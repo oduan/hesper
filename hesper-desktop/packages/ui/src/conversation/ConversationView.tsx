@@ -4,7 +4,7 @@ import { darkTheme } from '../theme'
 import { Composer } from './Composer'
 import { MessageBubble } from './MessageBubble'
 import { OutputBlock } from './OutputBlock'
-import { RightNavigation, type NavigationItem } from './RightNavigation'
+import type { NavigationItem } from './RightNavigation'
 import { RunSteps } from './RunSteps'
 
 export type ConversationShortcutCommand =
@@ -66,7 +66,6 @@ export function ConversationView({
   onOutputModeChange,
   shortcutCommand
 }: ConversationViewProps) {
-  const [navigationOpen, setNavigationOpen] = useState(false)
   const [closeFullscreenSignal, setCloseFullscreenSignal] = useState(0)
   const anchorRefs = useRef<Record<string, HTMLElement | null>>({})
   const anchorOrder = useMemo<AnchorEntry[]>(() => {
@@ -111,7 +110,6 @@ export function ConversationView({
 
     return entries
   }, [messages, steps, streamingText])
-  const navigationItems = useMemo<NavigationItem[]>(() => anchorOrder.map(({ id, kind, label }) => ({ id, kind, label })), [anchorOrder])
   const latestUserMessageId = [...messages].reverse().find((message) => message.role === 'user')?.id
   const jumpTargets = useMemo(
     () => anchorOrder.filter((entry) => entry.kind === 'user' || entry.kind === 'assistant'),
@@ -130,7 +128,6 @@ export function ConversationView({
     }
 
     if (shortcutCommand.type === 'close-panels') {
-      setNavigationOpen(false)
       setCloseFullscreenSignal((value) => value + 1)
       return
     }
@@ -158,7 +155,7 @@ export function ConversationView({
   }, [jumpTargets, shortcutCommand])
 
   return (
-    <div style={{ height: '100%', display: 'grid', gridTemplateColumns: navigationOpen ? 'minmax(0, 1fr) 280px' : 'minmax(0, 1fr)', gap: darkTheme.spacing.md }}>
+    <div style={{ height: '100%', minHeight: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: darkTheme.spacing.md }}>
       <section
         aria-label="会话详情"
         style={{ display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr) auto', gap: darkTheme.spacing.md, minWidth: 0, minHeight: 0 }}
@@ -176,15 +173,18 @@ export function ConversationView({
           <div style={{ minWidth: 0 }}>
             <h2 style={{ margin: 0, fontSize: 18, lineHeight: 1.2 }}>{session.title}</h2>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: darkTheme.spacing.sm, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            <button type="button" aria-label="打开导航" onClick={() => setNavigationOpen(true)} style={secondaryButtonStyle}>
-              导航
-            </button>
-            <button type="button" aria-label="会话文档" style={secondaryButtonStyle}>
-              会话文档
-            </button>
-            <span style={modeChipStyle}>{session.outputMode}</span>
-          </div>
+          <label style={outputModeLabelStyle}>
+            <span style={{ color: darkTheme.color.textMuted }}>输出</span>
+            <select
+              aria-label="选择输出模式"
+              value={session.outputMode}
+              onChange={(event) => onOutputModeChange?.(event.target.value as Session['outputMode'])}
+              style={outputModeSelectStyle}
+            >
+              <option value="markdown">markdown</option>
+              <option value="html">html</option>
+            </select>
+          </label>
         </header>
         <div
           style={{
@@ -287,34 +287,23 @@ export function ConversationView({
           sendSignal={shortcutCommand?.type === 'send' ? shortcutCommand.nonce : 0}
         />
       </section>
-      <RightNavigation
-        open={navigationOpen}
-        items={navigationItems}
-        onClose={() => setNavigationOpen(false)}
-        onNavigate={(id) => {
-          setNavigationOpen(false)
-          focusAnchor(id)
-        }}
-      />
     </div>
   )
 }
 
-const secondaryButtonStyle = {
+const outputModeLabelStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: darkTheme.spacing.xs,
+  fontSize: 13,
+  whiteSpace: 'nowrap'
+} satisfies CSSProperties
+
+const outputModeSelectStyle = {
   borderRadius: darkTheme.radius.md,
   border: `1px solid ${darkTheme.color.border}`,
   background: darkTheme.color.surfaceMuted,
   color: darkTheme.color.text,
-  cursor: 'pointer',
-  padding: `${darkTheme.spacing.xs} ${darkTheme.spacing.sm}`
-} satisfies CSSProperties
-
-const modeChipStyle = {
-  borderRadius: darkTheme.radius.xl,
-  border: `1px solid ${darkTheme.color.border}`,
-  background: darkTheme.color.surfaceMuted,
-  color: darkTheme.color.textMuted,
-  fontSize: 12,
-  padding: `2px ${darkTheme.spacing.sm}`,
-  textTransform: 'lowercase'
+  padding: `${darkTheme.spacing.xs} ${darkTheme.spacing.sm}`,
+  minWidth: 112
 } satisfies CSSProperties

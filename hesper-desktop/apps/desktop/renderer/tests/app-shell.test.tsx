@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, clearSessionSendError, pruneSessionSendErrors } from '../src/App'
 
-const { listSessions, createSession, enqueue, onEvent } = vi.hoisted(() => ({
+const { listSessions, createSession, enqueue, onEvent, minimizeWindow, toggleMaximizeWindow, closeWindow } = vi.hoisted(() => ({
   listSessions: vi.fn(async () => []),
   createSession: vi.fn(async () => ({
     id: 'session-1',
@@ -16,7 +16,10 @@ const { listSessions, createSession, enqueue, onEvent } = vi.hoisted(() => ({
     updatedAt: '2026-06-10T03:00:00.000Z'
   })),
   enqueue: vi.fn(async () => ({ runId: 'run-1' })),
-  onEvent: vi.fn(() => () => undefined)
+  onEvent: vi.fn(() => () => undefined),
+  minimizeWindow: vi.fn(async () => ({ minimized: true })),
+  toggleMaximizeWindow: vi.fn(async () => ({ isMaximized: true })),
+  closeWindow: vi.fn(async () => ({ closed: true }))
 }))
 
 vi.mock('../src/ipc-client', () => ({
@@ -26,7 +29,13 @@ vi.mock('../src/ipc-client', () => ({
       create: createSession
     },
     agent: { enqueue, onEvent },
-    dialog: { selectDirectory: vi.fn() }
+    dialog: { selectDirectory: vi.fn() },
+    window: {
+      platform: 'win32',
+      minimize: minimizeWindow,
+      toggleMaximize: toggleMaximizeWindow,
+      close: closeWindow
+    }
   }
 }))
 
@@ -48,15 +57,29 @@ describe('renderer App', () => {
     createSession.mockClear()
     enqueue.mockReset()
     onEvent.mockReset()
+    minimizeWindow.mockClear()
+    toggleMaximizeWindow.mockClear()
+    closeWindow.mockClear()
     listSessions.mockResolvedValue([])
     enqueue.mockResolvedValue({ runId: 'run-1' })
     onEvent.mockImplementation(() => () => undefined)
   })
 
-  it('renders the high-density shell and empty conversation state', async () => {
+  it('renders the high-density shell, native titlebar controls, and empty conversation state', async () => {
+    const user = userEvent.setup()
+
     render(<App />)
-    expect(await screen.findByText('hesper')).toBeInTheDocument()
+
+    expect((await screen.findAllByText('hesper')).length).toBeGreaterThan(0)
     expect(screen.getByText('所有会话')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '最小化窗口' }))
+    await user.click(screen.getByRole('button', { name: '最大化窗口' }))
+    await user.click(screen.getByRole('button', { name: '关闭窗口' }))
+
+    expect(minimizeWindow).toHaveBeenCalledTimes(1)
+    expect(toggleMaximizeWindow).toHaveBeenCalledTimes(1)
+    expect(closeWindow).toHaveBeenCalledTimes(1)
   })
 
   it('creates a session from the activity rail new-session button', async () => {

@@ -8,12 +8,12 @@ export type ActivityRailProps = {
   onSelectSection?: (section: AppSection) => void
 }
 
-const sections: Array<{ id: AppSection; label: string; shortLabel: string; icon: string }> = [
-  { id: 'sessions', label: '所有会话', shortLabel: '会话', icon: '会' },
-  { id: 'skills', label: '技能', shortLabel: '技能', icon: '技' },
-  { id: 'roles', label: '角色', shortLabel: '角色', icon: '角' },
-  { id: 'tools', label: '工具', shortLabel: '工具', icon: '工' },
-  { id: 'settings', label: '设置', shortLabel: '设置', icon: '设' }
+const sections: Array<{ id: AppSection; label: string; shortLabel: string }> = [
+  { id: 'sessions', label: '所有会话', shortLabel: '会话' },
+  { id: 'skills', label: '技能', shortLabel: '技能' },
+  { id: 'roles', label: '角色', shortLabel: '角色' },
+  { id: 'tools', label: '工具', shortLabel: '工具' },
+  { id: 'settings', label: '设置', shortLabel: '设置' }
 ]
 
 export function ActivityRail({ activeSection, onCreateSession, onSelectSection }: ActivityRailProps) {
@@ -23,7 +23,7 @@ export function ActivityRail({ activeSection, onCreateSession, onSelectSection }
       style={{
         width: '100%',
         boxSizing: 'border-box',
-        padding: darkTheme.spacing.md,
+        padding: `${darkTheme.spacing.sm} 6px`,
         background: darkTheme.color.surfaceMuted,
         borderRight: `1px solid ${darkTheme.color.border}`,
         display: 'flex',
@@ -43,7 +43,7 @@ export function ActivityRail({ activeSection, onCreateSession, onSelectSection }
           borderRadius: darkTheme.radius.md,
           background: darkTheme.color.accent,
           color: darkTheme.color.text,
-          padding: `${darkTheme.spacing.sm} ${darkTheme.spacing.md}`,
+          padding: `${darkTheme.spacing.sm} 6px`,
           textAlign: 'left',
           fontWeight: 700,
           cursor: 'pointer'
@@ -66,15 +66,13 @@ export function ActivityRail({ activeSection, onCreateSession, onSelectSection }
                 border: `1px solid ${isActive ? darkTheme.color.accent : darkTheme.color.border}`,
                 background: isActive ? 'rgba(155, 140, 255, 0.12)' : darkTheme.color.surface,
                 color: darkTheme.color.text,
-                padding: darkTheme.spacing.sm,
-                display: 'grid',
-                gap: 4,
-                textAlign: 'left',
+                padding: `${darkTheme.spacing.sm} 6px`,
+                display: 'block',
+                textAlign: 'center',
                 cursor: 'pointer'
               }}
             >
-              <span style={{ fontSize: 12, color: darkTheme.color.textMuted }}>{section.icon}</span>
-              <span style={{ fontSize: 12 }}>{section.shortLabel}</span>
+              <span style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{section.shortLabel}</span>
             </button>
           )
         })}

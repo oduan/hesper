@@ -14,7 +14,10 @@ const ipcChannels = {
   agentEventsSubscribe: 'agent:events:subscribe',
   agentEventsUnsubscribe: 'agent:events:unsubscribe',
   settingsGet: 'settings:get',
-  settingsUpdate: 'settings:update'
+  settingsUpdate: 'settings:update',
+  windowMinimize: 'window:minimize',
+  windowToggleMaximize: 'window:toggleMaximize',
+  windowClose: 'window:close'
 }
 
 const ipcEvents = {
@@ -51,6 +54,12 @@ const hesperApi = {
   settings: {
     get: () => ipcRenderer.invoke(ipcChannels.settingsGet),
     update: (input) => ipcRenderer.invoke(ipcChannels.settingsUpdate, input)
+  },
+  window: {
+    platform: process.platform,
+    minimize: () => ipcRenderer.invoke(ipcChannels.windowMinimize),
+    toggleMaximize: () => ipcRenderer.invoke(ipcChannels.windowToggleMaximize),
+    close: () => ipcRenderer.invoke(ipcChannels.windowClose)
   }
 }
 

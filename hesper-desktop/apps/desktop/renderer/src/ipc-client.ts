@@ -74,6 +74,12 @@ export function createFallbackHesperApi(): HesperDesktopApi {
         defaultOutputMode: input.defaultOutputMode ?? defaultSettings.defaultOutputMode,
         themeMode: input.themeMode ?? defaultSettings.themeMode
       })
+    },
+    window: {
+      platform: 'win32',
+      minimize: async () => ({ minimized: true }),
+      toggleMaximize: async () => ({ isMaximized: false }),
+      close: async () => ({ closed: true })
     }
   }
 }

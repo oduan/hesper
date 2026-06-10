@@ -228,6 +228,7 @@ function AppContent() {
       sessions={effectiveSessions}
       activeSection={state.activeSection}
       title={isSessionsSection ? activeSession?.title ?? '新建会话' : getSectionTitle(state.activeSection)}
+      platform={hesperApi.window.platform}
       {...(state.activeSessionId ? { activeSessionId: state.activeSessionId } : {})}
       onCreateSession={async () => {
         dispatch({ type: 'section.selected', section: 'sessions' })
@@ -238,6 +239,9 @@ function AppContent() {
         dispatch({ type: 'section.selected', section: 'sessions' })
         dispatch({ type: 'session.selected', sessionId })
       }}
+      onWindowMinimize={() => hesperApi.window.minimize()}
+      onWindowToggleMaximize={() => hesperApi.window.toggleMaximize()}
+      onWindowClose={() => hesperApi.window.close()}
     >
       {!isSessionsSection ? (
         <SectionPlaceholder section={state.activeSection} />

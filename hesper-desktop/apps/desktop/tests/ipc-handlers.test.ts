@@ -149,6 +149,43 @@ describe('registerIpcHandlers', () => {
     expect(await persistence.messages.listBySession('')).toEqual([])
   })
 
+  it('controls the source BrowserWindow through window IPC channels', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock' })
+    const handles = new Map<string, (event: any, ...args: any[]) => Promise<unknown> | unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (event: any, ...args: any[]) => Promise<unknown> | unknown) => {
+        handles.set(channel, handler)
+      }),
+      removeHandler: vi.fn()
+    }
+    const dialog = {
+      showOpenDialog: vi.fn(async () => ({ canceled: false, filePaths: ['C:/workspace'] }))
+    }
+    let maximized = false
+    const window = {
+      minimize: vi.fn(),
+      maximize: vi.fn(() => { maximized = true }),
+      unmaximize: vi.fn(() => { maximized = false }),
+      isMaximized: vi.fn(() => maximized),
+      close: vi.fn()
+    }
+
+    registerIpcHandlers({ ipcMain, dialog, container, getWindowForEvent: () => window })
+
+    await expect(handles.get(ipcChannels.windowMinimize)?.({ sender: { id: 1 } })).resolves.toEqual({ minimized: true })
+    expect(window.minimize).toHaveBeenCalledTimes(1)
+
+    await expect(handles.get(ipcChannels.windowToggleMaximize)?.({ sender: { id: 1 } })).resolves.toEqual({ isMaximized: true })
+    expect(window.maximize).toHaveBeenCalledTimes(1)
+
+    await expect(handles.get(ipcChannels.windowToggleMaximize)?.({ sender: { id: 1 } })).resolves.toEqual({ isMaximized: false })
+    expect(window.unmaximize).toHaveBeenCalledTimes(1)
+
+    await expect(handles.get(ipcChannels.windowClose)?.({ sender: { id: 1 } })).resolves.toEqual({ closed: true })
+    expect(window.close).toHaveBeenCalledTimes(1)
+  })
+
   it('rejects unknown settings:update fields at the IPC boundary', async () => {
     const persistence = await createInMemoryPersistence()
     const container = createServiceContainer({ persistence, agentMode: 'mock' })

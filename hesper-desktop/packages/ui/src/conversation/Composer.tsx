@@ -19,12 +19,12 @@ const defaultModelOptions = ['mock/hesper-fast', 'openai/gpt-4o', 'anthropic/cla
 export function Composer({
   workspacePath,
   modelId,
-  outputMode,
+  outputMode: _outputMode,
   modelOptions = defaultModelOptions,
   onSend,
   onSelectWorkspace,
   onModelChange,
-  onOutputModeChange,
+  onOutputModeChange: _onOutputModeChange,
   sendSignal = 0
 }: ComposerProps) {
   const [value, setValue] = useState('')
@@ -52,10 +52,10 @@ export function Composer({
       style={{
         display: 'grid',
         gap: darkTheme.spacing.sm,
-        border: `1px solid ${darkTheme.color.border}`,
-        borderRadius: darkTheme.radius.xl,
-        background: darkTheme.color.surface,
-        padding: darkTheme.spacing.md
+        border: 0,
+        borderRadius: 0,
+        background: 'transparent',
+        padding: 0
       }}
     >
       <textarea
@@ -73,8 +73,8 @@ export function Composer({
         style={{
           width: '100%',
           resize: 'none',
-          minHeight: 120,
-          maxHeight: 240,
+          minHeight: 112,
+          maxHeight: 220,
           overflow: 'auto',
           borderRadius: darkTheme.radius.lg,
           border: `1px solid ${darkTheme.color.border}`,
@@ -106,18 +106,6 @@ export function Composer({
                 ))}
               </select>
             </label>
-            <label style={controlLabelStyle}>
-              <span>输出：</span>
-              <select
-                aria-label="选择输出模式"
-                value={outputMode}
-                onChange={(event) => onOutputModeChange?.(event.target.value as OutputMode)}
-                style={selectStyle}
-              >
-                <option value="markdown">markdown</option>
-                <option value="html">html</option>
-              </select>
-            </label>
             <button
               type="button"
               aria-label="发送"
@@ -136,11 +124,6 @@ export function Composer({
               ↑
             </button>
           </div>
-        </div>
-        <div style={{ display: 'flex', gap: darkTheme.spacing.xs, flexWrap: 'wrap' }}>
-          <span style={placeholderChipStyle}>Tools · 即将支持</span>
-          <span style={placeholderChipStyle}>Skills · 即将支持</span>
-          <span style={placeholderChipStyle}>Roles · 即将支持</span>
         </div>
       </div>
     </section>
@@ -173,10 +156,3 @@ const selectStyle = {
   padding: `${darkTheme.spacing.xs} ${darkTheme.spacing.sm}`
 }
 
-const placeholderChipStyle = {
-  borderRadius: darkTheme.radius.xl,
-  border: `1px dashed ${darkTheme.color.border}`,
-  color: darkTheme.color.textMuted,
-  padding: `2px ${darkTheme.spacing.sm}`,
-  fontSize: 12
-}

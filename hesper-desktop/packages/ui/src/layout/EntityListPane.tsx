@@ -32,7 +32,7 @@ export function EntityListPane({ title, activeSection, sessions, activeSessionId
       </header>
       {activeSection === 'sessions' ? (
         sessions.length > 0 ? (
-          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: darkTheme.spacing.xs }}>
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 2, overflow: 'auto', minHeight: 0 }}>
             {sessions.map((session) => {
               const isActive = session.id === activeSessionId
               return (
@@ -43,21 +43,22 @@ export function EntityListPane({ title, activeSection, sessions, activeSessionId
                     onClick={() => onSelectSession?.(session.id)}
                     style={{
                       width: '100%',
-                      border: `1px solid ${isActive ? darkTheme.color.accent : darkTheme.color.border}`,
-                      borderRadius: darkTheme.radius.md,
-                      background: isActive ? 'rgba(155, 140, 255, 0.12)' : darkTheme.color.surfaceMuted,
-                      padding: darkTheme.spacing.sm,
+                      border: 0,
+                      borderRadius: darkTheme.radius.sm,
+                      background: isActive ? 'rgba(155, 140, 255, 0.14)' : 'transparent',
+                      padding: `${darkTheme.spacing.xs} ${darkTheme.spacing.sm}`,
                       textAlign: 'left',
                       color: darkTheme.color.text,
                       cursor: 'pointer',
                       display: 'grid',
-                      gap: 4
+                      gap: 2,
+                      minHeight: 48
                     }}
                   >
-                    <div style={{ fontWeight: 600 }}>{session.title}</div>
-                    <div style={{ fontSize: 12, color: darkTheme.color.textMuted }}>{session.defaultModelId ?? 'mock/hesper-fast'}</div>
-                    <div style={{ fontSize: 12, color: darkTheme.color.textMuted }}>{session.workspacePath ?? '未设置工作目录'}</div>
-                    <div style={{ fontSize: 12, color: darkTheme.color.textMuted }}>{session.outputMode}</div>
+                    <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{session.title}</div>
+                    <div style={{ fontSize: 12, color: darkTheme.color.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {session.defaultModelId ?? 'mock/hesper-fast'} · {session.workspacePath ?? '未设置工作目录'}
+                    </div>
                   </button>
                 </li>
               )

@@ -66,6 +66,12 @@ vi.mock('../src/ipc-client', () => ({
     settings: {
       get: vi.fn(),
       update: vi.fn()
+    },
+    window: {
+      platform: 'win32',
+      minimize: vi.fn(async () => ({ minimized: true })),
+      toggleMaximize: vi.fn(async () => ({ isMaximized: true })),
+      close: vi.fn(async () => ({ closed: true }))
     }
   }
 }))
@@ -110,15 +116,22 @@ describe('session settings and restore flow', () => {
     expect(screen.getByRole('button', { name: '选择工作目录' })).toHaveTextContent('C:/active')
   })
 
-  it('shows tools, skills and roles placeholders for future extension points', async () => {
+  it('shows tools, skills and roles placeholders from the activity rail', async () => {
+    const user = userEvent.setup()
     listSessions.mockResolvedValueOnce([createSession()] as any)
 
     render(<App />)
 
     await screen.findByRole('heading', { name: 'Current chat' })
-    expect(screen.getByText(/Tools/i)).toBeInTheDocument()
-    expect(screen.getByText(/Skills/i)).toBeInTheDocument()
-    expect(screen.getByText(/Roles/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '工具' }))
+    expect(screen.getByRole('region', { name: 'Tools 即将支持 占位区域' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '技能' }))
+    expect(screen.getByRole('region', { name: 'Skills 即将支持 占位区域' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '角色' }))
+    expect(screen.getByRole('region', { name: 'Roles 即将支持 占位区域' })).toBeInTheDocument()
   })
 
   it('persists workspace, model and output mode changes and refreshes session list details', async () => {

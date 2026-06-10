@@ -31,6 +31,12 @@ const hesperApi: HesperDesktopApi = {
   settings: {
     get: () => ipcRenderer.invoke(ipcChannels.settingsGet),
     update: (input) => ipcRenderer.invoke(ipcChannels.settingsUpdate, input)
+  },
+  window: {
+    platform: process.platform,
+    minimize: () => ipcRenderer.invoke(ipcChannels.windowMinimize),
+    toggleMaximize: () => ipcRenderer.invoke(ipcChannels.windowToggleMaximize),
+    close: () => ipcRenderer.invoke(ipcChannels.windowClose)
   }
 }
 

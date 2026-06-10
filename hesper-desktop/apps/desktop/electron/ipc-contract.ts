@@ -15,7 +15,10 @@ export const ipcChannels = {
   agentEventsSubscribe: 'agent:events:subscribe',
   agentEventsUnsubscribe: 'agent:events:unsubscribe',
   settingsGet: 'settings:get',
-  settingsUpdate: 'settings:update'
+  settingsUpdate: 'settings:update',
+  windowMinimize: 'window:minimize',
+  windowToggleMaximize: 'window:toggleMaximize',
+  windowClose: 'window:close'
 } as const
 
 export const ipcEvents = {
@@ -121,5 +124,11 @@ export type HesperDesktopApi = {
   settings: {
     get(): Promise<AppSettings>
     update(input: UpdateSettingsInput): Promise<AppSettings>
+  }
+  window: {
+    platform: NodeJS.Platform
+    minimize(): Promise<{ minimized: true }>
+    toggleMaximize(): Promise<{ isMaximized: boolean }>
+    close(): Promise<{ closed: true }>
   }
 }

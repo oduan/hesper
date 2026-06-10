@@ -1,5 +1,5 @@
 import { agentRuntimeEventSchema } from '@hesper/shared'
-import type { Dialog, IpcMain, IpcMainInvokeEvent } from 'electron'
+import { BrowserWindow, type Dialog, type IpcMain, type IpcMainInvokeEvent } from 'electron'
 import {
   agentEnqueueInputSchema,
   appSettingsSchema,
@@ -18,12 +18,15 @@ import {
 } from './ipc-contract'
 import type { ServiceContainer } from './service-container'
 
+type WindowControlTarget = Pick<BrowserWindow, 'minimize' | 'maximize' | 'unmaximize' | 'isMaximized' | 'close'>
+
 export type RegisterIpcHandlersOptions = {
   ipcMain: Pick<IpcMain, 'handle' | 'removeHandler'>
   dialog: Pick<Dialog, 'showOpenDialog'>
   container: ServiceContainer
   savePersistence?: () => Promise<void>
   schedulePersistenceSave?: () => void
+  getWindowForEvent?: (event: IpcMainInvokeEvent) => WindowControlTarget | undefined
 }
 
 const mutatingChannels = [
@@ -52,6 +55,7 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
   const savePersistence = options.savePersistence ?? (async () => {})
   const schedulePersistenceSave = options.schedulePersistenceSave ?? (() => {})
   const subscriptions = new Map<number, () => void>()
+  const getWindowForEvent = options.getWindowForEvent ?? ((event: IpcMainInvokeEvent) => BrowserWindow.fromWebContents(event.sender) ?? undefined)
 
   const detachRuntimePersistence = options.container.agentRuntime.subscribe(async () => {
     schedulePersistenceSave()
@@ -83,6 +87,14 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       target.send(ipcEvents.agentEvent, validateEvent(runtimeEvent))
     })
     subscriptions.set(senderId, unsubscribe)
+  }
+
+  const getRequiredWindow = (event: IpcMainInvokeEvent) => {
+    const window = getWindowForEvent(event)
+    if (!window) {
+      throw new Error('Unable to resolve BrowserWindow for renderer event')
+    }
+    return window
   }
 
   const handlers: Record<string, (event: IpcMainInvokeEvent, payload?: unknown) => Promise<unknown>> = {
@@ -159,6 +171,23 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       const settings = options.container.settingsService.updateSettings(omitUndefined(updateSettingsInputSchema.parse(payload ?? {})))
       await savePersistence()
       return appSettingsSchema.parse(settings)
+    },
+    [ipcChannels.windowMinimize]: async (event) => {
+      getRequiredWindow(event).minimize()
+      return { minimized: true }
+    },
+    [ipcChannels.windowToggleMaximize]: async (event) => {
+      const window = getRequiredWindow(event)
+      if (window.isMaximized()) {
+        window.unmaximize()
+      } else {
+        window.maximize()
+      }
+      return { isMaximized: window.isMaximized() }
+    },
+    [ipcChannels.windowClose]: async (event) => {
+      getRequiredWindow(event).close()
+      return { closed: true }
     }
   }
 

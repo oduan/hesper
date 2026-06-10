@@ -89,7 +89,7 @@ describe('ConversationView', () => {
     expect(screen.getByPlaceholderText(/输入消息/)).toHaveValue('')
   })
 
-  it('opens right navigation and fullscreen output', async () => {
+  it('renders top output selector and opens fullscreen output', async () => {
     const user = userEvent.setup()
 
     render(
@@ -112,8 +112,8 @@ describe('ConversationView', () => {
       />
     )
 
-    await user.click(screen.getByRole('button', { name: '打开导航' }))
-    expect(screen.getByText('会话导航')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '打开导航' })).not.toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: '选择输出模式' })).toHaveValue('markdown')
 
     await user.click(screen.getByRole('button', { name: '全屏查看输出' }))
     expect(screen.getByRole('dialog', { name: '输出全屏查看' })).toBeInTheDocument()
@@ -123,9 +123,7 @@ describe('ConversationView', () => {
     const user = userEvent.setup()
     const { rerender } = renderConversation()
 
-    await user.click(screen.getByRole('button', { name: '打开导航' }))
     await user.click(screen.getByRole('button', { name: '全屏查看输出' }))
-    expect(screen.getByText('会话导航')).toBeInTheDocument()
     expect(screen.getByRole('dialog', { name: '输出全屏查看' })).toBeInTheDocument()
 
     rerender(
@@ -167,19 +165,6 @@ describe('ConversationView', () => {
       />
     )
 
-    expect(screen.queryByText('会话导航')).not.toBeInTheDocument()
     expect(screen.queryByRole('dialog', { name: '输出全屏查看' })).not.toBeInTheDocument()
-  })
-
-  it('navigates to real step anchors from right navigation', async () => {
-    const user = userEvent.setup()
-    renderConversation()
-
-    await user.click(screen.getByRole('button', { name: '打开导航' }))
-    await user.click(screen.getByRole('button', { name: /工具节点\s+Searching repo/ }))
-
-    const stepAnchor = document.getElementById('step-step-1')
-    expect(stepAnchor).toBe(document.activeElement)
-    expect(scrollIntoViewMock).toHaveBeenCalled()
   })
 })

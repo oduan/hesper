@@ -14,6 +14,9 @@ describe('ui components', () => {
     const user = userEvent.setup()
     const onCreateSession = vi.fn()
     const onSelectSection = vi.fn()
+    const onWindowMinimize = vi.fn()
+    const onWindowToggleMaximize = vi.fn()
+    const onWindowClose = vi.fn()
 
     render(
       <AppShell
@@ -22,15 +25,25 @@ describe('ui components', () => {
         title="构建 hesper MVP"
         onCreateSession={onCreateSession}
         onSelectSection={onSelectSection}
+        onWindowMinimize={onWindowMinimize}
+        onWindowToggleMaximize={onWindowToggleMaximize}
+        onWindowClose={onWindowClose}
       />
     )
 
-    expect(screen.getByText('hesper')).toBeInTheDocument()
+    expect(screen.getAllByText('hesper')).not.toHaveLength(0)
     expect(screen.getByText('所有会话')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '所有会话' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByLabelText('功能栏')).toHaveStyle({ boxSizing: 'border-box' })
     expect(screen.getByLabelText('实体列表')).toHaveStyle({ boxSizing: 'border-box' })
-    expect(screen.getByText('构建 hesper MVP').closest('header')).toHaveClass('titlebar-drag')
+    expect(screen.getByLabelText('窗口标题栏')).toHaveClass('titlebar-drag')
+
+    await user.click(screen.getByRole('button', { name: '最小化窗口' }))
+    await user.click(screen.getByRole('button', { name: '最大化窗口' }))
+    await user.click(screen.getByRole('button', { name: '关闭窗口' }))
+    expect(onWindowMinimize).toHaveBeenCalledTimes(1)
+    expect(onWindowToggleMaximize).toHaveBeenCalledTimes(1)
+    expect(onWindowClose).toHaveBeenCalledTimes(1)
 
     await user.click(screen.getByRole('button', { name: '新建会话' }))
     expect(onCreateSession).toHaveBeenCalledTimes(1)
