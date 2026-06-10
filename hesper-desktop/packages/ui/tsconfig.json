@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "ignoreDeprecations": "6.0",
+    "baseUrl": ".",
+    "types": ["react", "react-dom", "vitest/globals"],
+    "paths": {
+      "@hesper/shared": ["../shared/dist/index.d.ts"]
+    }
+  },
+  "include": ["src"]
+}
