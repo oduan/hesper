@@ -37,6 +37,16 @@ const hesperApi: HesperDesktopApi = {
     saveProviderApiKey: (input) => ipcRenderer.invoke(ipcChannels.credentialsSaveProviderApiKey, input),
     deleteProviderApiKey: (input) => ipcRenderer.invoke(ipcChannels.credentialsDeleteProviderApiKey, input)
   },
+  providers: {
+    list: () => ipcRenderer.invoke(ipcChannels.providersList),
+    save: (input) => ipcRenderer.invoke(ipcChannels.providersSave, input),
+    disable: (input) => ipcRenderer.invoke(ipcChannels.providersDisable, input),
+    testConnection: (input) => ipcRenderer.invoke(ipcChannels.providersTestConnection, input)
+  },
+  models: {
+    list: (input) => ipcRenderer.invoke(ipcChannels.modelsList, input),
+    save: (input) => ipcRenderer.invoke(ipcChannels.modelsSave, input)
+  },
   window: {
     platform: process.platform,
     minimize: () => ipcRenderer.invoke(ipcChannels.windowMinimize),

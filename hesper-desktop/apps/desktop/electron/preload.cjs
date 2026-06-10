@@ -18,6 +18,12 @@ const ipcChannels = {
   credentialsProviderStatus: 'credentials:providerStatus',
   credentialsSaveProviderApiKey: 'credentials:saveProviderApiKey',
   credentialsDeleteProviderApiKey: 'credentials:deleteProviderApiKey',
+  providersList: 'providers:list',
+  providersSave: 'providers:save',
+  providersDisable: 'providers:disable',
+  providersTestConnection: 'providers:testConnection',
+  modelsList: 'models:list',
+  modelsSave: 'models:save',
   windowMinimize: 'window:minimize',
   windowToggleMaximize: 'window:toggleMaximize',
   windowClose: 'window:close'
@@ -62,6 +68,16 @@ const hesperApi = {
     providerStatus: (input) => ipcRenderer.invoke(ipcChannels.credentialsProviderStatus, input),
     saveProviderApiKey: (input) => ipcRenderer.invoke(ipcChannels.credentialsSaveProviderApiKey, input),
     deleteProviderApiKey: (input) => ipcRenderer.invoke(ipcChannels.credentialsDeleteProviderApiKey, input)
+  },
+  providers: {
+    list: () => ipcRenderer.invoke(ipcChannels.providersList),
+    save: (input) => ipcRenderer.invoke(ipcChannels.providersSave, input),
+    disable: (input) => ipcRenderer.invoke(ipcChannels.providersDisable, input),
+    testConnection: (input) => ipcRenderer.invoke(ipcChannels.providersTestConnection, input)
+  },
+  models: {
+    list: (input) => ipcRenderer.invoke(ipcChannels.modelsList, input),
+    save: (input) => ipcRenderer.invoke(ipcChannels.modelsSave, input)
   },
   window: {
     platform: process.platform,

@@ -4,6 +4,7 @@ import {
   createCredentialVaultService,
   createDefaultRoleService,
   createDefaultSkillService,
+  createModelProviderService,
   createSessionService,
   createSettingsService,
   createToolCatalogService,
@@ -33,6 +34,7 @@ export function createServiceContainer(options: ServiceContainerOptions) {
     persistence: options.persistence,
     ...(options.credentialCodec ? { codec: options.credentialCodec } : {})
   })
+  const modelProviderService = createModelProviderService({ persistence: options.persistence, credentialVaultService })
   const adapter = options.agentMode === 'pi-core' ? new PiCoreAgentAdapter() : new MockAgentAdapter({ delayMs: 0 })
   const agentRuntime = new AgentRuntime({ persistence: options.persistence, adapter })
 
@@ -45,6 +47,7 @@ export function createServiceContainer(options: ServiceContainerOptions) {
     skillService,
     toolCatalogService,
     credentialVaultService,
+    modelProviderService,
     agentRuntime
   }
 }

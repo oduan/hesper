@@ -1,4 +1,4 @@
-import { agentRuntimeEventSchema, sessionSchema } from '@hesper/shared'
+import { agentRuntimeEventSchema, modelConfigSchema, modelProviderConfigSchema, sessionSchema } from '@hesper/shared'
 import { z } from 'zod'
 
 export const ipcChannels = {
@@ -19,6 +19,12 @@ export const ipcChannels = {
   credentialsProviderStatus: 'credentials:providerStatus',
   credentialsSaveProviderApiKey: 'credentials:saveProviderApiKey',
   credentialsDeleteProviderApiKey: 'credentials:deleteProviderApiKey',
+  providersList: 'providers:list',
+  providersSave: 'providers:save',
+  providersDisable: 'providers:disable',
+  providersTestConnection: 'providers:testConnection',
+  modelsList: 'models:list',
+  modelsSave: 'models:save',
   windowMinimize: 'window:minimize',
   windowToggleMaximize: 'window:toggleMaximize',
   windowClose: 'window:close'
@@ -103,6 +109,40 @@ export const providerCredentialStatusSchema = z.object({
   updatedAt: z.string().datetime().optional()
 }).strict()
 
+export const saveModelProviderInputSchema = z.object({
+  id: nonEmptyStringSchema,
+  name: nonEmptyStringSchema,
+  kind: z.enum(['mock', 'openai', 'deepseek', 'openai-compatible', 'anthropic', 'custom']),
+  baseUrl: z.string().url().optional(),
+  enabled: z.boolean().optional(),
+  defaultModelId: z.string().min(1).optional()
+}).strict()
+
+export const providerIdInputSchema = z.object({
+  providerId: nonEmptyStringSchema
+}).strict()
+
+export const listModelsInputSchema = z.object({
+  providerId: nonEmptyStringSchema.optional()
+}).strict()
+
+export const saveModelInputSchema = z.object({
+  id: nonEmptyStringSchema,
+  providerId: nonEmptyStringSchema,
+  modelName: nonEmptyStringSchema,
+  displayName: nonEmptyStringSchema,
+  capabilities: z.array(z.enum(['streaming', 'toolCalls', 'jsonOutput', 'reasoning'])).optional(),
+  contextWindow: z.number().int().positive().optional(),
+  enabled: z.boolean().optional()
+}).strict()
+
+export const providerConnectionTestResultSchema = z.object({
+  providerId: nonEmptyStringSchema,
+  status: z.enum(['ok', 'disabled', 'needs_api_key', 'not_found']),
+  hasApiKey: z.boolean(),
+  message: z.string().min(1)
+}).strict()
+
 export const subscribeAgentEventsResultSchema = z.object({
   subscribed: z.literal(true)
 })
@@ -123,8 +163,15 @@ export type DirectorySelectionResult = z.infer<typeof directorySelectionSchema>
 export type ProviderCredentialInput = z.infer<typeof providerCredentialInputSchema>
 export type SaveProviderApiKeyInput = z.infer<typeof saveProviderApiKeyInputSchema>
 export type ProviderCredentialStatus = z.infer<typeof providerCredentialStatusSchema>
+export type SaveModelProviderInput = z.infer<typeof saveModelProviderInputSchema>
+export type ProviderIdInput = z.infer<typeof providerIdInputSchema>
+export type ListModelsInput = z.infer<typeof listModelsInputSchema>
+export type SaveModelInput = z.infer<typeof saveModelInputSchema>
+export type ProviderConnectionTestResult = z.infer<typeof providerConnectionTestResultSchema>
 export type AgentEvent = z.infer<typeof agentRuntimeEventSchema>
 export type SessionDto = z.infer<typeof sessionSchema>
+export type ModelProviderDto = z.infer<typeof modelProviderConfigSchema>
+export type ModelDto = z.infer<typeof modelConfigSchema>
 
 export type HesperDesktopApi = {
   sessions: {
@@ -153,6 +200,16 @@ export type HesperDesktopApi = {
     providerStatus(input: ProviderCredentialInput): Promise<ProviderCredentialStatus>
     saveProviderApiKey(input: SaveProviderApiKeyInput): Promise<ProviderCredentialStatus>
     deleteProviderApiKey(input: ProviderCredentialInput): Promise<ProviderCredentialStatus>
+  }
+  providers: {
+    list(): Promise<ModelProviderDto[]>
+    save(input: SaveModelProviderInput): Promise<ModelProviderDto>
+    disable(input: ProviderIdInput): Promise<ModelProviderDto>
+    testConnection(input: ProviderIdInput): Promise<ProviderConnectionTestResult>
+  }
+  models: {
+    list(input?: ListModelsInput): Promise<ModelDto[]>
+    save(input: SaveModelInput): Promise<ModelDto>
   }
   window: {
     platform: NodeJS.Platform

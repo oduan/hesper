@@ -265,6 +265,84 @@ describe('registerIpcHandlers', () => {
     ).rejects.toThrow()
   })
 
+  it('manages providers and models through strict IPC without returning API keys', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock', credentialCodec: createMockCredentialCodec() })
+    const savePersistence = vi.fn(async () => {})
+    const handles = new Map<string, (event: any, ...args: any[]) => Promise<unknown> | unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (event: any, ...args: any[]) => Promise<unknown> | unknown) => {
+        handles.set(channel, handler)
+      }),
+      removeHandler: vi.fn()
+    }
+    const dialog = {
+      showOpenDialog: vi.fn(async () => ({ canceled: false, filePaths: ['C:/workspace'] }))
+    }
+
+    registerIpcHandlers({ ipcMain, dialog, container, savePersistence })
+
+    const provider = await handles.get(ipcChannels.providersSave)?.({ sender: { id: 1 } }, {
+      id: 'deepseek',
+      name: 'DeepSeek',
+      kind: 'deepseek',
+      baseUrl: 'https://api.deepseek.com',
+      enabled: true,
+      defaultModelId: 'deepseek-chat'
+    })
+    expect(provider).toMatchObject({ id: 'deepseek', hasApiKey: false, apiKeyRef: 'provider:deepseek:api-key' })
+
+    const needsKey = await handles.get(ipcChannels.providersTestConnection)?.({ sender: { id: 1 } }, { providerId: 'deepseek' })
+    expect(needsKey).toMatchObject({ providerId: 'deepseek', status: 'needs_api_key', hasApiKey: false })
+
+    await handles.get(ipcChannels.credentialsSaveProviderApiKey)?.({ sender: { id: 1 } }, { providerId: 'deepseek', apiKey: 'sk-provider-secret' })
+    const connected = await handles.get(ipcChannels.providersTestConnection)?.({ sender: { id: 1 } }, { providerId: 'deepseek' })
+    expect(connected).toMatchObject({ providerId: 'deepseek', status: 'ok', hasApiKey: true })
+    expect(JSON.stringify(connected)).not.toContain('sk-provider-secret')
+
+    const model = await handles.get(ipcChannels.modelsSave)?.({ sender: { id: 1 } }, {
+      id: 'deepseek-chat',
+      providerId: 'deepseek',
+      modelName: 'deepseek-chat',
+      displayName: 'DeepSeek Chat',
+      capabilities: ['streaming', 'toolCalls'],
+      enabled: true
+    })
+    expect(model).toMatchObject({ id: 'deepseek-chat', providerId: 'deepseek' })
+    await expect(handles.get(ipcChannels.modelsList)?.({ sender: { id: 1 } }, { providerId: 'deepseek' })).resolves.toHaveLength(1)
+
+    const disabled = await handles.get(ipcChannels.providersDisable)?.({ sender: { id: 1 } }, { providerId: 'deepseek' })
+    expect(disabled).toMatchObject({ id: 'deepseek', enabled: false, hasApiKey: true })
+    expect(savePersistence).toHaveBeenCalled()
+  })
+
+  it('rejects unknown provider/model IPC fields at the boundary', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock', credentialCodec: createMockCredentialCodec() })
+    const handles = new Map<string, (event: any, ...args: any[]) => Promise<unknown> | unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (event: any, ...args: any[]) => Promise<unknown> | unknown) => {
+        handles.set(channel, handler)
+      }),
+      removeHandler: vi.fn()
+    }
+    const dialog = {
+      showOpenDialog: vi.fn(async () => ({ canceled: false, filePaths: ['C:/workspace'] }))
+    }
+
+    registerIpcHandlers({ ipcMain, dialog, container })
+
+    await expect(
+      handles.get(ipcChannels.providersSave)?.({ sender: { id: 1 } }, { id: 'openai', name: 'OpenAI', kind: 'openai', unexpected: true })
+    ).rejects.toThrow()
+    await expect(
+      handles.get(ipcChannels.providersDisable)?.({ sender: { id: 1 } }, { providerId: 'openai', unexpected: true })
+    ).rejects.toThrow()
+    await expect(
+      handles.get(ipcChannels.modelsSave)?.({ sender: { id: 1 } }, { id: 'm', providerId: 'p', modelName: 'm', displayName: 'M', unexpected: true })
+    ).rejects.toThrow()
+  })
+
   it('rejects unknown settings:update fields at the IPC boundary', async () => {
     const persistence = await createInMemoryPersistence()
     const container = createServiceContainer({ persistence, agentMode: 'mock' })

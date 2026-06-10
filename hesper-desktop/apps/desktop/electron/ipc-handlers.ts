@@ -1,5 +1,6 @@
-import { agentRuntimeEventSchema } from '@hesper/shared'
+import { agentRuntimeEventSchema, modelConfigSchema, modelProviderConfigSchema } from '@hesper/shared'
 import { BrowserWindow, type Dialog, type IpcMain, type IpcMainInvokeEvent } from 'electron'
+import { z } from 'zod'
 import {
   agentEnqueueInputSchema,
   appSettingsSchema,
@@ -7,8 +8,13 @@ import {
   directorySelectionSchema,
   ipcChannels,
   ipcEvents,
+  listModelsInputSchema,
+  providerConnectionTestResultSchema,
   providerCredentialInputSchema,
   providerCredentialStatusSchema,
+  providerIdInputSchema,
+  saveModelInputSchema,
+  saveModelProviderInputSchema,
   saveProviderApiKeyInputSchema,
   sessionIdInputSchema,
   setSessionModelInputSchema,
@@ -43,7 +49,10 @@ const mutatingChannels = [
   ipcChannels.agentEnqueue,
   ipcChannels.settingsUpdate,
   ipcChannels.credentialsSaveProviderApiKey,
-  ipcChannels.credentialsDeleteProviderApiKey
+  ipcChannels.credentialsDeleteProviderApiKey,
+  ipcChannels.providersSave,
+  ipcChannels.providersDisable,
+  ipcChannels.modelsSave
 ] as const
 
 type StripUndefined<T extends Record<string, unknown>> = {
@@ -190,6 +199,30 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       const status = await options.container.credentialVaultService.deleteProviderApiKey(providerCredentialInputSchema.parse(payload))
       await savePersistence()
       return providerCredentialStatusSchema.parse(status)
+    },
+    [ipcChannels.providersList]: async () => z.array(modelProviderConfigSchema).parse(await options.container.modelProviderService.listProviders()),
+    [ipcChannels.providersSave]: async (_event, payload) => {
+      const provider = await options.container.modelProviderService.saveProvider(omitUndefined(saveModelProviderInputSchema.parse(payload)))
+      await savePersistence()
+      return modelProviderConfigSchema.parse(provider)
+    },
+    [ipcChannels.providersDisable]: async (_event, payload) => {
+      const provider = await options.container.modelProviderService.disableProvider(providerIdInputSchema.parse(payload).providerId)
+      await savePersistence()
+      return modelProviderConfigSchema.parse(provider)
+    },
+    [ipcChannels.providersTestConnection]: async (_event, payload) => {
+      const result = await options.container.modelProviderService.testProviderConnection(providerIdInputSchema.parse(payload).providerId)
+      return providerConnectionTestResultSchema.parse(result)
+    },
+    [ipcChannels.modelsList]: async (_event, payload) => {
+      const input = listModelsInputSchema.parse(payload ?? {})
+      return z.array(modelConfigSchema).parse(await options.container.modelProviderService.listModels(input.providerId))
+    },
+    [ipcChannels.modelsSave]: async (_event, payload) => {
+      const model = await options.container.modelProviderService.saveModel(omitUndefined(saveModelInputSchema.parse(payload)))
+      await savePersistence()
+      return modelConfigSchema.parse(model)
     },
     [ipcChannels.windowMinimize]: async (event) => {
       getRequiredWindow(event).minimize()

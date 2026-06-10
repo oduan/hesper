@@ -1,5 +1,6 @@
 export * from './conversation-service'
 export * from './credential-vault-service'
+export * from './model-provider-service'
 export * from './registry-services'
 export * from './session-service'
 export * from './settings-service'

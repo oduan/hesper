@@ -4,6 +4,8 @@ import type {
   CreateSessionInput,
   DirectorySelectionResult,
   HesperDesktopApi,
+  ModelDto,
+  ModelProviderDto,
   SessionDto,
   SetSessionModelInput,
   SetSessionOutputModeInput,
@@ -93,6 +95,76 @@ export function createFallbackHesperApi(): HesperDesktopApi {
         encryptionAvailable: false,
         warning: 'Secure credential storage is unavailable in renderer fallback mode.'
       })
+    },
+    providers: {
+      list: async () => [{
+        id: 'mock',
+        name: 'Mock',
+        kind: 'mock',
+        enabled: true,
+        defaultModelId: 'mock/hesper-fast',
+        apiKeyRef: 'provider:mock:api-key',
+        hasApiKey: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }],
+      save: async (input): Promise<ModelProviderDto> => {
+        const timestamp = new Date().toISOString()
+        return withDefined({
+          id: input.id,
+          name: input.name,
+          kind: input.kind,
+          apiKeyRef: `provider:${input.id}:api-key`,
+          hasApiKey: false,
+          enabled: input.enabled ?? true,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
+          ...(input.defaultModelId !== undefined ? { defaultModelId: input.defaultModelId } : {})
+        }) as ModelProviderDto
+      },
+      disable: async (input) => ({
+        id: input.providerId,
+        name: input.providerId,
+        kind: 'custom',
+        apiKeyRef: `provider:${input.providerId}:api-key`,
+        hasApiKey: false,
+        enabled: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }),
+      testConnection: async (input) => ({
+        providerId: input.providerId,
+        status: input.providerId === 'mock' ? 'ok' : 'needs_api_key',
+        hasApiKey: false,
+        message: input.providerId === 'mock' ? 'Mock provider is available.' : 'Provider needs an API key.'
+      })
+    },
+    models: {
+      list: async (input = {}) => [{
+        id: 'mock/hesper-fast',
+        providerId: input.providerId ?? 'mock',
+        modelName: 'mock/hesper-fast',
+        displayName: 'Hesper Mock Fast',
+        capabilities: ['streaming', 'toolCalls'],
+        enabled: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }],
+      save: async (input): Promise<ModelDto> => {
+        const timestamp = new Date().toISOString()
+        return withDefined({
+          id: input.id,
+          providerId: input.providerId,
+          modelName: input.modelName,
+          displayName: input.displayName,
+          capabilities: input.capabilities ?? ['streaming'],
+          enabled: input.enabled ?? true,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          ...(input.contextWindow !== undefined ? { contextWindow: input.contextWindow } : {})
+        }) as ModelDto
+      }
     },
     window: {
       platform: 'win32',
