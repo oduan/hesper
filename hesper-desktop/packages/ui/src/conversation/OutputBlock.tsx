@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { MessageContentType } from '@hesper/shared'
 import { darkTheme } from '../theme'
 import { FullscreenOutput } from './FullscreenOutput'
+import { createSandboxedHtmlDocument } from './html-document'
 
 export type OutputBlockProps = {
   content: string
@@ -10,6 +11,7 @@ export type OutputBlockProps = {
 
 export function OutputBlock({ content, contentType }: OutputBlockProps) {
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const sandboxedDocument = useMemo(() => createSandboxedHtmlDocument(content), [content])
 
   return (
     <>
@@ -47,7 +49,7 @@ export function OutputBlock({ content, contentType }: OutputBlockProps) {
             <iframe
               title="HTML 输出预览"
               sandbox=""
-              srcDoc={content}
+              srcDoc={sandboxedDocument}
               style={{ width: '100%', height: '100%', minHeight: 200, border: 0, background: '#fff' }}
             />
           ) : (

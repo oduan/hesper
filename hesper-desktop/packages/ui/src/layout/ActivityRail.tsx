@@ -48,8 +48,9 @@ export function ActivityRail({ activeSection }: ActivityRailProps) {
         {sections.map((section) => {
           const isActive = section.id === activeSection
           return (
-            <div
+            <button
               key={section.id}
+              type="button"
               aria-current={isActive ? 'page' : undefined}
               aria-label={section.label}
               style={{
@@ -59,12 +60,14 @@ export function ActivityRail({ activeSection }: ActivityRailProps) {
                 color: darkTheme.color.text,
                 padding: darkTheme.spacing.sm,
                 display: 'grid',
-                gap: 4
+                gap: 4,
+                textAlign: 'left',
+                cursor: 'pointer'
               }}
             >
               <span style={{ fontSize: 12, color: darkTheme.color.textMuted }}>{section.icon}</span>
               <span style={{ fontSize: 12 }}>{section.shortLabel}</span>
-            </div>
+            </button>
           )
         })}
       </nav>

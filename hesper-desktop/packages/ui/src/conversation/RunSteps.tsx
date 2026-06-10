@@ -1,36 +1,36 @@
 import { useMemo, useState } from 'react'
-import type { RunStep } from '@hesper/shared'
+import type { RunStep, RunStepStatus, RunStepType } from '@hesper/shared'
 import { darkTheme } from '../theme'
 
 export type RunStepsProps = {
   steps: RunStep[]
 }
 
-function getStatusLabel(step: RunStep): string {
-  if (step.type === 'retry') {
-    return '重试'
-  }
+const typeLabels: Record<RunStepType, string> = {
+  thought: '思考',
+  tool_call: '工具调用',
+  tool_result: '工具结果',
+  model_call: '模型调用',
+  retry: '重试',
+  warning: '警告'
+}
 
-  if (step.type === 'thought') {
-    return '思考'
-  }
+const statusLabels: Record<RunStepStatus, string> = {
+  pending: '待处理',
+  running: '运行中',
+  succeeded: '成功',
+  failed: '失败'
+}
 
-  if (step.status === 'failed') {
-    return '失败'
-  }
-
-  if (step.status === 'succeeded') {
-    return '成功'
-  }
-
-  return '思考'
+function getStepBadge(step: RunStep): string {
+  return `${typeLabels[step.type]} / ${statusLabels[step.status]}`
 }
 
 export function RunSteps({ steps }: RunStepsProps) {
   const [expanded, setExpanded] = useState(true)
   const summary = useMemo(() => {
     const latest = steps.at(-1)
-    return latest ? `最新步骤：${latest.title}` : '暂无步骤'
+    return latest ? `最新步骤：${getStepBadge(latest)} · ${latest.title}` : '暂无步骤'
   }, [steps])
 
   return (
@@ -47,6 +47,7 @@ export function RunSteps({ steps }: RunStepsProps) {
     >
       <button
         type="button"
+        aria-expanded={expanded}
         onClick={() => setExpanded((value: boolean) => !value)}
         style={{
           display: 'flex',
@@ -75,7 +76,7 @@ export function RunSteps({ steps }: RunStepsProps) {
       {expanded ? (
         <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: darkTheme.spacing.sm }}>
           {steps.map((step) => {
-            const statusLabel = getStatusLabel(step)
+            const statusLabel = getStepBadge(step)
             return (
               <li
                 key={step.id}

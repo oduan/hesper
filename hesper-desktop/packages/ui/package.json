@@ -6,8 +6,8 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "pnpm --filter @hesper/shared build && tsc -p tsconfig.json",
-    "typecheck": "pnpm --filter @hesper/shared build && tsc -p tsconfig.json --noEmit",
+    "build": "pnpm --filter @hesper/shared build && node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json",
+    "typecheck": "pnpm --filter @hesper/shared build && tsc -p tsconfig.typecheck.json --noEmit",
     "test": "vitest --run"
   },
   "dependencies": {
