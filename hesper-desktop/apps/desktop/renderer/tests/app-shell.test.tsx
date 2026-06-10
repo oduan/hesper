@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest'
-import { render, screen } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../src/App'
 
-const { listSessions, createSession } = vi.hoisted(() => ({
+const { listSessions, createSession, enqueue, onEvent } = vi.hoisted(() => ({
   listSessions: vi.fn(async () => []),
   createSession: vi.fn(async () => ({
     id: 'session-1',
@@ -13,7 +14,9 @@ const { listSessions, createSession } = vi.hoisted(() => ({
     outputMode: 'markdown',
     createdAt: '2026-06-10T03:00:00.000Z',
     updatedAt: '2026-06-10T03:00:00.000Z'
-  }))
+  })),
+  enqueue: vi.fn(async () => ({ runId: 'run-1' })),
+  onEvent: vi.fn(() => () => undefined)
 }))
 
 vi.mock('../src/ipc-client', () => ({
@@ -22,16 +25,24 @@ vi.mock('../src/ipc-client', () => ({
       list: listSessions,
       create: createSession
     },
-    agent: { enqueue: vi.fn(), onEvent: vi.fn(() => () => undefined) },
+    agent: { enqueue, onEvent },
     dialog: { selectDirectory: vi.fn() }
   }
 }))
 
 describe('renderer App', () => {
+  afterEach(() => {
+    cleanup()
+  })
+
   beforeEach(() => {
     listSessions.mockReset()
     createSession.mockClear()
+    enqueue.mockReset()
+    onEvent.mockReset()
     listSessions.mockResolvedValue([])
+    enqueue.mockResolvedValue({ runId: 'run-1' })
+    onEvent.mockImplementation(() => () => undefined)
   })
 
   it('renders the high-density shell and empty conversation state', async () => {
@@ -46,5 +57,77 @@ describe('renderer App', () => {
     render(<App />)
 
     expect(await screen.findByRole('alert')).toHaveTextContent('会话加载失败：IPC unavailable')
+  })
+
+  it('sends messages through IPC, renders optimistic user text, and hydrates assistant output from runtime events', async () => {
+    const user = userEvent.setup()
+    let runtimeListener: ((event: { type: string; [key: string]: unknown }) => void) | undefined
+
+    listSessions.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        title: 'Task 11',
+        status: 'active',
+        workspacePath: 'C:/workspace',
+        defaultModelId: 'mock/hesper-fast',
+        outputMode: 'markdown',
+        createdAt: '2026-06-10T03:00:00.000Z',
+        updatedAt: '2026-06-10T03:00:00.000Z'
+      }
+    ] as any)
+    onEvent.mockImplementation(((listener: (event: { type: string; [key: string]: unknown }) => void) => {
+      runtimeListener = listener
+      return () => {
+        runtimeListener = undefined
+      }
+    }) as any)
+
+    render(<App />)
+
+    const composer = await screen.findByPlaceholderText(/输入消息/)
+    await user.type(composer, 'hello agent')
+    await user.click(screen.getByRole('button', { name: '发送' }))
+
+    expect(enqueue).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      prompt: 'hello agent',
+      modelId: 'mock/hesper-fast',
+      workspacePath: 'C:/workspace'
+    })
+    expect(await screen.findByText('hello agent')).toBeInTheDocument()
+
+    runtimeListener?.({
+      type: 'run.created',
+      run: {
+        id: 'run-1',
+        sessionId: 'session-1',
+        status: 'running',
+        modelId: 'mock/hesper-fast',
+        workspacePath: 'C:/workspace',
+        retryCount: 0,
+        maxRetries: 5
+      }
+    })
+    runtimeListener?.({ type: 'message.delta', runId: 'run-1', delta: 'hello ' })
+    runtimeListener?.({ type: 'message.delta', runId: 'run-1', delta: 'world' })
+
+    expect(await screen.findByText('hello world')).toBeInTheDocument()
+
+    runtimeListener?.({
+      type: 'message.completed',
+      message: {
+        id: 'message-assistant-1',
+        sessionId: 'session-1',
+        role: 'assistant',
+        content: 'hello world',
+        contentType: 'markdown',
+        runId: 'run-1',
+        createdAt: '2026-06-10T03:00:10.000Z'
+      }
+    })
+
+    await waitFor(() => {
+      expect(screen.getAllByText('hello world')).toHaveLength(1)
+    })
   })
 })

@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react'
+import { createId, nowIso, type Message } from '@hesper/shared'
 import { AppShell, ConversationView, type ConversationShortcutCommand } from '@hesper/ui'
 import { AppStoreProvider, useAppStore } from './app-store'
 import { hesperApi } from './ipc-client'
@@ -84,7 +85,14 @@ function AppContent() {
           steps={activeSteps}
           streamingText={activeStreamingText}
           modelId={activeSession.defaultModelId ?? 'mock/hesper-fast'}
-          onSend={() => undefined}
+          onSend={(content) => {
+            void sendMessage({
+              session: activeSession,
+              modelId: activeSession.defaultModelId ?? 'mock/hesper-fast',
+              content,
+              dispatch
+            })
+          }}
           {...(shortcutCommand ? { shortcutCommand } : {})}
         />
       ) : (
@@ -135,6 +143,39 @@ function EmptyConversationState({
 async function createSession(dispatch: ReturnType<typeof useAppStore>['dispatch']) {
   const session = await hesperApi.sessions.create({ title: 'New chat' })
   dispatch({ type: 'session.created', session })
+}
+
+async function sendMessage({
+  session,
+  modelId,
+  content,
+  dispatch
+}: {
+  session: Parameters<typeof createOptimisticUserMessage>[0]['session']
+  modelId: string
+  content: string
+  dispatch: ReturnType<typeof useAppStore>['dispatch']
+}) {
+  const message = createOptimisticUserMessage({ session, content })
+  dispatch({ type: 'message.optimistic', message })
+
+  await hesperApi.agent.enqueue({
+    sessionId: session.id,
+    prompt: content,
+    modelId,
+    ...(session.workspacePath ? { workspacePath: session.workspacePath } : {})
+  })
+}
+
+function createOptimisticUserMessage({ session, content }: { session: { id: string; workspacePath?: string }; content: string }): Message {
+  return {
+    id: createId('message'),
+    sessionId: session.id,
+    role: 'user',
+    content,
+    contentType: 'plain',
+    createdAt: nowIso()
+  }
 }
 
 const primaryButtonStyle: CSSProperties = {

@@ -4,6 +4,45 @@ import { appReducer, initialAppState } from '../src/app-store'
 const now = '2026-06-10T03:00:00.000Z'
 
 describe('app-store reducer', () => {
+  it('stores optimistic user messages locally', () => {
+    const sessionLoadedState = appReducer(initialAppState, {
+      type: 'sessions.loaded',
+      sessions: [
+        {
+          id: 'session-1',
+          title: 'Chat',
+          status: 'active',
+          outputMode: 'markdown',
+          createdAt: now,
+          updatedAt: now
+        }
+      ]
+    })
+
+    const nextState = appReducer(sessionLoadedState, {
+      type: 'message.optimistic',
+      message: {
+        id: 'message-user-1',
+        sessionId: 'session-1',
+        role: 'user',
+        content: 'hello from user',
+        contentType: 'plain',
+        createdAt: now
+      }
+    })
+
+    expect(nextState.messagesBySession['session-1']).toEqual([
+      {
+        id: 'message-user-1',
+        sessionId: 'session-1',
+        role: 'user',
+        content: 'hello from user',
+        contentType: 'plain',
+        createdAt: now
+      }
+    ])
+  })
+
   it('aggregates message deltas and removes streaming state when message completes', () => {
     const runCreatedState = appReducer(initialAppState, {
       type: 'agent.event',

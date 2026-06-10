@@ -17,6 +17,7 @@ export type AppAction =
   | { type: 'sessions.loaded'; sessions: Session[] }
   | { type: 'session.created'; session: Session }
   | { type: 'session.selected'; sessionId: string }
+  | { type: 'message.optimistic'; message: Message }
   | { type: 'agent.event'; event: AgentRuntimeEvent }
   | { type: 'section.selected'; section: AppSection }
 
@@ -107,6 +108,15 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     }
     case 'session.selected':
       return { ...state, activeSessionId: action.sessionId }
+    case 'message.optimistic': {
+      return {
+        ...state,
+        messagesBySession: {
+          ...state.messagesBySession,
+          [action.message.sessionId]: mergeById(state.messagesBySession[action.message.sessionId] ?? [], action.message)
+        }
+      }
+    }
     case 'section.selected':
       return { ...state, activeSection: action.section }
     case 'agent.event': {
@@ -180,6 +190,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           return state
       }
     }
+    default:
+      return state
   }
 }
 
