@@ -7,6 +7,9 @@ import {
   directorySelectionSchema,
   ipcChannels,
   ipcEvents,
+  providerCredentialInputSchema,
+  providerCredentialStatusSchema,
+  saveProviderApiKeyInputSchema,
   sessionIdInputSchema,
   setSessionModelInputSchema,
   setSessionOutputModeInputSchema,
@@ -38,7 +41,9 @@ const mutatingChannels = [
   ipcChannels.sessionsSetModel,
   ipcChannels.sessionsSetOutputMode,
   ipcChannels.agentEnqueue,
-  ipcChannels.settingsUpdate
+  ipcChannels.settingsUpdate,
+  ipcChannels.credentialsSaveProviderApiKey,
+  ipcChannels.credentialsDeleteProviderApiKey
 ] as const
 
 type StripUndefined<T extends Record<string, unknown>> = {
@@ -171,6 +176,20 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       const settings = options.container.settingsService.updateSettings(omitUndefined(updateSettingsInputSchema.parse(payload ?? {})))
       await savePersistence()
       return appSettingsSchema.parse(settings)
+    },
+    [ipcChannels.credentialsProviderStatus]: async (_event, payload) => {
+      const status = await options.container.credentialVaultService.getProviderApiKeyStatus(providerCredentialInputSchema.parse(payload))
+      return providerCredentialStatusSchema.parse(status)
+    },
+    [ipcChannels.credentialsSaveProviderApiKey]: async (_event, payload) => {
+      const status = await options.container.credentialVaultService.saveProviderApiKey(saveProviderApiKeyInputSchema.parse(payload))
+      await savePersistence()
+      return providerCredentialStatusSchema.parse(status)
+    },
+    [ipcChannels.credentialsDeleteProviderApiKey]: async (_event, payload) => {
+      const status = await options.container.credentialVaultService.deleteProviderApiKey(providerCredentialInputSchema.parse(payload))
+      await savePersistence()
+      return providerCredentialStatusSchema.parse(status)
     },
     [ipcChannels.windowMinimize]: async (event) => {
       getRequiredWindow(event).minimize()

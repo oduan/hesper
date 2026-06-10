@@ -15,6 +15,9 @@ const ipcChannels = {
   agentEventsUnsubscribe: 'agent:events:unsubscribe',
   settingsGet: 'settings:get',
   settingsUpdate: 'settings:update',
+  credentialsProviderStatus: 'credentials:providerStatus',
+  credentialsSaveProviderApiKey: 'credentials:saveProviderApiKey',
+  credentialsDeleteProviderApiKey: 'credentials:deleteProviderApiKey',
   windowMinimize: 'window:minimize',
   windowToggleMaximize: 'window:toggleMaximize',
   windowClose: 'window:close'
@@ -54,6 +57,11 @@ const hesperApi = {
   settings: {
     get: () => ipcRenderer.invoke(ipcChannels.settingsGet),
     update: (input) => ipcRenderer.invoke(ipcChannels.settingsUpdate, input)
+  },
+  credentials: {
+    providerStatus: (input) => ipcRenderer.invoke(ipcChannels.credentialsProviderStatus, input),
+    saveProviderApiKey: (input) => ipcRenderer.invoke(ipcChannels.credentialsSaveProviderApiKey, input),
+    deleteProviderApiKey: (input) => ipcRenderer.invoke(ipcChannels.credentialsDeleteProviderApiKey, input)
   },
   window: {
     platform: process.platform,

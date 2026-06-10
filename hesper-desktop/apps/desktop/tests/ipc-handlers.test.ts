@@ -1,8 +1,17 @@
+import type { CredentialVaultCodec } from '@hesper/app-core'
 import { createInMemoryPersistence } from '@hesper/persistence'
 import { describe, expect, it, vi } from 'vitest'
 import { registerIpcHandlers } from '../electron/ipc-handlers'
 import { ipcChannels, ipcEvents } from '../electron/ipc-contract'
 import { createServiceContainer } from '../electron/service-container'
+
+function createMockCredentialCodec(): CredentialVaultCodec {
+  return {
+    isEncryptionAvailable: () => true,
+    encryptString: (value) => Buffer.from([...value].reverse().join(''), 'utf8'),
+    decryptString: (value) => [...Buffer.from(value).toString('utf8')].reverse().join('')
+  }
+}
 
 describe('desktop service container', () => {
   it('creates a session through app-core services', async () => {
@@ -184,6 +193,76 @@ describe('registerIpcHandlers', () => {
 
     await expect(handles.get(ipcChannels.windowClose)?.({ sender: { id: 1 } })).resolves.toEqual({ closed: true })
     expect(window.close).toHaveBeenCalledTimes(1)
+  })
+
+  it('stores provider API keys through credential IPC without returning secrets', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock', credentialCodec: createMockCredentialCodec() })
+    const savePersistence = vi.fn(async () => {})
+    const handles = new Map<string, (event: any, ...args: any[]) => Promise<unknown> | unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (event: any, ...args: any[]) => Promise<unknown> | unknown) => {
+        handles.set(channel, handler)
+      }),
+      removeHandler: vi.fn()
+    }
+    const dialog = {
+      showOpenDialog: vi.fn(async () => ({ canceled: false, filePaths: ['C:/workspace'] }))
+    }
+
+    registerIpcHandlers({ ipcMain, dialog, container, savePersistence })
+
+    const saved = await handles.get(ipcChannels.credentialsSaveProviderApiKey)?.(
+      { sender: { id: 1 } },
+      { providerId: 'provider-deepseek', apiKey: 'sk-super-secret' }
+    )
+    expect(saved).toMatchObject({
+      providerId: 'provider-deepseek',
+      apiKeyRef: 'provider:provider-deepseek:api-key',
+      hasApiKey: true,
+      encryptionAvailable: true
+    })
+    expect(JSON.stringify(saved)).not.toContain('sk-super-secret')
+    expect(JSON.stringify(saved)).not.toContain('encrypted')
+
+    const status = await handles.get(ipcChannels.credentialsProviderStatus)?.({ sender: { id: 1 } }, { providerId: 'provider-deepseek' })
+    expect(status).toMatchObject({ hasApiKey: true })
+    expect(JSON.stringify(status)).not.toContain('sk-super-secret')
+    expect(await container.credentialVaultService.readProviderApiKey('provider-deepseek')).toBe('sk-super-secret')
+    expect(JSON.stringify(await persistence.credentialRecords.list())).not.toContain('sk-super-secret')
+    expect(savePersistence).toHaveBeenCalled()
+
+    const deleted = await handles.get(ipcChannels.credentialsDeleteProviderApiKey)?.({ sender: { id: 1 } }, { providerId: 'provider-deepseek' })
+    expect(deleted).toMatchObject({ hasApiKey: false })
+    expect(JSON.stringify(deleted)).not.toContain('sk-super-secret')
+  })
+
+  it('rejects unknown credential IPC fields at the boundary', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock', credentialCodec: createMockCredentialCodec() })
+    const handles = new Map<string, (event: any, ...args: any[]) => Promise<unknown> | unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (event: any, ...args: any[]) => Promise<unknown> | unknown) => {
+        handles.set(channel, handler)
+      }),
+      removeHandler: vi.fn()
+    }
+    const dialog = {
+      showOpenDialog: vi.fn(async () => ({ canceled: false, filePaths: ['C:/workspace'] }))
+    }
+
+    registerIpcHandlers({ ipcMain, dialog, container })
+
+    await expect(
+      handles.get(ipcChannels.credentialsSaveProviderApiKey)?.(
+        { sender: { id: 1 } },
+        { providerId: 'provider-openai', apiKey: 'sk-test', unexpected: true }
+      )
+    ).rejects.toThrow()
+
+    await expect(
+      handles.get(ipcChannels.credentialsProviderStatus)?.({ sender: { id: 1 } }, { providerId: 'provider-openai', apiKey: 'sk-test' })
+    ).rejects.toThrow()
   })
 
   it('rejects unknown settings:update fields at the IPC boundary', async () => {

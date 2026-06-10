@@ -75,6 +75,25 @@ export function createFallbackHesperApi(): HesperDesktopApi {
         themeMode: input.themeMode ?? defaultSettings.themeMode
       })
     },
+    credentials: {
+      providerStatus: async (input) => ({
+        providerId: input.providerId,
+        apiKeyRef: `provider:${input.providerId}:api-key`,
+        hasApiKey: false,
+        encryptionAvailable: false,
+        warning: 'Secure credential storage is unavailable in renderer fallback mode.'
+      }),
+      saveProviderApiKey: async (input) => {
+        throw new Error(`Secure credential storage is unavailable for provider ${input.providerId} in renderer fallback mode.`)
+      },
+      deleteProviderApiKey: async (input) => ({
+        providerId: input.providerId,
+        apiKeyRef: `provider:${input.providerId}:api-key`,
+        hasApiKey: false,
+        encryptionAvailable: false,
+        warning: 'Secure credential storage is unavailable in renderer fallback mode.'
+      })
+    },
     window: {
       platform: 'win32',
       minimize: async () => ({ minimized: true }),

@@ -23,6 +23,15 @@ import type { Database } from 'sql.js'
 
 export type RuntimeEventRecord = AgentRuntimeEvent
 
+export type CredentialRecord = {
+  id: string
+  kind: 'provider-api-key'
+  subjectId: string
+  encryptedValueBase64: string
+  createdAt: string
+  updatedAt: string
+}
+
 export type SessionRepository = {
   save(session: Session): Promise<void>
   get(id: string): Promise<Session | undefined>
@@ -89,6 +98,13 @@ export type SubagentInvocationRepository = {
   listByChildRun(childRunId: string): Promise<SubagentInvocation[]>
 }
 
+export type CredentialRecordRepository = {
+  save(record: CredentialRecord): Promise<void>
+  get(id: string): Promise<CredentialRecord | undefined>
+  list(): Promise<CredentialRecord[]>
+  delete(id: string): Promise<void>
+}
+
 export type Persistence = {
   sessions: SessionRepository
   messages: MessageRepository
@@ -101,6 +117,7 @@ export type Persistence = {
   roles: RoleRepository
   toolPermissionPolicies: ToolPermissionPolicyRepository
   subagentInvocations: SubagentInvocationRepository
+  credentialRecords: CredentialRecordRepository
   exportDatabaseBytes(): Uint8Array
 }
 
@@ -324,6 +341,17 @@ function toSubagentInvocation(row: any): SubagentInvocation {
   }) as SubagentInvocation
 }
 
+function toCredentialRecord(row: any): CredentialRecord {
+  return {
+    id: row.id,
+    kind: row.kind,
+    subjectId: row.subject_id,
+    encryptedValueBase64: row.encrypted_value_base64,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
 function extractRunId(event: RuntimeEventRecord): string {
   switch (event.type) {
     case 'run.created':
@@ -360,7 +388,8 @@ export function createRepositories(db: Database): Persistence {
     'skills',
     'roles',
     'tool_permission_policies',
-    'subagent_invocations'
+    'subagent_invocations',
+    'credential_records'
   ]
   const bindValues = (values: unknown[]) => values.map((value) => (value === undefined ? null : value))
   const exec = (sql: string, params: unknown[] = []) => db.run(sql, bindValues(params))
@@ -677,6 +706,29 @@ export function createRepositories(db: Database): Persistence {
       },
       async listByChildRun(childRunId) {
         return fetchAll('SELECT * FROM subagent_invocations WHERE child_run_id = ? ORDER BY sort_seq ASC, id ASC', [childRunId]).map(toSubagentInvocation)
+      }
+    },
+    credentialRecords: {
+      async save(record) {
+        upsert('credential_records', ['id', 'kind', 'subject_id', 'encrypted_value_base64', 'created_at', 'updated_at', 'sort_seq'], [
+          record.id,
+          record.kind,
+          record.subjectId,
+          record.encryptedValueBase64,
+          record.createdAt,
+          record.updatedAt,
+          nextSeq()
+        ], record.id)
+      },
+      async get(id) {
+        const row = fetchAll('SELECT * FROM credential_records WHERE id = ?', [id])[0]
+        return row ? toCredentialRecord(row) : undefined
+      },
+      async list() {
+        return fetchAll('SELECT * FROM credential_records ORDER BY sort_seq ASC, id ASC').map(toCredentialRecord)
+      },
+      async delete(id) {
+        exec('DELETE FROM credential_records WHERE id = ?', [id])
       }
     },
     exportDatabaseBytes() {

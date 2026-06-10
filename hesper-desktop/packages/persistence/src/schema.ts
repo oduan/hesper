@@ -154,6 +154,16 @@ CREATE TABLE IF NOT EXISTS subagent_invocations (
   error_json TEXT,
   sort_seq INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS credential_records (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  subject_id TEXT NOT NULL,
+  encrypted_value_base64 TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  sort_seq INTEGER NOT NULL
+);
 `
 
 const migrationColumns: Record<string, string[]> = {

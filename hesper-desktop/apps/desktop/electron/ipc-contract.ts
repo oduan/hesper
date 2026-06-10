@@ -16,6 +16,9 @@ export const ipcChannels = {
   agentEventsUnsubscribe: 'agent:events:unsubscribe',
   settingsGet: 'settings:get',
   settingsUpdate: 'settings:update',
+  credentialsProviderStatus: 'credentials:providerStatus',
+  credentialsSaveProviderApiKey: 'credentials:saveProviderApiKey',
+  credentialsDeleteProviderApiKey: 'credentials:deleteProviderApiKey',
   windowMinimize: 'window:minimize',
   windowToggleMaximize: 'window:toggleMaximize',
   windowClose: 'window:close'
@@ -82,6 +85,24 @@ export const directorySelectionSchema = z.object({
   path: z.string().optional()
 })
 
+export const providerCredentialInputSchema = z.object({
+  providerId: nonEmptyStringSchema
+}).strict()
+
+export const saveProviderApiKeyInputSchema = z.object({
+  providerId: nonEmptyStringSchema,
+  apiKey: z.string().min(1)
+}).strict()
+
+export const providerCredentialStatusSchema = z.object({
+  providerId: nonEmptyStringSchema,
+  apiKeyRef: nonEmptyStringSchema,
+  hasApiKey: z.boolean(),
+  encryptionAvailable: z.boolean(),
+  warning: z.string().optional(),
+  updatedAt: z.string().datetime().optional()
+}).strict()
+
 export const subscribeAgentEventsResultSchema = z.object({
   subscribed: z.literal(true)
 })
@@ -99,6 +120,9 @@ export type AgentEnqueueInput = z.infer<typeof agentEnqueueInputSchema>
 export type AppSettings = z.infer<typeof appSettingsSchema>
 export type UpdateSettingsInput = z.infer<typeof updateSettingsInputSchema>
 export type DirectorySelectionResult = z.infer<typeof directorySelectionSchema>
+export type ProviderCredentialInput = z.infer<typeof providerCredentialInputSchema>
+export type SaveProviderApiKeyInput = z.infer<typeof saveProviderApiKeyInputSchema>
+export type ProviderCredentialStatus = z.infer<typeof providerCredentialStatusSchema>
 export type AgentEvent = z.infer<typeof agentRuntimeEventSchema>
 export type SessionDto = z.infer<typeof sessionSchema>
 
@@ -124,6 +148,11 @@ export type HesperDesktopApi = {
   settings: {
     get(): Promise<AppSettings>
     update(input: UpdateSettingsInput): Promise<AppSettings>
+  }
+  credentials: {
+    providerStatus(input: ProviderCredentialInput): Promise<ProviderCredentialStatus>
+    saveProviderApiKey(input: SaveProviderApiKeyInput): Promise<ProviderCredentialStatus>
+    deleteProviderApiKey(input: ProviderCredentialInput): Promise<ProviderCredentialStatus>
   }
   window: {
     platform: NodeJS.Platform

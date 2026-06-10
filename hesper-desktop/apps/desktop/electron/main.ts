@@ -1,9 +1,10 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { app, BrowserWindow, dialog, ipcMain } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, safeStorage } from 'electron'
 import { createFilePersistence, exportDatabaseBytes } from '@hesper/persistence'
 import { createBeforeQuitHandler } from './before-quit'
+import { createElectronSafeStorageCredentialCodec } from './credential-codec'
 import { registerIpcHandlers } from './ipc-handlers'
 import { createServiceContainer, type AgentMode, type ServiceContainer } from './service-container'
 
@@ -93,7 +94,7 @@ async function loadRenderer(window: BrowserWindow): Promise<void> {
 async function bootstrap(): Promise<void> {
   persistencePath = path.join(app.getPath('userData'), 'hesper.sqlite')
   const persistence = await createFilePersistence(persistencePath)
-  container = createServiceContainer({ persistence, agentMode: resolveAgentMode() })
+  container = createServiceContainer({ persistence, agentMode: resolveAgentMode(), credentialCodec: createElectronSafeStorageCredentialCodec(safeStorage) })
   disposeIpcHandlers = registerIpcHandlers({ ipcMain, dialog, container, savePersistence, schedulePersistenceSave })
   await savePersistence()
 
