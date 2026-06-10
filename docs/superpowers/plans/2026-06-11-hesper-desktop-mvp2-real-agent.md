@@ -18,6 +18,8 @@
 - 主 Agent 只在接口、数据流和验收清晰后合并。
 - 使用 worktree 进行隔离开发，不回并到 `master`。
 - 不删除 `nul` 文件，不修改 `.agent-reports`。
+- MVP2 必须保留 MVP1 deterministic mock adapter、单会话运行骨架、现有 `AgentRuntimeEvent` 合约和 mock E2E 路径；真实 runtime 只能作为新增/切换层，不得把旧 baseline 推翻。
+- 任何 renderer、prompt assembly、IPC 返回值、日志、runtime events、test snapshots 都不得接触原始 API key 或可还原密钥数据；只有 `main/app-core` 的 credential vault 受控 provider client 构造路径可读取明文，且读取后不得落日志/进 prompt/回传 UI。
 - 提交信息必须包含：
 
 ```bash
@@ -34,7 +36,7 @@ Co-Authored-By: Craft Agent <agents-noreply@craft.do>
 
 ### Milestone B：工具、权限与 prompt 组装
 
-目标：让主 Agent 在进入 runtime 前就知道“能用什么、不能用什么、何时调用 subagent”。
+目标：让主 Agent 在进入 runtime 前就知道“能用什么、不能用什么、何时调用 subagent”，并严格遵守 `PermissionPolicy → ToolExecutor → child run/result` 的执行顺序。
 
 ### Milestone C：真实 agent-runtime + child run
 
@@ -42,11 +44,21 @@ Co-Authored-By: Craft Agent <agents-noreply@craft.do>
 
 ### Milestone D：Settings UI 与验收
 
-目标：把 registry 和权限能力暴露给用户，并确保状态可见、可改、可验证。
+目标：把 registry 和权限能力暴露给用户，并确保状态可见、可改、可验证；同时让 prompt assembly、credential vault、tool registry、subagent service 先有最小接口，再分任务落盘。
 
 ---
 
 ## 2. 任务列表
+
+| 需求 | Task 编号 | 验收点 |
+|---|---:|---|
+| 保留 MVP1 mock baseline / 事件合约 / mock E2E 路径 | 1 | 旧路径仍可运行，真实 runtime 可切换但不破坏 baseline |
+| 安全存储 API key | 2 | 明文 key 只在 credential vault 受控路径内短暂存在 |
+| registry 驱动 provider/model/tool/skill/role | 2-6 | UI/runtime/prompt 共享同一 registry 源 |
+| pi core real agent loop | 7 | 真实 loop 基于 `@earendil-works/pi-agent-core` / `@earendil-works/pi-ai` |
+| subagent child run | 8 | `agent.spawn-subagent`、`roleId`、`allowedToolIds`、`maxDepth`、`maxCount` 生效 |
+| Settings UI 分拆与验收 | 9 | provider/model/tools/skills/roles/runtime 分区清晰且可保存 |
+
 
 ### Task 1: 确认目录结构与基础约束
 
@@ -65,6 +77,8 @@ Co-Authored-By: Craft Agent <agents-noreply@craft.do>
 
 ### Task 2: provider / model registry + secret storage
 
+**Interface first:** 先落 `provider-registry` / `credential-vault` 最小接口，再拆实现与 UI。
+
 **Files to create/update:**
 - `hesper-desktop/packages/app-core/src/provider-registry.ts`
 - `hesper-desktop/packages/app-core/src/model-registry.ts`
@@ -75,7 +89,8 @@ Co-Authored-By: Craft Agent <agents-noreply@craft.do>
 **Checklist:**
 - [ ] 建立 provider registry，覆盖 DeepSeek / OpenAI / custom OpenAI-compatible endpoint
 - [ ] 建立 model registry，统一描述模型能力
-- [ ] 建立 secret store 抽象，确保 API key 不明文落盘
+- [ ] 建立 secret vault 抽象，确保 API key 不明文落盘
+- [ ] 只有 main/app-core 受控 provider client 构造路径可读取明文，并且读取后不进日志/提示词/事件
 - [ ] 提供 provider connection test
 - [ ] 补充失败/成功测试
 
@@ -85,6 +100,8 @@ Co-Authored-By: Craft Agent <agents-noreply@craft.do>
 ---
 
 ### Task 3: tools definitions + executors + permission policy
+
+**Interface first:** 先落 `tool-registry` / `permission-policy` 最小接口，再接 executor。
 
 **Files to create/update:**
 - `hesper-desktop/packages/tools/*`
@@ -96,6 +113,7 @@ Co-Authored-By: Craft Agent <agents-noreply@craft.do>
 - [ ] 定义工具结构：definition / executor / policy
 - [ ] 为文件、shell、web、agent 等工具建立分类
 - [ ] 让 policy 先判定后执行
+- [ ] 明确 `PermissionPolicy → ToolExecutor → child run/result` 的不可绕过顺序
 - [ ] 工具失败进入步骤流
 
 **Review:**
@@ -142,6 +160,8 @@ Co-Authored-By: Craft Agent <agents-noreply@craft.do>
 
 ### Task 6: PromptAssemblyService
 
+**Interface first:** 先落 `prompt-assembly` 最小接口，再接 registry 数据与 UI 展示。
+
 **Files to create/update:**
 - `hesper-desktop/packages/app-core/src/prompt-assembly.ts`
 - tests
@@ -151,6 +171,7 @@ Co-Authored-By: Craft Agent <agents-noreply@craft.do>
 - [ ] 主 Agent prompt 说明如何使用 subagent
 - [ ] subagent prompt 列出 roleId / allowedToolIds / max depth / max count
 - [ ] prompt assembly 依赖 registry，而不是散落状态
+- [ ] prompt 中清楚列出可用工具、如何使用 subagent、如何给 subagent 分配可用角色
 
 **Review:**
 - prompt 是否足够可解释、可扩展、可测试
@@ -178,6 +199,8 @@ Co-Authored-By: Craft Agent <agents-noreply@craft.do>
 
 ### Task 8: subagent child run
 
+**Interface first:** 先落 `subagent-service` 最小接口，再接 child run 路由与权限控制。
+
 **Files to create/update:**
 - `hesper-desktop/packages/agent-runtime/src/subagent.ts`
 - `hesper-desktop/packages/app-core/src/subagent-service.ts`
@@ -187,6 +210,7 @@ Co-Authored-By: Craft Agent <agents-noreply@craft.do>
 - [ ] 主 Agent 通过 `agent.spawn-subagent` 调 child run
 - [ ] 子 Agent 接受 `roleId` / `allowedToolIds` / `max depth` / `max count`
 - [ ] child run 事件可追踪
+- [ ] 禁止未经授权的工具进入 subagent prompt 或 executor
 - [ ] 防止无限递归与越权工具调用
 
 **Review:**
@@ -195,6 +219,8 @@ Co-Authored-By: Craft Agent <agents-noreply@craft.do>
 ---
 
 ### Task 9: Settings UI 拆分与验收
+
+**Interface first:** 先落 settings 分区与状态契约，再补 UI 细节。
 
 **Files to create/update:**
 - `hesper-desktop/packages/ui/src/settings/*`

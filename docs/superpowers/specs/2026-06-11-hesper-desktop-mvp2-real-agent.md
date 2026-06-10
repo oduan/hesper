@@ -21,6 +21,7 @@ MVP2 的目标不是“再做一个会聊天的桌面端”，而是把 hesper d
 - 引入 **PromptAssemblyService**，在主 Agent 和 subagent prompt 中清楚列出：可用工具、如何使用 subagent、如何给 subagent 分配可用角色。
 - Settings UI 必须按 provider / model / tools / skills / roles / runtime 分拆，且有明确验收标准。
 - 后续实现必须以 **TDD + subagent-driven task 拆分 + 每任务 review** 的方式推进。
+- MVP2 必须在保留 MVP1 的 deterministic mock adapter、单会话运行骨架、现有 `AgentRuntimeEvent` 合约、测试路径与 E2E mock 路径之上新增能力；真实 runtime 是可切换/可并存的增强层，不是推翻式重写。
 
 ## 2. 非目标
 
@@ -34,16 +35,17 @@ MVP2 明确不做：
 - 不做完整的权限审计后台。
 - 不做自研 Agent core。
 
-MVP2 的重点是把“可运行的原型”升级成“可落地的真实 Agent 内核架构”。
+MVP2 的重点是把“可运行的原型”升级成“可落地的真实 Agent 内核架构”，同时**不破坏 MVP1 已经验证的最小可运行基线**。
 
 ## 3. 设计原则
 
 1. **pi core 优先**：Agent loop、tool orchestration、streaming、child run 语义优先依赖 `pi-agent-core` / `pi-ai`。
 2. **hesper 只做编排层**：不要把 provider、prompt、权限、工具、角色逻辑散落在 UI 里。
 3. **统一 registry**：provider、model、tool、skill、role 都通过 registry 暴露，不允许各模块私有一份。
-4. **安全优先**：API key 不明文保存；默认最小权限；工具执行受 policy 控制。
+4. **安全优先**：API key 不明文保存；默认最小权限；工具执行受 policy 控制；任何 renderer、prompt assembly、IPC 返回值、logs/runtime events/test snapshots 都不得接触原始 API key 或可还原密钥数据。
 5. **prompt 可解释**：主 Agent 与 subagent 的 prompt 必须显式列出可用工具、可用角色和调用规则。
 6. **子任务可拆分**：所有复杂实现都应拆成小任务，由 subagent 先调研/实现/回归，再由主 Agent review。
+7. **兼容优先**：MVP2 通过“保留 mock baseline + 新增真实 runtime/切换路径”演进，禁止把 MVP1 deterministic mock adapter、现有事件合约和 mock E2E 路径删掉或改成不可回退形态。
 
 ## 4. 核心架构决策
 
@@ -104,6 +106,7 @@ provider/model registry 必须统一提供：
 - 优先使用操作系统安全存储能力；如需 fallback，必须至少采用本地加密封装。
 - UI 只能显示“已连接 / 未连接 / 需要重新授权”状态，不能直接回显完整 key。
 - provider 配置和密钥存储必须解耦：密钥只保存引用和状态。
+- `renderer`、`prompt assembly`、IPC 返回值、日志、runtime events、测试快照都绝不接触原始 API key；只有 `main/app-core` 内部的 credential vault 受控 provider client 构造路径可以读取明文，读取后必须立即脱敏，不得落日志、不进 prompt、不回传 UI。
 
 ### 体验
 
@@ -125,9 +128,11 @@ provider/model registry 必须统一提供：
 ### 规则
 
 - definitions 与 executors 必须解耦。
-- policy 先判定，再执行。
+- **强约束执行顺序：先 PermissionPolicy 校验，再执行 ToolExecutor，再创建 child run / 返回 tool result。**
+- policy 先判定，再执行；未经授权的工具不得进入 executor，也不得进入 subagent prompt。
 - 工具调用结果必须进入步骤流和持久化事件。
 - 失败工具调用必须可见、可追踪、可复用到重试。
+- `pi-agent-core` 发起的 tool call 必须经过 Hesper policy gate；未经授权的调用必须被拒绝并转成可见失败事件。
 
 ### 权限维度
 
@@ -214,7 +219,7 @@ role registry 需要统一描述：
 
 ## 11. PromptAssemblyService
 
-PromptAssemblyService 是 MVP2 的关键中枢。
+PromptAssemblyService 是 MVP2 的关键中枢，且必须先行接口化、分层落盘，避免后续 provider / tool / role / subagent 反复耦合同一文件。
 
 ### 输入
 
@@ -235,6 +240,25 @@ PromptAssemblyService 是 MVP2 的关键中枢。
 - subagent usage rules
 - role assignment rules
 
+### 最小接口草图
+
+```ts
+type PromptAssemblyInput = {
+  sessionId: string
+  roleId: string
+  modelId: string
+  depth: number
+  parentRunId?: string
+  allowedToolIds: string[]
+}
+
+type PromptAssemblyOutput = {
+  systemPrompt: string
+  toolManifest: string
+  subagentRules: string
+}
+```
+
 ### 必须在 prompt 中显式写清楚
 
 - 你能用哪些工具
@@ -246,6 +270,29 @@ PromptAssemblyService 是 MVP2 的关键中枢。
 - 如何引用 skills
 
 ## 12. Settings UI 拆分与验收
+
+### 最小 registry / vault / service 接口草图
+
+```ts
+type ProviderRegistry = {
+  listProviders(): ProviderSummary[]
+  getProvider(providerId: string): ProviderSummary | undefined
+}
+
+type CredentialVault = {
+  getSecretRef(providerId: string): string | undefined
+  resolveForClient(providerId: string): Promise<{ apiKey: string }>
+}
+
+type ToolRegistry = {
+  listDefinitions(roleId?: string): ToolDefinition[]
+  getExecutor(toolId: string): ToolExecutor | undefined
+}
+
+type SubagentService = {
+  spawn(input: { roleId: string; allowedToolIds: string[]; maxDepth: number; maxCount: number }): Promise<string>
+}
+```
 
 Settings UI 需拆分为清晰模块：
 
@@ -289,6 +336,9 @@ MVP2 完成时应满足：
 - 子 Agent 可按 `roleId`、`allowedToolIds`、`maxDepth`、`maxCount` 运行。
 - Settings UI 能分模块展示并正确影响运行。
 - 关键路径有 TDD 覆盖，并且每个任务有独立 review 记录。
+- MVP1 deterministic mock adapter、事件合约与 mock E2E 路径仍可用且可回退。
+- 任何原始 API key 都不会出现在 renderer、prompt、logs、runtime events 或 test snapshots。
+- tool call 的顺序必须满足：policy gate → executor → child run/result。
 
 ## 15. 风险
 

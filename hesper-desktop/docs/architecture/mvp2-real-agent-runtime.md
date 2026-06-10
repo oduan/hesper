@@ -7,7 +7,7 @@ It focuses on the real Agent loop, provider/model registry, secure secret storag
 
 ## 2. Architecture overview
 
-MVP2 keeps the same high-level split as MVP1, but moves from a simple agent loop to a **registry-driven real agent runtime**.
+MVP2 keeps the same high-level split as MVP1, but moves from a simple agent loop to a **registry-driven real agent runtime**. It **preserves** the MVP1 deterministic mock adapter, single-session skeleton, current `AgentRuntimeEvent` contract, and mock E2E paths; the real runtime is added as a switchable enhancement layer, not a replacement.
 
 ```mermaid
 graph TD
@@ -65,6 +65,14 @@ It must expose:
 
 API keys must be stored outside plain settings files.
 
+### Hard security boundary
+
+- renderer never receives raw API keys or reversible secret material
+- prompt assembly never sees raw API keys
+- IPC return values never include raw API keys
+- logs, runtime events, traces, and test snapshots must not contain raw API keys or reversible secret material
+- only the `main/app-core` credential vault path may resolve a provider client with plaintext key access, and that access must be transient, non-logged, and never forwarded into prompts or UI state
+
 Preferred behavior:
 
 - OS secure storage when available
@@ -88,6 +96,8 @@ MVP2 uses a three-layer tool model:
 3. **PermissionPolicy**: whether this run/role/subagent may call the tool
 
 ### Required rule
+
+**PermissionPolicy → ToolExecutor → child run / tool result** is the only allowed order.
 
 Permission policy must run before execution.
 
@@ -127,7 +137,7 @@ Prompt assembly must clearly state the role boundary for both main agent and sub
 
 ## 8. PromptAssemblyService
 
-PromptAssemblyService is a central service used before every run.
+PromptAssemblyService is a central service used before every run and should be introduced behind a small interface boundary first, then split into provider/tool/role/subagent submodules as implementation grows.
 
 ### Inputs
 
@@ -147,6 +157,41 @@ PromptAssemblyService is a central service used before every run.
 - tool list
 - role instructions
 - subagent usage rules
+
+### Minimal interface sketches
+
+```ts
+type PromptAssemblyInput = {
+  sessionId: string
+  roleId: string
+  modelId: string
+  depth: number
+  parentRunId?: string
+  allowedToolIds: string[]
+}
+
+type PromptAssemblyOutput = {
+  systemPrompt: string
+  toolManifest: string
+  subagentRules: string
+}
+
+type ProviderRegistry = {
+  listProviders(): ProviderSummary[]
+}
+
+type CredentialVault = {
+  resolveForClient(providerId: string): Promise<{ apiKey: string }>
+}
+
+type ToolRegistry = {
+  listDefinitions(roleId?: string): ToolDefinition[]
+}
+
+type SubagentService = {
+  spawn(input: { roleId: string; allowedToolIds: string[]; maxDepth: number; maxCount: number }): Promise<string>
+}
+```
 
 ### Prompt requirements
 
@@ -201,6 +246,10 @@ A child run must be created with:
 - child run events must be linked back to parent run id
 
 ## 11. Settings UI split
+
+### Compatibility / migration note
+
+MVP2 settings split must remain compatible with MVP1 defaults and preserve the existing mock-path configuration so users can keep the deterministic baseline while enabling real provider paths incrementally.
 
 Settings should be split into these modules:
 
