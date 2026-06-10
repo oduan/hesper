@@ -35,13 +35,25 @@ describe('createSessionService', () => {
     await expect(service.getSession(created.id)).rejects.toThrow(`Session not found: ${created.id}`)
   })
 
-  it('defaults createSession title to New chat', async () => {
+  it('defaults createSession title to New chat and trims blank titles', async () => {
     const persistence = await createInMemoryPersistence()
     const service = createSessionService(persistence)
 
-    const created = await service.createSession({})
+    const createdDefault = await service.createSession({})
+    const createdBlank = await service.createSession({ title: '   ' })
 
-    expect(created.title).toBe('New chat')
+    expect(createdDefault.title).toBe('New chat')
+    expect(createdBlank.title).toBe('New chat')
+  })
+
+  it('normalizes blank updates to Untitled chat', async () => {
+    const persistence = await createInMemoryPersistence()
+    const service = createSessionService(persistence)
+
+    const created = await service.createSession({ title: 'Named' })
+    const updated = await service.updateTitle(created.id, '   ')
+
+    expect(updated.title).toBe('Untitled chat')
   })
 
   it('lists sessions by visible order and excludes deleted sessions', async () => {

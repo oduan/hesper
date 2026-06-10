@@ -24,9 +24,24 @@ export type ConversationService = {
   appendRuntimeEvent(event: AgentRuntimeEvent): Promise<AgentRuntimeEvent>
 }
 
+function createNotFoundError(entity: string, id: string): Error {
+  return new Error(`${entity} not found: ${id}`)
+}
+
+async function ensureSessionExists(persistence: Persistence, sessionId: string): Promise<void> {
+  const session = await persistence.sessions.get(sessionId)
+  if (!session || session.status === 'deleted') throw createNotFoundError('Session', sessionId)
+}
+
+async function ensureRunExists(persistence: Persistence, runId: string): Promise<void> {
+  const run = await persistence.runs.get(runId)
+  if (!run) throw createNotFoundError('Run', runId)
+}
+
 export function createConversationService(persistence: Persistence): ConversationService {
   return {
     async createUserMessage(input) {
+      await ensureSessionExists(persistence, input.sessionId)
       const message: Message = {
         id: createId('message'),
         sessionId: input.sessionId,
@@ -39,6 +54,8 @@ export function createConversationService(persistence: Persistence): Conversatio
       return message
     },
     async createAssistantMessage(input) {
+      await ensureSessionExists(persistence, input.sessionId)
+      await ensureRunExists(persistence, input.runId)
       const message: Message = {
         id: createId('message'),
         sessionId: input.sessionId,
@@ -61,6 +78,20 @@ export function createConversationService(persistence: Persistence): Conversatio
       return persistence.steps.listByRun(runId)
     },
     async appendRuntimeEvent(event) {
+      if (event.type === 'run.created') {
+        await ensureSessionExists(persistence, event.run.sessionId)
+      }
+      if (event.type === 'run.started' || event.type === 'run.retrying' || event.type === 'run.failed' || event.type === 'run.succeeded' || event.type === 'message.delta') {
+        await ensureRunExists(persistence, event.runId)
+      }
+      if (event.type === 'step.created' || event.type === 'step.updated') {
+        await ensureRunExists(persistence, event.step.runId)
+      }
+      if (event.type === 'message.completed') {
+        await ensureSessionExists(persistence, event.message.sessionId)
+        if (!event.message.runId) throw createNotFoundError('Run', 'unknown')
+        await ensureRunExists(persistence, event.message.runId)
+      }
       await persistence.events.append(event)
       return event
     }

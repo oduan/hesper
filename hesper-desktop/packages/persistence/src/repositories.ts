@@ -25,6 +25,7 @@ export type MessageRepository = {
 
 export type RunRepository = {
   save(run: AgentRun): Promise<void>
+  get(id: string): Promise<AgentRun | undefined>
   listBySession(sessionId: string): Promise<AgentRun[]>
 }
 
@@ -227,6 +228,10 @@ export function createRepositories(db: Database): Persistence {
           run.error ? JSON.stringify(run.error) : undefined,
           nextSeq()
         ], run.id)
+      },
+      async get(id) {
+        const row = fetchAll('SELECT * FROM agent_runs WHERE id = ?', [id])[0]
+        return row ? toRun(row) : undefined
       },
       async listBySession(sessionId) {
         return fetchAll('SELECT * FROM agent_runs WHERE session_id = ? ORDER BY sort_seq ASC, id ASC', [sessionId]).map(toRun)

@@ -12,6 +12,14 @@ describe('createConversationService', () => {
     const conversation = createConversationService(persistence)
 
     const session = await sessions.createSession({ title: 'Chat', now })
+    const run = await persistence.runs.save({
+      id: 'run-1',
+      sessionId: session.id,
+      status: 'running',
+      modelId: 'mock/model',
+      retryCount: 0,
+      maxRetries: 5
+    })
     const userMessage = await conversation.createUserMessage({
       sessionId: session.id,
       content: 'Hello',
@@ -30,14 +38,6 @@ describe('createConversationService', () => {
       assistantMessage.id
     ])
 
-    await persistence.runs.save({
-      id: 'run-1',
-      sessionId: session.id,
-      status: 'running',
-      modelId: 'mock/model',
-      retryCount: 0,
-      maxRetries: 5
-    })
     await persistence.steps.save({
       id: 'step-1',
       runId: 'run-1',
@@ -51,5 +51,19 @@ describe('createConversationService', () => {
     expect((await conversation.listRuns(session.id)).map((run) => run.id)).toEqual(['run-1'])
     expect((await conversation.listSteps('run-1')).map((step) => step.id)).toEqual(['step-1'])
     expect((await conversation.appendRuntimeEvent({ type: 'run.succeeded', runId: 'run-1' })).type).toBe('run.succeeded')
+  })
+
+  it('rejects messages for missing sessions', async () => {
+    const persistence = await createInMemoryPersistence()
+    const conversation = createConversationService(persistence)
+
+    await expect(conversation.createUserMessage({ sessionId: 'missing', content: 'Hello' })).rejects.toThrow('Session not found: missing')
+  })
+
+  it('rejects runtime events for missing runs', async () => {
+    const persistence = await createInMemoryPersistence()
+    const conversation = createConversationService(persistence)
+
+    await expect(conversation.appendRuntimeEvent({ type: 'run.started', runId: 'missing' })).rejects.toThrow('Run not found: missing')
   })
 })

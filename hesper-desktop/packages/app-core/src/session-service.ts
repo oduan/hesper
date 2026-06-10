@@ -9,6 +9,11 @@ export type CreateSessionInput = {
   outputMode?: OutputMode
 }
 
+export function normalizeSessionTitle(title: string | undefined, fallback: string): string {
+  const normalized = title?.trim()
+  return normalized ? normalized : fallback
+}
+
 export type SessionService = {
   createSession(input: CreateSessionInput): Promise<Session>
   getSession(id: string): Promise<Session>
@@ -52,7 +57,7 @@ export function createSessionService(persistence: Persistence): SessionService {
       const timestamp = input.now ?? nowIso()
       const session: Session = {
         id: createId('session'),
-        title: input.title ?? 'New chat',
+        title: normalizeSessionTitle(input.title, 'New chat'),
         status: 'active',
         outputMode: input.outputMode ?? 'markdown',
         createdAt: timestamp,
@@ -71,7 +76,7 @@ export function createSessionService(persistence: Persistence): SessionService {
     },
     async updateTitle(id, title) {
       const session = await loadSession(persistence, id)
-      return saveSession(persistence, { ...session, title } satisfies Session)
+      return saveSession(persistence, { ...session, title: normalizeSessionTitle(title, 'Untitled chat') } satisfies Session)
     },
     async setWorkspacePath(id, workspacePath) {
       const session = await loadSession(persistence, id)
