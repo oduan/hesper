@@ -43,13 +43,14 @@ const providerPresets: SaveModelProviderInput[] = [
   { id: 'mock', name: 'Mock', kind: 'mock', enabled: true, defaultModelId: 'mock/hesper-fast' },
   { id: 'deepseek', name: 'DeepSeek', kind: 'deepseek', baseUrl: 'https://api.deepseek.com', enabled: true, defaultModelId: 'deepseek-chat' },
   { id: 'openai', name: 'OpenAI', kind: 'openai', baseUrl: 'https://api.openai.com/v1', enabled: true, defaultModelId: 'gpt-4o' },
-  { id: 'openai-compatible', name: 'OpenAI Compatible', kind: 'openai-compatible', enabled: false }
+  { id: 'openai-compatible', name: 'OpenAI Compatible', kind: 'openai-compatible', enabled: false, defaultModelId: 'openai-compatible/default' }
 ]
 
 const modelPresets: SaveModelInput[] = [
   { id: 'mock/hesper-fast', providerId: 'mock', modelName: 'mock/hesper-fast', displayName: 'Hesper Mock Fast', capabilities: ['streaming', 'toolCalls'], enabled: true },
   { id: 'deepseek-chat', providerId: 'deepseek', modelName: 'deepseek-chat', displayName: 'DeepSeek Chat', capabilities: ['streaming', 'toolCalls'], enabled: true },
-  { id: 'gpt-4o', providerId: 'openai', modelName: 'gpt-4o', displayName: 'GPT-4o', capabilities: ['streaming', 'toolCalls', 'jsonOutput'], enabled: true }
+  { id: 'gpt-4o', providerId: 'openai', modelName: 'gpt-4o', displayName: 'GPT-4o', capabilities: ['streaming', 'toolCalls', 'jsonOutput'], enabled: true },
+  { id: 'openai-compatible/default', providerId: 'openai-compatible', modelName: 'model-name', displayName: 'Custom model', capabilities: ['streaming', 'toolCalls'], enabled: false }
 ]
 
 function assertId(id: string, label = 'id'): void {
@@ -101,23 +102,55 @@ export function createModelProviderService(options: {
     }
   }
 
+  const saveProviderInternal = async (input: SaveModelProviderInput): Promise<ModelProviderConfig> => {
+    assertId(input.id)
+    assertId(input.name, 'name')
+    const existing = await options.persistence.modelProviders.get(input.id)
+    const credentialStatus = await options.credentialVaultService.getProviderApiKeyStatus({ providerId: input.id })
+    const provider = mergeProvider(existing, input, now(), credentialStatus.hasApiKey)
+    await options.persistence.modelProviders.save(provider)
+    return withCredentialStatus(provider)
+  }
+
+  const saveModelInternal = async (input: SaveModelInput): Promise<ModelConfig> => {
+    assertId(input.id)
+    assertId(input.providerId, 'providerId')
+    assertId(input.modelName, 'modelName')
+    assertId(input.displayName, 'displayName')
+    const provider = await options.persistence.modelProviders.get(input.providerId)
+    if (!provider) throw new Error(`Model provider not found: ${input.providerId}`)
+    const existing = await options.persistence.models.get(input.id)
+    const model = mergeModel(existing, input, now())
+    await options.persistence.models.save(model)
+    return model
+  }
+
+  const ensureBuiltinProviders = async (): Promise<void> => {
+    for (const provider of providerPresets) {
+      if (!await options.persistence.modelProviders.get(provider.id)) {
+        await saveProviderInternal(provider)
+      }
+    }
+    for (const model of modelPresets) {
+      if (!await options.persistence.models.get(model.id)) {
+        await saveModelInternal(model)
+      }
+    }
+  }
+
   return {
     async listProviders() {
+      await ensureBuiltinProviders()
       return Promise.all((await options.persistence.modelProviders.list()).map(withCredentialStatus))
     },
     async getProvider(id) {
       assertId(id)
+      await ensureBuiltinProviders()
       const provider = await options.persistence.modelProviders.get(id)
       return provider ? withCredentialStatus(provider) : undefined
     },
     async saveProvider(input) {
-      assertId(input.id)
-      assertId(input.name, 'name')
-      const existing = await options.persistence.modelProviders.get(input.id)
-      const credentialStatus = await options.credentialVaultService.getProviderApiKeyStatus({ providerId: input.id })
-      const provider = mergeProvider(existing, input, now(), credentialStatus.hasApiKey)
-      await options.persistence.modelProviders.save(provider)
-      return withCredentialStatus(provider)
+      return saveProviderInternal(input)
     },
     async disableProvider(id) {
       assertId(id)
@@ -134,22 +167,15 @@ export function createModelProviderService(options: {
       return provider
     },
     async listModels(providerId) {
+      await ensureBuiltinProviders()
       return providerId ? options.persistence.models.listByProvider(providerId) : options.persistence.models.list()
     },
     async saveModel(input) {
-      assertId(input.id)
-      assertId(input.providerId, 'providerId')
-      assertId(input.modelName, 'modelName')
-      assertId(input.displayName, 'displayName')
-      const provider = await options.persistence.modelProviders.get(input.providerId)
-      if (!provider) throw new Error(`Model provider not found: ${input.providerId}`)
-      const existing = await options.persistence.models.get(input.id)
-      const model = mergeModel(existing, input, now())
-      await options.persistence.models.save(model)
-      return model
+      return saveModelInternal(input)
     },
     async testProviderConnection(providerId) {
       assertId(providerId, 'providerId')
+      await ensureBuiltinProviders()
       const provider = await options.persistence.modelProviders.get(providerId)
       if (!provider) {
         return { providerId, status: 'not_found', hasApiKey: false, message: `Model provider not found: ${providerId}` }
@@ -167,8 +193,7 @@ export function createModelProviderService(options: {
       return { providerId, status: 'ok', hasApiKey: true, message: `${provider.name} has credentials configured. Network test is deferred to the model resolver task.` }
     },
     async ensureBuiltinProviders() {
-      for (const provider of providerPresets) await this.saveProvider(provider)
-      for (const model of modelPresets) await this.saveModel(model)
+      await ensureBuiltinProviders()
     }
   }
 }

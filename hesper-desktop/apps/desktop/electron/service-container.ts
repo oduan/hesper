@@ -35,6 +35,7 @@ export function createServiceContainer(options: ServiceContainerOptions) {
     ...(options.credentialCodec ? { codec: options.credentialCodec } : {})
   })
   const modelProviderService = createModelProviderService({ persistence: options.persistence, credentialVaultService })
+  void modelProviderService.ensureBuiltinProviders()
   const adapter = options.agentMode === 'pi-core' ? new PiCoreAgentAdapter() : new MockAgentAdapter({ delayMs: 0 })
   const agentRuntime = new AgentRuntime({ persistence: options.persistence, adapter })
 

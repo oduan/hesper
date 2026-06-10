@@ -97,17 +97,15 @@ export function createFallbackHesperApi(): HesperDesktopApi {
       })
     },
     providers: {
-      list: async () => [{
-        id: 'mock',
-        name: 'Mock',
-        kind: 'mock',
-        enabled: true,
-        defaultModelId: 'mock/hesper-fast',
-        apiKeyRef: 'provider:mock:api-key',
-        hasApiKey: false,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }],
+      list: async (): Promise<ModelProviderDto[]> => {
+        const timestamp = new Date().toISOString()
+        return [
+          { id: 'mock', name: 'Mock', kind: 'mock', enabled: true, defaultModelId: 'mock/hesper-fast', apiKeyRef: 'provider:mock:api-key', hasApiKey: false, createdAt: timestamp, updatedAt: timestamp },
+          { id: 'deepseek', name: 'DeepSeek', kind: 'deepseek', baseUrl: 'https://api.deepseek.com', enabled: true, defaultModelId: 'deepseek-chat', apiKeyRef: 'provider:deepseek:api-key', hasApiKey: false, createdAt: timestamp, updatedAt: timestamp },
+          { id: 'openai', name: 'OpenAI', kind: 'openai', baseUrl: 'https://api.openai.com/v1', enabled: true, defaultModelId: 'gpt-4o', apiKeyRef: 'provider:openai:api-key', hasApiKey: false, createdAt: timestamp, updatedAt: timestamp },
+          { id: 'openai-compatible', name: 'OpenAI Compatible', kind: 'openai-compatible', enabled: false, defaultModelId: 'openai-compatible/default', apiKeyRef: 'provider:openai-compatible:api-key', hasApiKey: false, createdAt: timestamp, updatedAt: timestamp }
+        ]
+      },
       save: async (input): Promise<ModelProviderDto> => {
         const timestamp = new Date().toISOString()
         return withDefined({
@@ -141,16 +139,16 @@ export function createFallbackHesperApi(): HesperDesktopApi {
       })
     },
     models: {
-      list: async (input = {}) => [{
-        id: 'mock/hesper-fast',
-        providerId: input.providerId ?? 'mock',
-        modelName: 'mock/hesper-fast',
-        displayName: 'Hesper Mock Fast',
-        capabilities: ['streaming', 'toolCalls'],
-        enabled: true,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }],
+      list: async (input = {}): Promise<ModelDto[]> => {
+        const timestamp = new Date().toISOString()
+        const models: ModelDto[] = [
+          { id: 'mock/hesper-fast', providerId: 'mock', modelName: 'mock/hesper-fast', displayName: 'Hesper Mock Fast', capabilities: ['streaming', 'toolCalls'], enabled: true, createdAt: timestamp, updatedAt: timestamp },
+          { id: 'deepseek-chat', providerId: 'deepseek', modelName: 'deepseek-chat', displayName: 'DeepSeek Chat', capabilities: ['streaming', 'toolCalls'], enabled: true, createdAt: timestamp, updatedAt: timestamp },
+          { id: 'gpt-4o', providerId: 'openai', modelName: 'gpt-4o', displayName: 'GPT-4o', capabilities: ['streaming', 'toolCalls', 'jsonOutput'], enabled: true, createdAt: timestamp, updatedAt: timestamp },
+          { id: 'openai-compatible/default', providerId: 'openai-compatible', modelName: 'model-name', displayName: 'Custom model', capabilities: ['streaming', 'toolCalls'], enabled: false, createdAt: timestamp, updatedAt: timestamp }
+        ]
+        return input.providerId ? models.filter((model) => model.providerId === input.providerId) : models
+      },
       save: async (input): Promise<ModelDto> => {
         const timestamp = new Date().toISOString()
         return withDefined({

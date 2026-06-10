@@ -23,7 +23,28 @@ describe('createModelProviderService', () => {
 
     expect((await service.listProviders()).map((provider) => provider.id)).toEqual(['mock', 'deepseek', 'openai', 'openai-compatible'])
     expect(await service.getProvider('mock')).toMatchObject({ kind: 'mock', enabled: true, defaultModelId: 'mock/hesper-fast', hasApiKey: false })
+    expect(await service.getProvider('openai-compatible')).toMatchObject({ enabled: false, defaultModelId: 'openai-compatible/default' })
+    expect((await service.listModels()).map((model) => model.id)).toEqual(['mock/hesper-fast', 'deepseek-chat', 'gpt-4o', 'openai-compatible/default'])
     expect((await service.listModels('mock')).map((model) => model.id)).toEqual(['mock/hesper-fast'])
+  })
+
+  it('seeds builtin providers on first list without overwriting user configuration', async () => {
+    const persistence = await createInMemoryPersistence()
+    const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
+    const service = createModelProviderService({ persistence, credentialVaultService, now: () => now })
+
+    expect(await persistence.modelProviders.list()).toEqual([])
+    expect((await service.listProviders()).map((provider) => provider.id)).toEqual(['mock', 'deepseek', 'openai', 'openai-compatible'])
+
+    await service.saveProvider({ id: 'deepseek', name: 'DeepSeek Local', kind: 'deepseek', baseUrl: 'https://local.deepseek.test', enabled: false, defaultModelId: 'local-chat' })
+    await service.ensureBuiltinProviders()
+
+    expect(await service.getProvider('deepseek')).toMatchObject({
+      name: 'DeepSeek Local',
+      baseUrl: 'https://local.deepseek.test',
+      enabled: false,
+      defaultModelId: 'local-chat'
+    })
   })
 
   it('saves providers and models through persistence repositories', async () => {

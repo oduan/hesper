@@ -8,7 +8,7 @@
   "scripts": {
     "build": "pnpm --filter @hesper/shared build && pnpm --filter @hesper/persistence build && node -e \"const fs=require('fs'); fs.rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
     "typecheck": "pnpm --filter @hesper/shared build && pnpm --filter @hesper/persistence build && tsc -p tsconfig.typecheck.json --noEmit",
-    "test": "pnpm --filter @hesper/shared build && pnpm --filter @hesper/persistence build && vitest --run"
+    "test": "pnpm --filter @hesper/shared build && pnpm --filter @hesper/persistence build && vitest --run --maxWorkers=1 --no-file-parallelism"
   },
   "dependencies": {
     "@hesper/persistence": "workspace:*",

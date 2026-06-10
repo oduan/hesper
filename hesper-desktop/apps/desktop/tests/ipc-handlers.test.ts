@@ -22,6 +22,16 @@ describe('desktop service container', () => {
     expect(session.title).toBe('Desktop test')
     expect(await container.sessionService.listSessions()).toHaveLength(1)
   })
+
+  it('seeds builtin providers for an empty desktop persistence store', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock', credentialCodec: createMockCredentialCodec() })
+
+    await container.modelProviderService.ensureBuiltinProviders()
+
+    expect((await container.modelProviderService.listProviders()).map((provider) => provider.id)).toEqual(['mock', 'deepseek', 'openai', 'openai-compatible'])
+    expect((await container.modelProviderService.listModels('mock')).map((model) => model.id)).toEqual(['mock/hesper-fast'])
+  })
 })
 
 describe('registerIpcHandlers', () => {
