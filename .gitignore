@@ -24,3 +24,6 @@ Thumbs.db
 
 # Isolated implementation worktrees
 .worktrees/
+
+# Windows reserved-name sink/local artifact at repo root
+/nul
