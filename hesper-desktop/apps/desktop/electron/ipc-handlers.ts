@@ -127,7 +127,7 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       return session
     },
     [ipcChannels.dialogSelectDirectory]: async () => {
-      const result = await options.dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] })
+      const result = await options.dialog.showOpenDialog({ properties: ['openDirectory'] })
       return directorySelectionSchema.parse({
         canceled: result.canceled,
         path: result.canceled ? undefined : result.filePaths[0]

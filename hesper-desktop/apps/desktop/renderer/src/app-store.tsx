@@ -16,6 +16,7 @@ export type AppState = {
 export type AppAction =
   | { type: 'sessions.loaded'; sessions: Session[] }
   | { type: 'session.created'; session: Session }
+  | { type: 'session.updated'; session: Session }
   | { type: 'session.selected'; sessionId: string }
   | { type: 'message.optimistic'; message: Message }
   | { type: 'message.removed'; sessionId: string; messageId: string }
@@ -43,7 +44,7 @@ function pickActiveSessionId(currentId: string | undefined, sessions: Session[])
     return currentId
   }
 
-  return sessions[0]?.id
+  return sessions.find((session) => session.status === 'active')?.id ?? sessions[0]?.id
 }
 
 function mergeById<T extends { id: string }>(items: T[], nextItem: T): T[] {
@@ -115,6 +116,17 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         ...state,
         sessions,
         activeSessionId: action.session.id,
+        messagesBySession: {
+          ...state.messagesBySession,
+          [action.session.id]: state.messagesBySession[action.session.id] ?? []
+        }
+      }
+    }
+    case 'session.updated': {
+      const sessions = sortSessions(mergeById(state.sessions, action.session))
+      return {
+        ...state,
+        sessions,
         messagesBySession: {
           ...state.messagesBySession,
           [action.session.id]: state.messagesBySession[action.session.id] ?? []

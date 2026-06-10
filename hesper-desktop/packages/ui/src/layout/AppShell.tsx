@@ -9,10 +9,12 @@ export type AppShellProps = {
   sessions: Session[]
   activeSection: AppSection
   title: string
+  activeSessionId?: string
+  onSelectSession?: (sessionId: string) => void
   children?: ReactNode
 }
 
-export function AppShell({ sessions, activeSection, title, children }: AppShellProps) {
+export function AppShell({ sessions, activeSection, title, activeSessionId, onSelectSession, children }: AppShellProps) {
   return (
     <div
       style={{
@@ -25,7 +27,12 @@ export function AppShell({ sessions, activeSection, title, children }: AppShellP
       }}
     >
       <ActivityRail activeSection={activeSection} />
-      <EntityListPane activeSection={activeSection} sessions={sessions} />
+      <EntityListPane
+        activeSection={activeSection}
+        sessions={sessions}
+        {...(activeSessionId ? { activeSessionId } : {})}
+        {...(onSelectSession ? { onSelectSession } : {})}
+      />
       <section aria-label="详情区域" style={{ minWidth: 0, display: 'flex', flexDirection: 'column' }}>
         <TitleBar title={title} />
         <div style={{ flex: 1, minHeight: 0, padding: darkTheme.spacing.md }}>{children}</div>

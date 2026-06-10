@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react'
 import { createId, nowIso, type Message } from '@hesper/shared'
 import { AppShell, ConversationView, type ConversationShortcutCommand } from '@hesper/ui'
 import { AppStoreProvider, useAppStore } from './app-store'
@@ -13,10 +13,12 @@ export function App() {
   )
 }
 
+const sessionModelOptions = ['mock/hesper-fast', 'openai/gpt-4o', 'anthropic/claude-sonnet-4-20250514']
+
 function AppContent() {
   const { state, dispatch } = useAppStore()
   const [loadError, setLoadError] = useState<string>()
-  const [sendError, setSendError] = useState<string>()
+  const [sendErrorsBySession, setSendErrorsBySession] = useState<Record<string, string | undefined>>({})
   const [shortcutCommand, setShortcutCommand] = useState<ConversationShortcutCommand>()
 
   useEffect(() => {
@@ -68,6 +70,7 @@ function AppContent() {
   }, [])
 
   const activeSession = state.sessions.find((session) => session.id === state.activeSessionId)
+  const activeSendError = activeSession ? sendErrorsBySession[activeSession.id] : undefined
   const activeRunId = activeSession ? state.latestRunIdBySession[activeSession.id] : undefined
   const activeSteps = activeRunId ? state.stepsByRun[activeRunId] ?? [] : []
   const activeStreamingText = activeRunId ? state.streamingByRun[activeRunId] ?? '' : ''
@@ -78,12 +81,14 @@ function AppContent() {
       sessions={state.sessions}
       activeSection={state.activeSection}
       title={activeSession?.title ?? '新建会话'}
+      {...(state.activeSessionId ? { activeSessionId: state.activeSessionId } : {})}
+      onSelectSession={(sessionId) => dispatch({ type: 'session.selected', sessionId })}
     >
       {activeSession ? (
         <>
-          {sendError ? (
+          {activeSendError ? (
             <p role="alert" style={{ margin: '0 0 12px', color: '#fca5a5', padding: '0 12px' }}>
-              发送失败：{sendError}
+              发送失败：{activeSendError}
             </p>
           ) : null}
           <ConversationView
@@ -92,13 +97,23 @@ function AppContent() {
             steps={activeSteps}
             streamingText={activeStreamingText}
             modelId={activeSession.defaultModelId ?? 'mock/hesper-fast'}
+            modelOptions={sessionModelOptions}
+            onSelectWorkspace={() => {
+              void updateSessionWorkspace(activeSession, dispatch)
+            }}
+            onModelChange={(modelId) => {
+              void updateSessionModel(activeSession.id, modelId, dispatch)
+            }}
+            onOutputModeChange={(outputMode) => {
+              void updateSessionOutputMode(activeSession.id, outputMode, dispatch)
+            }}
             onSend={(content) => {
               void sendMessage({
                 session: activeSession,
                 modelId: activeSession.defaultModelId ?? 'mock/hesper-fast',
                 content,
                 dispatch,
-                setSendError
+                setSendErrorsBySession
               })
             }}
             {...(shortcutCommand ? { shortcutCommand } : {})}
@@ -154,20 +169,47 @@ async function createSession(dispatch: ReturnType<typeof useAppStore>['dispatch'
   dispatch({ type: 'session.created', session })
 }
 
+async function updateSessionWorkspace(
+  session: { id: string; workspacePath?: string },
+  dispatch: ReturnType<typeof useAppStore>['dispatch']
+) {
+  const result = await hesperApi.dialog.selectDirectory()
+  if (result.canceled) {
+    return
+  }
+
+  const updatedSession = await hesperApi.sessions.setWorkspace({ id: session.id, workspacePath: result.path })
+  dispatch({ type: 'session.updated', session: updatedSession })
+}
+
+async function updateSessionModel(sessionId: string, modelId: string, dispatch: ReturnType<typeof useAppStore>['dispatch']) {
+  const updatedSession = await hesperApi.sessions.setModel({ id: sessionId, defaultModelId: modelId })
+  dispatch({ type: 'session.updated', session: updatedSession })
+}
+
+async function updateSessionOutputMode(
+  sessionId: string,
+  outputMode: 'markdown' | 'html',
+  dispatch: ReturnType<typeof useAppStore>['dispatch']
+) {
+  const updatedSession = await hesperApi.sessions.setOutputMode({ id: sessionId, outputMode })
+  dispatch({ type: 'session.updated', session: updatedSession })
+}
+
 async function sendMessage({
   session,
   modelId,
   content,
   dispatch,
-  setSendError
+  setSendErrorsBySession
 }: {
   session: Parameters<typeof createOptimisticUserMessage>[0]['session']
   modelId: string
   content: string
   dispatch: ReturnType<typeof useAppStore>['dispatch']
-  setSendError: (value: string | undefined) => void
+  setSendErrorsBySession: Dispatch<SetStateAction<Record<string, string | undefined>>>
 }) {
-  setSendError(undefined)
+  setSendErrorsBySession((current) => ({ ...current, [session.id]: undefined }))
   const message = createOptimisticUserMessage({ session, content })
   dispatch({ type: 'message.optimistic', message })
 
@@ -181,7 +223,10 @@ async function sendMessage({
     })
   } catch (error) {
     dispatch({ type: 'message.removed', sessionId: session.id, messageId: message.id })
-    setSendError(error instanceof Error ? error.message : 'unknown enqueue error')
+    setSendErrorsBySession((current) => ({
+      ...current,
+      [session.id]: error instanceof Error ? error.message : 'unknown enqueue error'
+    }))
   }
 }
 

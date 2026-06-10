@@ -18,7 +18,11 @@ export type ConversationViewProps = {
   steps: RunStep[]
   streamingText: string
   modelId: string
+  modelOptions?: string[]
   onSend: (content: string) => void
+  onSelectWorkspace?: () => void
+  onModelChange?: (modelId: string) => void
+  onOutputModeChange?: (outputMode: Session['outputMode']) => void
   shortcutCommand?: ConversationShortcutCommand
 }
 
@@ -49,7 +53,19 @@ function createStepAnchorId(stepId: string): string {
   return `step-${stepId}`
 }
 
-export function ConversationView({ session, messages, steps, streamingText, modelId, onSend, shortcutCommand }: ConversationViewProps) {
+export function ConversationView({
+  session,
+  messages,
+  steps,
+  streamingText,
+  modelId,
+  modelOptions,
+  onSend,
+  onSelectWorkspace,
+  onModelChange,
+  onOutputModeChange,
+  shortcutCommand
+}: ConversationViewProps) {
   const [navigationOpen, setNavigationOpen] = useState(false)
   const [closeFullscreenSignal, setCloseFullscreenSignal] = useState(0)
   const anchorRefs = useRef<Record<string, HTMLElement | null>>({})
@@ -263,6 +279,10 @@ export function ConversationView({ session, messages, steps, streamingText, mode
           {...(session.workspacePath ? { workspacePath: session.workspacePath } : {})}
           modelId={modelId}
           outputMode={session.outputMode}
+          {...(modelOptions ? { modelOptions } : {})}
+          {...(onSelectWorkspace ? { onSelectWorkspace } : {})}
+          {...(onModelChange ? { onModelChange } : {})}
+          {...(onOutputModeChange ? { onOutputModeChange } : {})}
           onSend={onSend}
           sendSignal={shortcutCommand?.type === 'send' ? shortcutCommand.nonce : 0}
         />

@@ -4,6 +4,32 @@ import { appReducer, initialAppState } from '../src/app-store'
 const now = '2026-06-10T03:00:00.000Z'
 
 describe('app-store reducer', () => {
+  it('prefers the latest active session when restoring loaded sessions', () => {
+    const nextState = appReducer(initialAppState, {
+      type: 'sessions.loaded',
+      sessions: [
+        {
+          id: 'session-archived',
+          title: 'Archived newer',
+          status: 'archived',
+          outputMode: 'markdown',
+          createdAt: now,
+          updatedAt: '2026-06-10T03:10:00.000Z'
+        },
+        {
+          id: 'session-active',
+          title: 'Active current',
+          status: 'active',
+          outputMode: 'markdown',
+          createdAt: now,
+          updatedAt: '2026-06-10T03:09:00.000Z'
+        }
+      ]
+    })
+
+    expect(nextState.activeSessionId).toBe('session-active')
+  })
+
   it('stores optimistic user messages locally', () => {
     const sessionLoadedState = appReducer(initialAppState, {
       type: 'sessions.loaded',

@@ -6,9 +6,11 @@ export type EntityListPaneProps = {
   title?: string
   activeSection: AppSection
   sessions: Session[]
+  activeSessionId?: string
+  onSelectSession?: (sessionId: string) => void
 }
 
-export function EntityListPane({ title, activeSection, sessions }: EntityListPaneProps) {
+export function EntityListPane({ title, activeSection, sessions, activeSessionId, onSelectSession }: EntityListPaneProps) {
   const heading = title ?? (activeSection === 'sessions' ? '所有会话' : '列表')
 
   return (
@@ -30,20 +32,35 @@ export function EntityListPane({ title, activeSection, sessions }: EntityListPan
       {activeSection === 'sessions' ? (
         sessions.length > 0 ? (
           <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: darkTheme.spacing.xs }}>
-            {sessions.map((session) => (
-              <li
-                key={session.id}
-                style={{
-                  border: `1px solid ${darkTheme.color.border}`,
-                  borderRadius: darkTheme.radius.md,
-                  background: darkTheme.color.surfaceMuted,
-                  padding: darkTheme.spacing.sm
-                }}
-              >
-                <div style={{ fontWeight: 600 }}>{session.title}</div>
-                <div style={{ fontSize: 12, color: darkTheme.color.textMuted }}>{session.outputMode}</div>
-              </li>
-            ))}
+            {sessions.map((session) => {
+              const isActive = session.id === activeSessionId
+              return (
+                <li key={session.id}>
+                  <button
+                    type="button"
+                    aria-current={isActive ? 'true' : undefined}
+                    onClick={() => onSelectSession?.(session.id)}
+                    style={{
+                      width: '100%',
+                      border: `1px solid ${isActive ? darkTheme.color.accent : darkTheme.color.border}`,
+                      borderRadius: darkTheme.radius.md,
+                      background: isActive ? 'rgba(155, 140, 255, 0.12)' : darkTheme.color.surfaceMuted,
+                      padding: darkTheme.spacing.sm,
+                      textAlign: 'left',
+                      color: darkTheme.color.text,
+                      cursor: 'pointer',
+                      display: 'grid',
+                      gap: 4
+                    }}
+                  >
+                    <div style={{ fontWeight: 600 }}>{session.title}</div>
+                    <div style={{ fontSize: 12, color: darkTheme.color.textMuted }}>{session.defaultModelId ?? 'mock/hesper-fast'}</div>
+                    <div style={{ fontSize: 12, color: darkTheme.color.textMuted }}>{session.workspacePath ?? '未设置工作目录'}</div>
+                    <div style={{ fontSize: 12, color: darkTheme.color.textMuted }}>{session.outputMode}</div>
+                  </button>
+                </li>
+              )
+            })}
           </ul>
         ) : (
           <div style={{ color: darkTheme.color.textMuted, fontSize: 13 }}>暂无会话</div>
