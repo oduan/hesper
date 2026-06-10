@@ -6,7 +6,7 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "pnpm --filter @hesper/shared build && pnpm --filter @hesper/persistence build && tsc -p tsconfig.build.json",
+    "build": "pnpm --filter @hesper/shared build && pnpm --filter @hesper/persistence build && tsc -p tsconfig.build.json && node -e \"const fs=require('fs'); const path=require('path'); for (const p of [path.join(process.cwd(),'dist/packages'), path.join(process.cwd(),'dist/__tests__')]) fs.rmSync(p, { recursive: true, force: true });\"",
     "typecheck": "pnpm --filter @hesper/shared build && pnpm --filter @hesper/persistence build && tsc -p tsconfig.typecheck.json --noEmit",
     "test": "pnpm --filter @hesper/shared build && pnpm --filter @hesper/persistence build && vitest --run"
   },

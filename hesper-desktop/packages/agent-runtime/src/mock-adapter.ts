@@ -13,14 +13,15 @@ function sleep(ms: number): Promise<void> {
 }
 
 export class MockAgentAdapter implements AgentAdapter {
-  private attempts = 0
+  private readonly attemptsByRunId = new Map<string, number>()
 
   constructor(private readonly options: MockAgentAdapterOptions = {}) {}
 
   async run(input: AgentPromptInput, emit: (event: AgentRuntimeEvent) => void | Promise<void>): Promise<void> {
-    this.attempts += 1
+    const attempts = (this.attemptsByRunId.get(input.runId) ?? 0) + 1
+    this.attemptsByRunId.set(input.runId, attempts)
 
-    if (this.options.failTimes && this.attempts <= this.options.failTimes) {
+    if (this.options.failTimes && attempts <= this.options.failTimes) {
       throw new Error('stream interrupted')
     }
 

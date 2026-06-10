@@ -41,6 +41,7 @@ export class AgentRuntime {
   private readonly retryPolicy: RetryPolicy
   private readonly listeners = new Set<RuntimeListener>()
   private readonly sessionStates = new Map<string, SessionState>()
+  private readonly enqueueChains = new Map<string, Promise<void>>()
 
   constructor(options: AgentRuntimeOptions) {
     this.persistence = options.persistence
@@ -56,33 +57,40 @@ export class AgentRuntime {
   }
 
   async enqueue(input: EnqueueRunInput): Promise<AgentRun> {
-    const session = await this.persistence.sessions.get(input.sessionId)
-    if (!session || session.status === 'deleted') throw createMissingSessionError(input.sessionId)
+    return this.withSessionEnqueueLock(input.sessionId, async () => {
+      const session = await this.persistence.sessions.get(input.sessionId)
+      if (!session || session.status === 'deleted') throw createMissingSessionError(input.sessionId)
 
-    const state = this.getSessionState(input.sessionId)
-    const timestamp = nowIso()
-    const run: AgentRun = {
-      id: createId('run'),
-      sessionId: input.sessionId,
-      status: state.running ? 'queued' : 'running',
-      modelId: input.modelId,
-      retryCount: 0,
-      maxRetries: this.retryPolicy.maxRetries,
-      ...(input.workspacePath !== undefined ? { workspacePath: input.workspacePath } : {}),
-      ...(input.parentRunId !== undefined ? { parentRunId: input.parentRunId } : {}),
-      ...(!state.running ? { startedAt: timestamp } : {})
-    }
+      const state = this.getSessionState(input.sessionId)
+      const shouldStartImmediately = !state.running
+      const timestamp = nowIso()
+      const run: AgentRun = {
+        id: createId('run'),
+        sessionId: input.sessionId,
+        status: shouldStartImmediately ? 'running' : 'queued',
+        modelId: input.modelId,
+        retryCount: 0,
+        maxRetries: this.retryPolicy.maxRetries,
+        ...(input.workspacePath !== undefined ? { workspacePath: input.workspacePath } : {}),
+        ...(input.parentRunId !== undefined ? { parentRunId: input.parentRunId } : {}),
+        ...(shouldStartImmediately ? { startedAt: timestamp } : {})
+      }
 
-    await this.persistence.runs.save(run)
-    await this.emitAndPersist({ type: 'run.created', run })
+      if (shouldStartImmediately) {
+        state.running = true
+      }
 
-    if (state.running) {
-      state.queue.push({ run, prompt: input.prompt })
+      await this.persistence.runs.save(run)
+      await this.emitAndPersist({ type: 'run.created', run })
+
+      if (!shouldStartImmediately) {
+        state.queue.push({ run, prompt: input.prompt })
+        return run
+      }
+
+      this.startSessionRun(input.sessionId, run, input.prompt)
       return run
-    }
-
-    this.startSessionRun(input.sessionId, run, input.prompt)
-    return run
+    })
   }
 
   async waitForIdle(sessionId: string): Promise<void> {
@@ -106,6 +114,25 @@ export class AgentRuntime {
     const created: SessionState = { running: false, queue: [], active: undefined, waiters: [] }
     this.sessionStates.set(sessionId, created)
     return created
+  }
+
+  private async withSessionEnqueueLock<T>(sessionId: string, task: () => Promise<T>): Promise<T> {
+    const previous = this.enqueueChains.get(sessionId) ?? Promise.resolve()
+    let release!: () => void
+    const current = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    this.enqueueChains.set(sessionId, previous.then(() => current))
+
+    await previous
+    try {
+      return await task()
+    } finally {
+      release()
+      if (this.enqueueChains.get(sessionId) === current) {
+        this.enqueueChains.delete(sessionId)
+      }
+    }
   }
 
   private startSessionRun(sessionId: string, run: AgentRun, prompt: string): void {

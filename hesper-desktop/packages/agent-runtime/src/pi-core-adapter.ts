@@ -1,10 +1,18 @@
-import { Agent, type AgentEvent } from '@earendil-works/pi-agent-core'
+import { Agent, type AgentEvent, type AgentTool } from '@earendil-works/pi-agent-core'
 import { getModel, type KnownProvider } from '@earendil-works/pi-ai'
 import type { AgentRuntimeEvent } from '@hesper/shared'
 import type { AgentAdapter, AgentPromptInput } from './adapters'
 import { mapPiEventToHesperEvents } from './map-pi-event'
 
 const DEFAULT_SYSTEM_PROMPT = 'You are hesper, a desktop coding assistant. Be concise, stable, and explicit about tool actions.'
+
+export type PiCoreModelResolver = (provider: string, modelName: string) => ReturnType<typeof getModel>
+
+export type PiCoreAgentAdapterOptions = {
+  tools?: AgentTool<any>[]
+  systemPrompt?: string
+  modelResolver?: PiCoreModelResolver
+}
 
 function parseModelId(modelId: string): { provider: string; modelName: string } {
   if (modelId.includes('/')) {
@@ -21,23 +29,29 @@ function parseModelId(modelId: string): { provider: string; modelName: string } 
   }
 }
 
+function defaultModelResolver(provider: string, modelName: string): ReturnType<typeof getModel> {
+  return getModel(provider as KnownProvider, modelName as never)
+}
+
 export class PiCoreAgentAdapter implements AgentAdapter {
+  constructor(private readonly options: PiCoreAgentAdapterOptions = {}) {}
+
   async run(input: AgentPromptInput, emit: (event: AgentRuntimeEvent) => void | Promise<void>): Promise<void> {
     const { provider, modelName } = parseModelId(input.modelId)
-    const model = getModel(provider as KnownProvider, modelName as never)
+    const model = (this.options.modelResolver ?? defaultModelResolver)(provider, modelName)
 
     const agent = new Agent({
       initialState: {
-        systemPrompt: DEFAULT_SYSTEM_PROMPT,
+        systemPrompt: this.options.systemPrompt ?? DEFAULT_SYSTEM_PROMPT,
         model,
-        tools: [],
+        tools: this.options.tools ?? [],
         messages: []
       },
       toolExecution: 'parallel'
     })
 
     const unsubscribe = agent.subscribe(async (piEvent: AgentEvent) => {
-      for (const event of mapPiEventToHesperEvents(input.runId, piEvent)) {
+      for (const event of mapPiEventToHesperEvents({ runId: input.runId, sessionId: input.sessionId }, piEvent)) {
         await emit(event)
       }
     })
