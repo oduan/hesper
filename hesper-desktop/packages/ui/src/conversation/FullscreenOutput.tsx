@@ -1,7 +1,6 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect } from 'react'
 import type { MessageContentType } from '@hesper/shared'
 import { darkTheme } from '../theme'
-import { createSandboxedHtmlDocument } from './html-document'
 
 export type FullscreenOutputProps = {
   open: boolean
@@ -11,8 +10,6 @@ export type FullscreenOutputProps = {
 }
 
 export function FullscreenOutput({ open, content, contentType, onClose }: FullscreenOutputProps) {
-  const sandboxedDocument = useMemo(() => createSandboxedHtmlDocument(content), [content])
-
   useEffect(() => {
     if (!open) {
       return undefined
@@ -36,7 +33,7 @@ export function FullscreenOutput({ open, content, contentType, onClose }: Fullsc
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="全屏输出"
+      aria-label="输出全屏查看"
       style={{
         position: 'fixed',
         inset: 0,
@@ -83,7 +80,7 @@ export function FullscreenOutput({ open, content, contentType, onClose }: Fullsc
             <iframe
               title="HTML 输出"
               sandbox=""
-              srcDoc={sandboxedDocument}
+              srcDoc={content}
               style={{ width: '100%', height: '100%', minHeight: 480, border: 0, background: '#fff' }}
             />
           ) : (

@@ -13,6 +13,13 @@ export type RightNavigationProps = {
   onNavigate?: (id: string) => void
 }
 
+const kindLabels: Record<NavigationItem['kind'], string> = {
+  user: '用户消息',
+  assistant: '助手输出',
+  warning: '警告',
+  tool: '工具节点'
+}
+
 export function RightNavigation({ open, items, onClose, onNavigate }: RightNavigationProps) {
   if (!open) {
     return null
@@ -32,7 +39,7 @@ export function RightNavigation({ open, items, onClose, onNavigate }: RightNavig
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <strong>导航</strong>
+        <strong>会话导航</strong>
         {onClose ? (
           <button type="button" onClick={onClose} aria-label="关闭导航">
             关闭
@@ -56,7 +63,7 @@ export function RightNavigation({ open, items, onClose, onNavigate }: RightNavig
                 cursor: 'pointer'
               }}
             >
-              <div style={{ fontSize: 12, color: darkTheme.color.textMuted }}>{item.kind}</div>
+              <div style={{ fontSize: 12, color: darkTheme.color.textMuted }}>{kindLabels[item.kind]}</div>
               <div>{item.label}</div>
             </button>
           </li>

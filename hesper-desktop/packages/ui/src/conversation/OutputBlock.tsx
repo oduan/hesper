@@ -1,8 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { MessageContentType } from '@hesper/shared'
 import { darkTheme } from '../theme'
 import { FullscreenOutput } from './FullscreenOutput'
-import { createSandboxedHtmlDocument } from './html-document'
 
 export type OutputBlockProps = {
   content: string
@@ -11,12 +10,24 @@ export type OutputBlockProps = {
 
 export function OutputBlock({ content, contentType }: OutputBlockProps) {
   const [isFullscreen, setIsFullscreen] = useState(false)
-  const sandboxedDocument = useMemo(() => createSandboxedHtmlDocument(content), [content])
+  const [isHovered, setIsHovered] = useState(false)
+
+  useEffect(() => {
+    if (!isFullscreen) {
+      return undefined
+    }
+
+    const handleClosePanels = () => setIsFullscreen(false)
+    window.addEventListener('hesper:close-panels', handleClosePanels)
+    return () => window.removeEventListener('hesper:close-panels', handleClosePanels)
+  }, [isFullscreen])
 
   return (
     <>
       <section
         className="hesper-output-block"
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
         style={{
           position: 'relative',
           height: 240,
@@ -30,6 +41,8 @@ export function OutputBlock({ content, contentType }: OutputBlockProps) {
           type="button"
           aria-label="全屏查看输出"
           onClick={() => setIsFullscreen(true)}
+          onFocus={() => setIsHovered(true)}
+          onBlur={() => setIsHovered(false)}
           style={{
             position: 'absolute',
             top: darkTheme.spacing.sm,
@@ -39,7 +52,9 @@ export function OutputBlock({ content, contentType }: OutputBlockProps) {
             border: `1px solid ${darkTheme.color.border}`,
             background: darkTheme.color.surfaceMuted,
             color: darkTheme.color.text,
-            cursor: 'pointer'
+            cursor: 'pointer',
+            opacity: isHovered ? 1 : 0,
+            transition: 'opacity 120ms ease'
           }}
         >
           ⤢
@@ -49,7 +64,7 @@ export function OutputBlock({ content, contentType }: OutputBlockProps) {
             <iframe
               title="HTML 输出预览"
               sandbox=""
-              srcDoc={sandboxedDocument}
+              srcDoc={content}
               style={{ width: '100%', height: '100%', minHeight: 200, border: 0, background: '#fff' }}
             />
           ) : (

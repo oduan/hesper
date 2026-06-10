@@ -1,4 +1,4 @@
-import { useMemo, useState, type ChangeEvent, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type KeyboardEvent } from 'react'
 import type { OutputMode } from '@hesper/shared'
 import { darkTheme } from '../theme'
 
@@ -13,7 +13,7 @@ export function Composer({ workspacePath, modelId, outputMode, onSend }: Compose
   const [value, setValue] = useState('')
   const canSend = useMemo(() => value.trim().length > 0, [value])
 
-  const handleSend = () => {
+  const handleSend = useCallback(() => {
     const content = value.trim()
     if (!content) {
       return
@@ -21,7 +21,13 @@ export function Composer({ workspacePath, modelId, outputMode, onSend }: Compose
 
     onSend(content)
     setValue('')
-  }
+  }, [onSend, value])
+
+  useEffect(() => {
+    const handleShortcutSend = () => handleSend()
+    window.addEventListener('hesper:send-active-composer', handleShortcutSend)
+    return () => window.removeEventListener('hesper:send-active-composer', handleShortcutSend)
+  }, [handleSend])
 
   return (
     <section
@@ -49,7 +55,7 @@ export function Composer({ workspacePath, modelId, outputMode, onSend }: Compose
         }}
         style={{
           width: '100%',
-          resize: 'vertical',
+          resize: 'none',
           minHeight: 120,
           maxHeight: 240,
           overflow: 'auto',

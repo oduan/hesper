@@ -2,6 +2,7 @@ import { useEffect, useState, type CSSProperties } from 'react'
 import { AppShell, ConversationView } from '@hesper/ui'
 import { AppStoreProvider, useAppStore } from './app-store'
 import { hesperApi } from './ipc-client'
+import { createShortcutHandler } from './shortcuts'
 
 export function App() {
   return (
@@ -44,6 +45,19 @@ function AppContent() {
     })
   }, [dispatch])
 
+  useEffect(() => {
+    const handler = createShortcutHandler({
+      send: () => window.dispatchEvent(new Event('hesper:send-active-composer')),
+      closePanels: () => window.dispatchEvent(new Event('hesper:close-panels')),
+      quickSwitch: () => window.dispatchEvent(new Event('hesper:quick-switch')),
+      jumpMessage: (direction, assistantOnly) =>
+        window.dispatchEvent(new CustomEvent('hesper:jump-message', { detail: { direction, assistantOnly } }))
+    })
+
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
+
   const activeSession = state.sessions.find((session) => session.id === state.activeSessionId)
   const activeRunId = activeSession ? state.latestRunIdBySession[activeSession.id] : undefined
   const activeSteps = activeRunId ? state.stepsByRun[activeRunId] ?? [] : []
@@ -61,7 +75,8 @@ function AppContent() {
           session={activeSession}
           messages={activeMessages}
           steps={activeSteps}
-          {...(activeStreamingText ? { output: activeStreamingText } : {})}
+          streamingText={activeStreamingText}
+          modelId={activeSession.defaultModelId ?? 'mock/hesper-fast'}
           onSend={() => undefined}
         />
       ) : (
