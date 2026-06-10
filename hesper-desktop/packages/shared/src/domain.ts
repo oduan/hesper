@@ -12,12 +12,57 @@ export type RunError = {
   retryable: boolean
 }
 
+export type ModelProviderKind = 'mock' | 'openai' | 'deepseek' | 'openai-compatible' | 'anthropic' | 'custom'
+export type ModelCapability = 'streaming' | 'toolCalls' | 'jsonOutput' | 'reasoning'
+export type ToolPermissionMode = 'allow' | 'deny' | 'ask'
+export type ToolPermissionScope = 'global' | 'session' | 'role' | 'subagent'
+export type ToolRiskLevel = 'low' | 'medium' | 'high' | 'critical'
+export type SubagentInvocationStatus = RunStatus
+
+export type ModelRef = {
+  providerId: string
+  modelId: string
+}
+
+export type ModelProviderConfig = {
+  id: string
+  name: string
+  kind: ModelProviderKind
+  baseUrl?: string
+  apiKeyRef?: string
+  hasApiKey?: boolean
+  enabled: boolean
+  defaultModelId?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type ModelConfig = {
+  id: string
+  providerId: string
+  modelName: string
+  displayName: string
+  capabilities: ModelCapability[]
+  contextWindow?: number
+  enabled?: boolean
+  createdAt: string
+  updatedAt: string
+}
+
 export type Session = {
   id: string
   title: string
   status: SessionStatus
   workspacePath?: string
   defaultModelId?: string
+  providerId?: string
+  modelId?: string
+  roleId?: string
+  enabledSkillIds?: string[]
+  enabledToolIds?: string[]
+  allowedSubagentRoleIds?: string[]
+  maxSubagentDepth?: number
+  maxSubagentsPerRun?: number
   outputMode: OutputMode
   createdAt: string
   updatedAt: string
@@ -37,6 +82,8 @@ export type AgentRun = {
   id: string
   sessionId: string
   parentRunId?: string
+  subagentInvocationId?: string
+  depth?: number
   status: RunStatus
   modelId: string
   workspacePath?: string
@@ -65,6 +112,10 @@ export type Skill = {
   description?: string
   source: 'builtin' | 'workspace' | 'project'
   path?: string
+  sourcePath?: string
+  prompt?: string
+  allowedToolIds?: string[]
+  enabled?: boolean
 }
 
 export type Role = {
@@ -72,9 +123,15 @@ export type Role = {
   name: string
   description?: string
   defaultModelId?: string
+  defaultModelRef?: ModelRef
+  systemPrompt?: string
   allowedSkillIds: string[]
+  defaultSkillIds?: string[]
+  defaultToolIds?: string[]
   canBeMainAgent: boolean
   canBeSubagent: boolean
+  canBeAssignedToSubagent?: boolean
+  subagentGuidance?: string
 }
 
 export type ToolDefinition = {
@@ -83,4 +140,30 @@ export type ToolDefinition = {
   description: string
   inputSchema: unknown
   category: 'filesystem' | 'git' | 'web' | 'agent' | 'system'
+}
+
+export type ToolPermissionPolicy = {
+  id: string
+  toolId: string
+  mode: ToolPermissionMode
+  scope: ToolPermissionScope
+  subjectId?: string
+  riskLevel?: ToolRiskLevel
+  createdAt: string
+  updatedAt: string
+}
+
+export type SubagentInvocation = {
+  id: string
+  parentRunId: string
+  childRunId?: string
+  task: string
+  roleId: string
+  allowedToolIds: string[]
+  modelRef?: ModelRef
+  expectedOutput?: string
+  status: SubagentInvocationStatus
+  createdAt: string
+  completedAt?: string
+  error?: RunError
 }

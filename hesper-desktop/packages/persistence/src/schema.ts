@@ -1,3 +1,6 @@
+/// <reference path="./sqljs.d.ts" />
+import type { Database } from 'sql.js'
+
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,
@@ -5,6 +8,14 @@ CREATE TABLE IF NOT EXISTS sessions (
   status TEXT NOT NULL,
   workspace_path TEXT,
   default_model_id TEXT,
+  provider_id TEXT,
+  model_id TEXT,
+  role_id TEXT,
+  enabled_skill_ids_json TEXT,
+  enabled_tool_ids_json TEXT,
+  allowed_subagent_role_ids_json TEXT,
+  max_subagent_depth INTEGER,
+  max_subagents_per_run INTEGER,
   output_mode TEXT NOT NULL,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
@@ -26,6 +37,8 @@ CREATE TABLE IF NOT EXISTS agent_runs (
   id TEXT PRIMARY KEY,
   session_id TEXT NOT NULL,
   parent_run_id TEXT,
+  subagent_invocation_id TEXT,
+  depth INTEGER,
   status TEXT NOT NULL,
   model_id TEXT NOT NULL,
   workspace_path TEXT,
@@ -56,4 +69,136 @@ CREATE TABLE IF NOT EXISTS runtime_events (
   event_json TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS model_providers (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  base_url TEXT,
+  api_key_ref TEXT,
+  has_api_key INTEGER,
+  enabled INTEGER NOT NULL,
+  default_model_id TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  sort_seq INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS models (
+  id TEXT PRIMARY KEY,
+  provider_id TEXT NOT NULL,
+  model_name TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  capabilities_json TEXT NOT NULL,
+  context_window INTEGER,
+  enabled INTEGER,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  sort_seq INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS skills (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  source TEXT NOT NULL,
+  path TEXT,
+  source_path TEXT,
+  prompt TEXT,
+  allowed_tool_ids_json TEXT,
+  enabled INTEGER,
+  sort_seq INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS roles (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  default_model_id TEXT,
+  default_model_ref_json TEXT,
+  system_prompt TEXT,
+  allowed_skill_ids_json TEXT NOT NULL,
+  default_skill_ids_json TEXT,
+  default_tool_ids_json TEXT,
+  can_be_main_agent INTEGER NOT NULL,
+  can_be_subagent INTEGER NOT NULL,
+  can_be_assigned_to_subagent INTEGER,
+  subagent_guidance TEXT,
+  sort_seq INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS tool_permission_policies (
+  id TEXT PRIMARY KEY,
+  tool_id TEXT NOT NULL,
+  mode TEXT NOT NULL,
+  scope TEXT NOT NULL,
+  subject_id TEXT,
+  risk_level TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  sort_seq INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS subagent_invocations (
+  id TEXT PRIMARY KEY,
+  parent_run_id TEXT NOT NULL,
+  child_run_id TEXT,
+  task TEXT NOT NULL,
+  role_id TEXT NOT NULL,
+  allowed_tool_ids_json TEXT NOT NULL,
+  model_ref_json TEXT,
+  expected_output TEXT,
+  status TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  completed_at TEXT,
+  error_json TEXT,
+  sort_seq INTEGER NOT NULL
+);
 `
+
+const migrationColumns: Record<string, string[]> = {
+  sessions: [
+    'provider_id TEXT',
+    'model_id TEXT',
+    'role_id TEXT',
+    'enabled_skill_ids_json TEXT',
+    'enabled_tool_ids_json TEXT',
+    'allowed_subagent_role_ids_json TEXT',
+    'max_subagent_depth INTEGER',
+    'max_subagents_per_run INTEGER'
+  ],
+  agent_runs: [
+    'subagent_invocation_id TEXT',
+    'depth INTEGER'
+  ]
+}
+
+function columnName(definition: string): string {
+  return definition.split(/\s+/, 1)[0] ?? definition
+}
+
+function tableColumns(db: Database, table: string): Set<string> {
+  const stmt = db.prepare(`PRAGMA table_info(${table})`)
+  try {
+    const columns = new Set<string>()
+    while (stmt.step()) {
+      const row = stmt.getAsObject() as { name?: unknown }
+      if (typeof row.name === 'string') columns.add(row.name)
+    }
+    return columns
+  } finally {
+    stmt.free()
+  }
+}
+
+export function migrateDatabaseSchema(db: Database): void {
+  for (const [table, definitions] of Object.entries(migrationColumns)) {
+    const existing = tableColumns(db, table)
+    for (const definition of definitions) {
+      const name = columnName(definition)
+      if (!existing.has(name)) {
+        db.run(`ALTER TABLE ${table} ADD COLUMN ${definition}`)
+      }
+    }
+  }
+}

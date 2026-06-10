@@ -5,8 +5,17 @@ import {
   type AgentRun,
   type AgentRuntimeEvent,
   type Message,
+  type ModelConfig,
+  type ModelProviderConfig,
+  type ModelRef,
+  type Role,
+  type RunError,
   type RunStep,
-  type Session
+  type Session,
+  type Skill,
+  type SubagentInvocation,
+  type ToolPermissionPolicy,
+  type ToolPermissionScope
 } from '@hesper/shared'
 import type { Database } from 'sql.js'
 
@@ -39,12 +48,57 @@ export type RuntimeEventRepository = {
   listByRun(runId: string): Promise<RuntimeEventRecord[]>
 }
 
+export type ModelProviderRepository = {
+  save(provider: ModelProviderConfig): Promise<void>
+  get(id: string): Promise<ModelProviderConfig | undefined>
+  list(): Promise<ModelProviderConfig[]>
+}
+
+export type ModelRepository = {
+  save(model: ModelConfig): Promise<void>
+  get(id: string): Promise<ModelConfig | undefined>
+  list(): Promise<ModelConfig[]>
+  listByProvider(providerId: string): Promise<ModelConfig[]>
+}
+
+export type SkillRepository = {
+  save(skill: Skill): Promise<void>
+  get(id: string): Promise<Skill | undefined>
+  list(): Promise<Skill[]>
+}
+
+export type RoleRepository = {
+  save(role: Role): Promise<void>
+  get(id: string): Promise<Role | undefined>
+  list(): Promise<Role[]>
+}
+
+export type ToolPermissionPolicyRepository = {
+  save(policy: ToolPermissionPolicy): Promise<void>
+  get(id: string): Promise<ToolPermissionPolicy | undefined>
+  list(): Promise<ToolPermissionPolicy[]>
+  listByScope(scope: ToolPermissionScope, subjectId?: string): Promise<ToolPermissionPolicy[]>
+}
+
+export type SubagentInvocationRepository = {
+  save(invocation: SubagentInvocation): Promise<void>
+  get(id: string): Promise<SubagentInvocation | undefined>
+  listByParentRun(parentRunId: string): Promise<SubagentInvocation[]>
+  listByChildRun(childRunId: string): Promise<SubagentInvocation[]>
+}
+
 export type Persistence = {
   sessions: SessionRepository
   messages: MessageRepository
   runs: RunRepository
   steps: RunStepRepository
   events: RuntimeEventRepository
+  modelProviders: ModelProviderRepository
+  models: ModelRepository
+  skills: SkillRepository
+  roles: RoleRepository
+  toolPermissionPolicies: ToolPermissionPolicyRepository
+  subagentInvocations: SubagentInvocationRepository
   exportDatabaseBytes(): Uint8Array
 }
 
@@ -52,17 +106,58 @@ function stripUndefined<T extends Record<string, unknown>>(value: T): Record<str
   return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined))
 }
 
+function parseJson<T>(value: unknown, fallback: T): T {
+  if (value === null || value === undefined || value === '') return fallback
+  try {
+    return JSON.parse(String(value)) as T
+  } catch {
+    return fallback
+  }
+}
+
+function parseJsonArray(value: unknown): string[] {
+  const parsed = parseJson<unknown>(value, [])
+  return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : []
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined
+}
+
+function optionalNumber(value: unknown): number | undefined {
+  if (value === null || value === undefined) return undefined
+  const numberValue = Number(value)
+  return Number.isFinite(numberValue) ? numberValue : undefined
+}
+
+function optionalBoolean(value: unknown): boolean | undefined {
+  if (value === null || value === undefined) return undefined
+  return Number(value) === 1
+}
+
+function json(value: unknown): string | undefined {
+  return value === undefined ? undefined : JSON.stringify(value)
+}
+
 function toSession(row: any): Session {
-  return {
+  return stripUndefined({
     id: row.id,
     title: row.title,
     status: row.status,
     workspacePath: row.workspace_path ?? undefined,
     defaultModelId: row.default_model_id ?? undefined,
+    providerId: optionalString(row.provider_id),
+    modelId: optionalString(row.model_id),
+    roleId: optionalString(row.role_id),
+    enabledSkillIds: parseJsonArray(row.enabled_skill_ids_json),
+    enabledToolIds: parseJsonArray(row.enabled_tool_ids_json),
+    allowedSubagentRoleIds: parseJsonArray(row.allowed_subagent_role_ids_json),
+    maxSubagentDepth: optionalNumber(row.max_subagent_depth) ?? 1,
+    maxSubagentsPerRun: optionalNumber(row.max_subagents_per_run) ?? 3,
     outputMode: row.output_mode,
     createdAt: row.created_at,
     updatedAt: row.updated_at
-  }
+  }) as Session
 }
 
 function toMessage(row: any): Message {
@@ -79,10 +174,12 @@ function toMessage(row: any): Message {
 
 function toRun(row: any): AgentRun {
   const error = row.error_json ? runErrorSchema.parse(JSON.parse(String(row.error_json))) : undefined
-  return {
+  return stripUndefined({
     id: row.id,
     sessionId: row.session_id,
     parentRunId: row.parent_run_id ?? undefined,
+    subagentInvocationId: row.subagent_invocation_id ?? undefined,
+    depth: optionalNumber(row.depth),
     status: row.status,
     modelId: row.model_id,
     workspacePath: row.workspace_path ?? undefined,
@@ -91,7 +188,7 @@ function toRun(row: any): AgentRun {
     startedAt: row.started_at ?? undefined,
     endedAt: row.ended_at ?? undefined,
     ...(error ? { error } : {})
-  }
+  }) as AgentRun
 }
 
 function toStep(row: any): RunStep {
@@ -106,6 +203,98 @@ function toStep(row: any): RunStep {
     createdAt: row.created_at,
     completedAt: row.completed_at ?? undefined
   }
+}
+
+function toModelProvider(row: any): ModelProviderConfig {
+  return stripUndefined({
+    id: row.id,
+    name: row.name,
+    kind: row.kind,
+    baseUrl: row.base_url ?? undefined,
+    apiKeyRef: row.api_key_ref ?? undefined,
+    hasApiKey: optionalBoolean(row.has_api_key),
+    enabled: Number(row.enabled) === 1,
+    defaultModelId: row.default_model_id ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }) as ModelProviderConfig
+}
+
+function toModel(row: any): ModelConfig {
+  return stripUndefined({
+    id: row.id,
+    providerId: row.provider_id,
+    modelName: row.model_name,
+    displayName: row.display_name,
+    capabilities: parseJsonArray(row.capabilities_json),
+    contextWindow: optionalNumber(row.context_window),
+    enabled: optionalBoolean(row.enabled),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }) as ModelConfig
+}
+
+function toSkill(row: any): Skill {
+  return stripUndefined({
+    id: row.id,
+    name: row.name,
+    description: row.description ?? undefined,
+    source: row.source,
+    path: row.path ?? undefined,
+    sourcePath: row.source_path ?? undefined,
+    prompt: row.prompt ?? undefined,
+    allowedToolIds: parseJsonArray(row.allowed_tool_ids_json),
+    enabled: optionalBoolean(row.enabled)
+  }) as Skill
+}
+
+function toRole(row: any): Role {
+  return stripUndefined({
+    id: row.id,
+    name: row.name,
+    description: row.description ?? undefined,
+    defaultModelId: row.default_model_id ?? undefined,
+    defaultModelRef: parseJson<ModelRef | undefined>(row.default_model_ref_json, undefined),
+    systemPrompt: row.system_prompt ?? undefined,
+    allowedSkillIds: parseJsonArray(row.allowed_skill_ids_json),
+    defaultSkillIds: parseJsonArray(row.default_skill_ids_json),
+    defaultToolIds: parseJsonArray(row.default_tool_ids_json),
+    canBeMainAgent: Number(row.can_be_main_agent) === 1,
+    canBeSubagent: Number(row.can_be_subagent) === 1,
+    canBeAssignedToSubagent: optionalBoolean(row.can_be_assigned_to_subagent),
+    subagentGuidance: row.subagent_guidance ?? undefined
+  }) as Role
+}
+
+function toToolPermissionPolicy(row: any): ToolPermissionPolicy {
+  return stripUndefined({
+    id: row.id,
+    toolId: row.tool_id,
+    mode: row.mode,
+    scope: row.scope,
+    subjectId: row.subject_id ?? undefined,
+    riskLevel: row.risk_level ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }) as ToolPermissionPolicy
+}
+
+function toSubagentInvocation(row: any): SubagentInvocation {
+  const error = row.error_json ? runErrorSchema.parse(JSON.parse(String(row.error_json))) : undefined
+  return stripUndefined({
+    id: row.id,
+    parentRunId: row.parent_run_id,
+    childRunId: row.child_run_id ?? undefined,
+    task: row.task,
+    roleId: row.role_id,
+    allowedToolIds: parseJsonArray(row.allowed_tool_ids_json),
+    modelRef: parseJson<ModelRef | undefined>(row.model_ref_json, undefined),
+    expectedOutput: row.expected_output ?? undefined,
+    status: row.status,
+    createdAt: row.created_at,
+    completedAt: row.completed_at ?? undefined,
+    error
+  }) as SubagentInvocation
 }
 
 function extractRunId(event: RuntimeEventRecord): string {
@@ -134,18 +323,18 @@ function parseRuntimeEvent(value: unknown): RuntimeEventRecord {
 }
 
 export function createRepositories(db: Database): Persistence {
-  const maxSequence = ['sessions', 'messages', 'agent_runs', 'run_steps'].reduce((max, table) => {
-    const stmt = db.prepare(`SELECT MAX(sort_seq) AS max_sort_seq FROM ${table}`)
-    try {
-      const value = stmt.step() ? Number((stmt.getAsObject() as { max_sort_seq?: unknown }).max_sort_seq ?? 0) : 0
-      return Number.isFinite(value) ? Math.max(max, value) : max
-    } finally {
-      stmt.free()
-    }
-  }, 0)
-  let sequence = maxSequence
-  const nextSeq = () => ++sequence
-
+  const sequencedTables = [
+    'sessions',
+    'messages',
+    'agent_runs',
+    'run_steps',
+    'model_providers',
+    'models',
+    'skills',
+    'roles',
+    'tool_permission_policies',
+    'subagent_invocations'
+  ]
   const bindValues = (values: unknown[]) => values.map((value) => (value === undefined ? null : value))
   const exec = (sql: string, params: unknown[] = []) => db.run(sql, bindValues(params))
   const fetchAll = (sql: string, params: unknown[] = []) => {
@@ -159,6 +348,18 @@ export function createRepositories(db: Database): Persistence {
       stmt.free()
     }
   }
+
+  const maxSequence = sequencedTables.reduce((max, table) => {
+    const stmt = db.prepare(`SELECT MAX(sort_seq) AS max_sort_seq FROM ${table}`)
+    try {
+      const value = stmt.step() ? Number((stmt.getAsObject() as { max_sort_seq?: unknown }).max_sort_seq ?? 0) : 0
+      return Number.isFinite(value) ? Math.max(max, value) : max
+    } finally {
+      stmt.free()
+    }
+  }, 0)
+  let sequence = maxSequence
+  const nextSeq = () => ++sequence
 
   const upsert = (table: string, columns: string[], values: unknown[], id: string) => {
     const placeholders = columns.map(() => '?').join(', ')
@@ -175,12 +376,38 @@ export function createRepositories(db: Database): Persistence {
   return {
     sessions: {
       async save(session) {
-        upsert('sessions', ['id', 'title', 'status', 'workspace_path', 'default_model_id', 'output_mode', 'created_at', 'updated_at', 'sort_seq'], [
+        upsert('sessions', [
+          'id',
+          'title',
+          'status',
+          'workspace_path',
+          'default_model_id',
+          'provider_id',
+          'model_id',
+          'role_id',
+          'enabled_skill_ids_json',
+          'enabled_tool_ids_json',
+          'allowed_subagent_role_ids_json',
+          'max_subagent_depth',
+          'max_subagents_per_run',
+          'output_mode',
+          'created_at',
+          'updated_at',
+          'sort_seq'
+        ], [
           session.id,
           session.title,
           session.status,
           session.workspacePath,
           session.defaultModelId,
+          session.providerId,
+          session.modelId,
+          session.roleId,
+          json(session.enabledSkillIds),
+          json(session.enabledToolIds),
+          json(session.allowedSubagentRoleIds),
+          session.maxSubagentDepth,
+          session.maxSubagentsPerRun,
           session.outputMode,
           session.createdAt,
           session.updatedAt,
@@ -214,10 +441,12 @@ export function createRepositories(db: Database): Persistence {
     },
     runs: {
       async save(run) {
-        upsert('agent_runs', ['id', 'session_id', 'parent_run_id', 'status', 'model_id', 'workspace_path', 'retry_count', 'max_retries', 'started_at', 'ended_at', 'error_json', 'sort_seq'], [
+        upsert('agent_runs', ['id', 'session_id', 'parent_run_id', 'subagent_invocation_id', 'depth', 'status', 'model_id', 'workspace_path', 'retry_count', 'max_retries', 'started_at', 'ended_at', 'error_json', 'sort_seq'], [
           run.id,
           run.sessionId,
           run.parentRunId,
+          run.subagentInvocationId,
+          run.depth,
           run.status,
           run.modelId,
           run.workspacePath,
@@ -263,6 +492,164 @@ export function createRepositories(db: Database): Persistence {
       },
       async listByRun(runId) {
         return fetchAll('SELECT event_json FROM runtime_events WHERE run_id = ? ORDER BY id ASC', [runId]).map((row) => parseRuntimeEvent(JSON.parse(String(row.event_json))))
+      }
+    },
+    modelProviders: {
+      async save(provider) {
+        upsert('model_providers', ['id', 'name', 'kind', 'base_url', 'api_key_ref', 'has_api_key', 'enabled', 'default_model_id', 'created_at', 'updated_at', 'sort_seq'], [
+          provider.id,
+          provider.name,
+          provider.kind,
+          provider.baseUrl,
+          provider.apiKeyRef,
+          provider.hasApiKey === undefined ? undefined : provider.hasApiKey ? 1 : 0,
+          provider.enabled ? 1 : 0,
+          provider.defaultModelId,
+          provider.createdAt,
+          provider.updatedAt,
+          nextSeq()
+        ], provider.id)
+      },
+      async get(id) {
+        const row = fetchAll('SELECT * FROM model_providers WHERE id = ?', [id])[0]
+        return row ? toModelProvider(row) : undefined
+      },
+      async list() {
+        return fetchAll('SELECT * FROM model_providers ORDER BY sort_seq ASC, id ASC').map(toModelProvider)
+      }
+    },
+    models: {
+      async save(model) {
+        upsert('models', ['id', 'provider_id', 'model_name', 'display_name', 'capabilities_json', 'context_window', 'enabled', 'created_at', 'updated_at', 'sort_seq'], [
+          model.id,
+          model.providerId,
+          model.modelName,
+          model.displayName,
+          JSON.stringify(model.capabilities),
+          model.contextWindow,
+          model.enabled === undefined ? undefined : model.enabled ? 1 : 0,
+          model.createdAt,
+          model.updatedAt,
+          nextSeq()
+        ], model.id)
+      },
+      async get(id) {
+        const row = fetchAll('SELECT * FROM models WHERE id = ?', [id])[0]
+        return row ? toModel(row) : undefined
+      },
+      async list() {
+        return fetchAll('SELECT * FROM models ORDER BY sort_seq ASC, id ASC').map(toModel)
+      },
+      async listByProvider(providerId) {
+        return fetchAll('SELECT * FROM models WHERE provider_id = ? ORDER BY sort_seq ASC, id ASC', [providerId]).map(toModel)
+      }
+    },
+    skills: {
+      async save(skill) {
+        upsert('skills', ['id', 'name', 'description', 'source', 'path', 'source_path', 'prompt', 'allowed_tool_ids_json', 'enabled', 'sort_seq'], [
+          skill.id,
+          skill.name,
+          skill.description,
+          skill.source,
+          skill.path,
+          skill.sourcePath,
+          skill.prompt,
+          json(skill.allowedToolIds),
+          skill.enabled === undefined ? undefined : skill.enabled ? 1 : 0,
+          nextSeq()
+        ], skill.id)
+      },
+      async get(id) {
+        const row = fetchAll('SELECT * FROM skills WHERE id = ?', [id])[0]
+        return row ? toSkill(row) : undefined
+      },
+      async list() {
+        return fetchAll('SELECT * FROM skills ORDER BY sort_seq ASC, id ASC').map(toSkill)
+      }
+    },
+    roles: {
+      async save(role) {
+        upsert('roles', ['id', 'name', 'description', 'default_model_id', 'default_model_ref_json', 'system_prompt', 'allowed_skill_ids_json', 'default_skill_ids_json', 'default_tool_ids_json', 'can_be_main_agent', 'can_be_subagent', 'can_be_assigned_to_subagent', 'subagent_guidance', 'sort_seq'], [
+          role.id,
+          role.name,
+          role.description,
+          role.defaultModelId,
+          json(role.defaultModelRef),
+          role.systemPrompt,
+          JSON.stringify(role.allowedSkillIds),
+          json(role.defaultSkillIds),
+          json(role.defaultToolIds),
+          role.canBeMainAgent ? 1 : 0,
+          role.canBeSubagent ? 1 : 0,
+          role.canBeAssignedToSubagent === undefined ? undefined : role.canBeAssignedToSubagent ? 1 : 0,
+          role.subagentGuidance,
+          nextSeq()
+        ], role.id)
+      },
+      async get(id) {
+        const row = fetchAll('SELECT * FROM roles WHERE id = ?', [id])[0]
+        return row ? toRole(row) : undefined
+      },
+      async list() {
+        return fetchAll('SELECT * FROM roles ORDER BY sort_seq ASC, id ASC').map(toRole)
+      }
+    },
+    toolPermissionPolicies: {
+      async save(policy) {
+        upsert('tool_permission_policies', ['id', 'tool_id', 'mode', 'scope', 'subject_id', 'risk_level', 'created_at', 'updated_at', 'sort_seq'], [
+          policy.id,
+          policy.toolId,
+          policy.mode,
+          policy.scope,
+          policy.subjectId,
+          policy.riskLevel,
+          policy.createdAt,
+          policy.updatedAt,
+          nextSeq()
+        ], policy.id)
+      },
+      async get(id) {
+        const row = fetchAll('SELECT * FROM tool_permission_policies WHERE id = ?', [id])[0]
+        return row ? toToolPermissionPolicy(row) : undefined
+      },
+      async list() {
+        return fetchAll('SELECT * FROM tool_permission_policies ORDER BY sort_seq ASC, id ASC').map(toToolPermissionPolicy)
+      },
+      async listByScope(scope, subjectId) {
+        const sql = subjectId === undefined
+          ? 'SELECT * FROM tool_permission_policies WHERE scope = ? ORDER BY sort_seq ASC, id ASC'
+          : 'SELECT * FROM tool_permission_policies WHERE scope = ? AND subject_id = ? ORDER BY sort_seq ASC, id ASC'
+        const params = subjectId === undefined ? [scope] : [scope, subjectId]
+        return fetchAll(sql, params).map(toToolPermissionPolicy)
+      }
+    },
+    subagentInvocations: {
+      async save(invocation) {
+        upsert('subagent_invocations', ['id', 'parent_run_id', 'child_run_id', 'task', 'role_id', 'allowed_tool_ids_json', 'model_ref_json', 'expected_output', 'status', 'created_at', 'completed_at', 'error_json', 'sort_seq'], [
+          invocation.id,
+          invocation.parentRunId,
+          invocation.childRunId,
+          invocation.task,
+          invocation.roleId,
+          JSON.stringify(invocation.allowedToolIds),
+          json(invocation.modelRef),
+          invocation.expectedOutput,
+          invocation.status,
+          invocation.createdAt,
+          invocation.completedAt,
+          invocation.error ? JSON.stringify(invocation.error) : undefined,
+          nextSeq()
+        ], invocation.id)
+      },
+      async get(id) {
+        const row = fetchAll('SELECT * FROM subagent_invocations WHERE id = ?', [id])[0]
+        return row ? toSubagentInvocation(row) : undefined
+      },
+      async listByParentRun(parentRunId) {
+        return fetchAll('SELECT * FROM subagent_invocations WHERE parent_run_id = ? ORDER BY sort_seq ASC, id ASC', [parentRunId]).map(toSubagentInvocation)
+      },
+      async listByChildRun(childRunId) {
+        return fetchAll('SELECT * FROM subagent_invocations WHERE child_run_id = ? ORDER BY sort_seq ASC, id ASC', [childRunId]).map(toSubagentInvocation)
       }
     },
     exportDatabaseBytes() {

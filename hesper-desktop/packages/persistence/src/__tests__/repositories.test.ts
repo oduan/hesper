@@ -1,10 +1,78 @@
 import fs from 'node:fs'
+import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { createFilePersistence, createInMemoryPersistence, exportDatabaseBytes } from '../database'
 
+const require = createRequire(import.meta.url)
+const initSqlJs = require('sql.js') as () => Promise<{ Database: new (data?: Uint8Array) => any }>
 const now = '2026-06-10T03:00:00.000Z'
+
+async function createLegacyDatabaseBytes(): Promise<Uint8Array> {
+  const SQL = await initSqlJs()
+  const db = new SQL.Database()
+  db.run(`
+CREATE TABLE sessions (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  status TEXT NOT NULL,
+  workspace_path TEXT,
+  default_model_id TEXT,
+  output_mode TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  sort_seq INTEGER NOT NULL
+);
+CREATE TABLE messages (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  role TEXT NOT NULL,
+  content TEXT NOT NULL,
+  content_type TEXT NOT NULL,
+  run_id TEXT,
+  created_at TEXT NOT NULL,
+  sort_seq INTEGER NOT NULL
+);
+CREATE TABLE agent_runs (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  parent_run_id TEXT,
+  status TEXT NOT NULL,
+  model_id TEXT NOT NULL,
+  workspace_path TEXT,
+  retry_count INTEGER NOT NULL,
+  max_retries INTEGER NOT NULL,
+  started_at TEXT,
+  ended_at TEXT,
+  error_json TEXT,
+  sort_seq INTEGER NOT NULL
+);
+CREATE TABLE run_steps (
+  id TEXT PRIMARY KEY,
+  run_id TEXT NOT NULL,
+  type TEXT NOT NULL,
+  status TEXT NOT NULL,
+  title TEXT NOT NULL,
+  summary TEXT,
+  detail TEXT,
+  created_at TEXT NOT NULL,
+  completed_at TEXT,
+  sort_seq INTEGER NOT NULL
+);
+CREATE TABLE runtime_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id TEXT NOT NULL,
+  event_json TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+INSERT INTO sessions (id, title, status, workspace_path, default_model_id, output_mode, created_at, updated_at, sort_seq)
+VALUES ('legacy-session', 'Legacy', 'active', NULL, 'mock/hesper-fast', 'markdown', '${now}', '${now}', 1);
+INSERT INTO agent_runs (id, session_id, parent_run_id, status, model_id, workspace_path, retry_count, max_retries, started_at, ended_at, error_json, sort_seq)
+VALUES ('legacy-run', 'legacy-session', NULL, 'queued', 'mock/hesper-fast', NULL, 0, 3, NULL, NULL, NULL, 2);
+`)
+  return db.export()
+}
 
 describe('persistence repositories', () => {
   it('creates and lists sessions without deleted sessions', async () => {
@@ -49,5 +117,158 @@ describe('persistence repositories', () => {
     await db.runs.save({ id: 'run-2', sessionId: 'session-1', status: 'queued', modelId: 'm2', retryCount: 0, maxRetries: 5 })
     await db.runs.save({ id: 'run-1', sessionId: 'session-1', status: 'running', modelId: 'm1', retryCount: 0, maxRetries: 5 })
     expect((await db.runs.listBySession('session-1')).map((run) => run.id)).toEqual(['run-1', 'run-2'])
+  })
+
+  it('round-trips model providers and models without raw API keys', async () => {
+    const db = await createInMemoryPersistence()
+    await db.modelProviders.save({
+      id: 'provider-deepseek',
+      name: 'DeepSeek',
+      kind: 'deepseek',
+      baseUrl: 'https://api.deepseek.com',
+      apiKeyRef: 'vault:provider-deepseek',
+      hasApiKey: true,
+      enabled: true,
+      defaultModelId: 'deepseek-chat',
+      createdAt: now,
+      updatedAt: now
+    })
+    await db.models.save({
+      id: 'deepseek-chat',
+      providerId: 'provider-deepseek',
+      modelName: 'deepseek-chat',
+      displayName: 'DeepSeek Chat',
+      capabilities: ['streaming', 'toolCalls'],
+      contextWindow: 64000,
+      enabled: true,
+      createdAt: now,
+      updatedAt: now
+    })
+
+    expect(await db.modelProviders.get('provider-deepseek')).toMatchObject({
+      kind: 'deepseek',
+      apiKeyRef: 'vault:provider-deepseek',
+      hasApiKey: true
+    })
+    expect(JSON.stringify(await db.modelProviders.list())).not.toContain('sk-')
+    expect((await db.models.listByProvider('provider-deepseek')).map((model) => model.id)).toEqual(['deepseek-chat'])
+  })
+
+  it('round-trips skills, roles and tool permission policies', async () => {
+    const db = await createInMemoryPersistence()
+    await db.skills.save({
+      id: 'skill-review',
+      name: 'Review',
+      source: 'workspace',
+      sourcePath: 'skills/review/SKILL.md',
+      prompt: 'Review carefully.',
+      allowedToolIds: ['filesystem.read-file'],
+      enabled: true
+    })
+    await db.roles.save({
+      id: 'reviewer',
+      name: 'Reviewer',
+      systemPrompt: 'Review code.',
+      allowedSkillIds: ['skill-review'],
+      defaultSkillIds: ['skill-review'],
+      defaultToolIds: ['filesystem.read-file', 'git.status'],
+      canBeMainAgent: true,
+      canBeSubagent: true,
+      canBeAssignedToSubagent: true,
+      subagentGuidance: 'Return findings with evidence.'
+    })
+    await db.toolPermissionPolicies.save({
+      id: 'policy-1',
+      toolId: 'filesystem.read-file',
+      mode: 'allow',
+      scope: 'subagent',
+      subjectId: 'reviewer',
+      riskLevel: 'low',
+      createdAt: now,
+      updatedAt: now
+    })
+
+    expect(await db.skills.get('skill-review')).toMatchObject({ allowedToolIds: ['filesystem.read-file'], enabled: true })
+    expect(await db.roles.get('reviewer')).toMatchObject({ canBeAssignedToSubagent: true, defaultToolIds: ['filesystem.read-file', 'git.status'] })
+    expect(await db.toolPermissionPolicies.listByScope('subagent', 'reviewer')).toHaveLength(1)
+  })
+
+  it('round-trips session agent configuration defaults and subagent invocations', async () => {
+    const db = await createInMemoryPersistence()
+    await db.sessions.save({
+      id: 'session-1',
+      title: 'Build hesper',
+      status: 'active',
+      outputMode: 'markdown',
+      providerId: 'provider-deepseek',
+      modelId: 'deepseek-chat',
+      roleId: 'coding',
+      enabledSkillIds: ['skill-review'],
+      enabledToolIds: ['filesystem.read-file', 'agent.spawn-subagent'],
+      allowedSubagentRoleIds: ['reviewer'],
+      maxSubagentDepth: 1,
+      maxSubagentsPerRun: 3,
+      createdAt: now,
+      updatedAt: now
+    })
+    await db.runs.save({ id: 'run-parent', sessionId: 'session-1', status: 'running', modelId: 'deepseek-chat', retryCount: 0, maxRetries: 3, depth: 0 })
+    await db.subagentInvocations.save({
+      id: 'subagent-1',
+      parentRunId: 'run-parent',
+      childRunId: 'run-child',
+      task: 'Review the staged diff.',
+      roleId: 'reviewer',
+      allowedToolIds: ['filesystem.read-file', 'git.status'],
+      modelRef: { providerId: 'provider-deepseek', modelId: 'deepseek-chat' },
+      expectedOutput: 'Findings with evidence.',
+      status: 'running',
+      createdAt: now
+    })
+    await db.runs.save({ id: 'run-child', sessionId: 'session-1', parentRunId: 'run-parent', subagentInvocationId: 'subagent-1', status: 'queued', modelId: 'deepseek-chat', retryCount: 0, maxRetries: 3, depth: 1 })
+
+    expect(await db.sessions.get('session-1')).toMatchObject({
+      providerId: 'provider-deepseek',
+      modelId: 'deepseek-chat',
+      roleId: 'coding',
+      enabledSkillIds: ['skill-review'],
+      allowedSubagentRoleIds: ['reviewer'],
+      maxSubagentDepth: 1
+    })
+    expect(await db.runs.get('run-child')).toMatchObject({ parentRunId: 'run-parent', subagentInvocationId: 'subagent-1', depth: 1 })
+    expect(await db.subagentInvocations.listByParentRun('run-parent')).toMatchObject([
+      { id: 'subagent-1', childRunId: 'run-child', roleId: 'reviewer', allowedToolIds: ['filesystem.read-file', 'git.status'] }
+    ])
+  })
+
+  it('migrates legacy MVP1 databases and applies safe session defaults', async () => {
+    const tempFile = path.join(os.tmpdir(), `hesper-legacy-${Date.now()}.sqlite`)
+    fs.writeFileSync(tempFile, await createLegacyDatabaseBytes())
+
+    try {
+      const migrated = await createFilePersistence(tempFile)
+      const session = await migrated.sessions.get('legacy-session')
+      expect(session).toMatchObject({
+        id: 'legacy-session',
+        defaultModelId: 'mock/hesper-fast',
+        enabledSkillIds: [],
+        enabledToolIds: [],
+        allowedSubagentRoleIds: [],
+        maxSubagentDepth: 1,
+        maxSubagentsPerRun: 3
+      })
+
+      await migrated.sessions.save({
+        ...session!,
+        providerId: 'provider-mock',
+        modelId: 'mock/hesper-fast',
+        roleId: 'default',
+        enabledToolIds: ['workspace.info']
+      })
+      await migrated.runs.save({ id: 'legacy-child-run', sessionId: 'legacy-session', parentRunId: 'legacy-run', status: 'queued', modelId: 'mock/hesper-fast', retryCount: 0, maxRetries: 3, depth: 1 })
+      expect(await migrated.sessions.get('legacy-session')).toMatchObject({ providerId: 'provider-mock', enabledToolIds: ['workspace.info'] })
+      expect(await migrated.runs.get('legacy-child-run')).toMatchObject({ parentRunId: 'legacy-run', depth: 1 })
+    } finally {
+      fs.rmSync(tempFile, { force: true })
+    }
   })
 })

@@ -2,12 +2,17 @@ import { z } from 'zod'
 import type {
   AgentRun,
   Message,
+  ModelConfig,
+  ModelProviderConfig,
+  ModelRef,
   Role,
   RunError,
   RunStep,
   Session,
   Skill,
-  ToolDefinition
+  SubagentInvocation,
+  ToolDefinition,
+  ToolPermissionPolicy
 } from './domain'
 import type { AgentRuntimeEvent } from './events'
 
@@ -38,12 +43,56 @@ const runErrorBaseSchema = z.object({
 
 export const runErrorSchema = runErrorBaseSchema.transform((value) => value)
 
+const modelRefBaseSchema = z.object({
+  providerId: z.string().min(1),
+  modelId: z.string().min(1)
+})
+
+export const modelRefSchema = modelRefBaseSchema.transform((value) => value)
+
+const modelProviderConfigBaseSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  kind: z.enum(['mock', 'openai', 'deepseek', 'openai-compatible', 'anthropic', 'custom']),
+  baseUrl: z.string().url().optional(),
+  apiKeyRef: z.string().min(1).optional(),
+  hasApiKey: z.boolean().optional(),
+  enabled: z.boolean(),
+  defaultModelId: z.string().min(1).optional(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+})
+
+export const modelProviderConfigSchema = modelProviderConfigBaseSchema.transform(stripUndefined)
+
+const modelConfigBaseSchema = z.object({
+  id: z.string().min(1),
+  providerId: z.string().min(1),
+  modelName: z.string().min(1),
+  displayName: z.string().min(1),
+  capabilities: z.array(z.enum(['streaming', 'toolCalls', 'jsonOutput', 'reasoning'])),
+  contextWindow: z.number().int().positive().optional(),
+  enabled: z.boolean().optional(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+})
+
+export const modelConfigSchema = modelConfigBaseSchema.transform(stripUndefined)
+
 const sessionBaseSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
   status: z.enum(['active', 'archived', 'deleted']),
   workspacePath: z.string().optional(),
   defaultModelId: z.string().optional(),
+  providerId: z.string().min(1).optional(),
+  modelId: z.string().min(1).optional(),
+  roleId: z.string().min(1).optional(),
+  enabledSkillIds: z.array(z.string().min(1)).optional(),
+  enabledToolIds: z.array(z.string().min(1)).optional(),
+  allowedSubagentRoleIds: z.array(z.string().min(1)).optional(),
+  maxSubagentDepth: z.number().int().nonnegative().optional(),
+  maxSubagentsPerRun: z.number().int().nonnegative().optional(),
   outputMode: z.enum(['markdown', 'html']),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime()
@@ -67,6 +116,8 @@ const agentRunBaseSchema = z.object({
   id: z.string().min(1),
   sessionId: z.string().min(1),
   parentRunId: z.string().optional(),
+  subagentInvocationId: z.string().optional(),
+  depth: z.number().int().nonnegative().optional(),
   status: z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled']),
   modelId: z.string().min(1),
   workspacePath: z.string().optional(),
@@ -98,7 +149,11 @@ const skillBaseSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
   source: z.enum(['builtin', 'workspace', 'project']),
-  path: z.string().optional()
+  path: z.string().optional(),
+  sourcePath: z.string().optional(),
+  prompt: z.string().optional(),
+  allowedToolIds: z.array(z.string().min(1)).optional(),
+  enabled: z.boolean().optional()
 })
 
 export const skillSchema = skillBaseSchema.transform(stripUndefined)
@@ -108,9 +163,15 @@ const roleBaseSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
   defaultModelId: z.string().optional(),
+  defaultModelRef: modelRefSchema.optional(),
+  systemPrompt: z.string().optional(),
   allowedSkillIds: z.array(z.string().min(1)),
+  defaultSkillIds: z.array(z.string().min(1)).optional(),
+  defaultToolIds: z.array(z.string().min(1)).optional(),
   canBeMainAgent: z.boolean(),
-  canBeSubagent: z.boolean()
+  canBeSubagent: z.boolean(),
+  canBeAssignedToSubagent: z.boolean().optional(),
+  subagentGuidance: z.string().optional()
 })
 
 export const roleSchema = roleBaseSchema.transform(stripUndefined)
@@ -122,6 +183,36 @@ export const toolDefinitionSchema = z.object({
   inputSchema: z.unknown(),
   category: z.enum(['filesystem', 'git', 'web', 'agent', 'system'])
 }) satisfies z.ZodType<ToolDefinition>
+
+const toolPermissionPolicyBaseSchema = z.object({
+  id: z.string().min(1),
+  toolId: z.string().min(1),
+  mode: z.enum(['allow', 'deny', 'ask']),
+  scope: z.enum(['global', 'session', 'role', 'subagent']),
+  subjectId: z.string().min(1).optional(),
+  riskLevel: z.enum(['low', 'medium', 'high', 'critical']).optional(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+})
+
+export const toolPermissionPolicySchema = toolPermissionPolicyBaseSchema.transform(stripUndefined)
+
+const subagentInvocationBaseSchema = z.object({
+  id: z.string().min(1),
+  parentRunId: z.string().min(1),
+  childRunId: z.string().min(1).optional(),
+  task: z.string().min(1),
+  roleId: z.string().min(1),
+  allowedToolIds: z.array(z.string().min(1)),
+  modelRef: modelRefSchema.optional(),
+  expectedOutput: z.string().optional(),
+  status: z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled']),
+  createdAt: z.string().datetime(),
+  completedAt: z.string().datetime().optional(),
+  error: runErrorSchema.optional()
+})
+
+export const subagentInvocationSchema = subagentInvocationBaseSchema.transform(stripUndefined)
 
 const runCreatedEventSchema = z.object({
   type: z.literal('run.created'),
@@ -193,5 +284,10 @@ type _RunStepCheck = Expect<Equal<z.output<typeof runStepSchema>, NormalizeOptio
 type _SkillCheck = Expect<Equal<z.output<typeof skillSchema>, NormalizeOptional<Skill>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type _RoleCheck = Expect<Equal<z.output<typeof roleSchema>, NormalizeOptional<Role>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type _ToolDefinitionCheck = Expect<Equal<z.output<typeof toolDefinitionSchema>, NormalizeOptional<ToolDefinition>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _ToolPermissionPolicyCheck = Expect<Equal<z.output<typeof toolPermissionPolicySchema>, NormalizeOptional<ToolPermissionPolicy>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _ModelRefCheck = Expect<Equal<z.output<typeof modelRefSchema>, NormalizeOptional<ModelRef>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _ModelProviderConfigCheck = Expect<Equal<z.output<typeof modelProviderConfigSchema>, NormalizeOptional<ModelProviderConfig>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _ModelConfigCheck = Expect<Equal<z.output<typeof modelConfigSchema>, NormalizeOptional<ModelConfig>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _SubagentInvocationCheck = Expect<Equal<z.output<typeof subagentInvocationSchema>, NormalizeOptional<SubagentInvocation>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type _RunErrorCheck = Expect<Equal<z.output<typeof runErrorSchema>, NormalizeOptional<RunError>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type _AgentRuntimeEventCheck = Expect<Equal<z.output<typeof agentRuntimeEventSchema>, NormalizeOptional<AgentRuntimeEvent>>>
