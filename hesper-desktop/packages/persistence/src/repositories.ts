@@ -132,7 +132,16 @@ function parseRuntimeEvent(value: unknown): RuntimeEventRecord {
 }
 
 export function createRepositories(db: Database): Persistence {
-  let sequence = 0
+  const maxSequence = ['sessions', 'messages', 'agent_runs', 'run_steps'].reduce((max, table) => {
+    const stmt = db.prepare(`SELECT MAX(sort_seq) AS max_sort_seq FROM ${table}`)
+    try {
+      const value = stmt.step() ? Number((stmt.getAsObject() as { max_sort_seq?: unknown }).max_sort_seq ?? 0) : 0
+      return Number.isFinite(value) ? Math.max(max, value) : max
+    } finally {
+      stmt.free()
+    }
+  }, 0)
+  let sequence = maxSequence
   const nextSeq = () => ++sequence
 
   const bindValues = (values: unknown[]) => values.map((value) => (value === undefined ? null : value))

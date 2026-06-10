@@ -46,7 +46,7 @@
 - `hesper-desktop/pnpm-lock.yaml`
 
 ## 提交 SHA
-bb71927de2f50bf0306f15f06278f17bfd5bdc09
+24d5d3fc741acedc86192ad93ae91e370393293c
 
 ## 自审结论
 实现范围严格限制在 Task 3，没有扩展到 Task 4 app-core。已满足测试、类型检查与仓库检查要求。

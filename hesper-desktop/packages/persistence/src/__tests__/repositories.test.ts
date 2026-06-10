@@ -1,3 +1,6 @@
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { createFilePersistence, createInMemoryPersistence, exportDatabaseBytes } from '../database'
 
@@ -23,14 +26,21 @@ describe('persistence repositories', () => {
     expect(await db.events.listByRun('run-1')).toHaveLength(4)
   })
 
-  it('exports and reopens file persistence', async () => {
-    const db = await createInMemoryPersistence()
-    await db.sessions.save({ id: 'session-1', title: 'Build hesper', status: 'active', outputMode: 'markdown', createdAt: now, updatedAt: now })
-    const bytes = exportDatabaseBytes(db)
-    expect(bytes).toBeInstanceOf(Uint8Array)
-    const reopened = await createFilePersistence('ignored')
-    await reopened.sessions.save({ id: 'session-1', title: 'Build hesper', status: 'active', outputMode: 'markdown', createdAt: now, updatedAt: now })
-    expect(await reopened.sessions.get('session-1')).toBeTruthy()
+  it('exports and reopens real file persistence without breaking order', async () => {
+    const original = await createInMemoryPersistence()
+    await original.runs.save({ id: 'run-1', sessionId: 'session-1', status: 'queued', modelId: 'm1', retryCount: 0, maxRetries: 5 })
+    await original.runs.save({ id: 'run-2', sessionId: 'session-1', status: 'queued', modelId: 'm2', retryCount: 0, maxRetries: 5 })
+
+    const tempFile = path.join(os.tmpdir(), `hesper-persistence-${Date.now()}.sqlite`)
+    fs.writeFileSync(tempFile, exportDatabaseBytes(original))
+
+    try {
+      const reopened = await createFilePersistence(tempFile)
+      await reopened.runs.save({ id: 'run-3', sessionId: 'session-1', status: 'queued', modelId: 'm3', retryCount: 0, maxRetries: 5 })
+      expect((await reopened.runs.listBySession('session-1')).map((run) => run.id)).toEqual(['run-1', 'run-2', 'run-3'])
+    } finally {
+      fs.rmSync(tempFile, { force: true })
+    }
   })
 
   it('keeps insertion order stable after updates', async () => {
