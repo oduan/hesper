@@ -2,6 +2,7 @@ import { createId, nowIso, type AgentRuntimeEvent, type Message, type MessageCon
 import type { Persistence } from '@hesper/persistence'
 
 export type CreateUserMessageInput = {
+  id?: string
   sessionId: string
   content: string
   now?: string
@@ -43,7 +44,7 @@ export function createConversationService(persistence: Persistence): Conversatio
     async createUserMessage(input) {
       await ensureSessionExists(persistence, input.sessionId)
       const message: Message = {
-        id: createId('message'),
+        id: input.id ?? createId('message'),
         sessionId: input.sessionId,
         role: 'user',
         content: input.content,

@@ -18,6 +18,7 @@ export type AppAction =
   | { type: 'session.created'; session: Session }
   | { type: 'session.selected'; sessionId: string }
   | { type: 'message.optimistic'; message: Message }
+  | { type: 'message.removed'; sessionId: string; messageId: string }
   | { type: 'agent.event'; event: AgentRuntimeEvent }
   | { type: 'section.selected'; section: AppSection }
 
@@ -56,9 +57,23 @@ function mergeById<T extends { id: string }>(items: T[], nextItem: T): T[] {
   return nextItems
 }
 
+function removeById<T extends { id: string }>(items: T[], id: string): T[] {
+  return items.filter((item) => item.id !== id)
+}
+
 function withActiveSessionId(state: AppState, activeSessionId: string | undefined): AppState {
   const { activeSessionId: _previousActiveSessionId, ...rest } = state
   return activeSessionId ? { ...rest, activeSessionId } : rest
+}
+
+function clearStreamingByRun(streamingByRun: Record<string, string>, runId: string): Record<string, string> {
+  if (!(runId in streamingByRun)) {
+    return streamingByRun
+  }
+
+  const next = { ...streamingByRun }
+  delete next[runId]
+  return next
 }
 
 function createRetryStep(event: Extract<AgentRuntimeEvent, { type: 'run.retrying' }>): RunStep {
@@ -117,6 +132,15 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         }
       }
     }
+    case 'message.removed': {
+      return {
+        ...state,
+        messagesBySession: {
+          ...state.messagesBySession,
+          [action.sessionId]: removeById(state.messagesBySession[action.sessionId] ?? [], action.messageId)
+        }
+      }
+    }
     case 'section.selected':
       return { ...state, activeSection: action.section }
     case 'agent.event': {
@@ -172,7 +196,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             stepsByRun: {
               ...state.stepsByRun,
               [event.runId]: mergeById(state.stepsByRun[event.runId] ?? [], retryStep)
-            }
+            },
+            streamingByRun: clearStreamingByRun(state.streamingByRun, event.runId)
           }
         }
         case 'run.failed': {
@@ -182,7 +207,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             stepsByRun: {
               ...state.stepsByRun,
               [event.runId]: mergeById(state.stepsByRun[event.runId] ?? [], failureStep)
-            }
+            },
+            streamingByRun: clearStreamingByRun(state.streamingByRun, event.runId)
           }
         }
         case 'run.started':

@@ -100,8 +100,28 @@ describe('app-store reducer', () => {
     ])
   })
 
-  it('aggregates retrying and failed runtime events into synthetic steps', () => {
-    const retryingState = appReducer(initialAppState, {
+  it('clears streaming text when a run retries or fails', () => {
+    const runCreatedState = appReducer(initialAppState, {
+      type: 'agent.event',
+      event: {
+        type: 'run.created',
+        run: {
+          id: 'run-2',
+          sessionId: 'session-1',
+          status: 'running',
+          modelId: 'mock/hesper-fast',
+          retryCount: 0,
+          maxRetries: 2
+        }
+      }
+    })
+
+    const deltaState = appReducer(runCreatedState, {
+      type: 'agent.event',
+      event: { type: 'message.delta', runId: 'run-2', delta: 'partial output' }
+    })
+
+    const retryingState = appReducer(deltaState, {
       type: 'agent.event',
       event: {
         type: 'run.retrying',
@@ -111,6 +131,7 @@ describe('app-store reducer', () => {
       }
     })
 
+    expect(retryingState.streamingByRun['run-2']).toBeUndefined()
     expect(retryingState.stepsByRun['run-2']).toEqual([
       {
         id: 'retry-run-2-2',
@@ -123,7 +144,12 @@ describe('app-store reducer', () => {
       }
     ])
 
-    const failedState = appReducer(retryingState, {
+    const failedDeltaState = appReducer(runCreatedState, {
+      type: 'agent.event',
+      event: { type: 'message.delta', runId: 'run-2', delta: 'still here' }
+    })
+
+    const failedState = appReducer(failedDeltaState, {
       type: 'agent.event',
       event: {
         type: 'run.failed',
@@ -136,8 +162,9 @@ describe('app-store reducer', () => {
       }
     })
 
-    expect(failedState.stepsByRun['run-2']).toHaveLength(2)
-    expect(failedState.stepsByRun['run-2']?.[1]).toMatchObject({
+    expect(failedState.streamingByRun['run-2']).toBeUndefined()
+    expect(failedState.stepsByRun['run-2']).toHaveLength(1)
+    expect(failedState.stepsByRun['run-2']?.[0]).toMatchObject({
       id: 'failed-run-2',
       runId: 'run-2',
       type: 'warning',

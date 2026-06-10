@@ -52,11 +52,12 @@ describe('registerIpcHandlers', () => {
 
     await handles.get(ipcChannels.agentEventsSubscribe)?.({ sender })
     const session = (await handles.get(ipcChannels.sessionsCreate)?.({ sender }, { title: 'IPC created' })) as { id: string }
-    await handles.get(ipcChannels.agentEnqueue)?.({ sender }, { sessionId: session.id, prompt: 'Ping', modelId: 'mock/hesper-fast' })
+    await handles.get(ipcChannels.agentEnqueue)?.({ sender }, { sessionId: session.id, prompt: 'Ping', modelId: 'mock/hesper-fast', messageId: 'message-client-1' })
     await container.agentRuntime.waitForIdle(session.id)
 
     expect(await persistence.messages.listBySession(session.id)).toEqual([
       expect.objectContaining({
+        id: 'message-client-1',
         sessionId: session.id,
         role: 'user',
         content: 'Ping'
@@ -89,6 +90,43 @@ describe('registerIpcHandlers', () => {
 
     dispose()
     expect(removeHandler).toHaveBeenCalledWith(ipcChannels.sessionsList)
+  })
+
+  it('flushes the persisted user message before surfacing runtime enqueue failures', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock' })
+    const savePersistence = vi.fn(async () => {})
+    const schedulePersistenceSave = vi.fn()
+    const handles = new Map<string, (event: any, ...args: any[]) => Promise<unknown> | unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (event: any, ...args: any[]) => Promise<unknown> | unknown) => {
+        handles.set(channel, handler)
+      }),
+      removeHandler: vi.fn()
+    }
+    const dialog = {
+      showOpenDialog: vi.fn(async () => ({ canceled: false, filePaths: ['C:/workspace'] }))
+    }
+
+    const enqueueSpy = vi.spyOn(container.agentRuntime, 'enqueue').mockRejectedValueOnce(new Error('runtime failed'))
+
+    registerIpcHandlers({ ipcMain, dialog, container, savePersistence, schedulePersistenceSave })
+    const session = await container.sessionService.createSession({ title: 'IPC failure' })
+
+    await expect(
+      handles.get(ipcChannels.agentEnqueue)?.({ sender: { id: 1 } }, { sessionId: session.id, prompt: 'Persist me', modelId: 'mock/hesper-fast', messageId: 'message-failure-1' })
+    ).rejects.toThrow('runtime failed')
+
+    expect(enqueueSpy).toHaveBeenCalled()
+    expect(schedulePersistenceSave).toHaveBeenCalled()
+    expect(savePersistence).toHaveBeenCalled()
+    expect(await persistence.messages.listBySession(session.id)).toEqual([
+      expect.objectContaining({
+        id: 'message-failure-1',
+        role: 'user',
+        content: 'Persist me'
+      })
+    ])
   })
 
   it('validates agent enqueue input before invoking the runtime', async () => {

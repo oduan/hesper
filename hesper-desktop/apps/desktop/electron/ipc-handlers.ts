@@ -137,8 +137,11 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       const input = agentEnqueueInputSchema.parse(payload)
       await options.container.conversationService.createUserMessage({
         sessionId: input.sessionId,
-        content: input.prompt
+        content: input.prompt,
+        ...(input.messageId ? { id: input.messageId } : {})
       })
+      schedulePersistenceSave()
+      await savePersistence()
       const run = await options.container.agentRuntime.enqueue(omitUndefined(input))
       await savePersistence()
       return { runId: run.id }

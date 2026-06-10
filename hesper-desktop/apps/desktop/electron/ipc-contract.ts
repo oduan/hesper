@@ -58,7 +58,8 @@ export const agentEnqueueInputSchema = z.object({
   prompt: nonEmptyStringSchema,
   modelId: nonEmptyStringSchema,
   workspacePath: z.string().optional(),
-  parentRunId: nonEmptyStringSchema.optional()
+  parentRunId: nonEmptyStringSchema.optional(),
+  messageId: nonEmptyStringSchema.optional()
 })
 
 export const appSettingsSchema = z.object({

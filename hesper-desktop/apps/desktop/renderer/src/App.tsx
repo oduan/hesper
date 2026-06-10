@@ -16,6 +16,7 @@ export function App() {
 function AppContent() {
   const { state, dispatch } = useAppStore()
   const [loadError, setLoadError] = useState<string>()
+  const [sendError, setSendError] = useState<string>()
   const [shortcutCommand, setShortcutCommand] = useState<ConversationShortcutCommand>()
 
   useEffect(() => {
@@ -79,22 +80,30 @@ function AppContent() {
       title={activeSession?.title ?? '新建会话'}
     >
       {activeSession ? (
-        <ConversationView
-          session={activeSession}
-          messages={activeMessages}
-          steps={activeSteps}
-          streamingText={activeStreamingText}
-          modelId={activeSession.defaultModelId ?? 'mock/hesper-fast'}
-          onSend={(content) => {
-            void sendMessage({
-              session: activeSession,
-              modelId: activeSession.defaultModelId ?? 'mock/hesper-fast',
-              content,
-              dispatch
-            })
-          }}
-          {...(shortcutCommand ? { shortcutCommand } : {})}
-        />
+        <>
+          {sendError ? (
+            <p role="alert" style={{ margin: '0 0 12px', color: '#fca5a5', padding: '0 12px' }}>
+              发送失败：{sendError}
+            </p>
+          ) : null}
+          <ConversationView
+            session={activeSession}
+            messages={activeMessages}
+            steps={activeSteps}
+            streamingText={activeStreamingText}
+            modelId={activeSession.defaultModelId ?? 'mock/hesper-fast'}
+            onSend={(content) => {
+              void sendMessage({
+                session: activeSession,
+                modelId: activeSession.defaultModelId ?? 'mock/hesper-fast',
+                content,
+                dispatch,
+                setSendError
+              })
+            }}
+            {...(shortcutCommand ? { shortcutCommand } : {})}
+          />
+        </>
       ) : (
         <EmptyConversationState
           {...(loadError ? { loadError } : {})}
@@ -149,22 +158,31 @@ async function sendMessage({
   session,
   modelId,
   content,
-  dispatch
+  dispatch,
+  setSendError
 }: {
   session: Parameters<typeof createOptimisticUserMessage>[0]['session']
   modelId: string
   content: string
   dispatch: ReturnType<typeof useAppStore>['dispatch']
+  setSendError: (value: string | undefined) => void
 }) {
+  setSendError(undefined)
   const message = createOptimisticUserMessage({ session, content })
   dispatch({ type: 'message.optimistic', message })
 
-  await hesperApi.agent.enqueue({
-    sessionId: session.id,
-    prompt: content,
-    modelId,
-    ...(session.workspacePath ? { workspacePath: session.workspacePath } : {})
-  })
+  try {
+    await hesperApi.agent.enqueue({
+      sessionId: session.id,
+      prompt: content,
+      modelId,
+      messageId: message.id,
+      ...(session.workspacePath ? { workspacePath: session.workspacePath } : {})
+    })
+  } catch (error) {
+    dispatch({ type: 'message.removed', sessionId: session.id, messageId: message.id })
+    setSendError(error instanceof Error ? error.message : 'unknown enqueue error')
+  }
 }
 
 function createOptimisticUserMessage({ session, content }: { session: { id: string; workspacePath?: string }; content: string }): Message {

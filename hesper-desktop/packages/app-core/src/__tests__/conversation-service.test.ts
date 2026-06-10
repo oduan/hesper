@@ -53,6 +53,25 @@ describe('createConversationService', () => {
     expect((await conversation.appendRuntimeEvent({ type: 'run.succeeded', runId: 'run-1' })).type).toBe('run.succeeded')
   })
 
+  it('uses the provided user message id when persisting optimistic-correlated messages', async () => {
+    const persistence = await createInMemoryPersistence()
+    const sessions = createSessionService(persistence)
+    const conversation = createConversationService(persistence)
+    const session = await sessions.createSession({ title: 'Chat', now })
+
+    const message = await conversation.createUserMessage({
+      id: 'message-client-1',
+      sessionId: session.id,
+      content: 'Hello',
+      now
+    })
+
+    expect(message.id).toBe('message-client-1')
+    expect(await conversation.listMessages(session.id)).toEqual([
+      expect.objectContaining({ id: 'message-client-1', content: 'Hello' })
+    ])
+  })
+
   it('rejects messages for missing sessions', async () => {
     const persistence = await createInMemoryPersistence()
     const conversation = createConversationService(persistence)

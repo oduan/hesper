@@ -88,12 +88,14 @@ describe('renderer App', () => {
     await user.type(composer, 'hello agent')
     await user.click(screen.getByRole('button', { name: '发送' }))
 
-    expect(enqueue).toHaveBeenCalledWith({
+    expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({
       sessionId: 'session-1',
       prompt: 'hello agent',
       modelId: 'mock/hesper-fast',
       workspacePath: 'C:/workspace'
-    })
+    }))
+    const enqueueInput = (enqueue as any).mock.calls[0]?.[0] as { messageId?: string } | undefined
+    expect(enqueueInput?.messageId).toEqual(expect.any(String))
     expect(await screen.findByText('hello agent')).toBeInTheDocument()
 
     runtimeListener?.({
@@ -128,6 +130,35 @@ describe('renderer App', () => {
 
     await waitFor(() => {
       expect(screen.getAllByText('hello world')).toHaveLength(1)
+    })
+  })
+
+  it('removes optimistic user message and shows an error when enqueue fails', async () => {
+    const user = userEvent.setup()
+
+    listSessions.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        title: 'Task 11',
+        status: 'active',
+        workspacePath: 'C:/workspace',
+        defaultModelId: 'mock/hesper-fast',
+        outputMode: 'markdown',
+        createdAt: '2026-06-10T03:00:00.000Z',
+        updatedAt: '2026-06-10T03:00:00.000Z'
+      }
+    ] as any)
+    enqueue.mockRejectedValueOnce(new Error('enqueue failed'))
+
+    render(<App />)
+
+    const composer = await screen.findByPlaceholderText(/输入消息/)
+    await user.type(composer, 'will fail')
+    await user.click(screen.getByRole('button', { name: '发送' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('发送失败：enqueue failed')
+    await waitFor(() => {
+      expect(screen.queryByText('will fail')).not.toBeInTheDocument()
     })
   })
 })
