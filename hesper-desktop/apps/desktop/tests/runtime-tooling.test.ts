@@ -23,17 +23,27 @@ describe('desktop runtime tooling', () => {
 
     const expectedChannels = readObjectLiteral(ipcContractSource, /export const ipcChannels = (\{[\s\S]*?\}) as const/, 'ipcChannels in ipc-contract.ts')
     const expectedEvents = readObjectLiteral(ipcContractSource, /export const ipcEvents = (\{[\s\S]*?\}) as const/, 'ipcEvents in ipc-contract.ts')
-    const preloadChannels = readObjectLiteral(preloadSource, /const ipcChannels = (\{[\s\S]*?\})\n/, 'ipcChannels in preload.cjs')
-    const preloadEvents = readObjectLiteral(preloadSource, /const ipcEvents = (\{[\s\S]*?\})\n/, 'ipcEvents in preload.cjs')
+    const preloadChannels = readObjectLiteral(preloadSource, /const ipcChannels = (\{[\s\S]*?\})\r?\n/, 'ipcChannels in preload.cjs')
+    const preloadEvents = readObjectLiteral(preloadSource, /const ipcEvents = (\{[\s\S]*?\})\r?\n/, 'ipcEvents in preload.cjs')
 
     expect(preloadChannels).toEqual(expectedChannels)
     expect(preloadEvents).toEqual(expectedEvents)
   })
 
-  it('keeps dev script self-contained for preload.cjs startup', () => {
+  it('keeps dev script self-contained for workspace runtime startup', () => {
+    const devPrepareScript = desktopPackage.scripts['dev:prepare']
     const devScript = desktopPackage.scripts.dev
+    const verifyDevRuntimeScript = desktopPackage.scripts['verify-dev-runtime']
 
+    expect(devPrepareScript).toContain('pnpm --filter @hesper/persistence build')
+    expect(devPrepareScript).toContain('pnpm --filter @hesper/tools build')
+    expect(devPrepareScript).toContain('node scripts/fix-esm-imports.mjs')
+    expect(devPrepareScript).toContain('node scripts/verify-dev-runtime.mjs')
+    expect(devScript).toContain('pnpm dev:prepare')
     expect(devScript).toContain('node scripts/copy-preload.mjs --watch')
+    expect(devScript).toContain('node scripts/fix-esm-imports.mjs --watch')
     expect(devScript).toContain('dist/electron/preload.cjs')
+    expect(verifyDevRuntimeScript).toContain('node scripts/clean-dev-runtime.mjs')
+    expect(verifyDevRuntimeScript).toContain('pnpm dev:prepare')
   })
 })

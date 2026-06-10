@@ -2,16 +2,18 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 /**
- * Temporary production-verification patch for workspace dist outputs.
+ * Temporary desktop-runtime patch for workspace dist outputs.
  *
  * Scope is intentionally narrow:
- * - only explicit desktop runtime verification targets are touched
+ * - only explicit desktop runtime targets are touched
  * - only relative ESM specifiers missing an extension are rewritten
  * - every changed file is reported to stdout
  *
  * This must not become a silent catch-all mutation step.
  */
 const appRoot = path.resolve(import.meta.dirname, '..')
+const shouldWatch = process.argv.includes('--watch')
+let debounceTimer
 const runtimeTargetDirs = [
   path.resolve(appRoot, '../../packages/shared/dist'),
   path.resolve(appRoot, '../../packages/persistence/dist'),
@@ -63,17 +65,36 @@ function visit(targetPath) {
   }
 }
 
-for (const target of runtimeTargetDirs) {
-  if (fs.existsSync(target)) {
-    visit(target)
+function patchRuntimeTargets() {
+  changedFiles.length = 0
+
+  for (const target of runtimeTargetDirs) {
+    if (fs.existsSync(target)) {
+      visit(target)
+    }
+  }
+
+  if (changedFiles.length === 0) {
+    console.log('[fix-esm-imports] no files changed')
+  } else {
+    console.log(`[fix-esm-imports] patched ${changedFiles.length} files:`)
+    for (const file of changedFiles) {
+      console.log(` - ${path.relative(appRoot, file)}`)
+    }
   }
 }
 
-if (changedFiles.length === 0) {
-  console.log('[fix-esm-imports] no files changed')
-} else {
-  console.log(`[fix-esm-imports] patched ${changedFiles.length} files:`)
-  for (const file of changedFiles) {
-    console.log(` - ${path.relative(appRoot, file)}`)
+function schedulePatch() {
+  clearTimeout(debounceTimer)
+  debounceTimer = setTimeout(patchRuntimeTargets, 100)
+}
+
+patchRuntimeTargets()
+
+if (shouldWatch) {
+  console.log('[fix-esm-imports] watching desktop runtime dist targets')
+  for (const target of runtimeTargetDirs) {
+    if (!fs.existsSync(target)) continue
+    fs.watch(target, { persistent: true, recursive: true }, schedulePatch)
   }
 }

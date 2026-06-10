@@ -25,11 +25,11 @@ pnpm --filter @hesper/desktop verify-dev-runtime
 ### Command notes
 
 - `pnpm check`: runs workspace typecheck and vitest suites.
-- `pnpm dev`: starts the renderer dev server, Electron TypeScript watch build and preload copy watcher.
+- `pnpm dev`: first prepares workspace runtime packages and Electron dev artifacts, then starts the renderer dev server, Electron TypeScript watch build, preload copy watcher and ESM import patch watcher.
 - `pnpm --filter @hesper/desktop build`: builds renderer and Electron outputs, patches ESM imports and verifies production entrypoints.
 - `pnpm --filter @hesper/desktop smoke`: launches the packaged desktop shell against the built output for a fast UI sanity check.
 - `pnpm --filter @hesper/desktop e2e`: runs Playwright desktop coverage against the built Electron app.
-- `pnpm --filter @hesper/desktop verify-dev-runtime`: validates the Electron main/preload dev-runtime contract without starting the renderer dev server.
+- `pnpm --filter @hesper/desktop verify-dev-runtime`: removes desktop/workspace runtime dist outputs, rebuilds the dev runtime prerequisites and validates the Electron main/preload contract without starting the renderer dev server.
 
 ## Agent runtime
 
