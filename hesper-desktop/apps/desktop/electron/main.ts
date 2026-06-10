@@ -3,6 +3,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import { createFilePersistence, exportDatabaseBytes } from '@hesper/persistence'
+import { createBeforeQuitHandler } from './before-quit'
 import { registerIpcHandlers } from './ipc-handlers'
 import { createServiceContainer, type AgentMode, type ServiceContainer } from './service-container'
 
@@ -106,12 +107,20 @@ app.whenReady().then(async () => {
   })
 })
 
-app.on('before-quit', async () => {
-  await flushScheduledPersistence()
-  await savePersistence()
-  disposeIpcHandlers?.()
-  disposeIpcHandlers = undefined
+const beforeQuitHandler = createBeforeQuitHandler({
+  flushScheduledPersistence,
+  savePersistence,
+  disposeIpcHandlers: () => {
+    disposeIpcHandlers?.()
+    disposeIpcHandlers = undefined
+  },
+  quit: () => app.quit(),
+  logError: (message, error) => {
+    console.error(message, error)
+  }
 })
+
+app.on('before-quit', beforeQuitHandler)
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
