@@ -27,3 +27,6 @@ Thumbs.db
 
 # Windows reserved-name sink/local artifact at repo root
 /nul
+
+# Playwright local test artifacts
+hesper-desktop/apps/desktop/test-results/
