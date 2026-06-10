@@ -141,15 +141,18 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           }
         }
         case 'message.completed': {
+          const nextStreamingByRun = { ...state.streamingByRun }
+          if (event.message.runId) {
+            delete nextStreamingByRun[event.message.runId]
+          }
+
           return {
             ...state,
             messagesBySession: {
               ...state.messagesBySession,
               [event.message.sessionId]: mergeById(state.messagesBySession[event.message.sessionId] ?? [], event.message)
             },
-            streamingByRun: event.message.runId
-              ? { ...state.streamingByRun, [event.message.runId]: '' }
-              : state.streamingByRun
+            streamingByRun: nextStreamingByRun
           }
         }
         case 'run.retrying': {

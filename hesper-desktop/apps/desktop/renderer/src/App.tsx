@@ -1,4 +1,4 @@
-import { useEffect, type CSSProperties } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 import { AppShell, ConversationView } from '@hesper/ui'
 import { AppStoreProvider, useAppStore } from './app-store'
 import { hesperApi } from './ipc-client'
@@ -13,14 +13,23 @@ export function App() {
 
 function AppContent() {
   const { state, dispatch } = useAppStore()
+  const [loadError, setLoadError] = useState<string>()
 
   useEffect(() => {
     let cancelled = false
 
     void (async () => {
-      const sessions = await hesperApi.sessions.list()
-      if (!cancelled) {
-        dispatch({ type: 'sessions.loaded', sessions })
+      try {
+        const sessions = await hesperApi.sessions.list()
+        if (!cancelled) {
+          setLoadError(undefined)
+          dispatch({ type: 'sessions.loaded', sessions })
+        }
+      } catch (error) {
+        if (!cancelled) {
+          const message = error instanceof Error ? error.message : 'Unknown renderer load error'
+          setLoadError(message)
+        }
       }
     })()
 
@@ -56,13 +65,22 @@ function AppContent() {
           onSend={() => undefined}
         />
       ) : (
-        <EmptyConversationState onCreateSession={async () => createSession(dispatch)} />
+        <EmptyConversationState
+          {...(loadError ? { loadError } : {})}
+          onCreateSession={async () => createSession(dispatch)}
+        />
       )}
     </AppShell>
   )
 }
 
-function EmptyConversationState({ onCreateSession }: { onCreateSession: () => Promise<void> }) {
+function EmptyConversationState({
+  loadError,
+  onCreateSession
+}: {
+  loadError?: string
+  onCreateSession: () => Promise<void>
+}) {
   return (
     <section
       aria-label="空会话状态"
@@ -78,6 +96,11 @@ function EmptyConversationState({ onCreateSession }: { onCreateSession: () => Pr
       <div>
         <h2 style={{ margin: '0 0 8px' }}>准备开始新的 hesper 会话</h2>
         <p style={{ margin: 0, opacity: 0.72 }}>当前还没有会话。先创建一个主界面会话壳，后续任务再接入完整交互。</p>
+        {loadError ? (
+          <p role="alert" style={{ margin: '12px 0 0', color: '#fca5a5' }}>
+            会话加载失败：{loadError}
+          </p>
+        ) : null}
       </div>
       <button type="button" onClick={onCreateSession} style={primaryButtonStyle}>
         新建会话
