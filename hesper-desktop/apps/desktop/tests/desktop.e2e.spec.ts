@@ -25,12 +25,14 @@ test('creates a session and receives a mock agent response', async () => {
   expect(fs.existsSync(builtMainPath), `Missing built Electron entry at ${builtMainPath}. Run pnpm --filter @hesper/desktop build first.`).toBeTruthy()
 
   const { env, userDataRoot } = createIsolatedDesktopEnv()
-  const app = await electron.launch({
-    args: [appRoot],
-    env
-  })
+  let app
 
   try {
+    app = await electron.launch({
+      args: [appRoot],
+      env
+    })
+
     const page = await app.firstWindow()
 
     await expect(page.getByRole('button', { name: '新建会话' })).toBeVisible()
@@ -43,7 +45,7 @@ test('creates a session and receives a mock agent response', async () => {
     await expect(page.getByRole('article', { name: '用户消息' }).getByText('hello from e2e')).toBeVisible()
     await expect(page.getByText(/Mock response for: hello from e2e/)).toBeVisible({ timeout: 10000 })
   } finally {
-    await app.close().catch(() => undefined)
+    await app?.close().catch(() => undefined)
     fs.rmSync(userDataRoot, { recursive: true, force: true })
   }
 })

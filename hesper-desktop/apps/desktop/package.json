@@ -5,13 +5,14 @@
   "type": "module",
   "main": "dist/electron/main.js",
   "scripts": {
-    "build": "node -e \"const fs=require('fs'); fs.rmSync('dist',{recursive:true,force:true})\" && pnpm --filter @hesper/shared build && pnpm --filter @hesper/persistence build && pnpm --filter @hesper/tools build && pnpm --filter @hesper/agent-runtime build && pnpm --filter @hesper/app-core build && vite build --config renderer/vite.config.ts && tsc -p tsconfig.build.json && node scripts/copy-preload.mjs && node scripts/fix-esm-imports.mjs ../../packages/shared/dist ../../packages/persistence/dist ../../packages/app-core/dist ../../packages/agent-runtime/dist ../../packages/tools/dist ../../packages/ui/dist dist/electron && node scripts/verify-build.mjs",
+    "build": "node -e \"const fs=require('fs'); fs.rmSync('dist',{recursive:true,force:true})\" && pnpm --filter @hesper/shared build && pnpm --filter @hesper/persistence build && pnpm --filter @hesper/tools build && pnpm --filter @hesper/agent-runtime build && pnpm --filter @hesper/app-core build && vite build --config renderer/vite.config.ts && tsc -p tsconfig.build.json && node scripts/copy-preload.mjs && node scripts/fix-esm-imports.mjs && node scripts/verify-build.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest --run -c vitest.config.ts",
-    "dev": "concurrently -k \"vite --host 127.0.0.1 renderer\" \"tsc -w -p tsconfig.build.json\" \"wait-on http://127.0.0.1:5173 dist/electron/main.js && electron .\"",
-    "e2e": "node scripts/fix-esm-imports.mjs ../../packages/shared/dist ../../packages/persistence/dist ../../packages/app-core/dist ../../packages/agent-runtime/dist ../../packages/tools/dist ../../packages/ui/dist dist/electron && playwright test -c playwright.config.ts",
-    "smoke": "node scripts/fix-esm-imports.mjs ../../packages/shared/dist ../../packages/persistence/dist ../../packages/app-core/dist ../../packages/agent-runtime/dist ../../packages/tools/dist ../../packages/ui/dist dist/electron && node scripts/smoke-desktop.mjs",
-    "verify-build": "node scripts/verify-build.mjs"
+    "test": "node scripts/verify-preload-contract.mjs && vitest --run -c vitest.config.ts",
+    "dev": "concurrently -k \"vite --host 127.0.0.1 renderer\" \"tsc -w -p tsconfig.build.json\" \"node scripts/copy-preload.mjs --watch\" \"wait-on http://127.0.0.1:5173 dist/electron/main.js dist/electron/preload.cjs && electron .\"",
+    "e2e": "node scripts/fix-esm-imports.mjs && playwright test -c playwright.config.ts",
+    "smoke": "node scripts/fix-esm-imports.mjs && node scripts/smoke-desktop.mjs",
+    "verify-build": "node scripts/verify-build.mjs",
+    "verify-dev-runtime": "node -e \"const fs=require('fs'); fs.rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json && node scripts/copy-preload.mjs && node scripts/verify-dev-runtime.mjs"
   },
   "dependencies": {
     "@hesper/agent-runtime": "workspace:*",

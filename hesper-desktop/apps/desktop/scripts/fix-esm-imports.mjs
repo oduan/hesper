@@ -1,14 +1,28 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-const targets = process.argv.slice(2)
-
-if (targets.length === 0) {
-  console.error('Usage: node scripts/fix-esm-imports.mjs <dir> [dir...]')
-  process.exit(1)
-}
-
+/**
+ * Temporary production-verification patch for workspace dist outputs.
+ *
+ * Scope is intentionally narrow:
+ * - only explicit desktop runtime verification targets are touched
+ * - only relative ESM specifiers missing an extension are rewritten
+ * - every changed file is reported to stdout
+ *
+ * This must not become a silent catch-all mutation step.
+ */
+const appRoot = path.resolve(import.meta.dirname, '..')
+const runtimeTargetDirs = [
+  path.resolve(appRoot, '../../packages/shared/dist'),
+  path.resolve(appRoot, '../../packages/persistence/dist'),
+  path.resolve(appRoot, '../../packages/app-core/dist'),
+  path.resolve(appRoot, '../../packages/agent-runtime/dist'),
+  path.resolve(appRoot, '../../packages/tools/dist'),
+  path.resolve(appRoot, '../../packages/ui/dist'),
+  path.join(appRoot, 'dist', 'electron')
+]
 const supportedExtensions = new Set(['.js', '.json', '.node', '.mjs', '.cjs'])
+const changedFiles = []
 
 function needsJsExtension(specifier) {
   if (!specifier.startsWith('./') && !specifier.startsWith('../')) return false
@@ -31,6 +45,8 @@ function patchRelativeSpecifiers(source) {
 function visit(targetPath) {
   const stat = fs.statSync(targetPath)
   if (stat.isDirectory()) {
+    if (path.basename(targetPath) === '__tests__') return
+
     for (const entry of fs.readdirSync(targetPath)) {
       visit(path.join(targetPath, entry))
     }
@@ -43,11 +59,21 @@ function visit(targetPath) {
   const next = patchRelativeSpecifiers(current)
   if (next !== current) {
     fs.writeFileSync(targetPath, next)
+    changedFiles.push(targetPath)
   }
 }
 
-for (const target of targets) {
+for (const target of runtimeTargetDirs) {
   if (fs.existsSync(target)) {
-    visit(path.resolve(target))
+    visit(target)
+  }
+}
+
+if (changedFiles.length === 0) {
+  console.log('[fix-esm-imports] no files changed')
+} else {
+  console.log(`[fix-esm-imports] patched ${changedFiles.length} files:`)
+  for (const file of changedFiles) {
+    console.log(` - ${path.relative(appRoot, file)}`)
   }
 }

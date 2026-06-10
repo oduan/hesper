@@ -11,16 +11,18 @@ if (!fs.existsSync(builtMainPath)) {
 }
 
 const userDataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'hesper-desktop-smoke-'))
-const app = await electron.launch({
-  args: [appRoot],
-  env: {
-    ...process.env,
-    HESPER_AGENT_MODE: 'mock',
-    HESPER_USER_DATA_DIR: userDataRoot
-  }
-})
+let app
 
 try {
+  app = await electron.launch({
+    args: [appRoot],
+    env: {
+      ...process.env,
+      HESPER_AGENT_MODE: 'mock',
+      HESPER_USER_DATA_DIR: userDataRoot
+    }
+  })
+
   const page = await app.firstWindow()
   const title = await page.title()
   console.log(`window title: ${title}`)
@@ -32,6 +34,6 @@ try {
 
   console.log('desktop smoke passed')
 } finally {
-  await app.close().catch(() => undefined)
+  await app?.close().catch(() => undefined)
   fs.rmSync(userDataRoot, { recursive: true, force: true })
 }
