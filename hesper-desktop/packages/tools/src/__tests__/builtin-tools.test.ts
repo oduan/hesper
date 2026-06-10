@@ -11,8 +11,15 @@ describe('builtin tools', () => {
 
   it('uses stable ids', () => {
     const ids = createBuiltinToolDefinitions().map((tool) => tool.id)
-    expect(ids).toContain('filesystem.read-file')
-    expect(ids).toContain('git.status')
-    expect(ids).toContain('web.fetch-url')
+    expect(ids).toEqual(
+      expect.arrayContaining([
+        'filesystem.read-file',
+        'filesystem.write-file',
+        'git.status',
+        'web.fetch-url',
+        'agent.spawn-subagent',
+        'system.show-notification'
+      ])
+    )
   })
 })
