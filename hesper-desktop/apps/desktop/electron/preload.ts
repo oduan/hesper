@@ -19,7 +19,10 @@ const hesperApi: HesperDesktopApi = {
       const handler = (_event: unknown, runtimeEvent: AgentEvent) => listener(runtimeEvent)
       void ipcRenderer.invoke(ipcChannels.agentEventsSubscribe)
       ipcRenderer.on(ipcEvents.agentEvent, handler)
-      return () => ipcRenderer.off(ipcEvents.agentEvent, handler)
+      return () => {
+        ipcRenderer.off(ipcEvents.agentEvent, handler)
+        void ipcRenderer.invoke(ipcChannels.agentEventsUnsubscribe)
+      }
     }
   },
   dialog: {

@@ -1,4 +1,4 @@
-import type { AgentRuntimeEvent } from '@hesper/shared'
+import { agentRuntimeEventSchema } from '@hesper/shared'
 import type { Dialog, IpcMain, IpcMainInvokeEvent } from 'electron'
 import {
   agentEnqueueInputSchema,
@@ -7,10 +7,12 @@ import {
   directorySelectionSchema,
   ipcChannels,
   ipcEvents,
+  sessionIdInputSchema,
   setSessionModelInputSchema,
   setSessionOutputModeInputSchema,
   setSessionWorkspaceInputSchema,
   subscribeAgentEventsResultSchema,
+  unsubscribeAgentEventsResultSchema,
   updateSessionTitleInputSchema,
   updateSettingsInputSchema
 } from './ipc-contract'
@@ -21,6 +23,7 @@ export type RegisterIpcHandlersOptions = {
   dialog: Pick<Dialog, 'showOpenDialog'>
   container: ServiceContainer
   savePersistence?: () => Promise<void>
+  schedulePersistenceSave?: () => void
 }
 
 const mutatingChannels = [
@@ -47,22 +50,34 @@ function omitUndefined<T extends Record<string, unknown>>(value: T): StripUndefi
 
 export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => void {
   const savePersistence = options.savePersistence ?? (async () => {})
+  const schedulePersistenceSave = options.schedulePersistenceSave ?? (() => {})
   const subscriptions = new Map<number, () => void>()
 
   const detachRuntimePersistence = options.container.agentRuntime.subscribe(async () => {
-    await savePersistence()
+    schedulePersistenceSave()
   })
 
-  const validateEvent = (event: AgentRuntimeEvent) => event
+  const unsubscribeSender = (senderId: number) => {
+    subscriptions.get(senderId)?.()
+    subscriptions.delete(senderId)
+  }
+
+  const validateEvent = (event: unknown) => {
+    const parsed = agentRuntimeEventSchema.safeParse(event)
+    if (!parsed.success) {
+      throw parsed.error
+    }
+    return parsed.data
+  }
 
   const subscribeSender = (event: IpcMainInvokeEvent) => {
     const senderId = event.sender.id
-    subscriptions.get(senderId)?.()
+    unsubscribeSender(senderId)
+    event.sender.once('destroyed', () => unsubscribeSender(senderId))
     const unsubscribe = options.container.agentRuntime.subscribe(async (runtimeEvent) => {
       const target = event.sender
       if (target.isDestroyed()) {
-        subscriptions.get(senderId)?.()
-        subscriptions.delete(senderId)
+        unsubscribeSender(senderId)
         return
       }
       target.send(ipcEvents.agentEvent, validateEvent(runtimeEvent))
@@ -84,12 +99,12 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       return session
     },
     [ipcChannels.sessionsArchive]: async (_event, payload) => {
-      const session = await options.container.sessionService.archiveSession(String(payload))
+      const session = await options.container.sessionService.archiveSession(sessionIdInputSchema.parse(payload))
       await savePersistence()
       return session
     },
     [ipcChannels.sessionsDelete]: async (_event, payload) => {
-      const session = await options.container.sessionService.deleteSession(String(payload))
+      const session = await options.container.sessionService.deleteSession(sessionIdInputSchema.parse(payload))
       await savePersistence()
       return session
     },
@@ -128,6 +143,10 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       subscribeSender(event)
       return subscribeAgentEventsResultSchema.parse({ subscribed: true })
     },
+    [ipcChannels.agentEventsUnsubscribe]: async (event) => {
+      unsubscribeSender(event.sender.id)
+      return unsubscribeAgentEventsResultSchema.parse({ unsubscribed: true })
+    },
     [ipcChannels.settingsGet]: async () => appSettingsSchema.parse(options.container.settingsService.getSettings()),
     [ipcChannels.settingsUpdate]: async (_event, payload) => {
       const settings = options.container.settingsService.updateSettings(omitUndefined(updateSettingsInputSchema.parse(payload ?? {})))
@@ -142,8 +161,7 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
 
   return () => {
     detachRuntimePersistence()
-    for (const unsubscribe of subscriptions.values()) unsubscribe()
-    subscriptions.clear()
+    for (const senderId of subscriptions.keys()) unsubscribeSender(senderId)
     for (const channel of Object.keys(handlers)) options.ipcMain.removeHandler(channel)
   }
 }

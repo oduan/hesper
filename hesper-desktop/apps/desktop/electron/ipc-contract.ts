@@ -13,6 +13,7 @@ export const ipcChannels = {
   dialogSelectDirectory: 'dialog:selectDirectory',
   agentEnqueue: 'agent:enqueue',
   agentEventsSubscribe: 'agent:events:subscribe',
+  agentEventsUnsubscribe: 'agent:events:unsubscribe',
   settingsGet: 'settings:get',
   settingsUpdate: 'settings:update'
 } as const
@@ -28,32 +29,36 @@ export const createSessionInputSchema = z.object({
   outputMode: z.enum(['markdown', 'html']).optional()
 })
 
+export const nonEmptyStringSchema = z.string().min(1)
+
 export const updateSessionTitleInputSchema = z.object({
-  id: z.string().min(1),
+  id: nonEmptyStringSchema,
   title: z.string()
 })
 
+export const sessionIdInputSchema = nonEmptyStringSchema
+
 export const setSessionWorkspaceInputSchema = z.object({
-  id: z.string().min(1),
+  id: nonEmptyStringSchema,
   workspacePath: z.string().optional()
 })
 
 export const setSessionModelInputSchema = z.object({
-  id: z.string().min(1),
+  id: nonEmptyStringSchema,
   defaultModelId: z.string().optional()
 })
 
 export const setSessionOutputModeInputSchema = z.object({
-  id: z.string().min(1),
+  id: nonEmptyStringSchema,
   outputMode: z.enum(['markdown', 'html'])
 })
 
 export const agentEnqueueInputSchema = z.object({
-  sessionId: z.string().min(1),
-  prompt: z.string().min(1),
-  modelId: z.string().min(1),
+  sessionId: nonEmptyStringSchema,
+  prompt: nonEmptyStringSchema,
+  modelId: nonEmptyStringSchema,
   workspacePath: z.string().optional(),
-  parentRunId: z.string().min(1).optional()
+  parentRunId: nonEmptyStringSchema.optional()
 })
 
 export const appSettingsSchema = z.object({
@@ -71,6 +76,10 @@ export const directorySelectionSchema = z.object({
 
 export const subscribeAgentEventsResultSchema = z.object({
   subscribed: z.literal(true)
+})
+
+export const unsubscribeAgentEventsResultSchema = z.object({
+  unsubscribed: z.literal(true)
 })
 
 export type CreateSessionInput = z.infer<typeof createSessionInputSchema>

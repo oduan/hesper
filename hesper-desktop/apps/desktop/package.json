@@ -5,11 +5,12 @@
   "type": "module",
   "main": "dist/electron/main.js",
   "scripts": {
-    "build": "vite build renderer && tsc -p tsconfig.json",
+    "build": "node -e \"const fs=require('fs'); fs.rmSync('dist',{recursive:true,force:true})\" && pnpm --filter @hesper/shared build && pnpm --filter @hesper/persistence build && pnpm --filter @hesper/tools build && pnpm --filter @hesper/agent-runtime build && pnpm --filter @hesper/app-core build && vite build --config renderer/vite.config.ts && tsc -p tsconfig.build.json && node scripts/verify-build.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest --run -c vitest.config.ts",
-    "dev": "concurrently -k \"vite --host 127.0.0.1 renderer\" \"tsc -w -p tsconfig.json\" \"wait-on http://127.0.0.1:5173 dist/electron/main.js && electron .\"",
-    "e2e": "playwright test"
+    "dev": "concurrently -k \"vite --host 127.0.0.1 renderer\" \"tsc -w -p tsconfig.build.json\" \"wait-on http://127.0.0.1:5173 dist/electron/main.js && electron .\"",
+    "e2e": "playwright test",
+    "verify-build": "node scripts/verify-build.mjs"
   },
   "dependencies": {
     "@hesper/agent-runtime": "workspace:*",

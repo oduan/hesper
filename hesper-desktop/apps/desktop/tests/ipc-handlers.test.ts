@@ -20,29 +20,35 @@ describe('registerIpcHandlers', () => {
     const persistence = await createInMemoryPersistence()
     const container = createServiceContainer({ persistence, agentMode: 'mock' })
     const savePersistence = vi.fn(async () => {})
+    const schedulePersistenceSave = vi.fn()
     const handles = new Map<string, (event: any, ...args: any[]) => Promise<unknown> | unknown>()
     const removeHandler = vi.fn((channel: string) => {
       handles.delete(channel)
     })
+    const destroyedListeners = new Map<string, () => void>()
+    const sender = {
+      id: 7,
+      isDestroyed: () => false,
+      send: vi.fn(),
+      once: vi.fn((eventName: string, listener: () => void) => {
+        destroyedListeners.set(eventName, listener)
+      })
+    }
     const ipcMain = {
       handle: vi.fn((channel: string, handler: (event: any, ...args: any[]) => Promise<unknown> | unknown) => {
         handles.set(channel, handler)
       }),
       removeHandler
     }
-    const sender = {
-      id: 7,
-      isDestroyed: () => false,
-      send: vi.fn()
-    }
     const dialog = {
       showOpenDialog: vi.fn(async () => ({ canceled: false, filePaths: ['C:/workspace'] }))
     }
 
-    const dispose = registerIpcHandlers({ ipcMain, dialog, container, savePersistence })
+    const dispose = registerIpcHandlers({ ipcMain, dialog, container, savePersistence, schedulePersistenceSave })
 
     expect(ipcMain.handle).toHaveBeenCalledWith(ipcChannels.sessionsList, expect.any(Function))
     expect(ipcMain.handle).toHaveBeenCalledWith(ipcChannels.agentEventsSubscribe, expect.any(Function))
+    expect(ipcMain.handle).toHaveBeenCalledWith(ipcChannels.agentEventsUnsubscribe, expect.any(Function))
 
     await handles.get(ipcChannels.agentEventsSubscribe)?.({ sender })
     const session = (await handles.get(ipcChannels.sessionsCreate)?.({ sender }, { title: 'IPC created' })) as { id: string }
@@ -53,7 +59,21 @@ describe('registerIpcHandlers', () => {
       ipcEvents.agentEvent,
       expect.objectContaining({ type: 'run.created' })
     )
+    expect(schedulePersistenceSave).toHaveBeenCalled()
     expect(savePersistence).toHaveBeenCalled()
+
+    await handles.get(ipcChannels.agentEventsUnsubscribe)?.({ sender })
+    const sendsBefore = sender.send.mock.calls.length
+    await handles.get(ipcChannels.agentEnqueue)?.({ sender }, { sessionId: session.id, prompt: 'Second run', modelId: 'mock/hesper-fast' })
+    await container.agentRuntime.waitForIdle(session.id)
+    expect(sender.send.mock.calls).toHaveLength(sendsBefore)
+
+    await handles.get(ipcChannels.agentEventsSubscribe)?.({ sender })
+    destroyedListeners.get('destroyed')?.()
+    const sendsAfterDestroyed = sender.send.mock.calls.length
+    await handles.get(ipcChannels.agentEnqueue)?.({ sender }, { sessionId: session.id, prompt: 'Third run', modelId: 'mock/hesper-fast' })
+    await container.agentRuntime.waitForIdle(session.id)
+    expect(sender.send.mock.calls).toHaveLength(sendsAfterDestroyed)
 
     dispose()
     expect(removeHandler).toHaveBeenCalledWith(ipcChannels.sessionsList)

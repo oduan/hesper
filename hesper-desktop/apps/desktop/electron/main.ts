@@ -16,11 +16,38 @@ let mainWindow: BrowserWindow | null = null
 let container: ServiceContainer | null = null
 let disposeIpcHandlers: (() => void) | undefined
 let persistencePath = ''
+let pendingPersistenceWrite: Promise<void> | null = null
+let persistenceFlushTimer: NodeJS.Timeout | undefined
 
 async function savePersistence(): Promise<void> {
   if (!container || !persistencePath) return
   fs.mkdirSync(path.dirname(persistencePath), { recursive: true })
-  fs.writeFileSync(persistencePath, exportDatabaseBytes(container.persistence))
+  const snapshot = exportDatabaseBytes(container.persistence)
+  const writeTask = fs.promises.writeFile(persistencePath, snapshot).then(() => undefined)
+  pendingPersistenceWrite = writeTask
+  try {
+    await writeTask
+  } finally {
+    if (pendingPersistenceWrite === writeTask) pendingPersistenceWrite = null
+  }
+}
+
+function schedulePersistenceSave(delayMs = 50): void {
+  if (persistenceFlushTimer) clearTimeout(persistenceFlushTimer)
+  persistenceFlushTimer = setTimeout(() => {
+    persistenceFlushTimer = undefined
+    void savePersistence()
+  }, delayMs)
+}
+
+async function flushScheduledPersistence(): Promise<void> {
+  if (persistenceFlushTimer) {
+    clearTimeout(persistenceFlushTimer)
+    persistenceFlushTimer = undefined
+    await savePersistence()
+    return
+  }
+  if (pendingPersistenceWrite) await pendingPersistenceWrite
 }
 
 function resolveAgentMode(): AgentMode {
@@ -61,7 +88,7 @@ async function bootstrap(): Promise<void> {
   persistencePath = path.join(app.getPath('userData'), 'hesper.sqlite')
   const persistence = await createFilePersistence(persistencePath)
   container = createServiceContainer({ persistence, agentMode: resolveAgentMode() })
-  disposeIpcHandlers = registerIpcHandlers({ ipcMain, dialog, container, savePersistence })
+  disposeIpcHandlers = registerIpcHandlers({ ipcMain, dialog, container, savePersistence, schedulePersistenceSave })
   await savePersistence()
 
   mainWindow = createMainWindow()
@@ -80,6 +107,7 @@ app.whenReady().then(async () => {
 })
 
 app.on('before-quit', async () => {
+  await flushScheduledPersistence()
   await savePersistence()
   disposeIpcHandlers?.()
   disposeIpcHandlers = undefined
