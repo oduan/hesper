@@ -1,0 +1,25 @@
+{
+  "name": "@hesper/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/electron/main.js",
+  "scripts": {
+    "build": "vite build renderer && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest --run -c vitest.config.ts",
+    "dev": "concurrently -k \"vite --host 127.0.0.1 renderer\" \"tsc -w -p tsconfig.json\" \"wait-on http://127.0.0.1:5173 dist/electron/main.js && electron .\"",
+    "e2e": "playwright test"
+  },
+  "dependencies": {
+    "@hesper/agent-runtime": "workspace:*",
+    "@hesper/app-core": "workspace:*",
+    "@hesper/persistence": "workspace:*",
+    "@hesper/shared": "workspace:*",
+    "@hesper/tools": "workspace:*",
+    "@hesper/ui": "workspace:*",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "zod": "4.4.3"
+  }
+}

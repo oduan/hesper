@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "../..",
+    "tsBuildInfoFile": "dist/.tsbuildinfo",
+    "types": ["node", "vitest/globals"],
+    "allowSyntheticDefaultImports": true
+  },
+  "include": ["electron/**/*.ts", "renderer/src/**/*", "tests/**/*.ts"]
+}

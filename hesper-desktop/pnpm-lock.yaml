@@ -63,6 +63,36 @@ importers:
         specifier: 9.0.10
         version: 9.0.10
 
+  apps/desktop:
+    dependencies:
+      '@hesper/agent-runtime':
+        specifier: workspace:*
+        version: link:../../packages/agent-runtime
+      '@hesper/app-core':
+        specifier: workspace:*
+        version: link:../../packages/app-core
+      '@hesper/persistence':
+        specifier: workspace:*
+        version: link:../../packages/persistence
+      '@hesper/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      '@hesper/tools':
+        specifier: workspace:*
+        version: link:../../packages/tools
+      '@hesper/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      react:
+        specifier: 19.2.7
+        version: 19.2.7
+      react-dom:
+        specifier: 19.2.7
+        version: 19.2.7(react@19.2.7)
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+
   packages/agent-runtime:
     dependencies:
       '@earendil-works/pi-agent-core':
