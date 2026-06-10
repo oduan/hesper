@@ -1,6 +1,8 @@
-import { defineWorkspace } from 'vitest/config'
+import { defineConfig } from 'vitest/config'
 
-export default defineWorkspace([
-  'packages/*/vitest.config.ts',
-  'apps/desktop/vitest.config.ts'
-])
+export default defineConfig({
+  test: {
+    passWithNoTests: true,
+    projects: ['apps/desktop', 'packages/*']
+  }
+})

@@ -13,5 +13,6 @@ MVP1 desktop client for hesper.
 ```bash
 pnpm install
 pnpm check
-pnpm dev
 ```
+
+> `pnpm dev` 将在后续桌面应用任务完成后启用。
