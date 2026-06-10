@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "baseUrl": ".",
+    "paths": {
+      "@hesper/shared": ["../shared/dist/index.d.ts"]
+    },
+    "ignoreDeprecations": "6.0"
+  },
+  "include": ["src"]
+}

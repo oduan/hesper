@@ -1,0 +1,17 @@
+{
+  "name": "@hesper/tools",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "pnpm --filter @hesper/shared build && tsc -p tsconfig.json",
+    "typecheck": "pnpm --filter @hesper/shared build && tsc -p tsconfig.json --noEmit",
+    "test": "pnpm --filter @hesper/shared build && vitest --run"
+  },
+  "dependencies": {
+    "@hesper/shared": "workspace:*"
+  },
+  "devDependencies": {}
+}
