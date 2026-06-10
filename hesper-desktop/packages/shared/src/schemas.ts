@@ -20,8 +20,14 @@ type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ?
     : false
   : false
 
-function stripUndefined<T extends Record<string, unknown>>(value: T): T {
-  return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as T
+type StripUndefined<T> = {
+  [K in keyof T]: undefined extends T[K] ? Exclude<T[K], undefined> : T[K]
+}
+
+type NormalizeOptional<T> = Simplify<StripUndefined<T>>
+
+function stripUndefined<T extends Record<string, unknown>>(value: T): StripUndefined<T> {
+  return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as StripUndefined<T>
 }
 
 const runErrorBaseSchema = z.object({
@@ -30,7 +36,7 @@ const runErrorBaseSchema = z.object({
   retryable: z.boolean()
 })
 
-export const runErrorSchema = runErrorBaseSchema.transform((value) => value) as z.ZodType<RunError>
+export const runErrorSchema = runErrorBaseSchema.transform((value) => value)
 
 const sessionBaseSchema = z.object({
   id: z.string().min(1),
@@ -43,7 +49,7 @@ const sessionBaseSchema = z.object({
   updatedAt: z.string().datetime()
 })
 
-export const sessionSchema = sessionBaseSchema.transform(stripUndefined) as z.ZodType<Session>
+export const sessionSchema = sessionBaseSchema.transform(stripUndefined)
 
 const messageBaseSchema = z.object({
   id: z.string().min(1),
@@ -55,7 +61,7 @@ const messageBaseSchema = z.object({
   createdAt: z.string().datetime()
 })
 
-export const messageSchema = messageBaseSchema.transform(stripUndefined) as z.ZodType<Message>
+export const messageSchema = messageBaseSchema.transform(stripUndefined)
 
 const agentRunBaseSchema = z.object({
   id: z.string().min(1),
@@ -71,7 +77,7 @@ const agentRunBaseSchema = z.object({
   error: runErrorSchema.optional()
 })
 
-export const agentRunSchema = agentRunBaseSchema.transform(stripUndefined) as z.ZodType<AgentRun>
+export const agentRunSchema = agentRunBaseSchema.transform(stripUndefined)
 
 const runStepBaseSchema = z.object({
   id: z.string().min(1),
@@ -85,7 +91,7 @@ const runStepBaseSchema = z.object({
   completedAt: z.string().datetime().optional()
 })
 
-export const runStepSchema = runStepBaseSchema.transform(stripUndefined) as z.ZodType<RunStep>
+export const runStepSchema = runStepBaseSchema.transform(stripUndefined)
 
 const skillBaseSchema = z.object({
   id: z.string().min(1),
@@ -95,7 +101,7 @@ const skillBaseSchema = z.object({
   path: z.string().optional()
 })
 
-export const skillSchema = skillBaseSchema.transform(stripUndefined) as z.ZodType<Skill>
+export const skillSchema = skillBaseSchema.transform(stripUndefined)
 
 const roleBaseSchema = z.object({
   id: z.string().min(1),
@@ -107,7 +113,7 @@ const roleBaseSchema = z.object({
   canBeSubagent: z.boolean()
 })
 
-export const roleSchema = roleBaseSchema.transform(stripUndefined) as z.ZodType<Role>
+export const roleSchema = roleBaseSchema.transform(stripUndefined)
 
 export const toolDefinitionSchema = z.object({
   id: z.string().min(1),
@@ -176,24 +182,16 @@ export const agentRuntimeEventSchema = z.discriminatedUnion('type', [
   runRetryingEventSchema,
   runFailedEventSchema,
   runSucceededEventSchema
-]) as z.ZodType<AgentRuntimeEvent>
+])
 
 // Compile-time contract checks
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-type _SessionCheck = Expect<Equal<z.infer<typeof sessionSchema>, Simplify<Session>>>
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-type _MessageCheck = Expect<Equal<z.infer<typeof messageSchema>, Simplify<Message>>>
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-type _AgentRunCheck = Expect<Equal<z.infer<typeof agentRunSchema>, Simplify<AgentRun>>>
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-type _RunStepCheck = Expect<Equal<z.infer<typeof runStepSchema>, Simplify<RunStep>>>
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-type _SkillCheck = Expect<Equal<z.infer<typeof skillSchema>, Simplify<Skill>>>
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-type _RoleCheck = Expect<Equal<z.infer<typeof roleSchema>, Simplify<Role>>>
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-type _ToolDefinitionCheck = Expect<Equal<z.infer<typeof toolDefinitionSchema>, Simplify<ToolDefinition>>>
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-type _RunErrorCheck = Expect<Equal<z.infer<typeof runErrorSchema>, Simplify<RunError>>>
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-type _AgentRuntimeEventCheck = Expect<Equal<z.infer<typeof agentRuntimeEventSchema>, Simplify<AgentRuntimeEvent>>>
+type _SessionCheck = Expect<Equal<z.output<typeof sessionSchema>, NormalizeOptional<Session>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _MessageCheck = Expect<Equal<z.output<typeof messageSchema>, NormalizeOptional<Message>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _AgentRunCheck = Expect<Equal<z.output<typeof agentRunSchema>, NormalizeOptional<AgentRun>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _RunStepCheck = Expect<Equal<z.output<typeof runStepSchema>, NormalizeOptional<RunStep>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _SkillCheck = Expect<Equal<z.output<typeof skillSchema>, NormalizeOptional<Skill>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _RoleCheck = Expect<Equal<z.output<typeof roleSchema>, NormalizeOptional<Role>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _ToolDefinitionCheck = Expect<Equal<z.output<typeof toolDefinitionSchema>, NormalizeOptional<ToolDefinition>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _RunErrorCheck = Expect<Equal<z.output<typeof runErrorSchema>, NormalizeOptional<RunError>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _AgentRuntimeEventCheck = Expect<Equal<z.output<typeof agentRuntimeEventSchema>, NormalizeOptional<AgentRuntimeEvent>>>
