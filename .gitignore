@@ -19,5 +19,8 @@ Thumbs.db
 # Superpowers visual brainstorming artifacts
 .superpowers/
 
+# Agent coordination reports
+.agent-reports/
+
 # Isolated implementation worktrees
 .worktrees/
