@@ -14,6 +14,7 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "baseUrl": ".",
+    "ignoreDeprecations": "6.0",
     "paths": {
       "@hesper/shared": ["packages/shared/src/index.ts"],
       "@hesper/persistence": ["packages/persistence/src/index.ts"],

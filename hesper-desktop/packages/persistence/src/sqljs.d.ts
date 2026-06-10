@@ -1,18 +1,11 @@
 declare module 'sql.js' {
-  export interface Database {
+  export type Database = {
     run(sql: string, params?: unknown[]): void
-    prepare(sql: string): {
-      bind(params: unknown[]): void
-      step(): boolean
-      getAsObject(): Record<string, unknown>
-      free(): void
-    }
+    prepare(sql: string): any
     export(): Uint8Array
   }
 
-  const initSqlJs: () => Promise<{
+  export default function initSqlJs(): Promise<{
     Database: new (data?: Uint8Array) => Database
   }>
-
-  export default initSqlJs
 }

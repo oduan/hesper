@@ -1,5 +1,8 @@
-import fs from 'node:fs'
-import initSqlJs from 'sql.js'
+import * as fs from 'fs'
+import { createRequire } from 'node:module'
+
+const require = createRequire(import.meta.url)
+const initSqlJs = require('sql.js') as () => Promise<{ Database: new (data?: Uint8Array) => any }>
 import { schemaSql } from './schema'
 import { createRepositories, type Persistence } from './repositories'
 

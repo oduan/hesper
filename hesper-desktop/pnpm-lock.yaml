@@ -63,6 +63,15 @@ importers:
         specifier: 9.0.10
         version: 9.0.10
 
+  packages/app-core:
+    dependencies:
+      '@hesper/persistence':
+        specifier: workspace:*
+        version: link:../persistence
+      '@hesper/shared':
+        specifier: workspace:*
+        version: link:../shared
+
   packages/persistence:
     dependencies:
       '@hesper/shared':

@@ -1,3 +1,4 @@
+/// <reference path="./sqljs.d.ts" />
 import {
   agentRuntimeEventSchema,
   runErrorSchema,
