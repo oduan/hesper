@@ -1,10 +1,12 @@
 /// <reference path="./sqljs.d.ts" />
 import {
   agentRuntimeEventSchema,
+  modelRefSchema,
   runErrorSchema,
   type AgentRun,
   type AgentRuntimeEvent,
   type Message,
+  type ModelCapability,
   type ModelConfig,
   type ModelProviderConfig,
   type ModelRef,
@@ -106,18 +108,43 @@ function stripUndefined<T extends Record<string, unknown>>(value: T): Record<str
   return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined))
 }
 
-function parseJson<T>(value: unknown, fallback: T): T {
-  if (value === null || value === undefined || value === '') return fallback
+function parseRequiredJson(value: unknown, field: string): unknown {
   try {
-    return JSON.parse(String(value)) as T
-  } catch {
-    return fallback
+    return JSON.parse(String(value))
+  } catch (error) {
+    throw new Error(`Invalid JSON in ${field}`, { cause: error })
   }
 }
 
-function parseJsonArray(value: unknown): string[] {
-  const parsed = parseJson<unknown>(value, [])
-  return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : []
+function parseOptionalJson(value: unknown, field: string): unknown | undefined {
+  if (value === null || value === undefined || value === '') return undefined
+  return parseRequiredJson(value, field)
+}
+
+function parseStringArrayJson(value: unknown, field: string): string[] {
+  if (value === null || value === undefined || value === '') return []
+  const parsed = parseRequiredJson(value, field)
+  if (!Array.isArray(parsed) || parsed.some((item) => typeof item !== 'string')) {
+    throw new Error(`Invalid string array JSON in ${field}`)
+  }
+  return parsed
+}
+
+const modelCapabilities = new Set<ModelCapability>(['streaming', 'toolCalls', 'jsonOutput', 'reasoning'])
+
+function parseModelCapabilities(value: unknown): ModelCapability[] {
+  const parsed = parseStringArrayJson(value, 'models.capabilities_json')
+  for (const capability of parsed) {
+    if (!modelCapabilities.has(capability as ModelCapability)) {
+      throw new Error(`Invalid model capability in models.capabilities_json: ${capability}`)
+    }
+  }
+  return parsed as ModelCapability[]
+}
+
+function parseOptionalModelRef(value: unknown, field: string): ModelRef | undefined {
+  const parsed = parseOptionalJson(value, field)
+  return parsed === undefined ? undefined : modelRefSchema.parse(parsed)
 }
 
 function optionalString(value: unknown): string | undefined {
@@ -149,9 +176,9 @@ function toSession(row: any): Session {
     providerId: optionalString(row.provider_id),
     modelId: optionalString(row.model_id),
     roleId: optionalString(row.role_id),
-    enabledSkillIds: parseJsonArray(row.enabled_skill_ids_json),
-    enabledToolIds: parseJsonArray(row.enabled_tool_ids_json),
-    allowedSubagentRoleIds: parseJsonArray(row.allowed_subagent_role_ids_json),
+    enabledSkillIds: parseStringArrayJson(row.enabled_skill_ids_json, 'sessions.enabled_skill_ids_json'),
+    enabledToolIds: parseStringArrayJson(row.enabled_tool_ids_json, 'sessions.enabled_tool_ids_json'),
+    allowedSubagentRoleIds: parseStringArrayJson(row.allowed_subagent_role_ids_json, 'sessions.allowed_subagent_role_ids_json'),
     maxSubagentDepth: optionalNumber(row.max_subagent_depth) ?? 1,
     maxSubagentsPerRun: optionalNumber(row.max_subagents_per_run) ?? 3,
     outputMode: row.output_mode,
@@ -226,7 +253,7 @@ function toModel(row: any): ModelConfig {
     providerId: row.provider_id,
     modelName: row.model_name,
     displayName: row.display_name,
-    capabilities: parseJsonArray(row.capabilities_json),
+    capabilities: parseModelCapabilities(row.capabilities_json),
     contextWindow: optionalNumber(row.context_window),
     enabled: optionalBoolean(row.enabled),
     createdAt: row.created_at,
@@ -243,7 +270,7 @@ function toSkill(row: any): Skill {
     path: row.path ?? undefined,
     sourcePath: row.source_path ?? undefined,
     prompt: row.prompt ?? undefined,
-    allowedToolIds: parseJsonArray(row.allowed_tool_ids_json),
+    allowedToolIds: parseStringArrayJson(row.allowed_tool_ids_json, 'skills.allowed_tool_ids_json'),
     enabled: optionalBoolean(row.enabled)
   }) as Skill
 }
@@ -254,11 +281,11 @@ function toRole(row: any): Role {
     name: row.name,
     description: row.description ?? undefined,
     defaultModelId: row.default_model_id ?? undefined,
-    defaultModelRef: parseJson<ModelRef | undefined>(row.default_model_ref_json, undefined),
+    defaultModelRef: parseOptionalModelRef(row.default_model_ref_json, 'roles.default_model_ref_json'),
     systemPrompt: row.system_prompt ?? undefined,
-    allowedSkillIds: parseJsonArray(row.allowed_skill_ids_json),
-    defaultSkillIds: parseJsonArray(row.default_skill_ids_json),
-    defaultToolIds: parseJsonArray(row.default_tool_ids_json),
+    allowedSkillIds: parseStringArrayJson(row.allowed_skill_ids_json, 'roles.allowed_skill_ids_json'),
+    defaultSkillIds: parseStringArrayJson(row.default_skill_ids_json, 'roles.default_skill_ids_json'),
+    defaultToolIds: parseStringArrayJson(row.default_tool_ids_json, 'roles.default_tool_ids_json'),
     canBeMainAgent: Number(row.can_be_main_agent) === 1,
     canBeSubagent: Number(row.can_be_subagent) === 1,
     canBeAssignedToSubagent: optionalBoolean(row.can_be_assigned_to_subagent),
@@ -287,8 +314,8 @@ function toSubagentInvocation(row: any): SubagentInvocation {
     childRunId: row.child_run_id ?? undefined,
     task: row.task,
     roleId: row.role_id,
-    allowedToolIds: parseJsonArray(row.allowed_tool_ids_json),
-    modelRef: parseJson<ModelRef | undefined>(row.model_ref_json, undefined),
+    allowedToolIds: parseStringArrayJson(row.allowed_tool_ids_json, 'subagent_invocations.allowed_tool_ids_json'),
+    modelRef: parseOptionalModelRef(row.model_ref_json, 'subagent_invocations.model_ref_json'),
     expectedOutput: row.expected_output ?? undefined,
     status: row.status,
     createdAt: row.created_at,

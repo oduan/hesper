@@ -4,10 +4,28 @@ import os from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { createFilePersistence, createInMemoryPersistence, exportDatabaseBytes } from '../database'
+import { schemaSql } from '../schema'
 
 const require = createRequire(import.meta.url)
 const initSqlJs = require('sql.js') as () => Promise<{ Database: new (data?: Uint8Array) => any }>
 const now = '2026-06-10T03:00:00.000Z'
+
+async function createCorruptConfigDatabaseBytes(): Promise<Uint8Array> {
+  const SQL = await initSqlJs()
+  const db = new SQL.Database()
+  db.run(schemaSql)
+  db.run(`
+INSERT INTO models (id, provider_id, model_name, display_name, capabilities_json, context_window, enabled, created_at, updated_at, sort_seq)
+VALUES ('bad-model-json', 'provider-1', 'bad', 'Bad Model JSON', '{not-json', NULL, 1, '${now}', '${now}', 1);
+INSERT INTO models (id, provider_id, model_name, display_name, capabilities_json, context_window, enabled, created_at, updated_at, sort_seq)
+VALUES ('bad-model-capability', 'provider-1', 'bad', 'Bad Capability', '["streaming", "unknownCapability"]', NULL, 1, '${now}', '${now}', 2);
+INSERT INTO roles (id, name, description, default_model_id, default_model_ref_json, system_prompt, allowed_skill_ids_json, default_skill_ids_json, default_tool_ids_json, can_be_main_agent, can_be_subagent, can_be_assigned_to_subagent, subagent_guidance, sort_seq)
+VALUES ('bad-role-array', 'Bad Role Array', NULL, NULL, NULL, NULL, '{"not":"an-array"}', NULL, NULL, 1, 1, 1, NULL, 3);
+INSERT INTO roles (id, name, description, default_model_id, default_model_ref_json, system_prompt, allowed_skill_ids_json, default_skill_ids_json, default_tool_ids_json, can_be_main_agent, can_be_subagent, can_be_assigned_to_subagent, subagent_guidance, sort_seq)
+VALUES ('bad-role-ref', 'Bad Role Ref', NULL, NULL, '{"providerId":"provider-1"}', NULL, '[]', NULL, NULL, 1, 1, 1, NULL, 4);
+`)
+  return db.export()
+}
 
 async function createLegacyDatabaseBytes(): Promise<Uint8Array> {
   const SQL = await initSqlJs()
@@ -238,6 +256,21 @@ describe('persistence repositories', () => {
     expect(await db.subagentInvocations.listByParentRun('run-parent')).toMatchObject([
       { id: 'subagent-1', childRunId: 'run-child', roleId: 'reviewer', allowedToolIds: ['filesystem.read-file', 'git.status'] }
     ])
+  })
+
+  it('fails fast instead of silently rewriting corrupted JSON configuration fields', async () => {
+    const tempFile = path.join(os.tmpdir(), `hesper-corrupt-config-${Date.now()}.sqlite`)
+    fs.writeFileSync(tempFile, await createCorruptConfigDatabaseBytes())
+
+    try {
+      const corrupted = await createFilePersistence(tempFile)
+      await expect(corrupted.models.get('bad-model-json')).rejects.toThrow(/models\.capabilities_json/)
+      await expect(corrupted.models.get('bad-model-capability')).rejects.toThrow(/Invalid model capability/)
+      await expect(corrupted.roles.get('bad-role-array')).rejects.toThrow(/roles\.allowed_skill_ids_json/)
+      await expect(corrupted.roles.get('bad-role-ref')).rejects.toThrow()
+    } finally {
+      fs.rmSync(tempFile, { force: true })
+    }
   })
 
   it('migrates legacy MVP1 databases and applies safe session defaults', async () => {
