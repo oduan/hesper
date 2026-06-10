@@ -4,6 +4,8 @@ export type AppSection = 'sessions' | 'skills' | 'roles' | 'tools' | 'settings'
 
 export type ActivityRailProps = {
   activeSection: AppSection
+  onCreateSession?: () => void | Promise<void>
+  onSelectSection?: (section: AppSection) => void
 }
 
 const sections: Array<{ id: AppSection; label: string; shortLabel: string; icon: string }> = [
@@ -14,12 +16,13 @@ const sections: Array<{ id: AppSection; label: string; shortLabel: string; icon:
   { id: 'settings', label: '设置', shortLabel: '设置', icon: '设' }
 ]
 
-export function ActivityRail({ activeSection }: ActivityRailProps) {
+export function ActivityRail({ activeSection, onCreateSession, onSelectSection }: ActivityRailProps) {
   return (
     <aside
       aria-label="功能栏"
       style={{
-        width: 92,
+        width: '100%',
+        boxSizing: 'border-box',
         padding: darkTheme.spacing.md,
         background: darkTheme.color.surfaceMuted,
         borderRight: `1px solid ${darkTheme.color.border}`,
@@ -31,6 +34,10 @@ export function ActivityRail({ activeSection }: ActivityRailProps) {
       <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: '0.04em' }}>hesper</div>
       <button
         type="button"
+        aria-label="新建会话"
+        onClick={() => {
+          void onCreateSession?.()
+        }}
         style={{
           border: 0,
           borderRadius: darkTheme.radius.md,
@@ -53,6 +60,7 @@ export function ActivityRail({ activeSection }: ActivityRailProps) {
               type="button"
               aria-current={isActive ? 'page' : undefined}
               aria-label={section.label}
+              onClick={() => onSelectSection?.(section.id)}
               style={{
                 borderRadius: darkTheme.radius.md,
                 border: `1px solid ${isActive ? darkTheme.color.accent : darkTheme.color.border}`,

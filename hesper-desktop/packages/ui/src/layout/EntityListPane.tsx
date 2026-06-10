@@ -17,7 +17,8 @@ export function EntityListPane({ title, activeSection, sessions, activeSessionId
     <aside
       aria-label="实体列表"
       style={{
-        width: 280,
+        width: '100%',
+        boxSizing: 'border-box',
         background: darkTheme.color.surface,
         borderRight: `1px solid ${darkTheme.color.border}`,
         padding: darkTheme.spacing.md,

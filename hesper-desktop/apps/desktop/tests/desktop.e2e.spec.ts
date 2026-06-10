@@ -35,8 +35,9 @@ test('creates a session and receives a mock agent response', async () => {
 
     const page = await app.firstWindow()
 
-    await expect(page.getByRole('button', { name: '新建会话' })).toBeVisible()
-    await page.getByRole('button', { name: '新建会话' }).click()
+    const emptyStateNewSessionButton = page.getByLabel('空会话状态').getByRole('button', { name: '新建会话' })
+    await expect(emptyStateNewSessionButton).toBeVisible()
+    await emptyStateNewSessionButton.click()
     await expect(page.getByRole('heading', { name: 'New chat' })).toBeVisible()
 
     await page.getByPlaceholder(/输入消息/).fill('hello from e2e')

@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { AppShell } from '../layout/AppShell'
 import { Composer } from '../conversation/Composer'
 import { OutputBlock } from '../conversation/OutputBlock'
@@ -10,11 +10,33 @@ import { RunSteps } from '../conversation/RunSteps'
 const now = '2026-06-10T03:00:00.000Z'
 
 describe('ui components', () => {
-  it('renders high-density desktop shell rails and panes', () => {
-    render(<AppShell sessions={[]} activeSection="sessions" title="构建 hesper MVP" />)
+  it('renders high-density desktop shell rails and panes', async () => {
+    const user = userEvent.setup()
+    const onCreateSession = vi.fn()
+    const onSelectSection = vi.fn()
+
+    render(
+      <AppShell
+        sessions={[]}
+        activeSection="sessions"
+        title="构建 hesper MVP"
+        onCreateSession={onCreateSession}
+        onSelectSection={onSelectSection}
+      />
+    )
+
     expect(screen.getByText('hesper')).toBeInTheDocument()
     expect(screen.getByText('所有会话')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '所有会话' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByLabelText('功能栏')).toHaveStyle({ boxSizing: 'border-box' })
+    expect(screen.getByLabelText('实体列表')).toHaveStyle({ boxSizing: 'border-box' })
+    expect(screen.getByText('构建 hesper MVP').closest('header')).toHaveClass('titlebar-drag')
+
+    await user.click(screen.getByRole('button', { name: '新建会话' }))
+    expect(onCreateSession).toHaveBeenCalledTimes(1)
+
+    await user.click(screen.getByRole('button', { name: '工具' }))
+    expect(onSelectSection).toHaveBeenCalledWith('tools')
   })
 
   it('disables send button when composer is empty and enables it with text', async () => {

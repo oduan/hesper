@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react'
 import { createId, nowIso, type Message, type OutputMode, type Session } from '@hesper/shared'
-import { AppShell, ConversationView, type ConversationShortcutCommand } from '@hesper/ui'
+import { AppShell, ConversationView, type AppSection, type ConversationShortcutCommand } from '@hesper/ui'
 import { AppStoreProvider, useAppStore } from './app-store'
 import { hesperApi } from './ipc-client'
 import { createShortcutHandler } from './shortcuts'
@@ -217,6 +217,7 @@ function AppContent() {
   )
   const activeSession = effectiveSessions.find((session) => session.id === state.activeSessionId)
   const activeSendError = activeSession ? sendErrorsBySession[activeSession.id] : undefined
+  const isSessionsSection = state.activeSection === 'sessions'
   const activeRunId = activeSession ? state.latestRunIdBySession[activeSession.id] : undefined
   const activeSteps = activeRunId ? state.stepsByRun[activeRunId] ?? [] : []
   const activeStreamingText = activeRunId ? state.streamingByRun[activeRunId] ?? '' : ''
@@ -226,11 +227,21 @@ function AppContent() {
     <AppShell
       sessions={effectiveSessions}
       activeSection={state.activeSection}
-      title={activeSession?.title ?? '新建会话'}
+      title={isSessionsSection ? activeSession?.title ?? '新建会话' : getSectionTitle(state.activeSection)}
       {...(state.activeSessionId ? { activeSessionId: state.activeSessionId } : {})}
-      onSelectSession={(sessionId) => dispatch({ type: 'session.selected', sessionId })}
+      onCreateSession={async () => {
+        dispatch({ type: 'section.selected', section: 'sessions' })
+        await createSession(dispatch)
+      }}
+      onSelectSection={(section) => dispatch({ type: 'section.selected', section })}
+      onSelectSession={(sessionId) => {
+        dispatch({ type: 'section.selected', section: 'sessions' })
+        dispatch({ type: 'session.selected', sessionId })
+      }}
     >
-      {activeSession ? (
+      {!isSessionsSection ? (
+        <SectionPlaceholder section={state.activeSection} />
+      ) : activeSession ? (
         <>
           {activeSendError ? (
             <p role="alert" style={{ margin: '0 0 12px', color: '#fca5a5', padding: '0 12px' }}>
@@ -295,6 +306,41 @@ function AppContent() {
         />
       )}
     </AppShell>
+  )
+}
+
+const sectionTitles: Record<AppSection, string> = {
+  sessions: '所有会话',
+  skills: 'Skills 即将支持',
+  roles: 'Roles 即将支持',
+  tools: 'Tools 即将支持',
+  settings: 'Settings 即将支持'
+}
+
+function getSectionTitle(section: AppSection): string {
+  return sectionTitles[section]
+}
+
+function SectionPlaceholder({ section }: { section: AppSection }) {
+  return (
+    <section
+      aria-label={`${getSectionTitle(section)} 占位区域`}
+      style={{
+        height: '100%',
+        border: '1px solid rgba(148, 163, 184, 0.18)',
+        borderRadius: 14,
+        background: 'rgba(15, 23, 42, 0.52)',
+        display: 'grid',
+        placeItems: 'center',
+        textAlign: 'center',
+        padding: 24
+      }}
+    >
+      <div>
+        <h2 style={{ margin: '0 0 8px', fontSize: 20 }}>{getSectionTitle(section)}</h2>
+        <p style={{ margin: 0, opacity: 0.72 }}>该扩展点已预留，后续会接入真实数据和交互。</p>
+      </div>
+    </section>
   )
 }
 

@@ -27,7 +27,7 @@ try {
   const title = await page.title()
   console.log(`window title: ${title}`)
 
-  await page.getByRole('button', { name: '新建会话' }).click()
+  await page.getByLabel('空会话状态').getByRole('button', { name: '新建会话' }).click()
   await page.getByPlaceholder(/输入消息/).fill('hello from smoke')
   await page.getByRole('button', { name: '发送' }).click()
   await page.getByText(/Mock response for: hello from smoke/).waitFor({ timeout: 10000 })

@@ -59,6 +59,41 @@ describe('renderer App', () => {
     expect(screen.getByText('所有会话')).toBeInTheDocument()
   })
 
+  it('creates a session from the activity rail new-session button', async () => {
+    const user = userEvent.setup()
+
+    render(<App />)
+
+    const newSessionButtons = await screen.findAllByRole('button', { name: '新建会话' })
+    await user.click(newSessionButtons[0]!)
+
+    expect(createSession).toHaveBeenCalledWith({ title: 'New chat' })
+    expect(await screen.findAllByText('New chat')).not.toHaveLength(0)
+  })
+
+  it('switches activity sections from the rail and shows extension placeholders', async () => {
+    const user = userEvent.setup()
+
+    listSessions.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        title: 'Existing chat',
+        status: 'active',
+        outputMode: 'markdown',
+        createdAt: '2026-06-10T03:00:00.000Z',
+        updatedAt: '2026-06-10T03:00:00.000Z'
+      }
+    ] as any)
+
+    render(<App />)
+
+    expect(await screen.findAllByText('Existing chat')).not.toHaveLength(0)
+    await user.click(screen.getByRole('button', { name: '工具' }))
+
+    expect(screen.getByRole('button', { name: '工具' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('region', { name: 'Tools 即将支持 占位区域' })).toBeInTheDocument()
+  })
+
   it('shows a minimal error state when initial sessions load fails', async () => {
     listSessions.mockRejectedValueOnce(new Error('IPC unavailable'))
 

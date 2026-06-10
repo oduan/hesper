@@ -9,6 +9,7 @@ export type TitleBarProps = {
 export function TitleBar({ title, rightSlot }: TitleBarProps) {
   return (
     <header
+      className="titlebar-drag"
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -19,8 +20,8 @@ export function TitleBar({ title, rightSlot }: TitleBarProps) {
         background: darkTheme.color.surface
       }}
     >
-      <div style={{ fontSize: 15, fontWeight: 700 }}>{title}</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: darkTheme.spacing.sm }}>{rightSlot}</div>
+      <div style={{ fontSize: 15, fontWeight: 700, pointerEvents: 'none' }}>{title}</div>
+      <div className="titlebar-no-drag" style={{ display: 'flex', alignItems: 'center', gap: darkTheme.spacing.sm }}>{rightSlot}</div>
     </header>
   )
 }
