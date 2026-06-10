@@ -1,0 +1,8 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+allowBuilds:
+  esbuild: true
+minimumReleaseAgeExclude:
+  - electron@42.4.0
+  - prettier@3.8.4
