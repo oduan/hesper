@@ -1,0 +1,20 @@
+{
+  "name": "@hesper/agent-runtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "pnpm --filter @hesper/shared build && pnpm --filter @hesper/persistence build && tsc -p tsconfig.build.json",
+    "typecheck": "pnpm --filter @hesper/shared build && pnpm --filter @hesper/persistence build && tsc -p tsconfig.typecheck.json --noEmit",
+    "test": "pnpm --filter @hesper/shared build && pnpm --filter @hesper/persistence build && vitest --run"
+  },
+  "dependencies": {
+    "@earendil-works/pi-agent-core": "0.79.1",
+    "@earendil-works/pi-ai": "0.79.1",
+    "@hesper/shared": "workspace:*",
+    "@hesper/persistence": "workspace:*"
+  },
+  "devDependencies": {}
+}

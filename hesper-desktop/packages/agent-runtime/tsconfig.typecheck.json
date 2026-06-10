@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@hesper/shared": ["../shared/dist/index.d.ts"],
+      "@hesper/persistence": ["../persistence/dist/index.d.ts"]
+    }
+  },
+  "include": ["src/**/*.ts"]
+}
