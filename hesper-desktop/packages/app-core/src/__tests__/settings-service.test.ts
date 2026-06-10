@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createSettingsService } from './settings-service'
+import { createSettingsService } from '../settings-service'
 
 describe('createSettingsService', () => {
   it('returns the expected defaults', () => {

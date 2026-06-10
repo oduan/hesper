@@ -88,8 +88,8 @@ export function createDefaultRoleService(): RoleService {
 export function createDefaultSkillService(): SkillService {
   const skills: Skill[] = [
     { id: 'builtin:notes', name: 'Notes', source: 'builtin' },
-    { id: 'builtin:files', name: 'Files', source: 'builtin' },
-    { id: 'builtin:web', name: 'Web', source: 'builtin' }
+    { id: 'workspace:notes', name: 'Workspace Notes', source: 'workspace' },
+    { id: 'project:notes', name: 'Project Notes', source: 'project' }
   ]
   return {
     listSkills: () => [...skills],

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createInMemoryPersistence } from '@hesper/persistence'
-import { createSessionService } from './session-service'
+import { createSessionService } from '../session-service'
 
 const now = '2026-06-10T05:00:00.000Z'
 
@@ -33,6 +33,15 @@ describe('createSessionService', () => {
 
     await service.deleteSession(created.id)
     await expect(service.getSession(created.id)).rejects.toThrow(`Session not found: ${created.id}`)
+  })
+
+  it('defaults createSession title to New chat', async () => {
+    const persistence = await createInMemoryPersistence()
+    const service = createSessionService(persistence)
+
+    const created = await service.createSession({})
+
+    expect(created.title).toBe('New chat')
   })
 
   it('lists sessions by visible order and excludes deleted sessions', async () => {

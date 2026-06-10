@@ -3,7 +3,7 @@ import {
   ToolCatalogService,
   createDefaultRoleService,
   createDefaultSkillService
-} from './registry-services'
+} from '../registry-services'
 
 describe('registry services', () => {
   it('exposes deterministic builtin roles and skills', () => {
@@ -11,7 +11,11 @@ describe('registry services', () => {
     const skills = createDefaultSkillService().listSkills()
 
     expect(roles.map((role) => role.id)).toEqual(['main-agent', 'subagent'])
-    expect(skills.map((skill) => skill.id)).toEqual(['builtin:notes', 'builtin:files', 'builtin:web'])
+    expect(skills.map((skill) => skill.id)).toEqual([
+      'builtin:notes',
+      'workspace:notes',
+      'project:notes'
+    ])
   })
 
   it('groups tools by category deterministically', () => {

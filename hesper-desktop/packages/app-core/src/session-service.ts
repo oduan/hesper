@@ -2,7 +2,7 @@ import { createId, nowIso, type OutputMode, type Session, type SessionStatus } f
 import type { Persistence } from '@hesper/persistence'
 
 export type CreateSessionInput = {
-  title: string
+  title?: string
   now?: string
   workspacePath?: string
   defaultModelId?: string
@@ -52,7 +52,7 @@ export function createSessionService(persistence: Persistence): SessionService {
       const timestamp = input.now ?? nowIso()
       const session: Session = {
         id: createId('session'),
-        title: input.title,
+        title: input.title ?? 'New chat',
         status: 'active',
         outputMode: input.outputMode ?? 'markdown',
         createdAt: timestamp,

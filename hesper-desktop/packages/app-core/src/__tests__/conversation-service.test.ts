@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createInMemoryPersistence } from '@hesper/persistence'
-import { createConversationService } from './conversation-service'
-import { createSessionService } from './session-service'
+import { createConversationService } from '../conversation-service'
+import { createSessionService } from '../session-service'
 
 const now = '2026-06-10T05:00:00.000Z'
 
