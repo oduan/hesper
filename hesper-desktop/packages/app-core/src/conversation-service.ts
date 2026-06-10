@@ -80,6 +80,7 @@ export function createConversationService(persistence: Persistence): Conversatio
     async appendRuntimeEvent(event) {
       if (event.type === 'run.created') {
         await ensureSessionExists(persistence, event.run.sessionId)
+        await ensureRunExists(persistence, event.run.id)
       }
       if (event.type === 'run.started' || event.type === 'run.retrying' || event.type === 'run.failed' || event.type === 'run.succeeded' || event.type === 'message.delta') {
         await ensureRunExists(persistence, event.runId)

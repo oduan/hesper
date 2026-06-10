@@ -62,8 +62,21 @@ describe('createConversationService', () => {
 
   it('rejects runtime events for missing runs', async () => {
     const persistence = await createInMemoryPersistence()
+    const sessions = createSessionService(persistence)
     const conversation = createConversationService(persistence)
+    const session = await sessions.createSession({ title: 'Chat', now })
 
-    await expect(conversation.appendRuntimeEvent({ type: 'run.started', runId: 'missing' })).rejects.toThrow('Run not found: missing')
+    await expect(conversation.appendRuntimeEvent({ type: 'run.created', run: { id: 'missing-run', sessionId: session.id, status: 'queued' as const, modelId: 'mock/model', retryCount: 0, maxRetries: 5 } })).rejects.toThrow('Run not found: missing-run')
+  })
+
+  it('accepts run.created when run already exists', async () => {
+    const persistence = await createInMemoryPersistence()
+    const sessions = createSessionService(persistence)
+    const conversation = createConversationService(persistence)
+    const session = await sessions.createSession({ title: 'Chat', now })
+    const run = { id: 'run-ok', sessionId: session.id, status: 'queued' as const, modelId: 'mock/model', retryCount: 0, maxRetries: 5 }
+    await persistence.runs.save(run)
+
+    await expect(conversation.appendRuntimeEvent({ type: 'run.created', run })).resolves.toMatchObject({ type: 'run.created' })
   })
 })
