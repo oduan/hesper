@@ -4,5 +4,5 @@
     "types": ["node", "vitest/globals"],
     "allowSyntheticDefaultImports": true
   },
-  "include": ["electron/**/*.ts", "renderer/src/**/*", "tests/**/*.ts"]
+  "include": ["electron/**/*.ts", "renderer/src/**/*", "renderer/tests/**/*", "tests/**/*.ts"]
 }

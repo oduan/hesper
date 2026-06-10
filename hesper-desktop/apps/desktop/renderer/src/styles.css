@@ -1,0 +1,44 @@
+:root {
+  color-scheme: light;
+  --hesper-body-background: #f5f7fb;
+  --hesper-body-text: #162033;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--hesper-body-background);
+  color: var(--hesper-body-text);
+  font-family: Inter, 'Segoe UI', sans-serif;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+.hesper-output-block {
+  max-height: 320px;
+  overflow: hidden;
+}
+
+.titlebar-drag {
+  -webkit-app-region: drag;
+}
+
+.titlebar-no-drag {
+  -webkit-app-region: no-drag;
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+  --hesper-body-background: #0f172a;
+  --hesper-body-text: #e2e8f0;
+}
