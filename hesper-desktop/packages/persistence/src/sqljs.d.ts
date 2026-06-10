@@ -7,10 +7,11 @@ declare module 'sql.js' {
       getAsObject(): Record<string, unknown>
       free(): void
     }
+    export(): Uint8Array
   }
 
   const initSqlJs: () => Promise<{
-    Database: new () => Database
+    Database: new (data?: Uint8Array) => Database
   }>
 
   export default initSqlJs

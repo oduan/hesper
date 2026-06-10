@@ -6,8 +6,8 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "pnpm --filter @hesper/shared build && tsc -p tsconfig.build.json && node -e \"const fs=require('fs'); const path=require('path'); for (const p of [path.join(process.cwd(),'dist/packages'), path.join(process.cwd(),'dist/__tests__')]) fs.rmSync(p, { recursive: true, force: true });\"",
+    "typecheck": "pnpm --filter @hesper/shared build && tsc -p tsconfig.typecheck.json --noEmit",
     "test": "vitest --run"
   },
   "dependencies": {

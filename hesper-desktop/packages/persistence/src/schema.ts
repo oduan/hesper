@@ -7,7 +7,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   default_model_id TEXT,
   output_mode TEXT NOT NULL,
   created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL,
+  sort_seq INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -17,7 +18,8 @@ CREATE TABLE IF NOT EXISTS messages (
   content TEXT NOT NULL,
   content_type TEXT NOT NULL,
   run_id TEXT,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  sort_seq INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS agent_runs (
@@ -31,7 +33,8 @@ CREATE TABLE IF NOT EXISTS agent_runs (
   max_retries INTEGER NOT NULL,
   started_at TEXT,
   ended_at TEXT,
-  error_json TEXT
+  error_json TEXT,
+  sort_seq INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS run_steps (
@@ -43,7 +46,8 @@ CREATE TABLE IF NOT EXISTS run_steps (
   summary TEXT,
   detail TEXT,
   created_at TEXT NOT NULL,
-  completed_at TEXT
+  completed_at TEXT,
+  sort_seq INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS runtime_events (

@@ -1,5 +1,12 @@
-import type { AgentRun, Message, RunStep, Session } from '@hesper/shared'
-import type { AgentRuntimeEvent } from '@hesper/shared/src/events'
+import {
+  agentRuntimeEventSchema,
+  runErrorSchema,
+  type AgentRun,
+  type AgentRuntimeEvent,
+  type Message,
+  type RunStep,
+  type Session
+} from '@hesper/shared'
 import type { Database } from 'sql.js'
 
 export type RuntimeEventRecord = AgentRuntimeEvent
@@ -36,6 +43,7 @@ export type Persistence = {
   runs: RunRepository
   steps: RunStepRepository
   events: RuntimeEventRepository
+  exportDatabaseBytes(): Uint8Array
 }
 
 function stripUndefined<T extends Record<string, unknown>>(value: T): Record<string, unknown> {
@@ -68,6 +76,7 @@ function toMessage(row: any): Message {
 }
 
 function toRun(row: any): AgentRun {
+  const error = row.error_json ? runErrorSchema.parse(JSON.parse(String(row.error_json))) : undefined
   return {
     id: row.id,
     sessionId: row.session_id,
@@ -79,7 +88,7 @@ function toRun(row: any): AgentRun {
     maxRetries: row.max_retries,
     startedAt: row.started_at ?? undefined,
     endedAt: row.ended_at ?? undefined,
-    error: row.error_json ? JSON.parse(row.error_json) : undefined
+    ...(error ? { error } : {})
   }
 }
 
@@ -97,167 +106,152 @@ function toStep(row: any): RunStep {
   }
 }
 
+function extractRunId(event: RuntimeEventRecord): string {
+  switch (event.type) {
+    case 'run.created':
+      return event.run.id
+    case 'run.started':
+    case 'message.delta':
+    case 'run.retrying':
+    case 'run.failed':
+    case 'run.succeeded':
+      return event.runId
+    case 'step.created':
+    case 'step.updated':
+      return event.step.runId
+    case 'message.completed': {
+      const runId = event.message.runId
+      if (!runId) throw new Error('message.completed event must include message.runId')
+      return runId
+    }
+  }
+}
+
+function parseRuntimeEvent(value: unknown): RuntimeEventRecord {
+  return agentRuntimeEventSchema.parse(value)
+}
+
 export function createRepositories(db: Database): Persistence {
+  let sequence = 0
+  const nextSeq = () => ++sequence
+
+  const bindValues = (values: unknown[]) => values.map((value) => (value === undefined ? null : value))
+  const exec = (sql: string, params: unknown[] = []) => db.run(sql, bindValues(params))
+  const fetchAll = (sql: string, params: unknown[] = []) => {
+    const stmt = db.prepare(sql)
+    try {
+      stmt.bind(params)
+      const rows: Record<string, unknown>[] = []
+      while (stmt.step()) rows.push(stmt.getAsObject())
+      return rows
+    } finally {
+      stmt.free()
+    }
+  }
+
+  const upsert = (table: string, columns: string[], values: unknown[], id: string) => {
+    const placeholders = columns.map(() => '?').join(', ')
+    const updateColumns = columns.filter((column) => column !== 'id' && column !== 'sort_seq').map((column) => `${column}=excluded.${column}`).join(', ')
+    const existing = fetchAll(`SELECT sort_seq FROM ${table} WHERE id = ?`, [id])[0]
+    const finalValues = values.slice()
+    finalValues[finalValues.length - 1] = existing ? existing.sort_seq : finalValues[finalValues.length - 1]
+    exec(
+      `INSERT INTO ${table} (${columns.join(', ')}) VALUES (${placeholders}) ON CONFLICT(id) DO UPDATE SET ${updateColumns}`,
+      finalValues
+    )
+  }
+
   return {
     sessions: {
       async save(session) {
-        const data = stripUndefined({
-          id: session.id,
-          title: session.title,
-          status: session.status,
-          workspace_path: session.workspacePath,
-          default_model_id: session.defaultModelId,
-          output_mode: session.outputMode,
-          created_at: session.createdAt,
-          updated_at: session.updatedAt
-        })
-        db.run(
-          `INSERT OR REPLACE INTO sessions (${Object.keys(data).join(', ')}) VALUES (${Object.keys(data)
-            .map(() => '?')
-            .join(', ')})`,
-          Object.values(data)
-        )
+        upsert('sessions', ['id', 'title', 'status', 'workspace_path', 'default_model_id', 'output_mode', 'created_at', 'updated_at', 'sort_seq'], [
+          session.id,
+          session.title,
+          session.status,
+          session.workspacePath,
+          session.defaultModelId,
+          session.outputMode,
+          session.createdAt,
+          session.updatedAt,
+          nextSeq()
+        ], session.id)
       },
       async get(id) {
-        const stmt = db.prepare('SELECT * FROM sessions WHERE id = ?')
-        try {
-          stmt.bind([id])
-          return stmt.step() ? toSession(stmt.getAsObject()) : undefined
-        } finally {
-          stmt.free()
-        }
+        const row = fetchAll('SELECT * FROM sessions WHERE id = ?', [id])[0]
+        return row ? toSession(row) : undefined
       },
       async listVisible() {
-        const stmt = db.prepare("SELECT * FROM sessions WHERE status != 'deleted' ORDER BY created_at ASC")
-        try {
-          const rows: Session[] = []
-          while (stmt.step()) rows.push(toSession(stmt.getAsObject()))
-          return rows
-        } finally {
-          stmt.free()
-        }
+        return fetchAll("SELECT * FROM sessions WHERE status != 'deleted' ORDER BY sort_seq ASC, id ASC").map(toSession)
       }
     },
     messages: {
       async save(message) {
-        const data = stripUndefined({
-          id: message.id,
-          session_id: message.sessionId,
-          role: message.role,
-          content: message.content,
-          content_type: message.contentType,
-          run_id: message.runId,
-          created_at: message.createdAt
-        })
-        db.run(
-          `INSERT OR REPLACE INTO messages (${Object.keys(data).join(', ')}) VALUES (${Object.keys(data)
-            .map(() => '?')
-            .join(', ')})`,
-          Object.values(data)
-        )
+        upsert('messages', ['id', 'session_id', 'role', 'content', 'content_type', 'run_id', 'created_at', 'sort_seq'], [
+          message.id,
+          message.sessionId,
+          message.role,
+          message.content,
+          message.contentType,
+          message.runId,
+          message.createdAt,
+          nextSeq()
+        ], message.id)
       },
       async listBySession(sessionId) {
-        const stmt = db.prepare('SELECT * FROM messages WHERE session_id = ? ORDER BY created_at ASC, id ASC')
-        try {
-          stmt.bind([sessionId])
-          const rows: Message[] = []
-          while (stmt.step()) rows.push(toMessage(stmt.getAsObject()))
-          return rows
-        } finally {
-          stmt.free()
-        }
+        return fetchAll('SELECT * FROM messages WHERE session_id = ? ORDER BY sort_seq ASC, id ASC', [sessionId]).map(toMessage)
       }
     },
     runs: {
       async save(run) {
-        const data = stripUndefined({
-          id: run.id,
-          session_id: run.sessionId,
-          parent_run_id: run.parentRunId,
-          status: run.status,
-          model_id: run.modelId,
-          workspace_path: run.workspacePath,
-          retry_count: run.retryCount,
-          max_retries: run.maxRetries,
-          started_at: run.startedAt,
-          ended_at: run.endedAt,
-          error_json: run.error ? JSON.stringify(run.error) : undefined
-        })
-        db.run(
-          `INSERT OR REPLACE INTO agent_runs (${Object.keys(data).join(', ')}) VALUES (${Object.keys(data)
-            .map(() => '?')
-            .join(', ')})`,
-          Object.values(data)
-        )
+        upsert('agent_runs', ['id', 'session_id', 'parent_run_id', 'status', 'model_id', 'workspace_path', 'retry_count', 'max_retries', 'started_at', 'ended_at', 'error_json', 'sort_seq'], [
+          run.id,
+          run.sessionId,
+          run.parentRunId,
+          run.status,
+          run.modelId,
+          run.workspacePath,
+          run.retryCount,
+          run.maxRetries,
+          run.startedAt,
+          run.endedAt,
+          run.error ? JSON.stringify(run.error) : undefined,
+          nextSeq()
+        ], run.id)
       },
       async listBySession(sessionId) {
-        const stmt = db.prepare('SELECT * FROM agent_runs WHERE session_id = ? ORDER BY rowid ASC')
-        try {
-          stmt.bind([sessionId])
-          const rows: AgentRun[] = []
-          while (stmt.step()) rows.push(toRun(stmt.getAsObject()))
-          return rows
-        } finally {
-          stmt.free()
-        }
+        return fetchAll('SELECT * FROM agent_runs WHERE session_id = ? ORDER BY sort_seq ASC, id ASC', [sessionId]).map(toRun)
       }
     },
     steps: {
       async save(step) {
-        const data = stripUndefined({
-          id: step.id,
-          run_id: step.runId,
-          type: step.type,
-          status: step.status,
-          title: step.title,
-          summary: step.summary,
-          detail: step.detail,
-          created_at: step.createdAt,
-          completed_at: step.completedAt
-        })
-        db.run(
-          `INSERT OR REPLACE INTO run_steps (${Object.keys(data).join(', ')}) VALUES (${Object.keys(data)
-            .map(() => '?')
-            .join(', ')})`,
-          Object.values(data)
-        )
+        upsert('run_steps', ['id', 'run_id', 'type', 'status', 'title', 'summary', 'detail', 'created_at', 'completed_at', 'sort_seq'], [
+          step.id,
+          step.runId,
+          step.type,
+          step.status,
+          step.title,
+          step.summary,
+          step.detail,
+          step.createdAt,
+          step.completedAt,
+          nextSeq()
+        ], step.id)
       },
       async listByRun(runId) {
-        const stmt = db.prepare('SELECT * FROM run_steps WHERE run_id = ? ORDER BY created_at ASC, id ASC')
-        try {
-          stmt.bind([runId])
-          const rows: RunStep[] = []
-          while (stmt.step()) rows.push(toStep(stmt.getAsObject()))
-          return rows
-        } finally {
-          stmt.free()
-        }
+        return fetchAll('SELECT * FROM run_steps WHERE run_id = ? ORDER BY sort_seq ASC, id ASC', [runId]).map(toStep)
       }
     },
     events: {
       async append(event) {
-        const runtimeEvent = event as any
-        const runId = runtimeEvent.type === 'run.created' ? runtimeEvent.run.id : runtimeEvent.runId
-        db.run('INSERT INTO runtime_events (run_id, event_json) VALUES (?, ?)', [runId, JSON.stringify(event)])
+        const runId = extractRunId(event)
+        exec('INSERT INTO runtime_events (run_id, event_json) VALUES (?, ?)', [runId, JSON.stringify(event)])
       },
       async listByRun(runId) {
-        const stmt = db.prepare('SELECT event_json FROM runtime_events WHERE run_id = ? ORDER BY id ASC')
-        try {
-          stmt.bind([runId])
-          const rows: RuntimeEventRecord[] = []
-          while (stmt.step()) {
-            const event = JSON.parse(String(stmt.getAsObject().event_json)) as any
-            if (event.type === 'run.created') {
-              if (event.run?.id === runId) rows.push(event as RuntimeEventRecord)
-            } else if (event.runId === runId) {
-              rows.push(event as RuntimeEventRecord)
-            }
-          }
-          return rows
-        } finally {
-          stmt.free()
-        }
+        return fetchAll('SELECT event_json FROM runtime_events WHERE run_id = ? ORDER BY id ASC', [runId]).map((row) => parseRuntimeEvent(JSON.parse(String(row.event_json))))
       }
+    },
+    exportDatabaseBytes() {
+      return db.export()
     }
   }
 }
