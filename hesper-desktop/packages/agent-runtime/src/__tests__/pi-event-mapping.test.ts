@@ -19,6 +19,74 @@ describe('pi event mapping', () => {
       args: { path: 'README.md' }
     })
 
-    expect(events[0]?.type).toBe('step.created')
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: 'step.created',
+        step: expect.objectContaining({
+          runId: 'run-1',
+          type: 'tool_call',
+          status: 'running',
+          title: 'Tool: read_file'
+        })
+      })
+    ])
+  })
+
+  it('maps tool execution end to a completed tool result step update', () => {
+    const events = mapPiEventToHesperEvents('run-1', {
+      type: 'tool_execution_end',
+      toolCallId: 'tool-call-1',
+      toolName: 'read_file',
+      result: { content: 'done' },
+      isError: false
+    })
+
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: 'step.updated',
+        step: expect.objectContaining({
+          runId: 'run-1',
+          type: 'tool_result',
+          status: 'succeeded',
+          title: 'Tool: read_file'
+        })
+      })
+    ])
+  })
+
+  it('maps turn start to a model_call step creation', () => {
+    const events = mapPiEventToHesperEvents('run-1', {
+      type: 'turn_start'
+    })
+
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: 'step.created',
+        step: expect.objectContaining({
+          runId: 'run-1',
+          type: 'model_call',
+          status: 'running',
+          title: 'Model turn'
+        })
+      })
+    ])
+  })
+
+  it('maps turn end to a model_call step update', () => {
+    const events = mapPiEventToHesperEvents('run-1', {
+      type: 'turn_end'
+    })
+
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: 'step.updated',
+        step: expect.objectContaining({
+          runId: 'run-1',
+          type: 'model_call',
+          status: 'succeeded',
+          title: 'Model turn'
+        })
+      })
+    ])
   })
 })
