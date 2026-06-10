@@ -3,7 +3,7 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { App } from '../src/App'
+import { App, clearSessionSendError, pruneSessionSendErrors } from '../src/App'
 
 const { listSessions, createSession, enqueue, onEvent } = vi.hoisted(() => ({
   listSessions: vi.fn(async () => []),
@@ -31,6 +31,14 @@ vi.mock('../src/ipc-client', () => ({
 }))
 
 describe('renderer App', () => {
+  it('deletes cleared send-error entries instead of keeping undefined keys', () => {
+    expect(clearSessionSendError({ 'session-1': 'failed', 'session-2': 'still-here' }, 'session-1')).toEqual({ 'session-2': 'still-here' })
+  })
+
+  it('prunes send-error entries for sessions that are no longer visible', () => {
+    expect(pruneSessionSendErrors({ 'session-1': 'failed', 'session-2': 'keep' }, ['session-2'])).toEqual({ 'session-2': 'keep' })
+  })
+
   afterEach(() => {
     cleanup()
   })

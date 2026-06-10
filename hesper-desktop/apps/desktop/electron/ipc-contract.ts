@@ -66,9 +66,13 @@ export const appSettingsSchema = z.object({
   defaultModelId: z.string().min(1),
   defaultOutputMode: z.enum(['markdown', 'html']),
   themeMode: z.enum(['system', 'light', 'dark'])
-})
+}).strict()
 
-export const updateSettingsInputSchema = appSettingsSchema.partial()
+export const updateSettingsInputSchema = z.object({
+  defaultModelId: z.string().min(1).optional(),
+  defaultOutputMode: z.enum(['markdown', 'html']).optional(),
+  themeMode: z.enum(['system', 'light', 'dark']).optional()
+}).strict()
 
 export const directorySelectionSchema = z.object({
   canceled: z.boolean(),

@@ -1,5 +1,5 @@
-import { useEffect, useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react'
-import { createId, nowIso, type Message } from '@hesper/shared'
+import { useEffect, useMemo, useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react'
+import { createId, nowIso, type Message, type OutputMode, type Session } from '@hesper/shared'
 import { AppShell, ConversationView, type ConversationShortcutCommand } from '@hesper/ui'
 import { AppStoreProvider, useAppStore } from './app-store'
 import { hesperApi } from './ipc-client'
@@ -13,12 +13,89 @@ export function App() {
   )
 }
 
+type SessionSettingsOverride = {
+  workspacePath?: string
+  defaultModelId?: string
+  outputMode?: OutputMode
+}
+
 const sessionModelOptions = ['mock/hesper-fast', 'openai/gpt-4o', 'anthropic/claude-sonnet-4-20250514']
+
+export function clearSessionSendError(errors: Record<string, string>, sessionId: string): Record<string, string> {
+  if (!(sessionId in errors)) {
+    return errors
+  }
+
+  const next = { ...errors }
+  delete next[sessionId]
+  return next
+}
+
+export function pruneSessionSendErrors(errors: Record<string, string>, visibleSessionIds: string[]): Record<string, string> {
+  const visible = new Set(visibleSessionIds)
+  const next = Object.fromEntries(Object.entries(errors).filter(([sessionId]) => visible.has(sessionId)))
+  return Object.keys(next).length === Object.keys(errors).length ? errors : next
+}
+
+function applySessionSettingsOverride(session: Session, override?: SessionSettingsOverride): Session {
+  if (!override) {
+    return session
+  }
+
+  return {
+    ...session,
+    ...(override.workspacePath !== undefined ? { workspacePath: override.workspacePath } : {}),
+    ...(override.defaultModelId !== undefined ? { defaultModelId: override.defaultModelId } : {}),
+    ...(override.outputMode !== undefined ? { outputMode: override.outputMode } : {})
+  }
+}
+
+function mergeSessionOverride(
+  overrides: Record<string, SessionSettingsOverride>,
+  sessionId: string,
+  partial: SessionSettingsOverride
+): Record<string, SessionSettingsOverride> {
+  return {
+    ...overrides,
+    [sessionId]: {
+      ...overrides[sessionId],
+      ...partial
+    }
+  }
+}
+
+function clearSessionOverrideFields(
+  overrides: Record<string, SessionSettingsOverride>,
+  sessionId: string,
+  fields: (keyof SessionSettingsOverride)[]
+): Record<string, SessionSettingsOverride> {
+  const current = overrides[sessionId]
+  if (!current) {
+    return overrides
+  }
+
+  const nextOverride = { ...current }
+  for (const field of fields) {
+    delete nextOverride[field]
+  }
+
+  if (Object.keys(nextOverride).length === 0) {
+    const next = { ...overrides }
+    delete next[sessionId]
+    return next
+  }
+
+  return {
+    ...overrides,
+    [sessionId]: nextOverride
+  }
+}
 
 function AppContent() {
   const { state, dispatch } = useAppStore()
   const [loadError, setLoadError] = useState<string>()
-  const [sendErrorsBySession, setSendErrorsBySession] = useState<Record<string, string | undefined>>({})
+  const [sendErrorsBySession, setSendErrorsBySession] = useState<Record<string, string>>({})
+  const [pendingSettingsBySession, setPendingSettingsBySession] = useState<Record<string, SessionSettingsOverride>>({})
   const [shortcutCommand, setShortcutCommand] = useState<ConversationShortcutCommand>()
 
   useEffect(() => {
@@ -69,7 +146,21 @@ function AppContent() {
     return () => window.removeEventListener('keydown', handler)
   }, [])
 
-  const activeSession = state.sessions.find((session) => session.id === state.activeSessionId)
+  useEffect(() => {
+    const visibleSessionIds = state.sessions.map((session) => session.id)
+    setSendErrorsBySession((current) => pruneSessionSendErrors(current, visibleSessionIds))
+    setPendingSettingsBySession((current) => {
+      const visible = new Set(visibleSessionIds)
+      const next = Object.fromEntries(Object.entries(current).filter(([sessionId]) => visible.has(sessionId)))
+      return Object.keys(next).length === Object.keys(current).length ? current : next
+    })
+  }, [state.sessions])
+
+  const effectiveSessions = useMemo(
+    () => state.sessions.map((session) => applySessionSettingsOverride(session, pendingSettingsBySession[session.id])),
+    [pendingSettingsBySession, state.sessions]
+  )
+  const activeSession = effectiveSessions.find((session) => session.id === state.activeSessionId)
   const activeSendError = activeSession ? sendErrorsBySession[activeSession.id] : undefined
   const activeRunId = activeSession ? state.latestRunIdBySession[activeSession.id] : undefined
   const activeSteps = activeRunId ? state.stepsByRun[activeRunId] ?? [] : []
@@ -78,7 +169,7 @@ function AppContent() {
 
   return (
     <AppShell
-      sessions={state.sessions}
+      sessions={effectiveSessions}
       activeSection={state.activeSection}
       title={activeSession?.title ?? '新建会话'}
       {...(state.activeSessionId ? { activeSessionId: state.activeSessionId } : {})}
@@ -99,13 +190,13 @@ function AppContent() {
             modelId={activeSession.defaultModelId ?? 'mock/hesper-fast'}
             modelOptions={sessionModelOptions}
             onSelectWorkspace={() => {
-              void updateSessionWorkspace(activeSession, dispatch)
+              void updateSessionWorkspace(activeSession, dispatch, setPendingSettingsBySession)
             }}
             onModelChange={(modelId) => {
-              void updateSessionModel(activeSession.id, modelId, dispatch)
+              void updateSessionModel(activeSession, modelId, dispatch, setPendingSettingsBySession)
             }}
             onOutputModeChange={(outputMode) => {
-              void updateSessionOutputMode(activeSession.id, outputMode, dispatch)
+              void updateSessionOutputMode(activeSession, outputMode, dispatch, setPendingSettingsBySession)
             }}
             onSend={(content) => {
               void sendMessage({
@@ -170,30 +261,55 @@ async function createSession(dispatch: ReturnType<typeof useAppStore>['dispatch'
 }
 
 async function updateSessionWorkspace(
-  session: { id: string; workspacePath?: string },
-  dispatch: ReturnType<typeof useAppStore>['dispatch']
+  session: Pick<Session, 'id' | 'workspacePath'>,
+  dispatch: ReturnType<typeof useAppStore>['dispatch'],
+  setPendingSettingsBySession: Dispatch<SetStateAction<Record<string, SessionSettingsOverride>>>
 ) {
   const result = await hesperApi.dialog.selectDirectory()
-  if (result.canceled) {
+  if (result.canceled || !result.path) {
     return
   }
 
-  const updatedSession = await hesperApi.sessions.setWorkspace({ id: session.id, workspacePath: result.path })
-  dispatch({ type: 'session.updated', session: updatedSession })
+  setPendingSettingsBySession((current) => mergeSessionOverride(current, session.id, { workspacePath: result.path! }))
+
+  try {
+    const updatedSession = await hesperApi.sessions.setWorkspace({ id: session.id, workspacePath: result.path })
+    dispatch({ type: 'session.updated', session: updatedSession })
+  } finally {
+    setPendingSettingsBySession((current) => clearSessionOverrideFields(current, session.id, ['workspacePath']))
+  }
 }
 
-async function updateSessionModel(sessionId: string, modelId: string, dispatch: ReturnType<typeof useAppStore>['dispatch']) {
-  const updatedSession = await hesperApi.sessions.setModel({ id: sessionId, defaultModelId: modelId })
-  dispatch({ type: 'session.updated', session: updatedSession })
+async function updateSessionModel(
+  session: Pick<Session, 'id' | 'defaultModelId'>,
+  modelId: string,
+  dispatch: ReturnType<typeof useAppStore>['dispatch'],
+  setPendingSettingsBySession: Dispatch<SetStateAction<Record<string, SessionSettingsOverride>>>
+) {
+  setPendingSettingsBySession((current) => mergeSessionOverride(current, session.id, { defaultModelId: modelId }))
+
+  try {
+    const updatedSession = await hesperApi.sessions.setModel({ id: session.id, defaultModelId: modelId })
+    dispatch({ type: 'session.updated', session: updatedSession })
+  } finally {
+    setPendingSettingsBySession((current) => clearSessionOverrideFields(current, session.id, ['defaultModelId']))
+  }
 }
 
 async function updateSessionOutputMode(
-  sessionId: string,
-  outputMode: 'markdown' | 'html',
-  dispatch: ReturnType<typeof useAppStore>['dispatch']
+  session: Pick<Session, 'id' | 'outputMode'>,
+  outputMode: OutputMode,
+  dispatch: ReturnType<typeof useAppStore>['dispatch'],
+  setPendingSettingsBySession: Dispatch<SetStateAction<Record<string, SessionSettingsOverride>>>
 ) {
-  const updatedSession = await hesperApi.sessions.setOutputMode({ id: sessionId, outputMode })
-  dispatch({ type: 'session.updated', session: updatedSession })
+  setPendingSettingsBySession((current) => mergeSessionOverride(current, session.id, { outputMode }))
+
+  try {
+    const updatedSession = await hesperApi.sessions.setOutputMode({ id: session.id, outputMode })
+    dispatch({ type: 'session.updated', session: updatedSession })
+  } finally {
+    setPendingSettingsBySession((current) => clearSessionOverrideFields(current, session.id, ['outputMode']))
+  }
 }
 
 async function sendMessage({
@@ -207,9 +323,9 @@ async function sendMessage({
   modelId: string
   content: string
   dispatch: ReturnType<typeof useAppStore>['dispatch']
-  setSendErrorsBySession: Dispatch<SetStateAction<Record<string, string | undefined>>>
+  setSendErrorsBySession: Dispatch<SetStateAction<Record<string, string>>>
 }) {
-  setSendErrorsBySession((current) => ({ ...current, [session.id]: undefined }))
+  setSendErrorsBySession((current) => clearSessionSendError(current, session.id))
   const message = createOptimisticUserMessage({ session, content })
   dispatch({ type: 'message.optimistic', message })
 

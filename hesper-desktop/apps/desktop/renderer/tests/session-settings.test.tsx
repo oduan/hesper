@@ -5,6 +5,16 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../src/App'
 
+function createDeferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((nextResolve, nextReject) => {
+    resolve = nextResolve
+    reject = nextReject
+  })
+  return { promise, resolve, reject }
+}
+
 function createSession(overrides: Partial<any> = {}) {
   return {
     id: 'session-1',
@@ -138,5 +148,73 @@ describe('session settings and restore flow', () => {
       expect(setOutputMode).toHaveBeenCalledWith({ id: 'session-1', outputMode: 'html' })
     })
     expect(screen.getAllByText('html').length).toBeGreaterThan(0)
+  })
+
+  it('uses the newly selected model immediately when the session update is still in flight', async () => {
+    const user = userEvent.setup()
+    const deferred = createDeferred<any>()
+    listSessions.mockResolvedValueOnce([createSession()] as any)
+    setModel.mockImplementationOnce(() => deferred.promise)
+
+    render(<App />)
+
+    await screen.findByRole('heading', { name: 'Current chat' })
+
+    await user.selectOptions(screen.getByRole('combobox', { name: '选择模型' }), 'openai/gpt-4o')
+    await user.type(screen.getByPlaceholderText(/输入消息/), 'send with new model')
+    await user.click(screen.getByRole('button', { name: '发送' }))
+
+    expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({
+      modelId: 'openai/gpt-4o'
+    }))
+
+    deferred.resolve(createSession({ defaultModelId: 'openai/gpt-4o', updatedAt: '2026-06-10T03:06:00.000Z' }))
+    await waitFor(() => {
+      expect(screen.getByRole('combobox', { name: '选择模型' })).toHaveValue('openai/gpt-4o')
+    })
+  })
+
+  it('uses the newly selected workspace immediately when the session update is still in flight', async () => {
+    const user = userEvent.setup()
+    const deferred = createDeferred<any>()
+    listSessions.mockResolvedValueOnce([createSession()] as any)
+    setWorkspace.mockImplementationOnce(() => deferred.promise)
+
+    render(<App />)
+
+    await screen.findByRole('heading', { name: 'Current chat' })
+
+    await user.click(screen.getByRole('button', { name: '选择工作目录' }))
+    await user.type(screen.getByPlaceholderText(/输入消息/), 'send with new workspace')
+    await user.click(screen.getByRole('button', { name: '发送' }))
+
+    expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({
+      workspacePath: 'D:/updated-workspace'
+    }))
+
+    deferred.resolve(createSession({ workspacePath: 'D:/updated-workspace', updatedAt: '2026-06-10T03:05:00.000Z' }))
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '选择工作目录' })).toHaveTextContent('D:/updated-workspace')
+    })
+  })
+
+  it('keeps send errors isolated to the active session', async () => {
+    const user = userEvent.setup()
+    listSessions.mockResolvedValueOnce([
+      createSession({ id: 'session-a', title: 'Session A', updatedAt: '2026-06-10T03:02:00.000Z' }),
+      createSession({ id: 'session-b', title: 'Session B', updatedAt: '2026-06-10T03:01:00.000Z' })
+    ] as any)
+    enqueue.mockRejectedValueOnce(new Error('session-a failed'))
+
+    render(<App />)
+
+    await screen.findByRole('heading', { name: 'Session A' })
+    await user.type(screen.getByPlaceholderText(/输入消息/), 'fail in A')
+    await user.click(screen.getByRole('button', { name: '发送' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('发送失败：session-a failed')
+
+    await user.click(screen.getByRole('button', { name: /Session B/ }))
+    expect(await screen.findByRole('heading', { name: 'Session B' })).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })

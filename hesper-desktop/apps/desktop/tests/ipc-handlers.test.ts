@@ -148,4 +148,29 @@ describe('registerIpcHandlers', () => {
     await expect(handles.get(ipcChannels.agentEnqueue)?.({ sender: { id: 1 } }, { sessionId: '', prompt: '', modelId: '' })).rejects.toThrow()
     expect(await persistence.messages.listBySession('')).toEqual([])
   })
+
+  it('rejects unknown settings:update fields at the IPC boundary', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock' })
+    const handles = new Map<string, (event: any, ...args: any[]) => Promise<unknown> | unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (event: any, ...args: any[]) => Promise<unknown> | unknown) => {
+        handles.set(channel, handler)
+      }),
+      removeHandler: vi.fn()
+    }
+    const dialog = {
+      showOpenDialog: vi.fn(async () => ({ canceled: false, filePaths: ['C:/workspace'] }))
+    }
+
+    registerIpcHandlers({ ipcMain, dialog, container })
+
+    await expect(
+      handles.get(ipcChannels.settingsUpdate)?.({ sender: { id: 1 } }, { themeMode: 'dark', unexpected: true })
+    ).rejects.toThrow()
+
+    await expect(
+      handles.get(ipcChannels.settingsUpdate)?.({ sender: { id: 1 } }, { defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'html' })
+    ).resolves.toMatchObject({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'html' })
+  })
 })
