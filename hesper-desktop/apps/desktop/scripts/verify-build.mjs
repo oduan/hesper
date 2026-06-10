@@ -7,7 +7,7 @@ const __dirname = path.dirname(__filename)
 const appRoot = path.resolve(__dirname, '..')
 const requiredFiles = [
   path.join(appRoot, 'dist', 'electron', 'main.js'),
-  path.join(appRoot, 'dist', 'electron', 'preload.js'),
+  path.join(appRoot, 'dist', 'electron', 'preload.cjs'),
   path.join(appRoot, 'dist', 'renderer', 'index.html')
 ]
 const forbiddenPaths = [

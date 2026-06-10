@@ -11,7 +11,12 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const rendererIndexPath = path.resolve(__dirname, '../renderer/index.html')
-const preloadPath = path.resolve(__dirname, 'preload.js')
+const preloadPath = path.resolve(__dirname, 'preload.cjs')
+
+const configuredUserDataPath = process.env.HESPER_USER_DATA_DIR
+if (configuredUserDataPath) {
+  app.setPath('userData', configuredUserDataPath)
+}
 
 let mainWindow: BrowserWindow | null = null
 let container: ServiceContainer | null = null
