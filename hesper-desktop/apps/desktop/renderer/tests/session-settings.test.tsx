@@ -217,4 +217,107 @@ describe('session settings and restore flow', () => {
     expect(await screen.findByRole('heading', { name: 'Session B' })).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
+
+  it('ignores stale model responses when two updates complete out of order', async () => {
+    const user = userEvent.setup()
+    const first = createDeferred<any>()
+    const second = createDeferred<any>()
+    listSessions.mockResolvedValueOnce([createSession()] as any)
+    setModel.mockImplementationOnce(() => first.promise)
+    setModel.mockImplementationOnce(() => second.promise)
+
+    render(<App />)
+
+    await screen.findByRole('heading', { name: 'Current chat' })
+    await user.selectOptions(screen.getByRole('combobox', { name: '选择模型' }), 'anthropic/claude-sonnet-4-20250514')
+    await user.selectOptions(screen.getByRole('combobox', { name: '选择模型' }), 'openai/gpt-4o')
+
+    second.resolve(createSession({ defaultModelId: 'openai/gpt-4o', updatedAt: '2026-06-10T03:06:02.000Z' }))
+    await waitFor(() => {
+      expect(screen.getByRole('combobox', { name: '选择模型' })).toHaveValue('openai/gpt-4o')
+    })
+
+    first.resolve(createSession({ defaultModelId: 'anthropic/claude-sonnet-4-20250514', updatedAt: '2026-06-10T03:06:01.000Z' }))
+    await waitFor(() => {
+      expect(screen.getByRole('combobox', { name: '选择模型' })).toHaveValue('openai/gpt-4o')
+    })
+
+    await user.type(screen.getByPlaceholderText(/输入消息/), 'use latest model')
+    await user.click(screen.getByRole('button', { name: '发送' }))
+    expect(enqueue).toHaveBeenLastCalledWith(expect.objectContaining({ modelId: 'openai/gpt-4o' }))
+  })
+
+  it('ignores stale workspace responses when two updates complete out of order', async () => {
+    const user = userEvent.setup()
+    const first = createDeferred<any>()
+    const second = createDeferred<any>()
+    listSessions.mockResolvedValueOnce([createSession()] as any)
+    selectDirectory.mockResolvedValueOnce({ canceled: false, path: 'D:/workspace-one' })
+    selectDirectory.mockResolvedValueOnce({ canceled: false, path: 'E:/workspace-two' })
+    setWorkspace.mockImplementationOnce(() => first.promise)
+    setWorkspace.mockImplementationOnce(() => second.promise)
+
+    render(<App />)
+
+    await screen.findByRole('heading', { name: 'Current chat' })
+    await user.click(screen.getByRole('button', { name: '选择工作目录' }))
+    await user.click(screen.getByRole('button', { name: '选择工作目录' }))
+
+    second.resolve(createSession({ workspacePath: 'E:/workspace-two', updatedAt: '2026-06-10T03:05:02.000Z' }))
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '选择工作目录' })).toHaveTextContent('E:/workspace-two')
+    })
+
+    first.resolve(createSession({ workspacePath: 'D:/workspace-one', updatedAt: '2026-06-10T03:05:01.000Z' }))
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '选择工作目录' })).toHaveTextContent('E:/workspace-two')
+    })
+
+    await user.type(screen.getByPlaceholderText(/输入消息/), 'use latest workspace')
+    await user.click(screen.getByRole('button', { name: '发送' }))
+    expect(enqueue).toHaveBeenLastCalledWith(expect.objectContaining({ workspacePath: 'E:/workspace-two' }))
+  })
+
+  it('ignores stale output mode responses when two updates complete out of order', async () => {
+    const user = userEvent.setup()
+    const first = createDeferred<any>()
+    const second = createDeferred<any>()
+    listSessions.mockResolvedValueOnce([createSession()] as any)
+    setOutputMode.mockImplementationOnce(() => first.promise)
+    setOutputMode.mockImplementationOnce(() => second.promise)
+
+    render(<App />)
+
+    await screen.findByRole('heading', { name: 'Current chat' })
+    await user.selectOptions(screen.getByRole('combobox', { name: '选择输出模式' }), 'html')
+    await user.selectOptions(screen.getByRole('combobox', { name: '选择输出模式' }), 'markdown')
+
+    second.resolve(createSession({ outputMode: 'markdown', updatedAt: '2026-06-10T03:07:02.000Z' }))
+    await waitFor(() => {
+      expect(screen.getByRole('combobox', { name: '选择输出模式' })).toHaveValue('markdown')
+    })
+
+    first.resolve(createSession({ outputMode: 'html', updatedAt: '2026-06-10T03:07:01.000Z' }))
+    await waitFor(() => {
+      expect(screen.getByRole('combobox', { name: '选择输出模式' })).toHaveValue('markdown')
+    })
+  })
+
+  it('reverts model pending state when the latest request fails', async () => {
+    const user = userEvent.setup()
+    const deferred = createDeferred<any>()
+    listSessions.mockResolvedValueOnce([createSession()] as any)
+    setModel.mockImplementationOnce(() => deferred.promise)
+
+    render(<App />)
+
+    await screen.findByRole('heading', { name: 'Current chat' })
+    await user.selectOptions(screen.getByRole('combobox', { name: '选择模型' }), 'openai/gpt-4o')
+    expect(screen.getByRole('combobox', { name: '选择模型' })).toHaveValue('openai/gpt-4o')
+
+    deferred.reject(new Error('save failed'))
+    await waitFor(() => {
+      expect(screen.getByRole('combobox', { name: '选择模型' })).toHaveValue('mock/hesper-fast')
+    })
+  })
 })
