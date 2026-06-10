@@ -5,11 +5,26 @@ export type ShortcutActions = {
   jumpMessage: (direction: 'previous' | 'next', assistantOnly: boolean) => void
 }
 
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false
+  }
+
+  const tagName = target.tagName.toLowerCase()
+  return target.isContentEditable || tagName === 'input' || tagName === 'textarea' || tagName === 'select'
+}
+
 export function createShortcutHandler(actions: ShortcutActions) {
   return (event: KeyboardEvent) => {
+    const inEditable = isEditableTarget(event.target)
+
     if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
       event.preventDefault()
       actions.send()
+      return
+    }
+
+    if (inEditable) {
       return
     }
 

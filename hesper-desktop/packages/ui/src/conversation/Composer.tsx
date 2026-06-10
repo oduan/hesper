@@ -7,9 +7,10 @@ export type ComposerProps = {
   modelId: string
   outputMode: OutputMode
   onSend: (content: string) => void
+  sendSignal?: number
 }
 
-export function Composer({ workspacePath, modelId, outputMode, onSend }: ComposerProps) {
+export function Composer({ workspacePath, modelId, outputMode, onSend, sendSignal = 0 }: ComposerProps) {
   const [value, setValue] = useState('')
   const canSend = useMemo(() => value.trim().length > 0, [value])
 
@@ -24,10 +25,10 @@ export function Composer({ workspacePath, modelId, outputMode, onSend }: Compose
   }, [onSend, value])
 
   useEffect(() => {
-    const handleShortcutSend = () => handleSend()
-    window.addEventListener('hesper:send-active-composer', handleShortcutSend)
-    return () => window.removeEventListener('hesper:send-active-composer', handleShortcutSend)
-  }, [handleSend])
+    if (sendSignal > 0) {
+      handleSend()
+    }
+  }, [handleSend, sendSignal])
 
   return (
     <section

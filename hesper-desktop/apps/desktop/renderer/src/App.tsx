@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react'
-import { AppShell, ConversationView } from '@hesper/ui'
+import { AppShell, ConversationView, type ConversationShortcutCommand } from '@hesper/ui'
 import { AppStoreProvider, useAppStore } from './app-store'
 import { hesperApi } from './ipc-client'
 import { createShortcutHandler } from './shortcuts'
@@ -15,6 +15,7 @@ export function App() {
 function AppContent() {
   const { state, dispatch } = useAppStore()
   const [loadError, setLoadError] = useState<string>()
+  const [shortcutCommand, setShortcutCommand] = useState<ConversationShortcutCommand>()
 
   useEffect(() => {
     let cancelled = false
@@ -46,12 +47,18 @@ function AppContent() {
   }, [dispatch])
 
   useEffect(() => {
+    let nonce = 0
+    const nextNonce = () => {
+      nonce += 1
+      return nonce
+    }
+
     const handler = createShortcutHandler({
-      send: () => window.dispatchEvent(new Event('hesper:send-active-composer')),
-      closePanels: () => window.dispatchEvent(new Event('hesper:close-panels')),
-      quickSwitch: () => window.dispatchEvent(new Event('hesper:quick-switch')),
+      send: () => setShortcutCommand({ type: 'send', nonce: nextNonce() }),
+      closePanels: () => setShortcutCommand({ type: 'close-panels', nonce: nextNonce() }),
+      quickSwitch: () => undefined,
       jumpMessage: (direction, assistantOnly) =>
-        window.dispatchEvent(new CustomEvent('hesper:jump-message', { detail: { direction, assistantOnly } }))
+        setShortcutCommand({ type: 'jump-message', nonce: nextNonce(), direction, assistantOnly })
     })
 
     window.addEventListener('keydown', handler)
@@ -78,6 +85,7 @@ function AppContent() {
           streamingText={activeStreamingText}
           modelId={activeSession.defaultModelId ?? 'mock/hesper-fast'}
           onSend={() => undefined}
+          {...(shortcutCommand ? { shortcutCommand } : {})}
         />
       ) : (
         <EmptyConversationState

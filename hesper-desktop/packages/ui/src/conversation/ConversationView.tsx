@@ -7,6 +7,11 @@ import { OutputBlock } from './OutputBlock'
 import { RightNavigation, type NavigationItem } from './RightNavigation'
 import { RunSteps } from './RunSteps'
 
+export type ConversationShortcutCommand =
+  | { type: 'send'; nonce: number }
+  | { type: 'close-panels'; nonce: number }
+  | { type: 'jump-message'; nonce: number; direction: 'previous' | 'next'; assistantOnly: boolean }
+
 export type ConversationViewProps = {
   session: Session
   messages: Message[]
@@ -14,13 +19,7 @@ export type ConversationViewProps = {
   streamingText: string
   modelId: string
   onSend: (content: string) => void
-}
-
-type JumpDirection = 'previous' | 'next'
-
-type JumpDetail = {
-  direction: JumpDirection
-  assistantOnly: boolean
+  shortcutCommand?: ConversationShortcutCommand
 }
 
 type AnchorEntry = {
@@ -42,47 +41,86 @@ function createStepNavigationKind(step: RunStep): NavigationItem['kind'] {
   return step.type === 'tool_call' || step.type === 'tool_result' ? 'tool' : 'assistant'
 }
 
-export function ConversationView({ session, messages, steps, streamingText, modelId, onSend }: ConversationViewProps) {
+function createMessageAnchorId(messageId: string): string {
+  return `message-${messageId}`
+}
+
+function createStepAnchorId(stepId: string): string {
+  return `step-${stepId}`
+}
+
+export function ConversationView({ session, messages, steps, streamingText, modelId, onSend, shortcutCommand }: ConversationViewProps) {
   const [navigationOpen, setNavigationOpen] = useState(false)
-  const anchorRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const [closeFullscreenSignal, setCloseFullscreenSignal] = useState(0)
+  const anchorRefs = useRef<Record<string, HTMLElement | null>>({})
   const anchorOrder = useMemo<AnchorEntry[]>(() => {
-    const messageEntries: AnchorEntry[] = messages.map((message) => ({
-      id: `message-${message.id}`,
-      kind: message.role === 'user' ? 'user' : 'assistant',
-      label: trimLabel(message.content, message.role === 'user' ? '用户消息' : '助手输出')
-    }))
-    const stepEntries: AnchorEntry[] = steps.map((step) => ({
-      id: `step-${step.id}`,
-      kind: createStepNavigationKind(step),
-      label: trimLabel(step.summary ?? step.title, step.title)
-    }))
+    const entries: AnchorEntry[] = []
+    const latestUserMessageId = [...messages].reverse().find((message) => message.role === 'user')?.id
 
-    return [...messageEntries, ...stepEntries]
-  }, [messages, steps])
+    for (const message of messages) {
+      entries.push({
+        id: createMessageAnchorId(message.id),
+        kind: message.role === 'user' ? 'user' : 'assistant',
+        label: trimLabel(message.content, message.role === 'user' ? '用户消息' : '助手输出')
+      })
 
+      if (message.id === latestUserMessageId) {
+        for (const step of steps) {
+          entries.push({
+            id: createStepAnchorId(step.id),
+            kind: createStepNavigationKind(step),
+            label: trimLabel(step.summary ?? step.title, step.title)
+          })
+        }
+      }
+    }
+
+    if (messages.length === 0) {
+      for (const step of steps) {
+        entries.push({
+          id: createStepAnchorId(step.id),
+          kind: createStepNavigationKind(step),
+          label: trimLabel(step.summary ?? step.title, step.title)
+        })
+      }
+    }
+
+    if (streamingText) {
+      entries.push({
+        id: 'streaming-output',
+        kind: 'assistant',
+        label: trimLabel(streamingText, '流式输出')
+      })
+    }
+
+    return entries
+  }, [messages, steps, streamingText])
   const navigationItems = useMemo<NavigationItem[]>(() => anchorOrder.map(({ id, kind, label }) => ({ id, kind, label })), [anchorOrder])
   const latestUserMessageId = [...messages].reverse().find((message) => message.role === 'user')?.id
   const jumpTargets = useMemo(
-    () =>
-      anchorOrder
-        .filter((entry) => entry.kind === 'user' || entry.kind === 'assistant')
-        .filter((entry) => entry.kind === 'assistant' || !streamingText || entry.id !== 'streaming-output'),
-    [anchorOrder, streamingText]
+    () => anchorOrder.filter((entry) => entry.kind === 'user' || entry.kind === 'assistant'),
+    [anchorOrder]
   )
 
-  const scrollToAnchor = (id: string) => {
-    anchorRefs.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  const focusAnchor = (id: string) => {
+    const element = anchorRefs.current[id]
+    element?.focus({ preventScroll: true })
+    element?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
 
   useEffect(() => {
-    const handleClosePanels = () => setNavigationOpen(false)
-    const handleJumpMessage = (event: Event) => {
-      const detail = (event as CustomEvent<JumpDetail>).detail
-      if (!detail) {
-        return
-      }
+    if (!shortcutCommand) {
+      return
+    }
 
-      const targets = jumpTargets.filter((entry) => (detail.assistantOnly ? entry.kind === 'assistant' : true))
+    if (shortcutCommand.type === 'close-panels') {
+      setNavigationOpen(false)
+      setCloseFullscreenSignal((value) => value + 1)
+      return
+    }
+
+    if (shortcutCommand.type === 'jump-message') {
+      const targets = jumpTargets.filter((entry) => (shortcutCommand.assistantOnly ? entry.kind === 'assistant' : true))
       if (targets.length === 0) {
         return
       }
@@ -92,27 +130,16 @@ export function ConversationView({ session, messages, steps, streamingText, mode
         return element?.contains(document.activeElement) || document.activeElement === element
       })?.id
       const currentIndex = activeId ? targets.findIndex((entry) => entry.id === activeId) : -1
-      const nextIndex = detail.direction === 'previous'
+      const nextIndex = shortcutCommand.direction === 'previous'
         ? (currentIndex <= 0 ? targets.length - 1 : currentIndex - 1)
         : (currentIndex === -1 || currentIndex >= targets.length - 1 ? 0 : currentIndex + 1)
 
       const next = targets[nextIndex]
-      if (!next) {
-        return
+      if (next) {
+        focusAnchor(next.id)
       }
-
-      const element = anchorRefs.current[next.id]
-      element?.focus({ preventScroll: true })
-      element?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }
-
-    window.addEventListener('hesper:close-panels', handleClosePanels)
-    window.addEventListener('hesper:jump-message', handleJumpMessage as EventListener)
-    return () => {
-      window.removeEventListener('hesper:close-panels', handleClosePanels)
-      window.removeEventListener('hesper:jump-message', handleJumpMessage as EventListener)
-    }
-  }, [jumpTargets])
+  }, [jumpTargets, shortcutCommand])
 
   return (
     <div style={{ height: '100%', display: 'grid', gridTemplateColumns: navigationOpen ? 'minmax(0, 1fr) 280px' : 'minmax(0, 1fr)', gap: darkTheme.spacing.md }}>
@@ -154,12 +181,14 @@ export function ConversationView({ session, messages, steps, streamingText, mode
           }}
         >
           {messages.map((message) => {
-            const anchorId = `message-${message.id}`
+            const anchorId = createMessageAnchorId(message.id)
             const isLatestUserMessage = message.id === latestUserMessageId
 
             return (
               <div
                 key={message.id}
+                id={anchorId}
+                data-anchor-id={anchorId}
                 ref={(node) => {
                   anchorRefs.current[anchorId] = node
                 }}
@@ -167,45 +196,66 @@ export function ConversationView({ session, messages, steps, streamingText, mode
                 style={{ outline: 'none' }}
               >
                 {message.role === 'assistant' ? (
-                  <OutputBlock content={message.content} contentType={message.contentType} />
+                  <OutputBlock
+                    content={message.content}
+                    contentType={message.contentType}
+                    closeFullscreenSignal={closeFullscreenSignal}
+                  />
                 ) : (
                   <MessageBubble message={message} />
                 )}
                 {isLatestUserMessage && steps.length > 0 ? (
-                  <div
-                    ref={(node) => {
-                      anchorRefs.current['step-cluster'] = node
-                    }}
-                    tabIndex={-1}
-                    style={{ outline: 'none', marginTop: darkTheme.spacing.sm }}
-                  >
-                    <RunSteps steps={steps} />
+                  <div style={{ marginTop: darkTheme.spacing.sm }}>
+                    <RunSteps
+                      steps={steps}
+                      getStepProps={(step) => {
+                        const stepAnchorId = createStepAnchorId(step.id)
+                        return {
+                          id: stepAnchorId,
+                          tabIndex: -1,
+                          'data-anchor-id': stepAnchorId,
+                          ref: (node) => {
+                            anchorRefs.current[stepAnchorId] = node
+                          }
+                        }
+                      }}
+                    />
                   </div>
                 ) : null}
               </div>
             )
           })}
-          {messages.length === 0 && steps.length > 0 ? <RunSteps steps={steps} /> : null}
-          {steps.map((step) => (
-            <div
-              key={step.id}
-              ref={(node) => {
-                anchorRefs.current[`step-${step.id}`] = node
+          {messages.length === 0 && steps.length > 0 ? (
+            <RunSteps
+              steps={steps}
+              getStepProps={(step) => {
+                const stepAnchorId = createStepAnchorId(step.id)
+                return {
+                  id: stepAnchorId,
+                  tabIndex: -1,
+                  'data-anchor-id': stepAnchorId,
+                  ref: (node) => {
+                    anchorRefs.current[stepAnchorId] = node
+                  }
+                }
               }}
-              tabIndex={-1}
-              style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', outline: 'none' }}
-              aria-hidden="true"
             />
-          ))}
+          ) : null}
           {streamingText ? (
             <div
+              id="streaming-output"
+              data-anchor-id="streaming-output"
               ref={(node) => {
                 anchorRefs.current['streaming-output'] = node
               }}
               tabIndex={-1}
               style={{ outline: 'none' }}
             >
-              <OutputBlock content={streamingText} contentType={session.outputMode} />
+              <OutputBlock
+                content={streamingText}
+                contentType={session.outputMode}
+                closeFullscreenSignal={closeFullscreenSignal}
+              />
             </div>
           ) : null}
         </div>
@@ -214,6 +264,7 @@ export function ConversationView({ session, messages, steps, streamingText, mode
           modelId={modelId}
           outputMode={session.outputMode}
           onSend={onSend}
+          sendSignal={shortcutCommand?.type === 'send' ? shortcutCommand.nonce : 0}
         />
       </section>
       <RightNavigation
@@ -222,7 +273,7 @@ export function ConversationView({ session, messages, steps, streamingText, mode
         onClose={() => setNavigationOpen(false)}
         onNavigate={(id) => {
           setNavigationOpen(false)
-          scrollToAnchor(id)
+          focusAnchor(id)
         }}
       />
     </div>

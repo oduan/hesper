@@ -25,21 +25,24 @@ describe('ui components', () => {
     expect(screen.getByRole('button', { name: '发送' })).toBeEnabled()
   })
 
-  it('renders output blocks with expand control', async () => {
+  it('renders output blocks with CSP wrapped html and fullscreen dialog', async () => {
     const user = userEvent.setup()
-    const html = '<p>hello</p>'
+    const html = '<img src="https://example.com/a.png"><style>body{color:red}</style><p>hello</p>'
     render(<OutputBlock content={html} contentType="html" />)
 
     const previewFrame = screen.getByTitle('HTML 输出预览')
     expect(previewFrame).toHaveAttribute('sandbox', '')
-    expect(previewFrame).toHaveAttribute('srcdoc', html)
+    expect(previewFrame.getAttribute('srcdoc')).toContain("default-src 'none'")
+    expect(previewFrame.getAttribute('srcdoc')).toContain("img-src data:")
+    expect(previewFrame.getAttribute('srcdoc')).toContain("style-src 'unsafe-inline'")
     expect(screen.getByRole('button', { name: '全屏查看输出' })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '全屏查看输出' }))
     expect(screen.getByRole('dialog', { name: '输出全屏查看' })).toBeInTheDocument()
     const fullscreenFrame = screen.getByTitle('HTML 输出')
     expect(fullscreenFrame).toHaveAttribute('sandbox', '')
-    expect(fullscreenFrame).toHaveAttribute('srcdoc', html)
+    expect(fullscreenFrame.getAttribute('srcdoc')).toContain("default-src 'none'")
+    expect(fullscreenFrame.getAttribute('srcdoc')).toContain("img-src data:")
   })
 
   it('renders run step states', () => {

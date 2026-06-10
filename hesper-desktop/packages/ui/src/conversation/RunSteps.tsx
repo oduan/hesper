@@ -4,6 +4,12 @@ import { darkTheme } from '../theme'
 
 export type RunStepsProps = {
   steps: RunStep[]
+  getStepProps?: (step: RunStep) => {
+    id?: string
+    tabIndex?: number
+    ref?: (node: HTMLLIElement | null) => void
+    ['data-anchor-id']?: string
+  }
 }
 
 const typeLabels: Record<RunStepType, string> = {
@@ -26,7 +32,7 @@ function getStepBadge(step: RunStep): string {
   return `${typeLabels[step.type]} / ${statusLabels[step.status]}`
 }
 
-export function RunSteps({ steps }: RunStepsProps) {
+export function RunSteps({ steps, getStepProps }: RunStepsProps) {
   const [expanded, setExpanded] = useState(true)
   const summary = useMemo(() => {
     const latest = steps.at(-1)
@@ -77,14 +83,17 @@ export function RunSteps({ steps }: RunStepsProps) {
         <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: darkTheme.spacing.sm }}>
           {steps.map((step) => {
             const statusLabel = getStepBadge(step)
+            const stepProps = getStepProps?.(step)
             return (
               <li
                 key={step.id}
+                {...stepProps}
                 style={{
                   display: 'grid',
                   gridTemplateColumns: '64px minmax(0, 1fr)',
                   gap: darkTheme.spacing.sm,
-                  alignItems: 'start'
+                  alignItems: 'start',
+                  outline: 'none'
                 }}
               >
                 <span style={{ color: darkTheme.color.textMuted, fontSize: 12 }}>{statusLabel}</span>

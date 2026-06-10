@@ -1,26 +1,28 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { MessageContentType } from '@hesper/shared'
 import { darkTheme } from '../theme'
 import { FullscreenOutput } from './FullscreenOutput'
+import { createSandboxedHtmlDocument } from './html-document'
 
 export type OutputBlockProps = {
   content: string
   contentType: MessageContentType
+  closeFullscreenSignal?: number
 }
 
-export function OutputBlock({ content, contentType }: OutputBlockProps) {
+export function OutputBlock({ content, contentType, closeFullscreenSignal = 0 }: OutputBlockProps) {
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
+  const sandboxedDocument = useMemo(
+    () => (contentType === 'html' ? createSandboxedHtmlDocument(content) : undefined),
+    [content, contentType]
+  )
 
   useEffect(() => {
-    if (!isFullscreen) {
-      return undefined
+    if (closeFullscreenSignal > 0) {
+      setIsFullscreen(false)
     }
-
-    const handleClosePanels = () => setIsFullscreen(false)
-    window.addEventListener('hesper:close-panels', handleClosePanels)
-    return () => window.removeEventListener('hesper:close-panels', handleClosePanels)
-  }, [isFullscreen])
+  }, [closeFullscreenSignal])
 
   return (
     <>
@@ -64,7 +66,7 @@ export function OutputBlock({ content, contentType }: OutputBlockProps) {
             <iframe
               title="HTML 输出预览"
               sandbox=""
-              srcDoc={content}
+              srcDoc={sandboxedDocument}
               style={{ width: '100%', height: '100%', minHeight: 200, border: 0, background: '#fff' }}
             />
           ) : (
