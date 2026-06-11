@@ -5,6 +5,7 @@ import {
   createDefaultRoleService,
   createDefaultSkillService,
   createModelProviderService,
+  createPromptAssemblyService,
   createSessionService,
   createSettingsService,
   createToolCatalogService,
@@ -30,6 +31,7 @@ export function createServiceContainer(options: ServiceContainerOptions) {
   const roleService = createDefaultRoleService()
   const skillService = createDefaultSkillService()
   const toolCatalogService = createToolCatalogService(createBuiltinToolDefinitions())
+  const promptAssemblyService = createPromptAssemblyService()
   const credentialVaultService = createCredentialVaultService({
     persistence: options.persistence,
     ...(options.credentialCodec ? { codec: options.credentialCodec } : {})
@@ -55,6 +57,7 @@ export function createServiceContainer(options: ServiceContainerOptions) {
     roleService,
     skillService,
     toolCatalogService,
+    promptAssemblyService,
     credentialVaultService,
     modelProviderService,
     agentRuntime

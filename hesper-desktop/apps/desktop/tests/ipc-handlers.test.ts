@@ -21,6 +21,13 @@ describe('desktop service container', () => {
 
     expect(session.title).toBe('Desktop test')
     expect(await container.sessionService.listSessions()).toHaveLength(1)
+    expect(container.promptAssemblyService.assembleMainPrompt({
+      session,
+      role: container.roleService.getRole('main-agent')!,
+      skills: container.skillService.listSkills(),
+      tools: container.toolCatalogService.list(),
+      assignableSubagentRoles: container.roleService.listRoles()
+    }).systemPrompt).toContain('hesper desktop Agent')
   })
 
   it('seeds builtin providers for an empty desktop persistence store', async () => {
