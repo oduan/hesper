@@ -29,7 +29,7 @@ function createSession(overrides: Partial<any> = {}) {
   }
 }
 
-const { listSessions, setWorkspace, setModel, setOutputMode, selectDirectory, onEvent, enqueue } = vi.hoisted(() => ({
+const { listSessions, setWorkspace, setModel, setOutputMode, selectDirectory, onEvent, enqueue, listModels } = vi.hoisted(() => ({
   listSessions: vi.fn(async () => []),
   setWorkspace: vi.fn(async (input: { id: string; workspacePath?: string }) =>
     createSession({ id: input.id, workspacePath: input.workspacePath, updatedAt: '2026-06-10T03:05:00.000Z' })
@@ -42,7 +42,12 @@ const { listSessions, setWorkspace, setModel, setOutputMode, selectDirectory, on
   ),
   selectDirectory: vi.fn(async () => ({ canceled: false, path: 'D:/updated-workspace' })),
   onEvent: vi.fn(() => () => undefined),
-  enqueue: vi.fn(async () => ({ runId: 'run-1' }))
+  enqueue: vi.fn(async () => ({ runId: 'run-1' })),
+  listModels: vi.fn(async () => [
+    { id: 'mock/hesper-fast', providerId: 'mock', modelName: 'mock/hesper-fast', displayName: 'Hesper Mock Fast', capabilities: ['streaming'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' },
+    { id: 'gpt-4o', providerId: 'openai', modelName: 'gpt-4o', displayName: 'GPT-4o', capabilities: ['streaming', 'toolCalls'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' },
+    { id: 'deepseek-chat', providerId: 'deepseek', modelName: 'deepseek-chat', displayName: 'DeepSeek Chat', capabilities: ['streaming', 'toolCalls'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+  ])
 }))
 
 vi.mock('../src/ipc-client', () => ({
@@ -67,6 +72,10 @@ vi.mock('../src/ipc-client', () => ({
       get: vi.fn(),
       update: vi.fn()
     },
+    models: {
+      list: listModels,
+      save: vi.fn()
+    },
     window: {
       platform: 'win32',
       minimize: vi.fn(async () => ({ minimized: true })),
@@ -89,6 +98,7 @@ describe('session settings and restore flow', () => {
     selectDirectory.mockClear()
     onEvent.mockReset()
     enqueue.mockReset()
+    listModels.mockClear()
     onEvent.mockImplementation(() => () => undefined)
     enqueue.mockResolvedValue({ runId: 'run-1' })
   })
@@ -149,12 +159,12 @@ describe('session settings and restore flow', () => {
     })
     expect(screen.getByRole('button', { name: '选择工作目录' })).toHaveTextContent('D:/updated-workspace')
 
-    await user.selectOptions(screen.getByRole('combobox', { name: '选择模型' }), 'openai/gpt-4o')
+    await user.selectOptions(screen.getByRole('combobox', { name: '选择模型' }), 'gpt-4o')
     await waitFor(() => {
-      expect(setModel).toHaveBeenCalledWith({ id: 'session-1', defaultModelId: 'openai/gpt-4o' })
+      expect(setModel).toHaveBeenCalledWith({ id: 'session-1', defaultModelId: 'gpt-4o' })
     })
-    expect(screen.getByRole('combobox', { name: '选择模型' })).toHaveValue('openai/gpt-4o')
-    expect(screen.getByRole('button', { name: /Current chat/ })).toHaveTextContent('openai/gpt-4o')
+    expect(screen.getByRole('combobox', { name: '选择模型' })).toHaveValue('gpt-4o')
+    expect(screen.getByRole('button', { name: /Current chat/ })).toHaveTextContent('gpt-4o')
 
     await user.selectOptions(screen.getByRole('combobox', { name: '选择输出模式' }), 'html')
     await waitFor(() => {
@@ -173,17 +183,17 @@ describe('session settings and restore flow', () => {
 
     await screen.findByRole('heading', { name: 'Current chat' })
 
-    await user.selectOptions(screen.getByRole('combobox', { name: '选择模型' }), 'openai/gpt-4o')
+    await user.selectOptions(screen.getByRole('combobox', { name: '选择模型' }), 'gpt-4o')
     await user.type(screen.getByPlaceholderText(/输入消息/), 'send with new model')
     await user.click(screen.getByRole('button', { name: '发送' }))
 
     expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({
-      modelId: 'openai/gpt-4o'
+      modelId: 'gpt-4o'
     }))
 
-    deferred.resolve(createSession({ defaultModelId: 'openai/gpt-4o', updatedAt: '2026-06-10T03:06:00.000Z' }))
+    deferred.resolve(createSession({ defaultModelId: 'gpt-4o', updatedAt: '2026-06-10T03:06:00.000Z' }))
     await waitFor(() => {
-      expect(screen.getByRole('combobox', { name: '选择模型' })).toHaveValue('openai/gpt-4o')
+      expect(screen.getByRole('combobox', { name: '选择模型' })).toHaveValue('gpt-4o')
     })
   })
 
@@ -242,22 +252,22 @@ describe('session settings and restore flow', () => {
     render(<App />)
 
     await screen.findByRole('heading', { name: 'Current chat' })
-    await user.selectOptions(screen.getByRole('combobox', { name: '选择模型' }), 'anthropic/claude-sonnet-4-20250514')
-    await user.selectOptions(screen.getByRole('combobox', { name: '选择模型' }), 'openai/gpt-4o')
+    await user.selectOptions(screen.getByRole('combobox', { name: '选择模型' }), 'deepseek-chat')
+    await user.selectOptions(screen.getByRole('combobox', { name: '选择模型' }), 'gpt-4o')
 
-    second.resolve(createSession({ defaultModelId: 'openai/gpt-4o', updatedAt: '2026-06-10T03:06:02.000Z' }))
+    second.resolve(createSession({ defaultModelId: 'gpt-4o', updatedAt: '2026-06-10T03:06:02.000Z' }))
     await waitFor(() => {
-      expect(screen.getByRole('combobox', { name: '选择模型' })).toHaveValue('openai/gpt-4o')
+      expect(screen.getByRole('combobox', { name: '选择模型' })).toHaveValue('gpt-4o')
     })
 
-    first.resolve(createSession({ defaultModelId: 'anthropic/claude-sonnet-4-20250514', updatedAt: '2026-06-10T03:06:01.000Z' }))
+    first.resolve(createSession({ defaultModelId: 'deepseek-chat', updatedAt: '2026-06-10T03:06:01.000Z' }))
     await waitFor(() => {
-      expect(screen.getByRole('combobox', { name: '选择模型' })).toHaveValue('openai/gpt-4o')
+      expect(screen.getByRole('combobox', { name: '选择模型' })).toHaveValue('gpt-4o')
     })
 
     await user.type(screen.getByPlaceholderText(/输入消息/), 'use latest model')
     await user.click(screen.getByRole('button', { name: '发送' }))
-    expect(enqueue).toHaveBeenLastCalledWith(expect.objectContaining({ modelId: 'openai/gpt-4o' }))
+    expect(enqueue).toHaveBeenLastCalledWith(expect.objectContaining({ modelId: 'gpt-4o' }))
   })
 
   it('ignores stale workspace responses when two updates complete out of order', async () => {
@@ -325,8 +335,8 @@ describe('session settings and restore flow', () => {
     render(<App />)
 
     await screen.findByRole('heading', { name: 'Current chat' })
-    await user.selectOptions(screen.getByRole('combobox', { name: '选择模型' }), 'openai/gpt-4o')
-    expect(screen.getByRole('combobox', { name: '选择模型' })).toHaveValue('openai/gpt-4o')
+    await user.selectOptions(screen.getByRole('combobox', { name: '选择模型' }), 'gpt-4o')
+    expect(screen.getByRole('combobox', { name: '选择模型' })).toHaveValue('gpt-4o')
 
     deferred.reject(new Error('save failed'))
     await waitFor(() => {

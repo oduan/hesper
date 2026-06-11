@@ -3,6 +3,8 @@ import { createId, nowIso, type Message, type OutputMode, type Session } from '@
 import { AppShell, ConversationView, type AppSection, type ConversationShortcutCommand } from '@hesper/ui'
 import { AppStoreProvider, useAppStore } from './app-store'
 import { hesperApi } from './ipc-client'
+import { defaultFallbackModelId, fallbackSessionModelOptions, loadAvailableModelOptions, mergeModelOptions } from './model-options'
+import { ProviderSettingsPanel } from './provider-settings-panel'
 import { createShortcutHandler } from './shortcuts'
 
 export function App() {
@@ -22,8 +24,6 @@ type SessionSettingsOverride = {
 type SessionSettingsField = keyof SessionSettingsOverride
 
 type RequestTokensBySession = Record<string, Partial<Record<SessionSettingsField, number>>>
-
-const sessionModelOptions = ['mock/hesper-fast', 'openai/gpt-4o', 'anthropic/claude-sonnet-4-20250514']
 
 export function clearSessionSendError(errors: Record<string, string>, sessionId: string): Record<string, string> {
   if (!(sessionId in errors)) {
@@ -107,6 +107,7 @@ function AppContent() {
   const [sendErrorsBySession, setSendErrorsBySession] = useState<Record<string, string>>({})
   const [pendingSettingsBySession, setPendingSettingsBySession] = useState<Record<string, SessionSettingsOverride>>({})
   const [shortcutCommand, setShortcutCommand] = useState<ConversationShortcutCommand>()
+  const [sessionModelOptions, setSessionModelOptions] = useState<string[]>(fallbackSessionModelOptions)
   const nextSettingsRequestIdRef = useRef(0)
   const latestSettingsRequestIdRef = useRef<RequestTokensBySession>({})
 
@@ -138,6 +139,31 @@ function AppContent() {
       dispatch({ type: 'agent.event', event })
     })
   }, [dispatch])
+
+  useEffect(() => {
+    let cancelled = false
+
+    void (async () => {
+      try {
+        const options = await loadAvailableModelOptions()
+        if (!cancelled) {
+          setSessionModelOptions(options)
+        }
+      } catch {
+        if (!cancelled) {
+          setSessionModelOptions(fallbackSessionModelOptions)
+        }
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const refreshSessionModelOptions = async () => {
+    setSessionModelOptions(await loadAvailableModelOptions())
+  }
 
   useEffect(() => {
     let nonce = 0
@@ -222,6 +248,7 @@ function AppContent() {
   const activeSteps = activeRunId ? state.stepsByRun[activeRunId] ?? [] : []
   const activeStreamingText = activeRunId ? state.streamingByRun[activeRunId] ?? '' : ''
   const activeMessages = activeSession ? state.messagesBySession[activeSession.id] ?? [] : []
+  const activeModelOptions = activeSession?.defaultModelId ? mergeModelOptions(sessionModelOptions, [activeSession.defaultModelId]) : sessionModelOptions
 
   return (
     <AppShell
@@ -244,7 +271,7 @@ function AppContent() {
       onWindowClose={() => hesperApi.window.close()}
     >
       {!isSessionsSection ? (
-        <SectionPlaceholder section={state.activeSection} />
+        state.activeSection === 'settings' ? <ProviderSettingsPanel onModelRegistryChanged={refreshSessionModelOptions} /> : <SectionPlaceholder section={state.activeSection} />
       ) : activeSession ? (
         <>
           {activeSendError ? (
@@ -257,8 +284,8 @@ function AppContent() {
             messages={activeMessages}
             steps={activeSteps}
             streamingText={activeStreamingText}
-            modelId={activeSession.defaultModelId ?? 'mock/hesper-fast'}
-            modelOptions={sessionModelOptions}
+            modelId={activeSession.defaultModelId ?? defaultFallbackModelId}
+            modelOptions={activeModelOptions}
             onSelectWorkspace={() => {
               void updateSessionWorkspace({
                 session: activeSession,
@@ -294,7 +321,7 @@ function AppContent() {
             onSend={(content) => {
               void sendMessage({
                 session: activeSession,
-                modelId: activeSession.defaultModelId ?? 'mock/hesper-fast',
+                modelId: activeSession.defaultModelId ?? defaultFallbackModelId,
                 content,
                 dispatch,
                 setSendErrorsBySession
@@ -318,7 +345,7 @@ const sectionTitles: Record<AppSection, string> = {
   skills: 'Skills 即将支持',
   roles: 'Roles 即将支持',
   tools: 'Tools 即将支持',
-  settings: 'Settings 即将支持'
+  settings: '设置'
 }
 
 function getSectionTitle(section: AppSection): string {
