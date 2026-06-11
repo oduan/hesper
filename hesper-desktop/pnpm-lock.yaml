@@ -114,6 +114,9 @@ importers:
       '@hesper/shared':
         specifier: workspace:*
         version: link:../shared
+      '@hesper/tools':
+        specifier: workspace:*
+        version: link:../tools
 
   packages/app-core:
     dependencies:
