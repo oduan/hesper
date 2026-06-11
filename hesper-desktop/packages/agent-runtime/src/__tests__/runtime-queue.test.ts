@@ -15,11 +15,38 @@ const session: Session = {
   updatedAt: '2026-06-10T05:00:00.000Z'
 }
 
+class FailsOnceRecordingAdapter implements AgentAdapter {
+  readonly inputs: AgentPromptInput[] = []
+  private attempts = 0
+
+  async run(input: AgentPromptInput, emit: (event: AgentRuntimeEvent) => void | Promise<void>): Promise<void> {
+    this.inputs.push(input)
+    this.attempts += 1
+    if (this.attempts === 1) {
+      throw { code: 'network_error', message: 'temporary network failure', retryable: true }
+    }
+    await emit({
+      type: 'message.completed',
+      message: {
+        id: `message-${input.runId}`,
+        sessionId: input.sessionId,
+        role: 'assistant',
+        content: `done:${input.prompt}`,
+        contentType: 'markdown',
+        runId: input.runId,
+        createdAt: '2026-06-10T06:00:00.000Z'
+      }
+    })
+  }
+}
+
 class RecordingAdapter implements AgentAdapter {
   readonly starts: string[] = []
   readonly finishes: string[] = []
+  readonly inputs: AgentPromptInput[] = []
 
   async run(input: AgentPromptInput, emit: (event: AgentRuntimeEvent) => void | Promise<void>): Promise<void> {
+    this.inputs.push(input)
     this.starts.push(input.runId)
     await new Promise((resolve) => setTimeout(resolve, 10))
     await emit({
@@ -88,6 +115,45 @@ describe('AgentRuntime queue', () => {
 
     const messages = await persistence.messages.listBySession('session-concurrent')
     expect(messages.map((message) => message.content)).toEqual(['done:first', 'done:second'])
+  })
+
+  it('passes assembled system prompts to immediate and queued adapter runs', async () => {
+    const persistence = await createInMemoryPersistence()
+    await persistence.sessions.save({ ...session, id: 'session-system-prompt' })
+
+    const adapter = new RecordingAdapter()
+    const runtime = new AgentRuntime({ persistence, adapter })
+
+    await runtime.enqueue({ sessionId: 'session-system-prompt', prompt: 'first', modelId: 'mock/hesper-fast', systemPrompt: 'system:first' })
+    await runtime.enqueue({ sessionId: 'session-system-prompt', prompt: 'second', modelId: 'mock/hesper-fast', systemPrompt: 'system:second' })
+    await runtime.waitForIdle('session-system-prompt')
+
+    expect(adapter.inputs.map((input) => input.systemPrompt)).toEqual(['system:first', 'system:second'])
+  })
+
+  it('keeps the same assembled system prompt across retry attempts', async () => {
+    const persistence = await createInMemoryPersistence()
+    await persistence.sessions.save({ ...session, id: 'session-system-prompt-retry' })
+
+    const adapter = new FailsOnceRecordingAdapter()
+    const runtime = new AgentRuntime({
+      persistence,
+      adapter,
+      retryPolicy: {
+        ...defaultRetryPolicy,
+        maxRetries: 1,
+        initialDelayMs: 1,
+        backoffMultiplier: 1
+      }
+    })
+
+    const run = await runtime.enqueue({ sessionId: 'session-system-prompt-retry', prompt: 'retry me', modelId: 'mock/hesper-fast', systemPrompt: 'system:retry' })
+    await runtime.waitForIdle('session-system-prompt-retry')
+
+    expect(adapter.inputs.map((input) => [input.runId, input.systemPrompt])).toEqual([
+      [run.id, 'system:retry'],
+      [run.id, 'system:retry']
+    ])
   })
 
   it('persists assistant messages when adapter emits message.completed', async () => {

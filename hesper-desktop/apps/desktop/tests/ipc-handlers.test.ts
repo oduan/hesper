@@ -132,6 +132,51 @@ describe('registerIpcHandlers', () => {
     expect(removeHandler).toHaveBeenCalledWith(ipcChannels.sessionsList)
   })
 
+  it('assembles a registry-backed system prompt before enqueueing an agent run', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock' })
+    const savePersistence = vi.fn(async () => {})
+    const schedulePersistenceSave = vi.fn()
+    const handles = new Map<string, (event: any, ...args: any[]) => Promise<unknown> | unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (event: any, ...args: any[]) => Promise<unknown> | unknown) => {
+        handles.set(channel, handler)
+      }),
+      removeHandler: vi.fn()
+    }
+    const dialog = {
+      showOpenDialog: vi.fn(async () => ({ canceled: false, filePaths: ['C:/workspace'] }))
+    }
+    const assembled = {
+      systemPrompt: 'assembled system prompt',
+      toolManifest: 'tools',
+      skillManifest: 'skills',
+      roleManifest: 'roles',
+      subagentRules: 'rules'
+    }
+    const promptSpy = vi.spyOn(container.promptAssemblyService, 'assembleMainPrompt').mockReturnValueOnce(assembled)
+    const enqueueSpy = vi.spyOn(container.agentRuntime, 'enqueue').mockResolvedValueOnce({ id: 'run-assembled' } as Awaited<ReturnType<typeof container.agentRuntime.enqueue>>)
+
+    registerIpcHandlers({ ipcMain, dialog, container, savePersistence, schedulePersistenceSave })
+    const session = await container.sessionService.createSession({ title: 'Prompt assembly IPC', workspacePath: 'C:/workspace' })
+
+    await expect(handles.get(ipcChannels.agentEnqueue)?.({ sender: { id: 1 } }, { sessionId: session.id, prompt: 'Use assembled prompt', modelId: 'mock/hesper-fast' })).resolves.toEqual({ runId: 'run-assembled' })
+
+    expect(promptSpy).toHaveBeenCalledWith(expect.objectContaining({
+      session: expect.objectContaining({ id: session.id, workspacePath: 'C:/workspace' }),
+      role: expect.objectContaining({ id: 'main-agent' }),
+      skills: expect.any(Array),
+      tools: expect.any(Array),
+      assignableSubagentRoles: expect.any(Array)
+    }))
+    expect(enqueueSpy).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: session.id,
+      prompt: 'Use assembled prompt',
+      modelId: 'mock/hesper-fast',
+      systemPrompt: 'assembled system prompt'
+    }))
+  })
+
   it('flushes the persisted user message before surfacing runtime enqueue failures', async () => {
     const persistence = await createInMemoryPersistence()
     const container = createServiceContainer({ persistence, agentMode: 'mock' })

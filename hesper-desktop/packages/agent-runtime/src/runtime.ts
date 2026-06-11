@@ -8,6 +8,7 @@ export type EnqueueRunInput = {
   sessionId: string
   prompt: string
   modelId: string
+  systemPrompt?: string
   workspacePath?: string
   parentRunId?: string
 }
@@ -21,7 +22,7 @@ export type AgentRuntimeOptions = {
 type RuntimeListener = (event: AgentRuntimeEvent) => void | Promise<void>
 type SessionState = {
   running: boolean
-  queue: Array<{ run: AgentRun; prompt: string }>
+  queue: Array<{ run: AgentRun; prompt: string; systemPrompt?: string }>
   active: Promise<void> | undefined
   waiters: Array<() => void>
 }
@@ -84,11 +85,11 @@ export class AgentRuntime {
       await this.emitAndPersist({ type: 'run.created', run })
 
       if (!shouldStartImmediately) {
-        state.queue.push({ run, prompt: input.prompt })
+        state.queue.push({ run, prompt: input.prompt, ...(input.systemPrompt !== undefined ? { systemPrompt: input.systemPrompt } : {}) })
         return run
       }
 
-      this.startSessionRun(input.sessionId, run, input.prompt)
+      this.startSessionRun(input.sessionId, run, input.prompt, input.systemPrompt)
       return run
     })
   }
@@ -135,10 +136,10 @@ export class AgentRuntime {
     }
   }
 
-  private startSessionRun(sessionId: string, run: AgentRun, prompt: string): void {
+  private startSessionRun(sessionId: string, run: AgentRun, prompt: string, systemPrompt?: string): void {
     const state = this.getSessionState(sessionId)
     state.running = true
-    state.active = this.executeRun(run, prompt)
+    state.active = this.executeRun(run, prompt, systemPrompt)
       .then(() => this.finishRun(sessionId))
       .catch(() => this.finishRun(sessionId))
   }
@@ -154,17 +155,30 @@ export class AgentRuntime {
         status: 'running',
         startedAt
       }
-      this.startSessionRun(sessionId, runningRun, next.prompt)
+      this.startSessionRun(sessionId, runningRun, next.prompt, next.systemPrompt)
       return
     }
 
     state.running = false
     state.active = undefined
+
+    const lateQueued = state.queue.shift()
+    if (lateQueued) {
+      const startedAt = nowIso()
+      const runningRun: AgentRun = {
+        ...lateQueued.run,
+        status: 'running',
+        startedAt
+      }
+      this.startSessionRun(sessionId, runningRun, lateQueued.prompt, lateQueued.systemPrompt)
+      return
+    }
+
     const waiters = state.waiters.splice(0)
     for (const resolve of waiters) resolve()
   }
 
-  private async executeRun(run: AgentRun, prompt: string): Promise<void> {
+  private async executeRun(run: AgentRun, prompt: string, systemPrompt?: string): Promise<void> {
     const current: AgentRun = { ...run, status: 'running', startedAt: run.startedAt ?? nowIso() }
     await this.persistence.runs.save(current)
     await this.emitAndPersist({ type: 'run.started', runId: current.id })
@@ -181,6 +195,7 @@ export class AgentRuntime {
             sessionId: latestRun.sessionId,
             prompt,
             modelId: latestRun.modelId,
+            ...(systemPrompt !== undefined ? { systemPrompt } : {}),
             ...(latestRun.workspacePath !== undefined ? { workspacePath: latestRun.workspacePath } : {}),
             signal: controller.signal
           },

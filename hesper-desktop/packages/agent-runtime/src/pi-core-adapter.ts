@@ -32,7 +32,7 @@ export class PiCoreAgentAdapter implements AgentAdapter {
 
     const agent = new Agent({
       initialState: {
-        systemPrompt: this.options.systemPrompt ?? DEFAULT_SYSTEM_PROMPT,
+        systemPrompt: input.systemPrompt ?? this.options.systemPrompt ?? DEFAULT_SYSTEM_PROMPT,
         model: resolved.model,
         tools: this.options.tools ?? [],
         messages: []

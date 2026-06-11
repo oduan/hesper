@@ -88,6 +88,30 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
     return parsed.data
   }
 
+  const assembleRunSystemPrompt = async (sessionId: string, workspacePath?: string): Promise<string> => {
+    const session = await options.container.sessionService.getSession(sessionId)
+    const roles = options.container.roleService.listRoles()
+    const role = options.container.roleService.getRole(session.roleId ?? 'main-agent')
+    const assignableSubagentRoles = roles.filter((candidate) => candidate.canBeAssignedToSubagent ?? candidate.canBeSubagent)
+    const sessionForPrompt = {
+      ...session,
+      ...(workspacePath !== undefined ? { workspacePath } : {}),
+      enabledSkillIds: session.enabledSkillIds ?? role?.defaultSkillIds ?? role?.allowedSkillIds ?? [],
+      enabledToolIds: session.enabledToolIds ?? role?.defaultToolIds ?? [],
+      allowedSubagentRoleIds: session.allowedSubagentRoleIds ?? assignableSubagentRoles.map((candidate) => candidate.id),
+      maxSubagentDepth: session.maxSubagentDepth ?? 1,
+      maxSubagentsPerRun: session.maxSubagentsPerRun ?? 3
+    }
+
+    return options.container.promptAssemblyService.assembleMainPrompt({
+      session: sessionForPrompt,
+      role,
+      skills: options.container.skillService.listSkills(),
+      tools: options.container.toolCatalogService.list(),
+      assignableSubagentRoles
+    }).systemPrompt
+  }
+
   const subscribeSender = (event: IpcMainInvokeEvent) => {
     const senderId = event.sender.id
     unsubscribeSender(senderId)
@@ -168,7 +192,8 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       })
       schedulePersistenceSave()
       await savePersistence()
-      const run = await options.container.agentRuntime.enqueue(omitUndefined(input))
+      const systemPrompt = await assembleRunSystemPrompt(input.sessionId, input.workspacePath)
+      const run = await options.container.agentRuntime.enqueue(omitUndefined({ ...input, systemPrompt }))
       await savePersistence()
       return { runId: run.id }
     },
