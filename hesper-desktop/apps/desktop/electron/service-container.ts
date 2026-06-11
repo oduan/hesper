@@ -1,4 +1,4 @@
-import { AgentRuntime, MockAgentAdapter, PiCoreAgentAdapter } from '@hesper/agent-runtime'
+import { AgentRuntime, MockAgentAdapter, PiCoreAgentAdapter, createRegistryModelResolver } from '@hesper/agent-runtime'
 import {
   createConversationService,
   createCredentialVaultService,
@@ -36,7 +36,15 @@ export function createServiceContainer(options: ServiceContainerOptions) {
   })
   const modelProviderService = createModelProviderService({ persistence: options.persistence, credentialVaultService })
   void modelProviderService.ensureBuiltinProviders()
-  const adapter = options.agentMode === 'pi-core' ? new PiCoreAgentAdapter() : new MockAgentAdapter({ delayMs: 0 })
+  const modelResolver = createRegistryModelResolver({
+    registry: {
+      ensureReady: () => modelProviderService.ensureBuiltinProviders(),
+      getProvider: (id) => modelProviderService.getProvider(id),
+      listModels: (providerId) => modelProviderService.listModels(providerId)
+    },
+    readProviderApiKey: (providerId) => credentialVaultService.readProviderApiKey(providerId)
+  })
+  const adapter = options.agentMode === 'pi-core' ? new PiCoreAgentAdapter({ modelResolver }) : new MockAgentAdapter({ delayMs: 0 })
   const agentRuntime = new AgentRuntime({ persistence: options.persistence, adapter })
 
   return {

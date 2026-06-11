@@ -1,52 +1,43 @@
 import { Agent, type AgentEvent, type AgentTool } from '@earendil-works/pi-agent-core'
-import { getModel, type KnownProvider } from '@earendil-works/pi-ai'
 import type { AgentRuntimeEvent } from '@hesper/shared'
 import type { AgentAdapter, AgentPromptInput } from './adapters'
 import { mapPiEventToHesperEvents } from './map-pi-event'
+import { createStaticModelResolver, type ModelResolver } from './model-resolver'
 
 const DEFAULT_SYSTEM_PROMPT = 'You are hesper, a desktop coding assistant. Be concise, stable, and explicit about tool actions.'
-
-export type PiCoreModelResolver = (provider: string, modelName: string) => ReturnType<typeof getModel>
 
 export type PiCoreAgentAdapterOptions = {
   tools?: AgentTool<any>[]
   systemPrompt?: string
-  modelResolver?: PiCoreModelResolver
-}
-
-function parseModelId(modelId: string): { provider: string; modelName: string } {
-  if (modelId.includes('/')) {
-    const [provider, modelName] = modelId.split('/', 2)
-    return {
-      provider: provider || 'openai',
-      modelName: modelName || modelId
-    }
-  }
-
-  return {
-    provider: 'openai',
-    modelName: modelId
-  }
-}
-
-function defaultModelResolver(provider: string, modelName: string): ReturnType<typeof getModel> {
-  return getModel(provider as KnownProvider, modelName as never)
+  modelResolver?: ModelResolver
 }
 
 export class PiCoreAgentAdapter implements AgentAdapter {
-  constructor(private readonly options: PiCoreAgentAdapterOptions = {}) {}
+  private readonly modelResolver: ModelResolver
+
+  constructor(private readonly options: PiCoreAgentAdapterOptions = {}) {
+    this.modelResolver = options.modelResolver ?? createStaticModelResolver()
+  }
 
   async run(input: AgentPromptInput, emit: (event: AgentRuntimeEvent) => void | Promise<void>): Promise<void> {
-    const { provider, modelName } = parseModelId(input.modelId)
-    const model = (this.options.modelResolver ?? defaultModelResolver)(provider, modelName)
+    if (input.signal.aborted) {
+      throw { code: 'unknown', message: 'Run was aborted before model resolution started.', retryable: false }
+    }
+
+    const resolved = await this.modelResolver.resolve({ modelId: input.modelId })
+
+    if (input.signal.aborted) {
+      throw { code: 'unknown', message: 'Run was aborted before the pi core agent started.', retryable: false }
+    }
 
     const agent = new Agent({
       initialState: {
         systemPrompt: this.options.systemPrompt ?? DEFAULT_SYSTEM_PROMPT,
-        model,
+        model: resolved.model,
         tools: this.options.tools ?? [],
         messages: []
       },
+      ...(resolved.getApiKey ? { getApiKey: resolved.getApiKey } : {}),
       toolExecution: 'parallel'
     })
 

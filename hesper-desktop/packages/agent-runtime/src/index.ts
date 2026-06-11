@@ -1,6 +1,7 @@
 export * from './adapters'
 export * from './map-pi-event'
 export * from './mock-adapter'
+export * from './model-resolver'
 export * from './pi-core-adapter'
 export * from './retry-policy'
 export * from './runtime'

@@ -32,6 +32,20 @@ describe('desktop service container', () => {
     expect((await container.modelProviderService.listProviders()).map((provider) => provider.id)).toEqual(['mock', 'deepseek', 'openai', 'openai-compatible'])
     expect((await container.modelProviderService.listModels('mock')).map((model) => model.id)).toEqual(['mock/hesper-fast'])
   })
+
+  it('wires pi-core runs through the provider registry resolver and fails fast without credentials', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'pi-core', credentialCodec: createMockCredentialCodec() })
+    await container.modelProviderService.ensureBuiltinProviders()
+    const session = await container.sessionService.createSession({ title: 'Pi core resolver', defaultModelId: 'gpt-4o' })
+
+    const run = await container.agentRuntime.enqueue({ sessionId: session.id, prompt: 'needs credentials', modelId: 'gpt-4o' })
+    await container.agentRuntime.waitForIdle(session.id)
+
+    const storedRun = await persistence.runs.get(run.id)
+    expect(storedRun?.status).toBe('failed')
+    expect(storedRun?.error?.message).toContain('Model provider needs an API key: openai')
+  })
 })
 
 describe('registerIpcHandlers', () => {
