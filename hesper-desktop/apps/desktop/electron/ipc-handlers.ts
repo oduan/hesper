@@ -88,28 +88,33 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
     return parsed.data
   }
 
-  const assembleRunSystemPrompt = async (sessionId: string, workspacePath?: string): Promise<string> => {
+  const assembleRunContext = async (sessionId: string, workspacePath?: string, requestedEnabledToolIds?: string[]): Promise<{ systemPrompt: string; enabledToolIds: string[] }> => {
     const session = await options.container.sessionService.getSession(sessionId)
     const roles = options.container.roleService.listRoles()
     const role = options.container.roleService.getRole(session.roleId ?? 'main-agent')
     const assignableSubagentRoles = roles.filter((candidate) => candidate.canBeAssignedToSubagent ?? candidate.canBeSubagent)
+    const configuredToolIds = session.enabledToolIds?.length ? session.enabledToolIds : role?.defaultToolIds ?? []
+    const requestedToolIdSet = requestedEnabledToolIds === undefined ? undefined : new Set(requestedEnabledToolIds)
+    const enabledToolIds = requestedToolIdSet ? configuredToolIds.filter((toolId) => requestedToolIdSet.has(toolId)) : configuredToolIds
     const sessionForPrompt = {
       ...session,
       ...(workspacePath !== undefined ? { workspacePath } : {}),
-      enabledSkillIds: session.enabledSkillIds ?? role?.defaultSkillIds ?? role?.allowedSkillIds ?? [],
-      enabledToolIds: session.enabledToolIds ?? role?.defaultToolIds ?? [],
-      allowedSubagentRoleIds: session.allowedSubagentRoleIds ?? assignableSubagentRoles.map((candidate) => candidate.id),
+      enabledSkillIds: session.enabledSkillIds?.length ? session.enabledSkillIds : role?.defaultSkillIds ?? role?.allowedSkillIds ?? [],
+      enabledToolIds,
+      allowedSubagentRoleIds: session.allowedSubagentRoleIds?.length ? session.allowedSubagentRoleIds : assignableSubagentRoles.map((candidate) => candidate.id),
       maxSubagentDepth: session.maxSubagentDepth ?? 1,
       maxSubagentsPerRun: session.maxSubagentsPerRun ?? 3
     }
 
-    return options.container.promptAssemblyService.assembleMainPrompt({
+    const prompt = options.container.promptAssemblyService.assembleMainPrompt({
       session: sessionForPrompt,
       role,
       skills: options.container.skillService.listSkills(),
       tools: options.container.toolCatalogService.list(),
       assignableSubagentRoles
-    }).systemPrompt
+    })
+
+    return { systemPrompt: prompt.systemPrompt, enabledToolIds: sessionForPrompt.enabledToolIds }
   }
 
   const subscribeSender = (event: IpcMainInvokeEvent) => {
@@ -192,8 +197,8 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       })
       schedulePersistenceSave()
       await savePersistence()
-      const systemPrompt = await assembleRunSystemPrompt(input.sessionId, input.workspacePath)
-      const run = await options.container.agentRuntime.enqueue(omitUndefined({ ...input, systemPrompt }))
+      const runContext = await assembleRunContext(input.sessionId, input.workspacePath, input.enabledToolIds)
+      const run = await options.container.agentRuntime.enqueue(omitUndefined({ ...input, ...runContext }))
       await savePersistence()
       return { runId: run.id }
     },

@@ -8,6 +8,7 @@ const DEFAULT_SYSTEM_PROMPT = 'You are hesper, a desktop coding assistant. Be co
 
 export type PiCoreAgentAdapterOptions = {
   tools?: AgentTool<any>[]
+  createTools?: (input: AgentPromptInput) => AgentTool<any>[]
   systemPrompt?: string
   modelResolver?: ModelResolver
 }
@@ -30,11 +31,13 @@ export class PiCoreAgentAdapter implements AgentAdapter {
       throw { code: 'unknown', message: 'Run was aborted before the pi core agent started.', retryable: false }
     }
 
+    const tools = this.options.createTools?.(input) ?? this.options.tools ?? []
+
     const agent = new Agent({
       initialState: {
         systemPrompt: input.systemPrompt ?? this.options.systemPrompt ?? DEFAULT_SYSTEM_PROMPT,
         model: resolved.model,
-        tools: this.options.tools ?? [],
+        tools,
         messages: []
       },
       ...(resolved.getApiKey ? { getApiKey: resolved.getApiKey } : {}),

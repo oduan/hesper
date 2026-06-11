@@ -124,11 +124,12 @@ describe('AgentRuntime queue', () => {
     const adapter = new RecordingAdapter()
     const runtime = new AgentRuntime({ persistence, adapter })
 
-    await runtime.enqueue({ sessionId: 'session-system-prompt', prompt: 'first', modelId: 'mock/hesper-fast', systemPrompt: 'system:first' })
-    await runtime.enqueue({ sessionId: 'session-system-prompt', prompt: 'second', modelId: 'mock/hesper-fast', systemPrompt: 'system:second' })
+    await runtime.enqueue({ sessionId: 'session-system-prompt', prompt: 'first', modelId: 'mock/hesper-fast', systemPrompt: 'system:first', enabledToolIds: ['filesystem.read-file'] })
+    await runtime.enqueue({ sessionId: 'session-system-prompt', prompt: 'second', modelId: 'mock/hesper-fast', systemPrompt: 'system:second', enabledToolIds: ['git.status'] })
     await runtime.waitForIdle('session-system-prompt')
 
     expect(adapter.inputs.map((input) => input.systemPrompt)).toEqual(['system:first', 'system:second'])
+    expect(adapter.inputs.map((input) => input.enabledToolIds)).toEqual([['filesystem.read-file'], ['git.status']])
   })
 
   it('keeps the same assembled system prompt across retry attempts', async () => {
@@ -147,12 +148,12 @@ describe('AgentRuntime queue', () => {
       }
     })
 
-    const run = await runtime.enqueue({ sessionId: 'session-system-prompt-retry', prompt: 'retry me', modelId: 'mock/hesper-fast', systemPrompt: 'system:retry' })
+    const run = await runtime.enqueue({ sessionId: 'session-system-prompt-retry', prompt: 'retry me', modelId: 'mock/hesper-fast', systemPrompt: 'system:retry', enabledToolIds: ['web.fetch-url'] })
     await runtime.waitForIdle('session-system-prompt-retry')
 
-    expect(adapter.inputs.map((input) => [input.runId, input.systemPrompt])).toEqual([
-      [run.id, 'system:retry'],
-      [run.id, 'system:retry']
+    expect(adapter.inputs.map((input) => [input.runId, input.systemPrompt, input.enabledToolIds])).toEqual([
+      [run.id, 'system:retry', ['web.fetch-url']],
+      [run.id, 'system:retry', ['web.fetch-url']]
     ])
   })
 

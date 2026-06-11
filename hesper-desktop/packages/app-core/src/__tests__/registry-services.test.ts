@@ -7,6 +7,14 @@ describe('registry services', () => {
     const skills = createDefaultSkillService().listSkills()
 
     expect(roles.map((role) => role.id)).toEqual(['main-agent', 'subagent'])
+    expect(roles.find((role) => role.id === 'main-agent')?.defaultToolIds).toEqual([
+      'filesystem.read-file',
+      'git.status',
+      'web.fetch-url',
+      'agent.spawn-subagent',
+      'system.show-notification'
+    ])
+    expect(roles.find((role) => role.id === 'main-agent')?.defaultToolIds).not.toContain('filesystem.write-file')
     expect(skills.map((skill) => skill.id)).toEqual([
       'builtin:notes',
       'workspace:notes',

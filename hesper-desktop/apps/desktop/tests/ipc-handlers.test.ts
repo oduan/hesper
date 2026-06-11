@@ -163,7 +163,11 @@ describe('registerIpcHandlers', () => {
     await expect(handles.get(ipcChannels.agentEnqueue)?.({ sender: { id: 1 } }, { sessionId: session.id, prompt: 'Use assembled prompt', modelId: 'mock/hesper-fast' })).resolves.toEqual({ runId: 'run-assembled' })
 
     expect(promptSpy).toHaveBeenCalledWith(expect.objectContaining({
-      session: expect.objectContaining({ id: session.id, workspacePath: 'C:/workspace' }),
+      session: expect.objectContaining({
+        id: session.id,
+        workspacePath: 'C:/workspace',
+        enabledToolIds: ['filesystem.read-file', 'git.status', 'web.fetch-url', 'agent.spawn-subagent', 'system.show-notification']
+      }),
       role: expect.objectContaining({ id: 'main-agent' }),
       skills: expect.any(Array),
       tools: expect.any(Array),
@@ -173,7 +177,54 @@ describe('registerIpcHandlers', () => {
       sessionId: session.id,
       prompt: 'Use assembled prompt',
       modelId: 'mock/hesper-fast',
-      systemPrompt: 'assembled system prompt'
+      systemPrompt: 'assembled system prompt',
+      enabledToolIds: ['filesystem.read-file', 'git.status', 'web.fetch-url', 'agent.spawn-subagent', 'system.show-notification']
+    }))
+  })
+
+  it('narrows per-run enabled tools without expanding beyond the configured allowlist', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock' })
+    const handles = new Map<string, (event: any, ...args: any[]) => Promise<unknown> | unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (event: any, ...args: any[]) => Promise<unknown> | unknown) => {
+        handles.set(channel, handler)
+      }),
+      removeHandler: vi.fn()
+    }
+    const dialog = {
+      showOpenDialog: vi.fn(async () => ({ canceled: false, filePaths: ['C:/workspace'] }))
+    }
+    const promptSpy = vi.spyOn(container.promptAssemblyService, 'assembleMainPrompt')
+    const enqueueSpy = vi.spyOn(container.agentRuntime, 'enqueue')
+      .mockResolvedValueOnce({ id: 'run-narrowed' } as Awaited<ReturnType<typeof container.agentRuntime.enqueue>>)
+      .mockResolvedValueOnce({ id: 'run-empty' } as Awaited<ReturnType<typeof container.agentRuntime.enqueue>>)
+
+    registerIpcHandlers({ ipcMain, dialog, container })
+    const session = await container.sessionService.createSession({ title: 'Narrow tools', workspacePath: 'C:/workspace' })
+
+    await expect(handles.get(ipcChannels.agentEnqueue)?.(
+      { sender: { id: 1 } },
+      { sessionId: session.id, prompt: 'Use only read', modelId: 'mock/hesper-fast', enabledToolIds: ['filesystem.read-file', 'filesystem.write-file'] }
+    )).resolves.toEqual({ runId: 'run-narrowed' })
+
+    expect(promptSpy).toHaveBeenLastCalledWith(expect.objectContaining({
+      session: expect.objectContaining({ enabledToolIds: ['filesystem.read-file'] })
+    }))
+    expect(enqueueSpy).toHaveBeenLastCalledWith(expect.objectContaining({
+      enabledToolIds: ['filesystem.read-file']
+    }))
+
+    await expect(handles.get(ipcChannels.agentEnqueue)?.(
+      { sender: { id: 1 } },
+      { sessionId: session.id, prompt: 'Use no tools', modelId: 'mock/hesper-fast', enabledToolIds: [] }
+    )).resolves.toEqual({ runId: 'run-empty' })
+
+    expect(promptSpy).toHaveBeenLastCalledWith(expect.objectContaining({
+      session: expect.objectContaining({ enabledToolIds: [] })
+    }))
+    expect(enqueueSpy).toHaveBeenLastCalledWith(expect.objectContaining({
+      enabledToolIds: []
     }))
   })
 

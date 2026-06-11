@@ -34,8 +34,22 @@ export function createToolCatalogService(tools: ToolDefinition[]): ToolCatalogSe
 
 export function createDefaultRoleService(): RoleService {
   const roles: Role[] = [
-    { id: 'main-agent', name: 'Main Agent', allowedSkillIds: ['builtin:notes', 'builtin:files', 'builtin:web'], canBeMainAgent: true, canBeSubagent: false },
-    { id: 'subagent', name: 'Subagent', allowedSkillIds: ['builtin:notes'], canBeMainAgent: false, canBeSubagent: true }
+    {
+      id: 'main-agent',
+      name: 'Main Agent',
+      allowedSkillIds: ['builtin:notes', 'builtin:files', 'builtin:web'],
+      defaultToolIds: ['filesystem.read-file', 'git.status', 'web.fetch-url', 'agent.spawn-subagent', 'system.show-notification'],
+      canBeMainAgent: true,
+      canBeSubagent: false
+    },
+    {
+      id: 'subagent',
+      name: 'Subagent',
+      allowedSkillIds: ['builtin:notes'],
+      defaultToolIds: ['filesystem.read-file', 'git.status', 'web.fetch-url'],
+      canBeMainAgent: false,
+      canBeSubagent: true
+    }
   ]
   return {
     listRoles: () => [...roles],

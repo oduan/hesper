@@ -1,4 +1,4 @@
-import { AgentRuntime, MockAgentAdapter, PiCoreAgentAdapter, createRegistryModelResolver } from '@hesper/agent-runtime'
+import { AgentRuntime, MockAgentAdapter, PiCoreAgentAdapter, createPiAgentTools, createRegistryModelResolver } from '@hesper/agent-runtime'
 import {
   createConversationService,
   createCredentialVaultService,
@@ -12,7 +12,8 @@ import {
   type CredentialVaultCodec
 } from '@hesper/app-core'
 import type { Persistence } from '@hesper/persistence'
-import { createBuiltinToolDefinitions } from '@hesper/tools'
+import { Notification } from 'electron'
+import { createAllowlistPermissionPolicy, createBuiltinToolDefinitions, createBuiltinToolExecutor, createToolRunner } from '@hesper/tools'
 
 export type AgentMode = 'mock' | 'pi-core'
 
@@ -30,7 +31,8 @@ export function createServiceContainer(options: ServiceContainerOptions) {
   const settingsService = createSettingsService()
   const roleService = createDefaultRoleService()
   const skillService = createDefaultSkillService()
-  const toolCatalogService = createToolCatalogService(createBuiltinToolDefinitions())
+  const toolDefinitions = createBuiltinToolDefinitions()
+  const toolCatalogService = createToolCatalogService(toolDefinitions)
   const promptAssemblyService = createPromptAssemblyService()
   const credentialVaultService = createCredentialVaultService({
     persistence: options.persistence,
@@ -46,7 +48,32 @@ export function createServiceContainer(options: ServiceContainerOptions) {
     },
     readProviderApiKey: (providerId) => credentialVaultService.readProviderApiKey(providerId)
   })
-  const adapter = options.agentMode === 'pi-core' ? new PiCoreAgentAdapter({ modelResolver }) : new MockAgentAdapter({ delayMs: 0 })
+  const toolRunner = createToolRunner({
+    policy: createAllowlistPermissionPolicy(),
+    executor: createBuiltinToolExecutor({
+      showNotification: (message) => {
+        if (!Notification.isSupported()) {
+          throw new Error('Desktop notifications are not supported on this system')
+        }
+        new Notification({ title: 'hesper', body: message }).show()
+      }
+    })
+  })
+  const adapter = options.agentMode === 'pi-core'
+    ? new PiCoreAgentAdapter({
+        modelResolver,
+        createTools: (input) => createPiAgentTools({
+          tools: toolDefinitions.filter((tool) => input.enabledToolIds?.includes(tool.id)),
+          runner: toolRunner,
+          context: {
+            runId: input.runId,
+            sessionId: input.sessionId,
+            allowedToolIds: input.enabledToolIds ?? [],
+            ...(input.workspacePath !== undefined ? { workspacePath: input.workspacePath } : {})
+          }
+        })
+      })
+    : new MockAgentAdapter({ delayMs: 0 })
   const agentRuntime = new AgentRuntime({ persistence: options.persistence, adapter })
 
   return {
@@ -58,6 +85,7 @@ export function createServiceContainer(options: ServiceContainerOptions) {
     skillService,
     toolCatalogService,
     promptAssemblyService,
+    toolRunner,
     credentialVaultService,
     modelProviderService,
     agentRuntime

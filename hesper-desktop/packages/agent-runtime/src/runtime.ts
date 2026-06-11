@@ -9,6 +9,7 @@ export type EnqueueRunInput = {
   prompt: string
   modelId: string
   systemPrompt?: string
+  enabledToolIds?: string[]
   workspacePath?: string
   parentRunId?: string
 }
@@ -22,7 +23,7 @@ export type AgentRuntimeOptions = {
 type RuntimeListener = (event: AgentRuntimeEvent) => void | Promise<void>
 type SessionState = {
   running: boolean
-  queue: Array<{ run: AgentRun; prompt: string; systemPrompt?: string }>
+  queue: Array<{ run: AgentRun; prompt: string; systemPrompt?: string; enabledToolIds?: string[] }>
   active: Promise<void> | undefined
   waiters: Array<() => void>
 }
@@ -85,11 +86,16 @@ export class AgentRuntime {
       await this.emitAndPersist({ type: 'run.created', run })
 
       if (!shouldStartImmediately) {
-        state.queue.push({ run, prompt: input.prompt, ...(input.systemPrompt !== undefined ? { systemPrompt: input.systemPrompt } : {}) })
+        state.queue.push({
+          run,
+          prompt: input.prompt,
+          ...(input.systemPrompt !== undefined ? { systemPrompt: input.systemPrompt } : {}),
+          ...(input.enabledToolIds !== undefined ? { enabledToolIds: input.enabledToolIds } : {})
+        })
         return run
       }
 
-      this.startSessionRun(input.sessionId, run, input.prompt, input.systemPrompt)
+      this.startSessionRun(input.sessionId, run, input.prompt, input.systemPrompt, input.enabledToolIds)
       return run
     })
   }
@@ -136,10 +142,10 @@ export class AgentRuntime {
     }
   }
 
-  private startSessionRun(sessionId: string, run: AgentRun, prompt: string, systemPrompt?: string): void {
+  private startSessionRun(sessionId: string, run: AgentRun, prompt: string, systemPrompt?: string, enabledToolIds?: string[]): void {
     const state = this.getSessionState(sessionId)
     state.running = true
-    state.active = this.executeRun(run, prompt, systemPrompt)
+    state.active = this.executeRun(run, prompt, systemPrompt, enabledToolIds)
       .then(() => this.finishRun(sessionId))
       .catch(() => this.finishRun(sessionId))
   }
@@ -155,7 +161,7 @@ export class AgentRuntime {
         status: 'running',
         startedAt
       }
-      this.startSessionRun(sessionId, runningRun, next.prompt, next.systemPrompt)
+      this.startSessionRun(sessionId, runningRun, next.prompt, next.systemPrompt, next.enabledToolIds)
       return
     }
 
@@ -170,7 +176,7 @@ export class AgentRuntime {
         status: 'running',
         startedAt
       }
-      this.startSessionRun(sessionId, runningRun, lateQueued.prompt, lateQueued.systemPrompt)
+      this.startSessionRun(sessionId, runningRun, lateQueued.prompt, lateQueued.systemPrompt, lateQueued.enabledToolIds)
       return
     }
 
@@ -178,7 +184,7 @@ export class AgentRuntime {
     for (const resolve of waiters) resolve()
   }
 
-  private async executeRun(run: AgentRun, prompt: string, systemPrompt?: string): Promise<void> {
+  private async executeRun(run: AgentRun, prompt: string, systemPrompt?: string, enabledToolIds?: string[]): Promise<void> {
     const current: AgentRun = { ...run, status: 'running', startedAt: run.startedAt ?? nowIso() }
     await this.persistence.runs.save(current)
     await this.emitAndPersist({ type: 'run.started', runId: current.id })
@@ -196,6 +202,7 @@ export class AgentRuntime {
             prompt,
             modelId: latestRun.modelId,
             ...(systemPrompt !== undefined ? { systemPrompt } : {}),
+            ...(enabledToolIds !== undefined ? { enabledToolIds } : {}),
             ...(latestRun.workspacePath !== undefined ? { workspacePath: latestRun.workspacePath } : {}),
             signal: controller.signal
           },

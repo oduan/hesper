@@ -70,6 +70,7 @@ export const agentEnqueueInputSchema = z.object({
   prompt: nonEmptyStringSchema,
   modelId: nonEmptyStringSchema,
   workspacePath: z.string().optional(),
+  enabledToolIds: z.array(nonEmptyStringSchema).optional(),
   parentRunId: nonEmptyStringSchema.optional(),
   messageId: nonEmptyStringSchema.optional()
 })

@@ -6,6 +6,7 @@ export type AgentPromptInput = {
   prompt: string
   modelId: string
   systemPrompt?: string
+  enabledToolIds?: string[]
   workspacePath?: string
   signal: AbortSignal
 }

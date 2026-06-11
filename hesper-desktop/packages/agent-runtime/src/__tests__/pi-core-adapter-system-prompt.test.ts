@@ -4,13 +4,13 @@ import { PiCoreAgentAdapter } from '../pi-core-adapter'
 import type { ModelResolver } from '../model-resolver'
 
 const agentMock = vi.hoisted(() => ({
-  constructorInputs: [] as Array<{ initialState?: { systemPrompt?: string } }>,
+  constructorInputs: [] as Array<{ initialState?: { systemPrompt?: string; tools?: Array<{ name: string }> } }>,
   prompts: [] as string[]
 }))
 
 vi.mock('@earendil-works/pi-agent-core', () => ({
   Agent: class MockPiAgent {
-    constructor(input: { initialState?: { systemPrompt?: string } }) {
+    constructor(input: { initialState?: { systemPrompt?: string; tools?: Array<{ name: string }> } }) {
       agentMock.constructorInputs.push(input)
     }
 
@@ -89,5 +89,36 @@ describe('PiCoreAgentAdapter system prompt', () => {
     expect(agentMock.constructorInputs).toHaveLength(1)
     expect(agentMock.constructorInputs[0]?.initialState?.systemPrompt).toBe('assembled system prompt')
     expect(agentMock.prompts).toEqual(['hello'])
+  })
+
+  it('builds pi tools from the run input when a tool factory is configured', async () => {
+    agentMock.constructorInputs.length = 0
+    agentMock.prompts.length = 0
+    const createTools = vi.fn(() => [{
+      name: 'filesystem.read-file',
+      label: 'Read File',
+      description: 'Read file',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn()
+    }])
+    const adapter = new PiCoreAgentAdapter({ modelResolver: resolver(), createTools })
+
+    await adapter.run({
+      runId: 'run-tools',
+      sessionId: 'session-1',
+      prompt: 'hello',
+      modelId: 'mock/hesper-fast',
+      enabledToolIds: ['filesystem.read-file'],
+      workspacePath: 'C:/workspace',
+      signal: new AbortController().signal
+    }, vi.fn())
+
+    expect(createTools).toHaveBeenCalledWith(expect.objectContaining({
+      runId: 'run-tools',
+      sessionId: 'session-1',
+      enabledToolIds: ['filesystem.read-file'],
+      workspacePath: 'C:/workspace'
+    }))
+    expect(agentMock.constructorInputs[0]?.initialState?.tools?.map((tool) => tool.name)).toEqual(['filesystem.read-file'])
   })
 })
