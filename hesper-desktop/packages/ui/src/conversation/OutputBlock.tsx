@@ -32,11 +32,12 @@ export function OutputBlock({ content, contentType, closeFullscreenSignal = 0 }:
         onMouseLeave={() => setIsHovered(false)}
         style={{
           position: 'relative',
-          height: 240,
+          height: contentType === 'html' ? 260 : 'auto',
+          maxHeight: 340,
           overflow: 'hidden',
           borderRadius: darkTheme.radius.lg,
-          border: `1px solid ${darkTheme.color.border}`,
-          background: darkTheme.color.surface
+          border: 0,
+          background: darkTheme.color.surfaceMuted
         }}
       >
         <button
@@ -51,8 +52,8 @@ export function OutputBlock({ content, contentType, closeFullscreenSignal = 0 }:
             right: darkTheme.spacing.sm,
             zIndex: 1,
             borderRadius: darkTheme.radius.md,
-            border: `1px solid ${darkTheme.color.border}`,
-            background: darkTheme.color.surfaceMuted,
+            border: 0,
+            background: 'rgba(255, 255, 255, 0.055)',
             color: darkTheme.color.text,
             cursor: 'pointer',
             opacity: isHovered ? 1 : 0,
@@ -67,10 +68,10 @@ export function OutputBlock({ content, contentType, closeFullscreenSignal = 0 }:
               title="HTML 输出预览"
               sandbox=""
               srcDoc={sandboxedDocument}
-              style={{ width: '100%', height: '100%', minHeight: 200, border: 0, background: '#fff' }}
+              style={{ width: '100%', height: '100%', minHeight: 200, border: 0, borderRadius: darkTheme.radius.md, background: '#fff' }}
             />
           ) : (
-            <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{content}</div>
+            <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.55, fontSize: 13 }}>{content}</div>
           )}
         </div>
       </section>

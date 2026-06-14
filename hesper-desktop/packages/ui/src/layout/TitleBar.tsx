@@ -40,8 +40,8 @@ export function TitleBar({ title, platform = 'win32', onMinimize, onToggleMaximi
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        borderBottom: `1px solid ${darkTheme.color.border}`,
-        background: '#1a1c22',
+        borderBottom: 0,
+        background: darkTheme.color.background,
         color: darkTheme.color.text,
         userSelect: 'none'
       }}
@@ -98,7 +98,8 @@ const windowsControlStyle: CSSProperties = {
   color: darkTheme.color.textMuted,
   cursor: 'pointer',
   fontSize: 13,
-  lineHeight: 1
+  lineHeight: 1,
+  outline: 0
 }
 
 const windowsCloseStyle: CSSProperties = {
@@ -109,7 +110,8 @@ const macControlStyle: CSSProperties = {
   width: 12,
   height: 12,
   borderRadius: 999,
-  border: '1px solid rgba(0, 0, 0, 0.22)',
+  border: '1px solid rgba(0, 0, 0, 0.16)',
   padding: 0,
-  cursor: 'pointer'
+  cursor: 'pointer',
+  outline: 0
 }

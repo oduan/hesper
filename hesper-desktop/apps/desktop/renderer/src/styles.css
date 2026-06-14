@@ -33,8 +33,85 @@ select {
   font: inherit;
 }
 
+button,
+textarea,
+select,
+input {
+  outline: none;
+}
+
+button:focus,
+button:focus-visible,
+textarea:focus,
+textarea:focus-visible,
+select:focus,
+select:focus-visible,
+input:focus,
+input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.hesper-nav-item {
+  width: 100%;
+  min-height: 34px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #c8cde0;
+  padding: 7px 10px;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.hesper-nav-item:hover,
+.hesper-nav-item.is-active {
+  background: rgba(255, 255, 255, 0.07);
+  color: #eef2ff;
+}
+
+.hesper-nav-item-strong {
+  color: #eef2ff;
+}
+
+.hesper-list-row {
+  width: 100%;
+  min-height: 46px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #e8ecfb;
+  padding: 7px 10px;
+  text-align: left;
+  cursor: pointer;
+  display: grid;
+  gap: 2px;
+  transition: background 120ms ease;
+}
+
+.hesper-list-row:hover,
+.hesper-list-row.is-active {
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.hesper-soft-control,
+.hesper-send-button {
+  transition: background 120ms ease, opacity 120ms ease;
+}
+
+.hesper-soft-control:hover,
+.hesper-send-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.075) !important;
+}
+
 .hesper-output-block {
-  max-height: 320px;
   overflow: hidden;
 }
 
@@ -48,6 +125,6 @@ select {
 
 [data-theme='dark'] {
   color-scheme: dark;
-  --hesper-body-background: #0f172a;
-  --hesper-body-text: #e2e8f0;
+  --hesper-body-background: #262a3b;
+  --hesper-body-text: #e8ecfb;
 }

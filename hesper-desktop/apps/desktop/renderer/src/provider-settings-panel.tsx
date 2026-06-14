@@ -353,7 +353,7 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
               onClick={() => selectProvider(provider)}
               style={{
                 ...providerItemStyle,
-                borderColor: provider.id === selectedProviderId ? '#8b7cff' : 'rgba(148, 163, 184, 0.18)'
+                background: provider.id === selectedProviderId ? 'rgba(255, 255, 255, 0.07)' : providerItemStyle.background
               }}
             >
               <strong>{provider.name}</strong>
@@ -484,11 +484,12 @@ const settingsPanelStyle: CSSProperties = {
   display: 'grid',
   gridTemplateRows: 'auto auto auto minmax(0, 1fr)',
   gap: 12,
-  border: '1px solid rgba(148, 163, 184, 0.18)',
-  borderRadius: 14,
-  background: 'rgba(15, 23, 42, 0.52)',
-  padding: 16,
-  overflow: 'hidden'
+  border: 0,
+  borderRadius: 0,
+  background: 'transparent',
+  padding: 0,
+  overflow: 'hidden',
+  fontSize: 13
 }
 
 const settingsHeaderStyle: CSSProperties = {
@@ -506,8 +507,8 @@ const feedbackRowStyle: CSSProperties = {
 
 const settingsInlineCardStyle: CSSProperties = {
   borderRadius: 14,
-  border: '1px solid rgba(148, 163, 184, 0.18)',
-  background: 'rgba(17, 24, 39, 0.72)',
+  border: 0,
+  background: 'rgba(255, 255, 255, 0.04)',
   padding: 12,
   display: 'flex',
   alignItems: 'center',
@@ -533,9 +534,10 @@ const providerListStyle: CSSProperties = {
 
 const providerItemStyle: CSSProperties = {
   borderRadius: 12,
-  border: '1px solid rgba(148, 163, 184, 0.18)',
-  background: 'rgba(30, 41, 59, 0.72)',
-  color: '#e5e7eb',
+  border: 0,
+  outline: 0,
+  background: 'rgba(255, 255, 255, 0.04)',
+  color: '#e8ecfb',
   padding: 10,
   cursor: 'pointer',
   textAlign: 'left',
@@ -553,8 +555,8 @@ const settingsDetailStyle: CSSProperties = {
 
 const settingsCardStyle: CSSProperties = {
   borderRadius: 14,
-  border: '1px solid rgba(148, 163, 184, 0.18)',
-  background: 'rgba(17, 24, 39, 0.82)',
+  border: 0,
+  background: 'rgba(255, 255, 255, 0.04)',
   padding: 14
 }
 
@@ -579,8 +581,9 @@ const fieldStyle: CSSProperties = {
 
 const inputStyle: CSSProperties = {
   borderRadius: 10,
-  border: '1px solid rgba(148, 163, 184, 0.22)',
-  background: 'rgba(15, 23, 42, 0.86)',
+  border: 0,
+  outline: 0,
+  background: 'rgba(255, 255, 255, 0.045)',
   color: '#f8fafc',
   padding: '8px 10px'
 }
@@ -595,18 +598,20 @@ const actionRowStyle: CSSProperties = {
 
 const primaryActionStyle: CSSProperties = {
   border: 0,
+  outline: 0,
   borderRadius: 10,
   padding: '10px 18px',
-  background: '#7c6cff',
-  color: '#ffffff',
+  background: 'rgba(127, 158, 232, 0.24)',
+  color: '#eef2ff',
   fontWeight: 700,
   cursor: 'pointer'
 }
 
 const secondaryActionStyle: CSSProperties = {
   borderRadius: 10,
-  border: '1px solid rgba(148, 163, 184, 0.22)',
-  background: 'rgba(30, 41, 59, 0.72)',
+  border: 0,
+  outline: 0,
+  background: 'rgba(255, 255, 255, 0.045)',
   color: '#e5e7eb',
   padding: '8px 12px',
   cursor: 'pointer'
@@ -614,8 +619,9 @@ const secondaryActionStyle: CSSProperties = {
 
 const modelItemStyle: CSSProperties = {
   borderRadius: 10,
-  border: '1px solid rgba(148, 163, 184, 0.18)',
-  background: 'rgba(15, 23, 42, 0.7)',
+  border: 0,
+  outline: 0,
+  background: 'rgba(255, 255, 255, 0.04)',
   color: '#e5e7eb',
   padding: 10,
   textAlign: 'left',

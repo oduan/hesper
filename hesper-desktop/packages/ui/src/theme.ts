@@ -34,16 +34,16 @@ export const lightTheme: ThemeTokens = {
 
 export const darkTheme: ThemeTokens = {
   color: {
-    background: '#15161a',
-    surface: '#202229',
-    surfaceMuted: '#1b1d23',
-    text: '#eef0f4',
-    textMuted: '#a8adba',
-    border: '#343843',
-    accent: '#9b8cff',
-    success: '#43c48c',
-    danger: '#ff7b73',
-    warning: '#d8a043'
+    background: '#262a3b',
+    surface: '#171a26',
+    surfaceMuted: '#202434',
+    text: '#e8ecfb',
+    textMuted: '#969db8',
+    border: 'rgba(255, 255, 255, 0.07)',
+    accent: '#7f9ee8',
+    success: '#68c69a',
+    danger: '#ef817d',
+    warning: '#d8b66b'
   },
   radius: lightTheme.radius,
   spacing: lightTheme.spacing

@@ -18,13 +18,15 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       <article
         aria-label={isUser ? '用户消息' : '助手消息'}
         style={{
-          maxWidth: '80%',
+          maxWidth: '78%',
           padding: `${darkTheme.spacing.sm} ${darkTheme.spacing.md}`,
           borderRadius: darkTheme.radius.lg,
-          border: `1px solid ${isUser ? darkTheme.color.accent : darkTheme.color.border}`,
-          background: isUser ? 'rgba(155, 140, 255, 0.14)' : darkTheme.color.surface,
+          border: 0,
+          background: isUser ? 'rgba(255, 255, 255, 0.055)' : darkTheme.color.surfaceMuted,
+          color: darkTheme.color.text,
           whiteSpace: 'pre-wrap',
-          lineHeight: 1.5
+          lineHeight: 1.5,
+          fontSize: 13
         }}
       >
         {message.content}

@@ -155,24 +155,21 @@ export function ConversationView({
   }, [jumpTargets, shortcutCommand])
 
   return (
-    <div style={{ height: '100%', minHeight: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: darkTheme.spacing.md }}>
+    <div style={{ height: '100%', minHeight: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', fontSize: 13 }}>
       <section
         aria-label="会话详情"
         style={{ display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr) auto', gap: darkTheme.spacing.md, minWidth: 0, minHeight: 0 }}
       >
         <header
           style={{
+            position: 'relative',
+            minHeight: 32,
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: darkTheme.spacing.md,
-            borderBottom: `1px solid ${darkTheme.color.border}`,
-            paddingBottom: darkTheme.spacing.sm
+            justifyContent: 'center'
           }}
         >
-          <div style={{ minWidth: 0 }}>
-            <h2 style={{ margin: 0, fontSize: 18, lineHeight: 1.2 }}>{session.title}</h2>
-          </div>
+          <h2 style={{ margin: 0, maxWidth: '65%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 15, lineHeight: 1.2, textAlign: 'center', fontWeight: 700 }}>{session.title}</h2>
           <label style={outputModeLabelStyle}>
             <span style={{ color: darkTheme.color.textMuted }}>输出</span>
             <select
@@ -292,18 +289,22 @@ export function ConversationView({
 }
 
 const outputModeLabelStyle = {
+  position: 'absolute',
+  right: 0,
   display: 'flex',
   alignItems: 'center',
   gap: darkTheme.spacing.xs,
-  fontSize: 13,
+  fontSize: 12,
   whiteSpace: 'nowrap'
 } satisfies CSSProperties
 
 const outputModeSelectStyle = {
   borderRadius: darkTheme.radius.md,
-  border: `1px solid ${darkTheme.color.border}`,
+  border: 0,
+  outline: 0,
   background: darkTheme.color.surfaceMuted,
   color: darkTheme.color.text,
   padding: `${darkTheme.spacing.xs} ${darkTheme.spacing.sm}`,
-  minWidth: 112
+  minWidth: 108,
+  fontSize: 12
 } satisfies CSSProperties

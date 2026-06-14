@@ -31,7 +31,8 @@ export function AppShell({ sessions, activeSection, title: _title, platform, act
         color: darkTheme.color.text,
         display: 'grid',
         gridTemplateRows: '36px minmax(0, 1fr)',
-        fontFamily: 'Inter, Segoe UI, sans-serif'
+        fontFamily: 'Inter, Segoe UI, sans-serif',
+        fontSize: 13
       }}
     >
       <TitleBar
@@ -45,8 +46,10 @@ export function AppShell({ sessions, activeSection, title: _title, platform, act
         style={{
           minHeight: 0,
           display: 'grid',
-          gridTemplateColumns: '84px 280px minmax(0, 1fr)',
-          overflow: 'hidden'
+          gridTemplateColumns: '204px minmax(280px, 35vw) minmax(0, 1fr)',
+          gap: darkTheme.spacing.sm,
+          overflow: 'hidden',
+          padding: `0 ${darkTheme.spacing.sm} ${darkTheme.spacing.sm} 0`
         }}
       >
         <ActivityRail
@@ -60,8 +63,19 @@ export function AppShell({ sessions, activeSection, title: _title, platform, act
           {...(activeSessionId ? { activeSessionId } : {})}
           {...(onSelectSession ? { onSelectSession } : {})}
         />
-        <section aria-label="详情区域" style={{ minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <div style={{ flex: 1, minHeight: 0, padding: darkTheme.spacing.md, overflow: 'hidden' }}>{children}</div>
+        <section
+          aria-label="详情区域"
+          style={{
+            minWidth: 0,
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            borderRadius: darkTheme.radius.xl,
+            background: darkTheme.color.surface
+          }}
+        >
+          <div style={{ flex: 1, minHeight: 0, padding: darkTheme.spacing.lg, overflow: 'hidden' }}>{children}</div>
         </section>
       </div>
     </div>

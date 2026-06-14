@@ -18,17 +18,20 @@ export function EntityListPane({ title, activeSection, sessions, activeSessionId
       aria-label="实体列表"
       style={{
         width: '100%',
+        minWidth: 0,
+        minHeight: 0,
         boxSizing: 'border-box',
         background: darkTheme.color.surface,
-        borderRight: `1px solid ${darkTheme.color.border}`,
-        padding: darkTheme.spacing.md,
+        borderRadius: darkTheme.radius.xl,
+        padding: darkTheme.spacing.lg,
         display: 'flex',
         flexDirection: 'column',
-        gap: darkTheme.spacing.sm
+        gap: darkTheme.spacing.md,
+        overflow: 'hidden'
       }}
     >
-      <header>
-        <h2 style={{ margin: 0, fontSize: 16 }}>{heading}</h2>
+      <header style={{ position: 'relative', minHeight: 24 }}>
+        <h2 style={{ margin: 0, fontSize: 15, lineHeight: '24px', textAlign: 'center', fontWeight: 700 }}>{heading}</h2>
       </header>
       {activeSection === 'sessions' ? (
         sessions.length > 0 ? (
@@ -39,24 +42,12 @@ export function EntityListPane({ title, activeSection, sessions, activeSessionId
                 <li key={session.id}>
                   <button
                     type="button"
+                    className={`hesper-list-row${isActive ? ' is-active' : ''}`}
                     aria-current={isActive ? 'true' : undefined}
                     onClick={() => onSelectSession?.(session.id)}
-                    style={{
-                      width: '100%',
-                      border: 0,
-                      borderRadius: darkTheme.radius.sm,
-                      background: isActive ? 'rgba(155, 140, 255, 0.14)' : 'transparent',
-                      padding: `${darkTheme.spacing.xs} ${darkTheme.spacing.sm}`,
-                      textAlign: 'left',
-                      color: darkTheme.color.text,
-                      cursor: 'pointer',
-                      display: 'grid',
-                      gap: 2,
-                      minHeight: 48
-                    }}
                   >
                     <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{session.title}</div>
-                    <div style={{ fontSize: 12, color: darkTheme.color.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <div style={{ fontSize: 11, color: darkTheme.color.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {session.defaultModelId ?? 'mock/hesper-fast'} · {session.workspacePath ?? '未设置工作目录'}
                     </div>
                   </button>
@@ -65,10 +56,10 @@ export function EntityListPane({ title, activeSection, sessions, activeSessionId
             })}
           </ul>
         ) : (
-          <div style={{ color: darkTheme.color.textMuted, fontSize: 13 }}>暂无会话</div>
+          <div style={{ margin: 'auto', color: darkTheme.color.textMuted, fontSize: 13, textAlign: 'center' }}>暂无会话</div>
         )
       ) : (
-        <div style={{ color: darkTheme.color.textMuted, fontSize: 13 }}>该区域将在后续任务接入真实数据。</div>
+        <div style={{ margin: 'auto', color: darkTheme.color.textMuted, fontSize: 13, textAlign: 'center' }}>该区域将在后续任务接入真实数据。</div>
       )}
     </aside>
   )

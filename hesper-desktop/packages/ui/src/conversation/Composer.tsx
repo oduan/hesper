@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent } from 'react'
 import type { OutputMode } from '@hesper/shared'
 import { darkTheme } from '../theme'
 
@@ -53,15 +53,15 @@ export function Composer({
         display: 'grid',
         gap: darkTheme.spacing.sm,
         border: 0,
-        borderRadius: 0,
-        background: 'transparent',
-        padding: 0
+        borderRadius: darkTheme.radius.xl,
+        background: darkTheme.color.surfaceMuted,
+        padding: darkTheme.spacing.md
       }}
     >
       <textarea
         aria-label="消息输入框"
         placeholder="输入消息，支持 @skills"
-        rows={5}
+        rows={4}
         value={value}
         onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setValue(event.target.value)}
         onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -70,89 +70,106 @@ export function Composer({
             handleSend()
           }
         }}
-        style={{
-          width: '100%',
-          resize: 'none',
-          minHeight: 112,
-          maxHeight: 220,
-          overflow: 'auto',
-          borderRadius: darkTheme.radius.lg,
-          border: `1px solid ${darkTheme.color.border}`,
-          background: darkTheme.color.surfaceMuted,
-          color: darkTheme.color.text,
-          padding: darkTheme.spacing.md,
-          font: 'inherit',
-          lineHeight: 1.5
-        }}
+        style={textareaStyle}
       />
-      <div style={{ display: 'grid', gap: darkTheme.spacing.sm }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: darkTheme.spacing.md, alignItems: 'center', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: darkTheme.spacing.md, alignItems: 'center', flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          className="hesper-soft-control"
+          aria-label="选择工作目录"
+          onClick={() => onSelectWorkspace?.()}
+          style={controlButtonStyle}
+        >
+          工作目录：{workspacePath ?? '未设置'}
+        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: darkTheme.spacing.sm, flexWrap: 'wrap' }}>
+          <label style={controlLabelStyle}>
+            <span>模型</span>
+            <select aria-label="选择模型" value={modelId} onChange={(event) => onModelChange?.(event.target.value)} style={selectStyle}>
+              {modelOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
           <button
             type="button"
-            aria-label="选择工作目录"
-            onClick={() => onSelectWorkspace?.()}
-            style={controlButtonStyle}
+            className="hesper-send-button"
+            aria-label="发送"
+            disabled={!canSend}
+            onClick={handleSend}
+            style={{
+              ...sendButtonStyle,
+              opacity: canSend ? 1 : 0.45,
+              cursor: canSend ? 'pointer' : 'not-allowed'
+            }}
           >
-            工作目录：{workspacePath ?? '未设置'}
+            ↑
           </button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: darkTheme.spacing.sm, flexWrap: 'wrap' }}>
-            <label style={controlLabelStyle}>
-              <span>模型：</span>
-              <select aria-label="选择模型" value={modelId} onChange={(event) => onModelChange?.(event.target.value)} style={selectStyle}>
-                {modelOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button
-              type="button"
-              aria-label="发送"
-              disabled={!canSend}
-              onClick={handleSend}
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: '999px',
-                border: 0,
-                background: canSend ? darkTheme.color.accent : darkTheme.color.border,
-                color: darkTheme.color.text,
-                cursor: canSend ? 'pointer' : 'not-allowed'
-              }}
-            >
-              ↑
-            </button>
-          </div>
         </div>
       </div>
     </section>
   )
 }
 
+const textareaStyle = {
+  width: '100%',
+  resize: 'none',
+  minHeight: 96,
+  maxHeight: 210,
+  overflow: 'auto',
+  borderRadius: darkTheme.radius.lg,
+  border: 0,
+  outline: 0,
+  background: 'transparent',
+  color: darkTheme.color.text,
+  padding: 0,
+  font: 'inherit',
+  fontSize: 13,
+  lineHeight: 1.5
+} satisfies CSSProperties
+
 const controlButtonStyle = {
   borderRadius: darkTheme.radius.md,
-  border: `1px solid ${darkTheme.color.border}`,
-  background: darkTheme.color.surfaceMuted,
+  border: 0,
+  outline: 0,
+  background: 'rgba(255, 255, 255, 0.045)',
   color: darkTheme.color.textMuted,
   cursor: 'pointer',
   padding: `${darkTheme.spacing.xs} ${darkTheme.spacing.sm}`,
-  fontSize: 13
-}
+  fontSize: 12,
+  maxWidth: '100%',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap'
+} satisfies CSSProperties
 
 const controlLabelStyle = {
   display: 'flex',
   alignItems: 'center',
   gap: darkTheme.spacing.xs,
   color: darkTheme.color.textMuted,
-  fontSize: 13
-}
+  fontSize: 12
+} satisfies CSSProperties
 
 const selectStyle = {
   borderRadius: darkTheme.radius.md,
-  border: `1px solid ${darkTheme.color.border}`,
-  background: darkTheme.color.surfaceMuted,
+  border: 0,
+  outline: 0,
+  background: 'rgba(255, 255, 255, 0.045)',
   color: darkTheme.color.text,
-  padding: `${darkTheme.spacing.xs} ${darkTheme.spacing.sm}`
-}
+  padding: `${darkTheme.spacing.xs} ${darkTheme.spacing.sm}`,
+  fontSize: 12,
+  maxWidth: 220
+} satisfies CSSProperties
 
+const sendButtonStyle = {
+  width: 34,
+  height: 34,
+  borderRadius: '999px',
+  border: 0,
+  outline: 0,
+  background: 'rgba(127, 158, 232, 0.22)',
+  color: darkTheme.color.text
+} satisfies CSSProperties
