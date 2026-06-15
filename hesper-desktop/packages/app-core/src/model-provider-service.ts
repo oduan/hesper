@@ -33,6 +33,7 @@ export type ModelProviderService = {
   getProvider(id: string): Promise<ModelProviderConfig | undefined>
   saveProvider(input: SaveModelProviderInput): Promise<ModelProviderConfig>
   disableProvider(id: string): Promise<ModelProviderConfig>
+  deleteProvider(id: string): Promise<ModelProviderConfig | undefined>
   listModels(providerId?: string): Promise<ModelConfig[]>
   saveModel(input: SaveModelInput): Promise<ModelConfig>
   testProviderConnection(providerId: string): Promise<ProviderConnectionTestResult>
@@ -52,6 +53,8 @@ const modelPresets: SaveModelInput[] = [
   { id: 'gpt-4o', providerId: 'openai', modelName: 'gpt-4o', displayName: 'GPT-4o', capabilities: ['streaming', 'toolCalls', 'jsonOutput'], enabled: true },
   { id: 'openai-compatible/default', providerId: 'openai-compatible', modelName: 'model-name', displayName: 'Custom model', capabilities: ['streaming', 'toolCalls'], enabled: false }
 ]
+
+const builtinProviderIds = new Set(providerPresets.map((provider) => provider.id))
 
 function assertId(id: string, label = 'id'): void {
   if (!id.trim()) throw new Error(`${label} is required`)
@@ -165,6 +168,18 @@ export function createModelProviderService(options: {
         ...(existing.defaultModelId !== undefined ? { defaultModelId: existing.defaultModelId } : {})
       })
       return provider
+    },
+    async deleteProvider(id) {
+      assertId(id)
+      const existing = await options.persistence.modelProviders.get(id)
+      if (!existing) throw new Error(`Model provider not found: ${id}`)
+      if (builtinProviderIds.has(id)) {
+        return this.disableProvider(id)
+      }
+      await options.persistence.models.deleteByProvider(id)
+      await options.credentialVaultService.deleteProviderApiKey({ providerId: id })
+      await options.persistence.modelProviders.delete(id)
+      return undefined
     },
     async listModels(providerId) {
       await ensureBuiltinProviders()

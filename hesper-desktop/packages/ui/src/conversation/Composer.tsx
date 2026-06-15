@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent } from 'react'
 import type { OutputMode } from '@hesper/shared'
 import { darkTheme } from '../theme'
+import { ThemedSelect } from './ThemedSelect'
 
 export type ComposerProps = {
   workspacePath?: string
@@ -83,16 +84,18 @@ export function Composer({
           工作目录：{workspacePath ?? '未设置'}
         </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: darkTheme.spacing.sm, flexWrap: 'wrap' }}>
-          <label style={controlLabelStyle}>
+          <div style={controlLabelStyle}>
             <span>模型</span>
-            <select aria-label="选择模型" value={modelId} onChange={(event) => onModelChange?.(event.target.value)} style={selectStyle}>
-              {modelOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </label>
+            <ThemedSelect
+              ariaLabel="选择模型"
+              value={modelId}
+              options={modelOptions}
+              {...(onModelChange ? { onChange: onModelChange } : {})}
+              minWidth={150}
+              maxWidth={220}
+              menuPlacement="top"
+            />
+          </div>
           <button
             type="button"
             className="hesper-send-button"
@@ -151,17 +154,6 @@ const controlLabelStyle = {
   gap: darkTheme.spacing.xs,
   color: darkTheme.color.textMuted,
   fontSize: 12
-} satisfies CSSProperties
-
-const selectStyle = {
-  borderRadius: darkTheme.radius.md,
-  border: 0,
-  outline: 0,
-  background: 'rgba(255, 255, 255, 0.045)',
-  color: darkTheme.color.text,
-  padding: `${darkTheme.spacing.xs} ${darkTheme.spacing.sm}`,
-  fontSize: 12,
-  maxWidth: 220
 } satisfies CSSProperties
 
 const sendButtonStyle = {

@@ -131,6 +131,7 @@ export function createFallbackHesperApi(): HesperDesktopApi {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }),
+      delete: async (input) => ({ deleted: true as const, providerId: input.providerId }),
       testConnection: async (input) => ({
         providerId: input.providerId,
         status: input.providerId === 'mock' ? 'ok' : 'needs_api_key',

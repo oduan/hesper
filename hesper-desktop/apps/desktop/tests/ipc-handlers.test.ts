@@ -440,6 +440,29 @@ describe('registerIpcHandlers', () => {
 
     const disabled = await handles.get(ipcChannels.providersDisable)?.({ sender: { id: 1 } }, { providerId: 'deepseek' })
     expect(disabled).toMatchObject({ id: 'deepseek', enabled: false, hasApiKey: true })
+
+    await handles.get(ipcChannels.providersSave)?.({ sender: { id: 1 } }, {
+      id: 'custom-api-example-com',
+      name: 'Example API',
+      kind: 'openai-compatible',
+      baseUrl: 'https://api.example.com',
+      enabled: true,
+      defaultModelId: 'example-chat'
+    })
+    await handles.get(ipcChannels.modelsSave)?.({ sender: { id: 1 } }, {
+      id: 'example-chat',
+      providerId: 'custom-api-example-com',
+      modelName: 'example-chat',
+      displayName: 'Example Chat',
+      capabilities: ['streaming'],
+      enabled: true
+    })
+    await handles.get(ipcChannels.credentialsSaveProviderApiKey)?.({ sender: { id: 1 } }, { providerId: 'custom-api-example-com', apiKey: 'sk-custom-secret' })
+    const deleted = await handles.get(ipcChannels.providersDelete)?.({ sender: { id: 1 } }, { providerId: 'custom-api-example-com' })
+    expect(deleted).toEqual({ deleted: true, providerId: 'custom-api-example-com' })
+    expect(await container.modelProviderService.getProvider('custom-api-example-com')).toBeUndefined()
+    expect(await container.modelProviderService.listModels('custom-api-example-com')).toEqual([])
+    expect(await container.credentialVaultService.getProviderApiKeyStatus({ providerId: 'custom-api-example-com' })).toMatchObject({ hasApiKey: false })
     expect(savePersistence).toHaveBeenCalled()
   })
 
@@ -464,6 +487,9 @@ describe('registerIpcHandlers', () => {
     ).rejects.toThrow()
     await expect(
       handles.get(ipcChannels.providersDisable)?.({ sender: { id: 1 } }, { providerId: 'openai', unexpected: true })
+    ).rejects.toThrow()
+    await expect(
+      handles.get(ipcChannels.providersDelete)?.({ sender: { id: 1 } }, { providerId: 'openai', unexpected: true })
     ).rejects.toThrow()
     await expect(
       handles.get(ipcChannels.modelsSave)?.({ sender: { id: 1 } }, { id: 'm', providerId: 'p', modelName: 'm', displayName: 'M', unexpected: true })

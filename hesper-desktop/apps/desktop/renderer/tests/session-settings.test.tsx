@@ -29,6 +29,11 @@ function createSession(overrides: Partial<any> = {}) {
   }
 }
 
+async function chooseThemedOption(user: ReturnType<typeof userEvent.setup>, label: string, option: string) {
+  await user.click(screen.getByRole('button', { name: label }))
+  await user.click(await screen.findByRole('option', { name: option }))
+}
+
 const { listSessions, setWorkspace, setModel, setOutputMode, selectDirectory, onEvent, enqueue, listModels } = vi.hoisted(() => ({
   listSessions: vi.fn(async () => []),
   setWorkspace: vi.fn(async (input: { id: string; workspacePath?: string }) =>
@@ -159,14 +164,14 @@ describe('session settings and restore flow', () => {
     })
     expect(screen.getByRole('button', { name: '选择工作目录' })).toHaveTextContent('D:/updated-workspace')
 
-    await user.selectOptions(screen.getByRole('combobox', { name: '选择模型' }), 'gpt-4o')
+    await chooseThemedOption(user, '选择模型', 'gpt-4o')
     await waitFor(() => {
       expect(setModel).toHaveBeenCalledWith({ id: 'session-1', defaultModelId: 'gpt-4o' })
     })
-    expect(screen.getByRole('combobox', { name: '选择模型' })).toHaveValue('gpt-4o')
+    expect(screen.getByRole('button', { name: '选择模型' })).toHaveTextContent('gpt-4o')
     expect(screen.getByRole('button', { name: /Current chat/ })).toHaveTextContent('gpt-4o')
 
-    await user.selectOptions(screen.getByRole('combobox', { name: '选择输出模式' }), 'html')
+    await chooseThemedOption(user, '选择输出模式', 'html')
     await waitFor(() => {
       expect(setOutputMode).toHaveBeenCalledWith({ id: 'session-1', outputMode: 'html' })
     })
@@ -183,7 +188,7 @@ describe('session settings and restore flow', () => {
 
     await screen.findByRole('heading', { name: 'Current chat' })
 
-    await user.selectOptions(screen.getByRole('combobox', { name: '选择模型' }), 'gpt-4o')
+    await chooseThemedOption(user, '选择模型', 'gpt-4o')
     await user.type(screen.getByPlaceholderText(/输入消息/), 'send with new model')
     await user.click(screen.getByRole('button', { name: '发送' }))
 
@@ -193,7 +198,7 @@ describe('session settings and restore flow', () => {
 
     deferred.resolve(createSession({ defaultModelId: 'gpt-4o', updatedAt: '2026-06-10T03:06:00.000Z' }))
     await waitFor(() => {
-      expect(screen.getByRole('combobox', { name: '选择模型' })).toHaveValue('gpt-4o')
+      expect(screen.getByRole('button', { name: '选择模型' })).toHaveTextContent('gpt-4o')
     })
   })
 
@@ -252,17 +257,17 @@ describe('session settings and restore flow', () => {
     render(<App />)
 
     await screen.findByRole('heading', { name: 'Current chat' })
-    await user.selectOptions(screen.getByRole('combobox', { name: '选择模型' }), 'deepseek-chat')
-    await user.selectOptions(screen.getByRole('combobox', { name: '选择模型' }), 'gpt-4o')
+    await chooseThemedOption(user, '选择模型', 'deepseek-chat')
+    await chooseThemedOption(user, '选择模型', 'gpt-4o')
 
     second.resolve(createSession({ defaultModelId: 'gpt-4o', updatedAt: '2026-06-10T03:06:02.000Z' }))
     await waitFor(() => {
-      expect(screen.getByRole('combobox', { name: '选择模型' })).toHaveValue('gpt-4o')
+      expect(screen.getByRole('button', { name: '选择模型' })).toHaveTextContent('gpt-4o')
     })
 
     first.resolve(createSession({ defaultModelId: 'deepseek-chat', updatedAt: '2026-06-10T03:06:01.000Z' }))
     await waitFor(() => {
-      expect(screen.getByRole('combobox', { name: '选择模型' })).toHaveValue('gpt-4o')
+      expect(screen.getByRole('button', { name: '选择模型' })).toHaveTextContent('gpt-4o')
     })
 
     await user.type(screen.getByPlaceholderText(/输入消息/), 'use latest model')
@@ -312,17 +317,17 @@ describe('session settings and restore flow', () => {
     render(<App />)
 
     await screen.findByRole('heading', { name: 'Current chat' })
-    await user.selectOptions(screen.getByRole('combobox', { name: '选择输出模式' }), 'html')
-    await user.selectOptions(screen.getByRole('combobox', { name: '选择输出模式' }), 'markdown')
+    await chooseThemedOption(user, '选择输出模式', 'html')
+    await chooseThemedOption(user, '选择输出模式', 'markdown')
 
     second.resolve(createSession({ outputMode: 'markdown', updatedAt: '2026-06-10T03:07:02.000Z' }))
     await waitFor(() => {
-      expect(screen.getByRole('combobox', { name: '选择输出模式' })).toHaveValue('markdown')
+      expect(screen.getByRole('button', { name: '选择输出模式' })).toHaveTextContent('markdown')
     })
 
     first.resolve(createSession({ outputMode: 'html', updatedAt: '2026-06-10T03:07:01.000Z' }))
     await waitFor(() => {
-      expect(screen.getByRole('combobox', { name: '选择输出模式' })).toHaveValue('markdown')
+      expect(screen.getByRole('button', { name: '选择输出模式' })).toHaveTextContent('markdown')
     })
   })
 
@@ -335,12 +340,12 @@ describe('session settings and restore flow', () => {
     render(<App />)
 
     await screen.findByRole('heading', { name: 'Current chat' })
-    await user.selectOptions(screen.getByRole('combobox', { name: '选择模型' }), 'gpt-4o')
-    expect(screen.getByRole('combobox', { name: '选择模型' })).toHaveValue('gpt-4o')
+    await chooseThemedOption(user, '选择模型', 'gpt-4o')
+    expect(screen.getByRole('button', { name: '选择模型' })).toHaveTextContent('gpt-4o')
 
     deferred.reject(new Error('save failed'))
     await waitFor(() => {
-      expect(screen.getByRole('combobox', { name: '选择模型' })).toHaveValue('mock/hesper-fast')
+      expect(screen.getByRole('button', { name: '选择模型' })).toHaveTextContent('mock/hesper-fast')
     })
   })
 })

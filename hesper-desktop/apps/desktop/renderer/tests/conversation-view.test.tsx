@@ -113,7 +113,7 @@ describe('ConversationView', () => {
     )
 
     expect(screen.queryByRole('button', { name: '打开导航' })).not.toBeInTheDocument()
-    expect(screen.getByRole('combobox', { name: '选择输出模式' })).toHaveValue('markdown')
+    expect(screen.getByRole('button', { name: '选择输出模式' })).toHaveTextContent('markdown')
 
     await user.click(screen.getByRole('button', { name: '全屏查看输出' }))
     expect(screen.getByRole('dialog', { name: '输出全屏查看' })).toBeInTheDocument()

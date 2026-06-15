@@ -22,6 +22,7 @@ export const ipcChannels = {
   providersList: 'providers:list',
   providersSave: 'providers:save',
   providersDisable: 'providers:disable',
+  providersDelete: 'providers:delete',
   providersTestConnection: 'providers:testConnection',
   modelsList: 'models:list',
   modelsSave: 'models:save',
@@ -206,6 +207,7 @@ export type HesperDesktopApi = {
     list(): Promise<ModelProviderDto[]>
     save(input: SaveModelProviderInput): Promise<ModelProviderDto>
     disable(input: ProviderIdInput): Promise<ModelProviderDto>
+    delete(input: ProviderIdInput): Promise<{ deleted: true; providerId: string; provider?: ModelProviderDto }>
     testConnection(input: ProviderIdInput): Promise<ProviderConnectionTestResult>
   }
   models: {

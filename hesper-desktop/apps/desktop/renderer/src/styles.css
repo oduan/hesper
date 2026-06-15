@@ -101,6 +101,35 @@ button {
   background: rgba(255, 255, 255, 0.055);
 }
 
+.hesper-settings-row {
+  width: 100%;
+  min-height: 58px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: #e8ecfb;
+  padding: 10px 12px;
+  text-align: left;
+  cursor: pointer;
+  display: grid;
+  gap: 3px;
+  transition: background 120ms ease;
+}
+
+.hesper-settings-row:hover,
+.hesper-settings-row.is-active {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.hesper-scroll-invisible {
+  scrollbar-width: none;
+}
+
+.hesper-scroll-invisible::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
 .hesper-soft-control,
 .hesper-send-button {
   transition: background 120ms ease, opacity 120ms ease;

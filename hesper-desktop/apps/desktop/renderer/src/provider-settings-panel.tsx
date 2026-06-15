@@ -1,72 +1,39 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import type {
-  AppSettings,
   ModelDto,
   ModelProviderDto,
   ProviderConnectionTestResult,
-  SaveModelInput,
   SaveModelProviderInput
 } from '../../electron/ipc-contract'
 import { hesperApi } from './ipc-client'
-import {
-  defaultFallbackModelId,
-  fallbackSessionModelOptions,
-  mergeModelOptions,
-  parseModelCapabilities,
-  validModelCapabilities
-} from './model-options'
 
-type ProviderKind = SaveModelProviderInput['kind']
+type ProtocolMode = 'openai-compatible' | 'anthropic-compatible'
+type ConnectionDialogMode = 'add' | 'edit'
 
-const providerKindOptions: ProviderKind[] = ['mock', 'deepseek', 'openai', 'openai-compatible', 'anthropic', 'custom']
-
-function isProviderKind(value: string): value is ProviderKind {
-  return providerKindOptions.includes(value as ProviderKind)
-}
-
-type ProviderFormState = {
-  id: string
-  name: string
-  kind: ProviderKind
-  baseUrl: string
+type ConnectionFormState = {
+  apiKey: string
+  endpoint: string
+  protocol: ProtocolMode
   defaultModelId: string
-  enabled: boolean
 }
 
-type ModelFormState = {
-  id: string
-  providerId: string
-  modelName: string
-  displayName: string
-  capabilities: string
-  contextWindow: string
-  enabled: boolean
+type ConnectionDialogState = {
+  mode: ConnectionDialogMode
+  providerId?: string
+  form: ConnectionFormState
 }
 
 export type ProviderSettingsPanelProps = {
   onModelRegistryChanged?: () => void | Promise<void>
 }
 
-function createProviderForm(provider?: ModelProviderDto): ProviderFormState {
+function createConnectionForm(provider?: ModelProviderDto, models: ModelDto[] = []): ConnectionFormState {
+  const primaryModel = provider ? models.find((model) => model.providerId === provider.id) : undefined
   return {
-    id: provider?.id ?? 'custom-openai-compatible',
-    name: provider?.name ?? 'Custom OpenAI Compatible',
-    kind: provider?.kind ?? 'openai-compatible',
-    baseUrl: provider?.baseUrl ?? '',
-    defaultModelId: provider?.defaultModelId ?? '',
-    enabled: provider?.enabled ?? true
-  }
-}
-
-function createModelForm(providerId: string, model?: ModelDto): ModelFormState {
-  return {
-    id: model?.id ?? `${providerId}/model`,
-    providerId: model?.providerId ?? providerId,
-    modelName: model?.modelName ?? 'model-name',
-    displayName: model?.displayName ?? 'Model name',
-    capabilities: model?.capabilities.join(', ') ?? 'streaming, toolCalls',
-    contextWindow: model?.contextWindow ? String(model.contextWindow) : '',
-    enabled: model?.enabled ?? true
+    apiKey: '',
+    endpoint: provider?.baseUrl ?? '',
+    protocol: provider?.kind === 'anthropic' ? 'anthropic-compatible' : 'openai-compatible',
+    defaultModelId: provider?.defaultModelId ?? primaryModel?.id ?? ''
   }
 }
 
@@ -74,35 +41,45 @@ function formatUnknownError(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback
 }
 
+function slugFromEndpoint(endpoint: string): string {
+  try {
+    const host = new URL(endpoint).hostname
+    const slug = host.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase()
+    return slug || 'custom-ai'
+  } catch {
+    const slug = endpoint.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase()
+    return slug || 'custom-ai'
+  }
+}
+
+function titleFromSlug(slug: string): string {
+  return slug.split('-').filter(Boolean).map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`).join(' ') || 'Custom AI'
+}
+
+function providerKindForProtocol(protocol: ProtocolMode): SaveModelProviderInput['kind'] {
+  return protocol === 'anthropic-compatible' ? 'anthropic' : 'openai-compatible'
+}
+
 export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettingsPanelProps) {
   const [providers, setProviders] = useState<ModelProviderDto[]>([])
   const [models, setModels] = useState<ModelDto[]>([])
-  const [appSettings, setAppSettings] = useState<AppSettings>()
   const [selectedProviderId, setSelectedProviderId] = useState<string>()
-  const [providerForm, setProviderForm] = useState<ProviderFormState>(() => createProviderForm())
-  const [modelForm, setModelForm] = useState<ModelFormState>(() => createModelForm('mock'))
-  const [apiKeyInput, setApiKeyInput] = useState('')
+  const [dialogState, setDialogState] = useState<ConnectionDialogState>()
+  const [openMenuProviderId, setOpenMenuProviderId] = useState<string>()
   const [connectionResult, setConnectionResult] = useState<ProviderConnectionTestResult>()
   const [message, setMessage] = useState<string>()
   const [error, setError] = useState<string>()
   const mountedRef = useRef(true)
   const loadRequestIdRef = useRef(0)
-  const defaultModelRequestIdRef = useRef(0)
-  const selectedProvider = providers.find((provider) => provider.id === selectedProviderId)
-  const providerModels = selectedProviderId ? models.filter((model) => model.providerId === selectedProviderId) : []
-  const defaultModelOptions = mergeModelOptions(
-    fallbackSessionModelOptions,
-    models.filter((model) => model.enabled !== false).map((model) => model.id),
-    [appSettings?.defaultModelId]
-  )
+
+  const visibleProviders = useMemo(() => providers.filter((provider) => provider.enabled !== false), [providers])
 
   const loadProviderSettings = async (preferredProviderId = selectedProviderId) => {
     const requestId = loadRequestIdRef.current + 1
     loadRequestIdRef.current = requestId
-    const [nextProviders, nextModels, nextSettings] = await Promise.all([
+    const [nextProviders, nextModels] = await Promise.all([
       hesperApi.providers.list(),
-      hesperApi.models.list(),
-      hesperApi.settings.get()
+      hesperApi.models.list()
     ])
 
     if (!mountedRef.current || requestId !== loadRequestIdRef.current) {
@@ -111,22 +88,9 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
 
     setProviders(nextProviders)
     setModels(nextModels)
-    setAppSettings(nextSettings)
-    const nextSelectedProvider = nextProviders.find((provider) => provider.id === preferredProviderId) ?? nextProviders[0]
-    if (nextSelectedProvider) {
-      setSelectedProviderId(nextSelectedProvider.id)
-      setProviderForm(createProviderForm(nextSelectedProvider))
-      setModelForm(createModelForm(nextSelectedProvider.id, nextModels.find((model) => model.providerId === nextSelectedProvider.id)))
-    }
-  }
-
-  const refreshProviderSettings = async (preferredProviderId = selectedProviderId) => {
-    setError(undefined)
-    try {
-      await loadProviderSettings(preferredProviderId)
-    } catch (refreshError) {
-      setError(`刷新失败：${formatUnknownError(refreshError, '未知错误')}`)
-    }
+    const nextVisibleProviders = nextProviders.filter((provider) => provider.enabled !== false)
+    const nextSelectedProvider = nextVisibleProviders.find((provider) => provider.id === preferredProviderId) ?? nextVisibleProviders[0]
+    setSelectedProviderId(nextSelectedProvider?.id)
   }
 
   useEffect(() => {
@@ -138,76 +102,88 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
     return () => {
       mountedRef.current = false
       loadRequestIdRef.current += 1
-      defaultModelRequestIdRef.current += 1
     }
   }, [])
 
-  const selectProvider = (provider: ModelProviderDto) => {
-    loadRequestIdRef.current += 1
-    setSelectedProviderId(provider.id)
-    setProviderForm(createProviderForm(provider))
-    setModelForm(createModelForm(provider.id, models.find((model) => model.providerId === provider.id)))
+  const openAddConnection = () => {
+    setError(undefined)
+    setMessage(undefined)
     setConnectionResult(undefined)
-    setMessage(undefined)
-    setError(undefined)
-    setApiKeyInput('')
+    setOpenMenuProviderId(undefined)
+    setDialogState({ mode: 'add', form: createConnectionForm() })
   }
 
-  const saveProvider = async () => {
+  const openEditConnection = (provider: ModelProviderDto) => {
     setError(undefined)
     setMessage(undefined)
+    setConnectionResult(undefined)
+    setOpenMenuProviderId(undefined)
+    setSelectedProviderId(provider.id)
+    setDialogState({ mode: 'edit', providerId: provider.id, form: createConnectionForm(provider, models) })
+  }
+
+  const updateDialogForm = (updater: ConnectionFormState | ((current: ConnectionFormState) => ConnectionFormState)) => {
+    setDialogState((current) => current ? { ...current, form: typeof updater === 'function' ? updater(current.form) : updater } : current)
+  }
+
+  const saveConnection = async () => {
+    if (!dialogState) return
+
+    const endpoint = dialogState.form.endpoint.trim()
+    const apiKey = dialogState.form.apiKey.trim()
+    const modelIds = dialogState.form.defaultModelId.split(',').map((item) => item.trim()).filter(Boolean)
+    const primaryModelId = modelIds[0]
+    const existingProvider = dialogState.providerId ? providers.find((provider) => provider.id === dialogState.providerId) : undefined
+    const providerSlug = endpoint ? slugFromEndpoint(endpoint) : 'custom-ai'
+    const providerId = existingProvider?.id ?? `custom-${providerSlug}`
+    const providerName = existingProvider?.name ?? titleFromSlug(providerSlug)
+
+    setError(undefined)
+    setMessage(undefined)
+    setConnectionResult(undefined)
+    updateDialogForm((current) => ({ ...current, apiKey: '' }))
+
     try {
-      const input: SaveModelProviderInput = {
-        id: providerForm.id.trim(),
-        name: providerForm.name.trim(),
-        kind: providerForm.kind,
-        enabled: providerForm.enabled,
-        ...(providerForm.baseUrl.trim() ? { baseUrl: providerForm.baseUrl.trim() } : {}),
-        ...(providerForm.defaultModelId.trim() ? { defaultModelId: providerForm.defaultModelId.trim() } : {})
+      const provider = await hesperApi.providers.save({
+        id: providerId,
+        name: providerName,
+        kind: providerKindForProtocol(dialogState.form.protocol),
+        enabled: true,
+        ...(endpoint ? { baseUrl: endpoint } : existingProvider?.baseUrl ? { baseUrl: existingProvider.baseUrl } : {}),
+        ...(primaryModelId ? { defaultModelId: primaryModelId } : existingProvider?.defaultModelId ? { defaultModelId: existingProvider.defaultModelId } : {})
+      })
+
+      if (apiKey) {
+        await hesperApi.credentials.saveProviderApiKey({ providerId: provider.id, apiKey })
       }
-      const provider = await hesperApi.providers.save(input)
+
+      if (primaryModelId) {
+        await hesperApi.models.save({
+          id: primaryModelId,
+          providerId: provider.id,
+          modelName: primaryModelId,
+          displayName: primaryModelId,
+          capabilities: ['streaming', 'toolCalls'],
+          enabled: true
+        })
+      }
+
       if (!mountedRef.current) return
-      setSelectedProviderId(provider.id)
-      setProviderForm(createProviderForm(provider))
-      setMessage(`已保存模型来源：${provider.name}`)
-      try {
-        await loadProviderSettings(provider.id)
-      } catch (refreshError) {
-        setError(`模型来源已保存，但刷新失败：${formatUnknownError(refreshError, '未知错误')}`)
-      }
+      setDialogState(undefined)
+      setMessage(dialogState.mode === 'edit' ? `已保存连接：${provider.name}` : `已添加连接：${provider.name}`)
+      await loadProviderSettings(provider.id)
+      await onModelRegistryChanged?.()
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : '模型来源保存失败')
+      setError(saveError instanceof Error ? saveError.message : '连接保存失败')
     }
   }
 
-  const saveApiKey = async () => {
-    const providerId = selectedProviderId
-    const apiKey = apiKeyInput.trim()
-    if (!providerId || !apiKey) return
-
-    setError(undefined)
-    setMessage(undefined)
-    setApiKeyInput('')
-    try {
-      const status = await hesperApi.credentials.saveProviderApiKey({ providerId, apiKey })
-      if (!mountedRef.current) return
-      setMessage(status.hasApiKey ? 'API key 已安全保存。' : 'API key 未保存。')
-      try {
-        await loadProviderSettings(providerId)
-      } catch (refreshError) {
-        setError(`API key 已处理，但刷新失败：${formatUnknownError(refreshError, '未知错误')}`)
-      }
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'API key 保存失败')
-    }
-  }
-
-  const testConnection = async () => {
-    if (!selectedProviderId) return
+  const testDialogConnection = async () => {
+    if (!dialogState?.providerId) return
     setError(undefined)
     setMessage(undefined)
     try {
-      const result = await hesperApi.providers.testConnection({ providerId: selectedProviderId })
+      const result = await hesperApi.providers.testConnection({ providerId: dialogState.providerId })
       if (!mountedRef.current) return
       setConnectionResult(result)
       setMessage(result.message)
@@ -216,108 +192,25 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
     }
   }
 
-  const disableProvider = async () => {
-    if (!selectedProviderId) return
+  const deleteConnection = async (provider: ModelProviderDto) => {
+    setOpenMenuProviderId(undefined)
     setError(undefined)
     setMessage(undefined)
     try {
-      const provider = await hesperApi.providers.disable({ providerId: selectedProviderId })
+      await hesperApi.providers.delete({ providerId: provider.id })
       if (!mountedRef.current) return
-      setProviderForm(createProviderForm(provider))
-      setMessage(`已停用：${provider.name}`)
-      try {
-        await loadProviderSettings(provider.id)
-      } catch (refreshError) {
-        setError(`模型来源已停用，但刷新失败：${formatUnknownError(refreshError, '未知错误')}`)
-      }
-    } catch (disableError) {
-      setError(disableError instanceof Error ? disableError.message : '停用失败')
-    }
-  }
-
-  const saveModel = async () => {
-    setError(undefined)
-    setMessage(undefined)
-
-    const { capabilities, invalidCapabilities } = parseModelCapabilities(modelForm.capabilities)
-    if (invalidCapabilities.length > 0) {
-      setError(`未知模型能力：${invalidCapabilities.join(', ')}。可用值：${validModelCapabilities.join(', ')}`)
-      return
-    }
-
-    const contextWindowInput = modelForm.contextWindow.trim()
-    const contextWindow = contextWindowInput ? Number(contextWindowInput) : undefined
-    if (contextWindow !== undefined && (!Number.isInteger(contextWindow) || contextWindow <= 0)) {
-      setError('上下文窗口必须是正整数。')
-      return
-    }
-
-    let model: ModelDto
-    try {
-      const input: SaveModelInput = {
-        id: modelForm.id.trim(),
-        providerId: modelForm.providerId.trim(),
-        modelName: modelForm.modelName.trim(),
-        displayName: modelForm.displayName.trim(),
-        enabled: modelForm.enabled,
-        ...(capabilities?.length ? { capabilities } : {}),
-        ...(contextWindow !== undefined ? { contextWindow } : {})
-      }
-      model = await hesperApi.models.save(input)
-      if (!mountedRef.current) return
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : '模型保存失败')
-      return
-    }
-
-    setModelForm(createModelForm(model.providerId, model))
-    setMessage(`已保存模型：${model.displayName}`)
-
-    try {
+      setMessage(`已删除连接：${provider.name}`)
+      await loadProviderSettings()
       await onModelRegistryChanged?.()
-    } catch (refreshError) {
-      setError(`模型已保存，但会话模型选项刷新失败：${formatUnknownError(refreshError, '未知错误')}`)
-    }
-
-    try {
-      await loadProviderSettings(model.providerId)
-    } catch (refreshError) {
-      setError(`模型已保存，但刷新失败：${formatUnknownError(refreshError, '未知错误')}`)
-    }
-  }
-
-  const updateDefaultModel = async (defaultModelId: string) => {
-    const requestId = defaultModelRequestIdRef.current + 1
-    const previousSettings = appSettings
-    defaultModelRequestIdRef.current = requestId
-    setError(undefined)
-    setMessage(undefined)
-    setAppSettings((current) => (current ? { ...current, defaultModelId } : current))
-
-    try {
-      const settings = await hesperApi.settings.update({ defaultModelId })
-      if (!mountedRef.current || requestId !== defaultModelRequestIdRef.current) return
-      setAppSettings(settings)
-      setMessage(`默认模型已更新：${settings.defaultModelId}`)
-    } catch (settingsError) {
-      if (!mountedRef.current || requestId !== defaultModelRequestIdRef.current) return
-      setAppSettings(previousSettings)
-      setError(settingsError instanceof Error ? settingsError.message : '默认模型保存失败')
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : '删除连接失败')
     }
   }
 
   return (
-    <section aria-label="模型来源设置" style={settingsPanelStyle}>
+    <section aria-label="模型来源设置" style={settingsPanelStyle} onClick={() => setOpenMenuProviderId(undefined)}>
       <header style={settingsHeaderStyle}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: 20 }}>模型来源</h2>
-          <p style={{ margin: '4px 0 0', color: '#94a3b8' }}>
-            配置 DeepSeek、OpenAI 或自定义 OpenAI-compatible endpoint。API key 保存后不会回显。
-          </p>
-        </div>
-        <button type="button" style={secondaryActionStyle} onClick={() => void refreshProviderSettings()}>
-          刷新
-        </button>
+        <h2 style={{ margin: 0, fontSize: 15, lineHeight: '24px', textAlign: 'center', fontWeight: 700 }}>AI</h2>
       </header>
 
       <div style={feedbackRowStyle}>
@@ -325,165 +218,170 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
         {message ? <p role="status" style={statusTextStyle}>{message}</p> : null}
       </div>
 
-      <section aria-label="默认模型设置" style={settingsInlineCardStyle}>
-        <label style={{ ...fieldStyle, minWidth: 280 }}>
-          应用默认模型
-          <select
-            aria-label="应用默认模型"
-            value={appSettings?.defaultModelId ?? defaultFallbackModelId}
-            onChange={(event) => void updateDefaultModel(event.target.value)}
-            style={inputStyle}
-          >
-            {defaultModelOptions.map((modelId) => (
-              <option key={modelId} value={modelId}>{modelId}</option>
-            ))}
-          </select>
-        </label>
-        <span style={{ color: '#94a3b8' }}>新建会话默认使用此模型；已有会话仍可单独覆盖。</span>
-      </section>
-
-      <div style={settingsGridStyle}>
-        <aside aria-label="模型来源列表" style={providerListStyle}>
-          {providers.map((provider) => (
-            <button
-              key={provider.id}
-              type="button"
-              aria-label={`选择模型来源 ${provider.name}`}
-              aria-current={provider.id === selectedProviderId ? 'page' : undefined}
-              onClick={() => selectProvider(provider)}
-              style={{
-                ...providerItemStyle,
-                background: provider.id === selectedProviderId ? 'rgba(255, 255, 255, 0.07)' : providerItemStyle.background
-              }}
-            >
-              <strong>{provider.name}</strong>
-              <span style={{ color: '#94a3b8' }}>
-                {provider.kind} · {provider.enabled ? '启用' : '停用'} · {provider.hasApiKey ? '已保存 key' : '未保存 key'}
-              </span>
-            </button>
-          ))}
-        </aside>
-
-        <div style={settingsDetailStyle}>
-          <section aria-label="编辑模型来源" style={settingsCardStyle}>
-            <h3 style={cardTitleStyle}>Provider</h3>
-            <div style={formGridStyle}>
-              <label style={fieldStyle}>
-                ID
-                <input aria-label="Provider ID" value={providerForm.id} onChange={(event) => setProviderForm((current) => ({ ...current, id: event.target.value }))} style={inputStyle} />
-              </label>
-              <label style={fieldStyle}>
-                名称
-                <input aria-label="Provider 名称" value={providerForm.name} onChange={(event) => setProviderForm((current) => ({ ...current, name: event.target.value }))} style={inputStyle} />
-              </label>
-              <label style={fieldStyle}>
-                类型
-                <select
-                  aria-label="Provider 类型"
-                  value={providerForm.kind}
-                  onChange={(event) => {
-                    const kind = event.target.value
-                    if (!isProviderKind(kind)) {
-                      setError(`未知 provider 类型：${kind}`)
-                      return
-                    }
-                    setProviderForm((current) => ({ ...current, kind }))
-                  }}
-                  style={inputStyle}
+      <div className="hesper-scroll-invisible" style={scrollContentStyle}>
+        <section aria-label="AI 连接" style={sectionBlockStyle}>
+          <div>
+            <h3 style={sectionTitleStyle}>连接</h3>
+            <p style={sectionDescriptionStyle}>管理 AI 提供商连接。</p>
+          </div>
+          <div style={connectionListStyle}>
+            {visibleProviders.map((provider, index) => (
+              <div key={provider.id} style={{ ...connectionItemStyle, ...(index === visibleProviders.length - 1 ? { borderBottom: 0 } : {}) }}>
+                <button
+                  type="button"
+                  aria-label={`选择模型来源 ${provider.name}`}
+                  aria-current={provider.id === selectedProviderId ? 'page' : undefined}
+                  onClick={() => setSelectedProviderId(provider.id)}
+                  style={{ ...connectionInfoButtonStyle, ...(provider.id === selectedProviderId ? { background: 'rgba(255, 255, 255, 0.055)' } : {}) }}
                 >
-                  {providerKindOptions.map((kind) => (
-                    <option key={kind} value={kind}>{kind}</option>
-                  ))}
-                </select>
-              </label>
-              <label style={fieldStyle}>
-                Base URL
-                <input aria-label="Provider Base URL" value={providerForm.baseUrl} onChange={(event) => setProviderForm((current) => ({ ...current, baseUrl: event.target.value }))} placeholder="https://api.deepseek.com" style={inputStyle} />
-              </label>
-              <label style={fieldStyle}>
-                默认模型
-                <input aria-label="Provider 默认模型" value={providerForm.defaultModelId} onChange={(event) => setProviderForm((current) => ({ ...current, defaultModelId: event.target.value }))} style={inputStyle} />
-              </label>
-              <label style={{ ...fieldStyle, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <input aria-label="Provider 启用" type="checkbox" checked={providerForm.enabled} onChange={(event) => setProviderForm((current) => ({ ...current, enabled: event.target.checked }))} /> 启用
-              </label>
-            </div>
-            <div style={actionRowStyle}>
-              <button type="button" style={primaryActionStyle} onClick={() => void saveProvider()}>保存来源</button>
-              <button type="button" style={secondaryActionStyle} onClick={() => void disableProvider()} disabled={!selectedProvider}>停用来源</button>
-            </div>
-          </section>
-
-          <section aria-label="API key 存储" style={settingsCardStyle}>
-            <h3 style={cardTitleStyle}>API Key</h3>
-            <p style={{ margin: '0 0 10px', color: '#94a3b8' }}>
-              状态：{selectedProvider?.hasApiKey ? '已保存' : '未保存'}；引用：{selectedProvider?.apiKeyRef ?? '未选择'}
-            </p>
-            <label style={fieldStyle}>
-              API key
-              <input aria-label="Provider API key" type="password" value={apiKeyInput} onChange={(event) => setApiKeyInput(event.target.value)} placeholder="保存后会立即清空" style={inputStyle} />
-            </label>
-            <div style={actionRowStyle}>
-              <button type="button" style={primaryActionStyle} onClick={() => void saveApiKey()} disabled={!selectedProviderId || !apiKeyInput.trim()}>
-                安全保存 API key
-              </button>
-              <button type="button" style={secondaryActionStyle} onClick={() => void testConnection()} disabled={!selectedProviderId}>测试连接</button>
-              {connectionResult ? <span style={{ color: connectionResult.status === 'ok' ? '#86efac' : '#fbbf24' }}>{connectionResult.status}</span> : null}
-            </div>
-          </section>
-
-          <section aria-label="模型配置" style={settingsCardStyle}>
-            <h3 style={cardTitleStyle}>Models</h3>
-            <div style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
-              {providerModels.map((model) => (
-                <button key={model.id} type="button" aria-label={`编辑模型 ${model.displayName}`} onClick={() => setModelForm(createModelForm(model.providerId, model))} style={modelItemStyle}>
-                  <strong>{model.displayName}</strong>
-                  <span style={{ color: '#94a3b8' }}>{model.id} · {model.enabled === false ? '停用' : '启用'} · {model.capabilities.join(', ')}</span>
+                  <span style={providerAvatarStyle}>{provider.name.slice(0, 1).toUpperCase()}</span>
+                  <span style={{ minWidth: 0 }}>
+                    <strong>{provider.name}</strong>
+                    <span style={providerMetaStyle}>
+                      {provider.kind} · {provider.baseUrl ?? '使用默认端点'} · {provider.hasApiKey ? '已保存 key' : '未保存 key'}
+                    </span>
+                  </span>
                 </button>
-              ))}
-            </div>
-            <div style={formGridStyle}>
-              <label style={fieldStyle}>
-                模型 ID
-                <input aria-label="模型 ID" value={modelForm.id} onChange={(event) => setModelForm((current) => ({ ...current, id: event.target.value }))} style={inputStyle} />
-              </label>
-              <label style={fieldStyle}>
-                Provider ID
-                <input aria-label="模型 Provider ID" value={modelForm.providerId} onChange={(event) => setModelForm((current) => ({ ...current, providerId: event.target.value }))} style={inputStyle} />
-              </label>
-              <label style={fieldStyle}>
-                模型名称
-                <input aria-label="模型名称" value={modelForm.modelName} onChange={(event) => setModelForm((current) => ({ ...current, modelName: event.target.value }))} style={inputStyle} />
-              </label>
-              <label style={fieldStyle}>
-                展示名
-                <input aria-label="模型展示名" value={modelForm.displayName} onChange={(event) => setModelForm((current) => ({ ...current, displayName: event.target.value }))} style={inputStyle} />
-              </label>
-              <label style={fieldStyle}>
-                能力
-                <input aria-label="模型能力" value={modelForm.capabilities} onChange={(event) => setModelForm((current) => ({ ...current, capabilities: event.target.value }))} style={inputStyle} />
-              </label>
-              <label style={fieldStyle}>
-                上下文窗口
-                <input aria-label="模型上下文窗口" value={modelForm.contextWindow} onChange={(event) => setModelForm((current) => ({ ...current, contextWindow: event.target.value }))} style={inputStyle} />
-              </label>
-            </div>
-            <div style={actionRowStyle}>
-              <button type="button" style={primaryActionStyle} onClick={() => void saveModel()}>保存模型</button>
-            </div>
-          </section>
-        </div>
+                <button
+                  type="button"
+                  aria-label={`打开连接菜单 ${provider.name}`}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    setOpenMenuProviderId((current) => current === provider.id ? undefined : provider.id)
+                  }}
+                  style={menuButtonStyle}
+                >
+                  •••
+                </button>
+                {openMenuProviderId === provider.id ? (
+                  <div role="menu" aria-label={`${provider.name} 连接菜单`} style={connectionMenuStyle} onClick={(event) => event.stopPropagation()}>
+                    <button type="button" role="menuitem" style={connectionMenuItemStyle} onClick={() => openEditConnection(provider)}>编辑</button>
+                    <button type="button" role="menuitem" style={{ ...connectionMenuItemStyle, color: '#fca5a5' }} onClick={() => void deleteConnection(provider)}>删除</button>
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+          <button type="button" style={secondaryActionStyle} onClick={openAddConnection}>+ 添加连接</button>
+        </section>
       </div>
+
+      {dialogState ? (
+        <ConnectionDialog
+          state={dialogState}
+          {...(connectionResult ? { connectionResult } : {})}
+          updateForm={updateDialogForm}
+          onCancel={() => {
+            setConnectionResult(undefined)
+            setDialogState(undefined)
+          }}
+          {...(dialogState.mode === 'edit' ? { onTest: () => void testDialogConnection() } : {})}
+          onSave={() => void saveConnection()}
+        />
+      ) : null}
     </section>
   )
 }
+
+function ConnectionDialog({
+  state,
+  connectionResult,
+  updateForm,
+  onCancel,
+  onTest,
+  onSave
+}: {
+  state: ConnectionDialogState
+  connectionResult?: ProviderConnectionTestResult
+  updateForm: (updater: ConnectionFormState | ((current: ConnectionFormState) => ConnectionFormState)) => void
+  onCancel: () => void
+  onTest?: () => void
+  onSave: () => void
+}) {
+  const hasSavedKey = state.mode === 'edit'
+  return (
+    <div role="dialog" aria-modal="true" aria-label="API 配置" style={overlayStyle}>
+      <button type="button" aria-label="关闭 API 配置" onClick={onCancel} style={overlayCloseStyle}>×</button>
+      <div style={overlayFormStyle}>
+        <header style={{ textAlign: 'center', marginBottom: 24 }}>
+          <h2 style={{ margin: 0, fontSize: 18 }}>API 配置</h2>
+          <p style={{ margin: '12px 0 0', color: mutedTextColor, lineHeight: 1.5 }}>
+            Select a provider preset and enter the API key. Saved keys are not displayed; leave the key empty to keep it unchanged.
+          </p>
+        </header>
+        <label style={fieldStyle}>
+          API Key
+          <input
+            aria-label="添加连接 API key"
+            type="password"
+            value={state.form.apiKey}
+            onChange={(event) => updateForm((current) => ({ ...current, apiKey: event.target.value }))}
+            placeholder={hasSavedKey ? '已保存，留空不更改' : 'Paste your key here...'}
+            style={inputStyle}
+          />
+        </label>
+        <label style={fieldStyle}>
+          Endpoint
+          <input
+            aria-label="添加连接 Endpoint"
+            value={state.form.endpoint}
+            onChange={(event) => updateForm((current) => ({ ...current, endpoint: event.target.value }))}
+            placeholder="https://your-api-endpoint.com"
+            style={inputStyle}
+          />
+        </label>
+        <div style={fieldStyle}>
+          Protocol
+          <div style={segmentedControlStyle}>
+            <button
+              type="button"
+              aria-pressed={state.form.protocol === 'openai-compatible'}
+              onClick={() => updateForm((current) => ({ ...current, protocol: 'openai-compatible' }))}
+              style={{ ...segmentButtonStyle, ...(state.form.protocol === 'openai-compatible' ? activeSegmentButtonStyle : {}) }}
+            >
+              OpenAI Compatible
+            </button>
+            <button
+              type="button"
+              aria-pressed={state.form.protocol === 'anthropic-compatible'}
+              onClick={() => updateForm((current) => ({ ...current, protocol: 'anthropic-compatible' }))}
+              style={{ ...segmentButtonStyle, ...(state.form.protocol === 'anthropic-compatible' ? activeSegmentButtonStyle : {}) }}
+            >
+              Anthropic Compatible
+            </button>
+          </div>
+          <span style={{ color: mutedTextColor }}>Most third-party APIs use OpenAI Compatible.</span>
+        </div>
+        <label style={fieldStyle}>
+          Default Model · optional
+          <input
+            aria-label="添加连接默认模型"
+            value={state.form.defaultModelId}
+            onChange={(event) => updateForm((current) => ({ ...current, defaultModelId: event.target.value }))}
+            placeholder="deepseek-chat, gpt-4o-mini"
+            style={inputStyle}
+          />
+          <span style={{ color: mutedTextColor }}>Comma-separated list. The first model is the default.</span>
+        </label>
+        {connectionResult ? <p role="status" style={statusTextStyle}>{connectionResult.message}</p> : null}
+        <footer style={{ display: 'grid', gridTemplateColumns: onTest ? '1fr 1fr 1fr' : '1fr 1fr', gap: 10, marginTop: 22 }}>
+          <button type="button" onClick={onCancel} style={secondaryActionStyle}>Back</button>
+          {onTest ? <button type="button" onClick={onTest} style={secondaryActionStyle}>连接</button> : null}
+          <button type="button" onClick={onSave} style={primaryActionStyle}>保存</button>
+        </footer>
+      </div>
+    </div>
+  )
+}
+
+const mutedTextColor = '#969db8'
 
 const settingsPanelStyle: CSSProperties = {
   height: '100%',
   minHeight: 0,
   display: 'grid',
-  gridTemplateRows: 'auto auto auto minmax(0, 1fr)',
-  gap: 12,
+  gridTemplateRows: 'auto auto minmax(0, 1fr)',
+  gap: 14,
   border: 0,
   borderRadius: 0,
   background: 'transparent',
@@ -493,10 +391,11 @@ const settingsPanelStyle: CSSProperties = {
 }
 
 const settingsHeaderStyle: CSSProperties = {
+  position: 'relative',
+  minHeight: 24,
   display: 'flex',
-  alignItems: 'flex-start',
-  justifyContent: 'space-between',
-  gap: 12
+  alignItems: 'center',
+  justifyContent: 'center'
 }
 
 const feedbackRowStyle: CSSProperties = {
@@ -505,77 +404,122 @@ const feedbackRowStyle: CSSProperties = {
   alignContent: 'center'
 }
 
-const settingsInlineCardStyle: CSSProperties = {
-  borderRadius: 14,
-  border: 0,
-  background: 'rgba(255, 255, 255, 0.04)',
-  padding: 12,
-  display: 'flex',
-  alignItems: 'center',
-  gap: 14,
-  flexWrap: 'wrap'
-}
-
-const settingsGridStyle: CSSProperties = {
-  minHeight: 0,
-  display: 'grid',
-  gridTemplateColumns: '280px minmax(0, 1fr)',
-  gap: 12,
-  overflow: 'hidden'
-}
-
-const providerListStyle: CSSProperties = {
+const scrollContentStyle: CSSProperties = {
   minHeight: 0,
   overflow: 'auto',
   display: 'grid',
   alignContent: 'start',
-  gap: 8
+  gap: 24,
+  paddingRight: 2
 }
 
-const providerItemStyle: CSSProperties = {
-  borderRadius: 12,
-  border: 0,
-  outline: 0,
-  background: 'rgba(255, 255, 255, 0.04)',
-  color: '#e8ecfb',
-  padding: 10,
-  cursor: 'pointer',
-  textAlign: 'left',
+const sectionBlockStyle: CSSProperties = {
   display: 'grid',
-  gap: 4
-}
-
-const settingsDetailStyle: CSSProperties = {
-  minHeight: 0,
-  overflow: 'auto',
-  display: 'grid',
-  alignContent: 'start',
   gap: 12
 }
 
-const settingsCardStyle: CSSProperties = {
-  borderRadius: 14,
-  border: 0,
-  background: 'rgba(255, 255, 255, 0.04)',
-  padding: 14
+const sectionTitleStyle: CSSProperties = {
+  margin: 0,
+  fontSize: 17,
+  lineHeight: 1.2
 }
 
-const cardTitleStyle: CSSProperties = {
-  margin: '0 0 12px',
-  fontSize: 15
+const sectionDescriptionStyle: CSSProperties = {
+  margin: '4px 0 0',
+  color: mutedTextColor,
+  lineHeight: 1.45
 }
 
-const formGridStyle: CSSProperties = {
+const connectionListStyle: CSSProperties = {
+  borderRadius: 16,
+  background: 'rgba(255, 255, 255, 0.025)',
+  overflow: 'visible'
+}
+
+const connectionItemStyle: CSSProperties = {
+  position: 'relative',
+  minHeight: 68,
   display: 'grid',
-  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-  gap: 10
+  gridTemplateColumns: 'minmax(0, 1fr) auto',
+  alignItems: 'stretch',
+  borderBottom: '1px solid rgba(255, 255, 255, 0.045)'
+}
+
+const connectionInfoButtonStyle: CSSProperties = {
+  width: '100%',
+  border: 0,
+  outline: 0,
+  background: 'transparent',
+  color: '#e8ecfb',
+  padding: '12px 14px',
+  display: 'grid',
+  gridTemplateColumns: '28px minmax(0, 1fr)',
+  alignItems: 'center',
+  gap: 12,
+  textAlign: 'left',
+  cursor: 'pointer'
+}
+
+const providerAvatarStyle: CSSProperties = {
+  width: 26,
+  height: 26,
+  borderRadius: 999,
+  background: 'rgba(255, 255, 255, 0.055)',
+  color: mutedTextColor,
+  display: 'grid',
+  placeItems: 'center',
+  fontSize: 12,
+  fontWeight: 700
+}
+
+const providerMetaStyle: CSSProperties = {
+  display: 'block',
+  color: mutedTextColor,
+  marginTop: 3,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap'
+}
+
+const menuButtonStyle: CSSProperties = {
+  width: 44,
+  border: 0,
+  outline: 0,
+  background: 'transparent',
+  color: mutedTextColor,
+  cursor: 'pointer',
+  letterSpacing: 1
+}
+
+const connectionMenuStyle: CSSProperties = {
+  position: 'absolute',
+  zIndex: 10,
+  right: 8,
+  top: 46,
+  minWidth: 112,
+  borderRadius: 12,
+  background: '#202434',
+  padding: 6,
+  boxShadow: '0 18px 36px rgba(0, 0, 0, 0.28)'
+}
+
+const connectionMenuItemStyle: CSSProperties = {
+  width: '100%',
+  border: 0,
+  outline: 0,
+  borderRadius: 9,
+  background: 'transparent',
+  color: '#e8ecfb',
+  padding: '8px 10px',
+  textAlign: 'left',
+  cursor: 'pointer'
 }
 
 const fieldStyle: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
-  gap: 5,
-  color: '#cbd5e1',
+  gap: 7,
+  color: '#cbd3ee',
   fontSize: 12
 }
 
@@ -585,15 +529,7 @@ const inputStyle: CSSProperties = {
   outline: 0,
   background: 'rgba(255, 255, 255, 0.045)',
   color: '#f8fafc',
-  padding: '8px 10px'
-}
-
-const actionRowStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 10,
-  marginTop: 12,
-  flexWrap: 'wrap'
+  padding: '9px 11px'
 }
 
 const primaryActionStyle: CSSProperties = {
@@ -617,17 +553,57 @@ const secondaryActionStyle: CSSProperties = {
   cursor: 'pointer'
 }
 
-const modelItemStyle: CSSProperties = {
-  borderRadius: 10,
+const overlayStyle: CSSProperties = {
+  position: 'fixed',
+  inset: 0,
+  zIndex: 20,
+  background: '#171a26',
+  display: 'grid',
+  placeItems: 'center',
+  padding: 24
+}
+
+const overlayCloseStyle: CSSProperties = {
+  position: 'absolute',
+  top: 16,
+  right: 16,
+  width: 30,
+  height: 30,
   border: 0,
   outline: 0,
+  borderRadius: 10,
   background: 'rgba(255, 255, 255, 0.04)',
-  color: '#e5e7eb',
-  padding: 10,
-  textAlign: 'left',
-  display: 'grid',
-  gap: 4,
+  color: mutedTextColor,
   cursor: 'pointer'
+}
+
+const overlayFormStyle: CSSProperties = {
+  width: 'min(440px, 100%)',
+  display: 'grid',
+  gap: 18
+}
+
+const segmentedControlStyle: CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: '1fr 1fr',
+  borderRadius: 10,
+  background: 'rgba(255, 255, 255, 0.035)',
+  overflow: 'hidden'
+}
+
+const segmentButtonStyle: CSSProperties = {
+  border: 0,
+  outline: 0,
+  background: 'transparent',
+  color: mutedTextColor,
+  padding: '10px 12px',
+  cursor: 'pointer'
+}
+
+const activeSegmentButtonStyle: CSSProperties = {
+  background: 'rgba(255, 255, 255, 0.055)',
+  color: '#eef2ff',
+  fontWeight: 700
 }
 
 const statusTextStyle: CSSProperties = {

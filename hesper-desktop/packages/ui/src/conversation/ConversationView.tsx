@@ -6,6 +6,7 @@ import { MessageBubble } from './MessageBubble'
 import { OutputBlock } from './OutputBlock'
 import type { NavigationItem } from './RightNavigation'
 import { RunSteps } from './RunSteps'
+import { ThemedSelect } from './ThemedSelect'
 
 export type ConversationShortcutCommand =
   | { type: 'send'; nonce: number }
@@ -170,18 +171,17 @@ export function ConversationView({
           }}
         >
           <h2 style={{ margin: 0, maxWidth: '65%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 15, lineHeight: 1.2, textAlign: 'center', fontWeight: 700 }}>{session.title}</h2>
-          <label style={outputModeLabelStyle}>
+          <div style={outputModeLabelStyle}>
             <span style={{ color: darkTheme.color.textMuted }}>输出</span>
-            <select
-              aria-label="选择输出模式"
+            <ThemedSelect
+              ariaLabel="选择输出模式"
               value={session.outputMode}
-              onChange={(event) => onOutputModeChange?.(event.target.value as Session['outputMode'])}
-              style={outputModeSelectStyle}
-            >
-              <option value="markdown">markdown</option>
-              <option value="html">html</option>
-            </select>
-          </label>
+              options={['markdown', 'html']}
+              onChange={(value) => onOutputModeChange?.(value as Session['outputMode'])}
+              minWidth={108}
+              maxWidth={126}
+            />
+          </div>
         </header>
         <div
           style={{
@@ -296,15 +296,4 @@ const outputModeLabelStyle = {
   gap: darkTheme.spacing.xs,
   fontSize: 12,
   whiteSpace: 'nowrap'
-} satisfies CSSProperties
-
-const outputModeSelectStyle = {
-  borderRadius: darkTheme.radius.md,
-  border: 0,
-  outline: 0,
-  background: darkTheme.color.surfaceMuted,
-  color: darkTheme.color.text,
-  padding: `${darkTheme.spacing.xs} ${darkTheme.spacing.sm}`,
-  minWidth: 108,
-  fontSize: 12
 } satisfies CSSProperties

@@ -52,6 +52,7 @@ const mutatingChannels = [
   ipcChannels.credentialsDeleteProviderApiKey,
   ipcChannels.providersSave,
   ipcChannels.providersDisable,
+  ipcChannels.providersDelete,
   ipcChannels.modelsSave
 ] as const
 
@@ -240,6 +241,12 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       const provider = await options.container.modelProviderService.disableProvider(providerIdInputSchema.parse(payload).providerId)
       await savePersistence()
       return modelProviderConfigSchema.parse(provider)
+    },
+    [ipcChannels.providersDelete]: async (_event, payload) => {
+      const providerId = providerIdInputSchema.parse(payload).providerId
+      const provider = await options.container.modelProviderService.deleteProvider(providerId)
+      await savePersistence()
+      return provider ? { deleted: true as const, providerId, provider: modelProviderConfigSchema.parse(provider) } : { deleted: true as const, providerId }
     },
     [ipcChannels.providersTestConnection]: async (_event, payload) => {
       const result = await options.container.modelProviderService.testProviderConnection(providerIdInputSchema.parse(payload).providerId)

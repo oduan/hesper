@@ -11,7 +11,7 @@ export type EntityListPaneProps = {
 }
 
 export function EntityListPane({ title, activeSection, sessions, activeSessionId, onSelectSession }: EntityListPaneProps) {
-  const heading = title ?? (activeSection === 'sessions' ? '所有会话' : '列表')
+  const heading = title ?? (activeSection === 'sessions' ? '所有会话' : activeSection === 'settings' ? '设置' : '列表')
 
   return (
     <aside
@@ -58,6 +58,17 @@ export function EntityListPane({ title, activeSection, sessions, activeSessionId
         ) : (
           <div style={{ margin: 'auto', color: darkTheme.color.textMuted, fontSize: 13, textAlign: 'center' }}>暂无会话</div>
         )
+      ) : activeSection === 'settings' ? (
+        <nav aria-label="设置分类" style={{ display: 'grid', gap: 4 }}>
+          <button type="button" className="hesper-settings-row" aria-label="应用设置">
+            <span style={{ fontWeight: 700 }}>应用</span>
+            <span style={{ fontSize: 12, color: darkTheme.color.textMuted }}>通知和更新</span>
+          </button>
+          <button type="button" className="hesper-settings-row is-active" aria-current="page" aria-label="AI 设置">
+            <span style={{ fontWeight: 700 }}>AI</span>
+            <span style={{ fontSize: 12, color: darkTheme.color.textMuted }}>模型、思考、连接</span>
+          </button>
+        </nav>
       ) : (
         <div style={{ margin: 'auto', color: darkTheme.color.textMuted, fontSize: 13, textAlign: 'center' }}>该区域将在后续任务接入真实数据。</div>
       )}

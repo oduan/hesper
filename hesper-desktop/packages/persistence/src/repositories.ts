@@ -63,6 +63,7 @@ export type ModelProviderRepository = {
   save(provider: ModelProviderConfig): Promise<void>
   get(id: string): Promise<ModelProviderConfig | undefined>
   list(): Promise<ModelProviderConfig[]>
+  delete(id: string): Promise<void>
 }
 
 export type ModelRepository = {
@@ -70,6 +71,7 @@ export type ModelRepository = {
   get(id: string): Promise<ModelConfig | undefined>
   list(): Promise<ModelConfig[]>
   listByProvider(providerId: string): Promise<ModelConfig[]>
+  deleteByProvider(providerId: string): Promise<void>
 }
 
 export type SkillRepository = {
@@ -572,6 +574,9 @@ export function createRepositories(db: Database): Persistence {
       },
       async list() {
         return fetchAll('SELECT * FROM model_providers ORDER BY sort_seq ASC, id ASC').map(toModelProvider)
+      },
+      async delete(id) {
+        exec('DELETE FROM model_providers WHERE id = ?', [id])
       }
     },
     models: {
@@ -598,6 +603,9 @@ export function createRepositories(db: Database): Persistence {
       },
       async listByProvider(providerId) {
         return fetchAll('SELECT * FROM models WHERE provider_id = ? ORDER BY sort_seq ASC, id ASC', [providerId]).map(toModel)
+      },
+      async deleteByProvider(providerId) {
+        exec('DELETE FROM models WHERE provider_id = ?', [providerId])
       }
     },
     skills: {

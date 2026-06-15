@@ -88,6 +88,36 @@ describe('createModelProviderService', () => {
     expect(await persistence.modelProviders.get('openai')).toMatchObject({ enabled: false })
   })
 
+  it('deletes custom providers with their models and credentials', async () => {
+    const persistence = await createInMemoryPersistence()
+    const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
+    const service = createModelProviderService({ persistence, credentialVaultService, now: () => now })
+
+    await service.saveProvider({ id: 'custom-api-example-com', name: 'Example API', kind: 'openai-compatible', baseUrl: 'https://api.example.com', enabled: true, defaultModelId: 'example-chat' })
+    await service.saveModel({ id: 'example-chat', providerId: 'custom-api-example-com', modelName: 'example-chat', displayName: 'Example Chat', capabilities: ['streaming'], enabled: true })
+    await credentialVaultService.saveProviderApiKey({ providerId: 'custom-api-example-com', apiKey: 'sk-custom-secret' })
+
+    await expect(service.deleteProvider('custom-api-example-com')).resolves.toBeUndefined()
+
+    expect(await persistence.modelProviders.get('custom-api-example-com')).toBeUndefined()
+    expect(await persistence.models.listByProvider('custom-api-example-com')).toEqual([])
+    expect(await credentialVaultService.getProviderApiKeyStatus({ providerId: 'custom-api-example-com' })).toMatchObject({ hasApiKey: false })
+    expect(Buffer.from(exportDatabaseBytes(persistence)).toString('latin1')).not.toContain('sk-custom-secret')
+  })
+
+  it('disables builtin providers when asked to delete them', async () => {
+    const persistence = await createInMemoryPersistence()
+    const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
+    const service = createModelProviderService({ persistence, credentialVaultService, now: () => now })
+
+    await service.ensureBuiltinProviders()
+    const deleted = await service.deleteProvider('deepseek')
+
+    expect(deleted).toMatchObject({ id: 'deepseek', enabled: false })
+    expect(await persistence.modelProviders.get('deepseek')).toMatchObject({ enabled: false })
+    expect(await persistence.models.listByProvider('deepseek')).toMatchObject([{ id: 'deepseek-chat' }])
+  })
+
   it('tests connections without returning or persisting raw API keys in provider responses', async () => {
     const persistence = await createInMemoryPersistence()
     const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
