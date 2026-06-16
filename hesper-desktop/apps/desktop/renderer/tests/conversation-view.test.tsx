@@ -114,9 +114,44 @@ describe('ConversationView', () => {
 
     expect(screen.queryByRole('button', { name: '打开导航' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '选择输出模式' })).toHaveTextContent('markdown')
+    expect(screen.queryByText('输出')).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '全屏查看输出' }))
     expect(screen.getByRole('dialog', { name: '输出全屏查看' })).toBeInTheDocument()
+  })
+
+  it('renders messages in chronological order even when props arrive reversed', () => {
+    render(
+      <ConversationView
+        session={session}
+        messages={[
+          {
+            id: 'a-late',
+            sessionId: 'session-1',
+            role: 'assistant',
+            content: 'later answer',
+            contentType: 'markdown',
+            createdAt: '2026-06-10T03:00:02.000Z'
+          },
+          {
+            id: 'u-early',
+            sessionId: 'session-1',
+            role: 'user',
+            content: 'first user prompt',
+            contentType: 'plain',
+            createdAt: '2026-06-10T03:00:01.000Z'
+          }
+        ]}
+        steps={[]}
+        streamingText=""
+        modelId="mock/hesper-fast"
+        onSend={() => undefined}
+      />
+    )
+
+    const userMessage = screen.getByText('first user prompt')
+    const assistantMessage = screen.getByText('later answer')
+    expect(userMessage.compareDocumentPosition(assistantMessage) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('closes navigation and fullscreen when close-panels command arrives', async () => {

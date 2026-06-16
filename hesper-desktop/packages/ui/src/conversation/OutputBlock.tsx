@@ -62,7 +62,7 @@ export function OutputBlock({ content, contentType, closeFullscreenSignal = 0 }:
         >
           ⤢
         </button>
-        <div style={{ height: '100%', overflow: 'auto', padding: darkTheme.spacing.md }}>
+        <div className="hesper-theme-scrollbar" style={{ height: '100%', overflow: 'auto', padding: darkTheme.spacing.md }}>
           {contentType === 'html' ? (
             <iframe
               title="HTML 输出预览"

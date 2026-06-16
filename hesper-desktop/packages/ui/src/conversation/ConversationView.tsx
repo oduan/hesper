@@ -54,6 +54,15 @@ function createStepAnchorId(stepId: string): string {
   return `step-${stepId}`
 }
 
+function compareCreatedAt<T extends { id: string; createdAt: string }>(left: T, right: T): number {
+  const byCreatedAt = left.createdAt.localeCompare(right.createdAt)
+  return byCreatedAt === 0 ? left.id.localeCompare(right.id) : byCreatedAt
+}
+
+function sortChronologically<T extends { id: string; createdAt: string }>(items: T[]): T[] {
+  return [...items].sort(compareCreatedAt)
+}
+
 export function ConversationView({
   session,
   messages,
@@ -69,11 +78,13 @@ export function ConversationView({
 }: ConversationViewProps) {
   const [closeFullscreenSignal, setCloseFullscreenSignal] = useState(0)
   const anchorRefs = useRef<Record<string, HTMLElement | null>>({})
+  const orderedMessages = useMemo(() => sortChronologically(messages), [messages])
+  const orderedSteps = useMemo(() => sortChronologically(steps), [steps])
   const anchorOrder = useMemo<AnchorEntry[]>(() => {
     const entries: AnchorEntry[] = []
-    const latestUserMessageId = [...messages].reverse().find((message) => message.role === 'user')?.id
+    const latestUserMessageId = [...orderedMessages].reverse().find((message) => message.role === 'user')?.id
 
-    for (const message of messages) {
+    for (const message of orderedMessages) {
       entries.push({
         id: createMessageAnchorId(message.id),
         kind: message.role === 'user' ? 'user' : 'assistant',
@@ -81,7 +92,7 @@ export function ConversationView({
       })
 
       if (message.id === latestUserMessageId) {
-        for (const step of steps) {
+        for (const step of orderedSteps) {
           entries.push({
             id: createStepAnchorId(step.id),
             kind: createStepNavigationKind(step),
@@ -91,8 +102,8 @@ export function ConversationView({
       }
     }
 
-    if (messages.length === 0) {
-      for (const step of steps) {
+    if (orderedMessages.length === 0) {
+      for (const step of orderedSteps) {
         entries.push({
           id: createStepAnchorId(step.id),
           kind: createStepNavigationKind(step),
@@ -110,8 +121,8 @@ export function ConversationView({
     }
 
     return entries
-  }, [messages, steps, streamingText])
-  const latestUserMessageId = [...messages].reverse().find((message) => message.role === 'user')?.id
+  }, [orderedMessages, orderedSteps, streamingText])
+  const latestUserMessageId = [...orderedMessages].reverse().find((message) => message.role === 'user')?.id
   const jumpTargets = useMemo(
     () => anchorOrder.filter((entry) => entry.kind === 'user' || entry.kind === 'assistant'),
     [anchorOrder]
@@ -172,18 +183,18 @@ export function ConversationView({
         >
           <h2 style={{ margin: 0, maxWidth: '65%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 15, lineHeight: 1.2, textAlign: 'center', fontWeight: 700 }}>{session.title}</h2>
           <div style={outputModeLabelStyle}>
-            <span style={{ color: darkTheme.color.textMuted }}>输出</span>
             <ThemedSelect
               ariaLabel="选择输出模式"
               value={session.outputMode}
               options={['markdown', 'html']}
               onChange={(value) => onOutputModeChange?.(value as Session['outputMode'])}
-              minWidth={108}
-              maxWidth={126}
+              minWidth={82}
+              maxWidth={112}
             />
           </div>
         </header>
         <div
+          className="hesper-theme-scrollbar"
           style={{
             minHeight: 0,
             overflow: 'auto',
@@ -193,7 +204,7 @@ export function ConversationView({
             paddingRight: darkTheme.spacing.xs
           }}
         >
-          {messages.map((message) => {
+          {orderedMessages.map((message) => {
             const anchorId = createMessageAnchorId(message.id)
             const isLatestUserMessage = message.id === latestUserMessageId
 
@@ -217,10 +228,10 @@ export function ConversationView({
                 ) : (
                   <MessageBubble message={message} />
                 )}
-                {isLatestUserMessage && steps.length > 0 ? (
+                {isLatestUserMessage && orderedSteps.length > 0 ? (
                   <div style={{ marginTop: darkTheme.spacing.sm }}>
                     <RunSteps
-                      steps={steps}
+                      steps={orderedSteps}
                       getStepProps={(step) => {
                         const stepAnchorId = createStepAnchorId(step.id)
                         return {
@@ -238,9 +249,9 @@ export function ConversationView({
               </div>
             )
           })}
-          {messages.length === 0 && steps.length > 0 ? (
+          {orderedMessages.length === 0 && orderedSteps.length > 0 ? (
             <RunSteps
-              steps={steps}
+              steps={orderedSteps}
               getStepProps={(step) => {
                 const stepAnchorId = createStepAnchorId(step.id)
                 return {

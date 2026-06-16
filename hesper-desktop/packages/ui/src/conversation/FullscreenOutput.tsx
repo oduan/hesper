@@ -81,7 +81,7 @@ export function FullscreenOutput({ open, content, contentType, onClose }: Fullsc
             </button>
           </div>
         </div>
-        <div style={{ minHeight: 0, overflow: 'auto', padding: darkTheme.spacing.md }}>
+        <div className="hesper-theme-scrollbar" style={{ minHeight: 0, overflow: 'auto', padding: darkTheme.spacing.md }}>
           {contentType === 'html' ? (
             <iframe
               title="HTML 输出"

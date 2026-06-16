@@ -1,13 +1,17 @@
 import '@testing-library/jest-dom/vitest'
-import { render, screen, within } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppShell } from '../layout/AppShell'
 import { Composer } from '../conversation/Composer'
 import { OutputBlock } from '../conversation/OutputBlock'
 import { RunSteps } from '../conversation/RunSteps'
 
 const now = '2026-06-10T03:00:00.000Z'
+
+afterEach(() => {
+  cleanup()
+})
 
 describe('ui components', () => {
   it('renders high-density desktop shell rails and panes', async () => {
@@ -52,28 +56,56 @@ describe('ui components', () => {
     expect(onSelectSection).toHaveBeenCalledWith('tools')
   })
 
-  it('disables send button when composer is empty and enables it with text', async () => {
+  it('disables send button when composer is empty and keeps controls visually aligned', async () => {
     const user = userEvent.setup()
     render(<Composer workspacePath="C:/dev/hesper" modelId="mock/hesper-fast" outputMode="markdown" onSend={() => undefined} />)
     const textarea = screen.getByPlaceholderText(/输入消息/)
+    const modelSelect = screen.getByRole('button', { name: '选择模型' })
+    const sendButton = screen.getByRole('button', { name: '发送' })
 
-    expect(screen.getByRole('button', { name: '发送' })).toBeDisabled()
+    expect(sendButton).toBeDisabled()
     expect(screen.getByLabelText('消息输入区')).toHaveStyle({ borderRadius: '20px' })
     expect(textarea).toHaveStyle({ borderRadius: '0' })
+    expect(textarea).toHaveClass('hesper-theme-scrollbar')
+    expect(screen.queryByText('模型')).not.toBeInTheDocument()
+    expect(modelSelect).toHaveStyle({ background: 'transparent', borderRadius: '0', padding: '0' })
+    expect(sendButton).toHaveStyle({ fontSize: '22px', display: 'inline-flex' })
 
     await user.type(textarea, 'hello')
-    expect(screen.getByRole('button', { name: '发送' })).toBeEnabled()
+    expect(sendButton).toBeEnabled()
   })
 
-  it('renders output blocks with CSP wrapped html and fullscreen dialog', async () => {
+  it('handles each external send signal only once', async () => {
+    const user = userEvent.setup()
+    const onSend = vi.fn()
+    const renderComposer = (sendSignal: number) => (
+      <Composer workspacePath="C:/dev/hesper" modelId="mock/hesper-fast" outputMode="markdown" onSend={onSend} sendSignal={sendSignal} />
+    )
+    const { rerender } = render(renderComposer(0))
+    const textarea = screen.getByPlaceholderText(/输入消息/)
+
+    await user.type(textarea, 'first')
+    rerender(renderComposer(1))
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledWith('first'))
+    expect(onSend).toHaveBeenCalledTimes(1)
+    expect(textarea).toHaveValue('')
+
+    await user.type(textarea, 'second')
+    expect(textarea).toHaveValue('second')
+    expect(onSend).toHaveBeenCalledTimes(1)
+  })
+
+  it('renders output blocks with CSP wrapped html, themed scrollbars and fullscreen dialog', async () => {
     const user = userEvent.setup()
     const html = '<img src="https://example.com/a.png"><style>body{color:red}</style><p>hello</p>'
     render(<OutputBlock content={html} contentType="html" />)
 
     const previewFrame = screen.getByTitle('HTML 输出预览')
     expect(previewFrame).toHaveAttribute('sandbox', '')
+    expect(previewFrame.closest('.hesper-theme-scrollbar')).toBeInTheDocument()
     expect(previewFrame.getAttribute('srcdoc')).toContain("default-src 'none'")
-    expect(previewFrame.getAttribute('srcdoc')).toContain("img-src data:")
+    expect(previewFrame.getAttribute('srcdoc')).toContain('img-src data:')
     expect(previewFrame.getAttribute('srcdoc')).toContain("style-src 'unsafe-inline'")
     expect(screen.getByRole('button', { name: '全屏查看输出' })).toBeInTheDocument()
 
@@ -81,37 +113,47 @@ describe('ui components', () => {
     expect(screen.getByRole('dialog', { name: '输出全屏查看' })).toBeInTheDocument()
     const fullscreenFrame = screen.getByTitle('HTML 输出')
     expect(fullscreenFrame).toHaveAttribute('sandbox', '')
+    expect(fullscreenFrame.closest('.hesper-theme-scrollbar')).toBeInTheDocument()
     expect(fullscreenFrame.getAttribute('srcdoc')).toContain("default-src 'none'")
-    expect(fullscreenFrame.getAttribute('srcdoc')).toContain("img-src data:")
+    expect(fullscreenFrame.getAttribute('srcdoc')).toContain('img-src data:')
   })
 
-  it('renders run step states', () => {
+  it('renders run steps as a collapsed latest-step row with aligned status dots', async () => {
+    const user = userEvent.setup()
     render(
       <RunSteps
         steps={[
           { id: 'step-1', runId: 'run-1', type: 'thought', status: 'succeeded', title: 'Thinking', createdAt: now },
-          { id: 'step-2', runId: 'run-1', type: 'tool_call', status: 'running', title: 'Search Files', createdAt: now },
-          { id: 'step-3', runId: 'run-1', type: 'tool_result', status: 'succeeded', title: 'Search Results', createdAt: now },
-          { id: 'step-4', runId: 'run-1', type: 'model_call', status: 'pending', title: 'Call Model', createdAt: now },
-          { id: 'step-5', runId: 'run-1', type: 'warning', status: 'failed', title: 'Network Warning', createdAt: now }
+          { id: 'step-2', runId: 'run-1', type: 'tool_call', status: 'running', title: 'Search Files', createdAt: '2026-06-10T03:00:01.000Z' },
+          { id: 'step-3', runId: 'run-1', type: 'tool_result', status: 'succeeded', title: 'Search Results', createdAt: '2026-06-10T03:00:02.000Z' },
+          { id: 'step-4', runId: 'run-1', type: 'model_call', status: 'pending', title: 'Call Model', createdAt: '2026-06-10T03:00:03.000Z' },
+          { id: 'step-5', runId: 'run-1', type: 'warning', status: 'failed', title: 'Network Warning', createdAt: '2026-06-10T03:00:04.000Z' }
         ]}
       />
     )
 
     const toggle = screen.getByRole('button', { name: /最新步骤/ })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(toggle).toHaveTextContent('5')
+    expect(toggle).toHaveTextContent('Network Warning')
+    expect(screen.queryByText('Thinking')).not.toBeInTheDocument()
+    expect(screen.queryByText('思考 / 成功')).not.toBeInTheDocument()
+
+    await user.click(toggle)
+
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByText('Thinking')).toBeInTheDocument()
     expect(screen.getByText('Search Files')).toBeInTheDocument()
     expect(screen.getByText('Search Results')).toBeInTheDocument()
     expect(screen.getByText('Call Model')).toBeInTheDocument()
     expect(screen.getByText('Network Warning')).toBeInTheDocument()
+    expect(screen.getAllByLabelText('步骤状态：成功')).toHaveLength(2)
+    expect(screen.getAllByLabelText('步骤状态：失败')).toHaveLength(2)
 
     const items = screen.getAllByRole('listitem')
     expect(items).toHaveLength(5)
-    expect(within(items[0]!).getByText('思考 / 成功')).toBeInTheDocument()
-    expect(within(items[1]!).getByText('工具调用 / 运行中')).toBeInTheDocument()
-    expect(within(items[2]!).getByText('工具结果 / 成功')).toBeInTheDocument()
-    expect(within(items[3]!).getByText('模型调用 / 待处理')).toBeInTheDocument()
-    expect(within(items[4]!).getByText('警告 / 失败')).toBeInTheDocument()
+    expect(items[0]).toHaveStyle({ gridTemplateColumns: '16px 28px 10px minmax(0, 1fr)' })
+    expect(within(items[0]!).getByText('Thinking').parentElement).toHaveStyle({ whiteSpace: 'nowrap' })
+    expect(within(items[0]!).queryByText('思考 / 成功')).not.toBeInTheDocument()
   })
 })

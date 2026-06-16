@@ -199,4 +199,135 @@ describe('app-store reducer', () => {
       detail: 'Network lost'
     })
   })
+
+  it('keeps messages and run steps in chronological order', () => {
+    const runCreatedState = appReducer(initialAppState, {
+      type: 'agent.event',
+      event: {
+        type: 'run.created',
+        run: {
+          id: 'run-sort',
+          sessionId: 'session-1',
+          status: 'running',
+          modelId: 'mock/hesper-fast',
+          retryCount: 0,
+          maxRetries: 2
+        }
+      }
+    })
+
+    const assistantState = appReducer(runCreatedState, {
+      type: 'agent.event',
+      event: {
+        type: 'message.completed',
+        message: {
+          id: 'message-assistant-late',
+          sessionId: 'session-1',
+          role: 'assistant',
+          content: 'late assistant',
+          contentType: 'markdown',
+          runId: 'run-sort',
+          createdAt: '2026-06-10T03:00:02.000Z'
+        }
+      }
+    })
+
+    const userState = appReducer(assistantState, {
+      type: 'message.optimistic',
+      message: {
+        id: 'message-user-early',
+        sessionId: 'session-1',
+        role: 'user',
+        content: 'early user',
+        contentType: 'plain',
+        createdAt: '2026-06-10T03:00:01.000Z'
+      }
+    })
+
+    expect(userState.messagesBySession['session-1']?.map((message) => message.id)).toEqual([
+      'message-user-early',
+      'message-assistant-late'
+    ])
+
+    const laterStepState = appReducer(runCreatedState, {
+      type: 'agent.event',
+      event: {
+        type: 'step.created',
+        step: {
+          id: 'step-late',
+          runId: 'run-sort',
+          type: 'tool_call',
+          status: 'running',
+          title: 'Later',
+          createdAt: '2026-06-10T03:00:02.000Z'
+        }
+      }
+    })
+
+    const sortedStepState = appReducer(laterStepState, {
+      type: 'agent.event',
+      event: {
+        type: 'step.created',
+        step: {
+          id: 'step-early',
+          runId: 'run-sort',
+          type: 'thought',
+          status: 'succeeded',
+          title: 'Earlier',
+          createdAt: '2026-06-10T03:00:01.000Z'
+        }
+      }
+    })
+
+    expect(sortedStepState.stepsByRun['run-sort']?.map((step) => step.id)).toEqual(['step-early', 'step-late'])
+  })
+
+  it('clears the latest run pointer when a new user prompt is added optimistically', () => {
+    const runCreatedState = appReducer(initialAppState, {
+      type: 'agent.event',
+      event: {
+        type: 'run.created',
+        run: {
+          id: 'run-previous',
+          sessionId: 'session-1',
+          status: 'succeeded',
+          modelId: 'mock/hesper-fast',
+          retryCount: 0,
+          maxRetries: 2
+        }
+      }
+    })
+
+    const withPreviousSteps = appReducer(runCreatedState, {
+      type: 'agent.event',
+      event: {
+        type: 'step.created',
+        step: {
+          id: 'step-previous',
+          runId: 'run-previous',
+          type: 'thought',
+          status: 'succeeded',
+          title: 'Previous thinking',
+          createdAt: now
+        }
+      }
+    })
+
+    expect(withPreviousSteps.latestRunIdBySession['session-1']).toBe('run-previous')
+
+    const nextPromptState = appReducer(withPreviousSteps, {
+      type: 'message.optimistic',
+      message: {
+        id: 'message-new-user',
+        sessionId: 'session-1',
+        role: 'user',
+        content: 'new prompt',
+        contentType: 'plain',
+        createdAt: '2026-06-10T03:00:10.000Z'
+      }
+    })
+
+    expect(nextPromptState.latestRunIdBySession['session-1']).toBeUndefined()
+    expect(nextPromptState.stepsByRun['run-previous']).toHaveLength(1)
+  })
 })

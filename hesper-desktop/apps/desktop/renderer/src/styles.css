@@ -130,6 +130,34 @@ button {
   height: 0;
 }
 
+.hesper-theme-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(127, 158, 232, 0.58) rgba(255, 255, 255, 0.035);
+}
+
+.hesper-theme-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.hesper-theme-scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.035);
+  border-radius: 999px;
+}
+
+.hesper-theme-scrollbar::-webkit-scrollbar-thumb {
+  min-height: 32px;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(127, 158, 232, 0.76), rgba(104, 198, 154, 0.58)) border-box;
+  background-clip: padding-box;
+}
+
+.hesper-theme-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(154, 176, 255, 0.92), rgba(104, 198, 154, 0.78)) border-box;
+  background-clip: padding-box;
+}
+
 .hesper-soft-control,
 .hesper-send-button {
   transition: background 120ms ease, opacity 120ms ease;

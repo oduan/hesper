@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent } from 'react'
 import type { OutputMode } from '@hesper/shared'
 import { darkTheme } from '../theme'
 import { ThemedSelect } from './ThemedSelect'
@@ -29,6 +29,7 @@ export function Composer({
   sendSignal = 0
 }: ComposerProps) {
   const [value, setValue] = useState('')
+  const lastHandledSendSignalRef = useRef(0)
   const canSend = useMemo(() => value.trim().length > 0, [value])
 
   const handleSend = useCallback(() => {
@@ -42,9 +43,12 @@ export function Composer({
   }, [onSend, value])
 
   useEffect(() => {
-    if (sendSignal > 0) {
-      handleSend()
+    if (sendSignal <= 0 || sendSignal === lastHandledSendSignalRef.current) {
+      return
     }
+
+    lastHandledSendSignalRef.current = sendSignal
+    handleSend()
   }, [handleSend, sendSignal])
 
   return (
@@ -60,6 +64,7 @@ export function Composer({
       }}
     >
       <textarea
+        className="hesper-theme-scrollbar"
         aria-label="消息输入框"
         placeholder="输入消息，支持 @skills"
         rows={4}
@@ -84,8 +89,7 @@ export function Composer({
           工作目录：{workspacePath ?? '未设置'}
         </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: darkTheme.spacing.sm, flexWrap: 'wrap' }}>
-          <div style={controlLabelStyle}>
-            <span>模型</span>
+          <div style={modelControlStyle}>
             <ThemedSelect
               ariaLabel="选择模型"
               value={modelId}
@@ -148,10 +152,9 @@ const controlButtonStyle = {
   whiteSpace: 'nowrap'
 } satisfies CSSProperties
 
-const controlLabelStyle = {
+const modelControlStyle = {
   display: 'flex',
   alignItems: 'center',
-  gap: darkTheme.spacing.xs,
   color: darkTheme.color.textMuted,
   fontSize: 12
 } satisfies CSSProperties
@@ -163,5 +166,10 @@ const sendButtonStyle = {
   border: 0,
   outline: 0,
   background: 'rgba(127, 158, 232, 0.22)',
-  color: darkTheme.color.text
+  color: darkTheme.color.text,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  fontSize: 22,
+  lineHeight: 1
 } satisfies CSSProperties

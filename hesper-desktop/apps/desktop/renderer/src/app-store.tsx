@@ -62,6 +62,29 @@ function removeById<T extends { id: string }>(items: T[], id: string): T[] {
   return items.filter((item) => item.id !== id)
 }
 
+function compareCreatedAt<T extends { id: string; createdAt: string }>(left: T, right: T): number {
+  const byCreatedAt = left.createdAt.localeCompare(right.createdAt)
+  return byCreatedAt === 0 ? left.id.localeCompare(right.id) : byCreatedAt
+}
+
+function sortByCreatedAt<T extends { id: string; createdAt: string }>(items: T[]): T[] {
+  return [...items].sort(compareCreatedAt)
+}
+
+function mergeByIdChronologically<T extends { id: string; createdAt: string }>(items: T[], nextItem: T): T[] {
+  return sortByCreatedAt(mergeById(items, nextItem))
+}
+
+function omitRecordKey<T>(record: Record<string, T>, key: string): Record<string, T> {
+  if (!(key in record)) {
+    return record
+  }
+
+  const next = { ...record }
+  delete next[key]
+  return next
+}
+
 function withActiveSessionId(state: AppState, activeSessionId: string | undefined): AppState {
   const { activeSessionId: _previousActiveSessionId, ...rest } = state
   return activeSessionId ? { ...rest, activeSessionId } : rest
@@ -140,8 +163,9 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         ...state,
         messagesBySession: {
           ...state.messagesBySession,
-          [action.message.sessionId]: mergeById(state.messagesBySession[action.message.sessionId] ?? [], action.message)
-        }
+          [action.message.sessionId]: mergeByIdChronologically(state.messagesBySession[action.message.sessionId] ?? [], action.message)
+        },
+        latestRunIdBySession: omitRecordKey(state.latestRunIdBySession, action.message.sessionId)
       }
     }
     case 'message.removed': {
@@ -173,7 +197,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             ...state,
             stepsByRun: {
               ...state.stepsByRun,
-              [event.step.runId]: mergeById(state.stepsByRun[event.step.runId] ?? [], event.step)
+              [event.step.runId]: mergeByIdChronologically(state.stepsByRun[event.step.runId] ?? [], event.step)
             }
           }
         }
@@ -196,7 +220,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             ...state,
             messagesBySession: {
               ...state.messagesBySession,
-              [event.message.sessionId]: mergeById(state.messagesBySession[event.message.sessionId] ?? [], event.message)
+              [event.message.sessionId]: mergeByIdChronologically(state.messagesBySession[event.message.sessionId] ?? [], event.message)
             },
             streamingByRun: nextStreamingByRun
           }
@@ -207,7 +231,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             ...state,
             stepsByRun: {
               ...state.stepsByRun,
-              [event.runId]: mergeById(state.stepsByRun[event.runId] ?? [], retryStep)
+              [event.runId]: mergeByIdChronologically(state.stepsByRun[event.runId] ?? [], retryStep)
             },
             streamingByRun: clearStreamingByRun(state.streamingByRun, event.runId)
           }
@@ -218,7 +242,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             ...state,
             stepsByRun: {
               ...state.stepsByRun,
-              [event.runId]: mergeById(state.stepsByRun[event.runId] ?? [], failureStep)
+              [event.runId]: mergeByIdChronologically(state.stepsByRun[event.runId] ?? [], failureStep)
             },
             streamingByRun: clearStreamingByRun(state.streamingByRun, event.runId)
           }
