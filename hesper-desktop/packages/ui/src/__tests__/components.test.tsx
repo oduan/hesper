@@ -55,8 +55,13 @@ describe('ui components', () => {
   it('disables send button when composer is empty and enables it with text', async () => {
     const user = userEvent.setup()
     render(<Composer workspacePath="C:/dev/hesper" modelId="mock/hesper-fast" outputMode="markdown" onSend={() => undefined} />)
+    const textarea = screen.getByPlaceholderText(/输入消息/)
+
     expect(screen.getByRole('button', { name: '发送' })).toBeDisabled()
-    await user.type(screen.getByPlaceholderText(/输入消息/), 'hello')
+    expect(screen.getByLabelText('消息输入区')).toHaveStyle({ borderRadius: '20px' })
+    expect(textarea).toHaveStyle({ borderRadius: '0' })
+
+    await user.type(textarea, 'hello')
     expect(screen.getByRole('button', { name: '发送' })).toBeEnabled()
   })
 

@@ -122,7 +122,7 @@ const textareaStyle = {
   minHeight: 96,
   maxHeight: 210,
   overflow: 'auto',
-  borderRadius: darkTheme.radius.lg,
+  borderRadius: 0,
   border: 0,
   outline: 0,
   background: 'transparent',
