@@ -324,6 +324,86 @@ describe('app-store reducer', () => {
     expect(sortedStepState.stepsByRun['run-sort']?.map((step) => step.id)).toEqual(['step-early', 'step-late'])
   })
 
+  it('hydrates restored conversation history in display order without clearing active streaming output', () => {
+    const streamingState = appReducer(initialAppState, {
+      type: 'agent.event',
+      event: {
+        type: 'run.created',
+        run: {
+          id: 'run-live',
+          sessionId: 'session-1',
+          status: 'running',
+          modelId: 'mock/hesper-fast',
+          retryCount: 0,
+          maxRetries: 2
+        }
+      }
+    })
+    const withDelta = appReducer(streamingState, {
+      type: 'agent.event',
+      event: { type: 'message.delta', runId: 'run-live', delta: 'streaming now' }
+    })
+
+    const restoredState = appReducer(withDelta, {
+      type: 'history.loaded',
+      sessionId: 'session-1',
+      messages: [
+        {
+          id: 'message-late',
+          sessionId: 'session-1',
+          role: 'assistant',
+          content: 'late assistant',
+          contentType: 'markdown',
+          runId: 'run-restored-2',
+          createdAt: '2026-06-10T03:00:03.000Z'
+        },
+        {
+          id: 'message-early',
+          sessionId: 'session-1',
+          role: 'user',
+          content: 'early user',
+          contentType: 'plain',
+          runId: 'run-restored-1',
+          createdAt: '2026-06-10T03:00:01.000Z'
+        }
+      ],
+      runs: [
+        { id: 'run-restored-1', sessionId: 'session-1', status: 'succeeded', modelId: 'mock/hesper-fast', retryCount: 0, maxRetries: 2 },
+        { id: 'run-restored-2', sessionId: 'session-1', status: 'succeeded', modelId: 'mock/hesper-fast', retryCount: 0, maxRetries: 2 }
+      ],
+      stepsByRun: {
+        'run-restored-2': [
+          {
+            id: 'step-late',
+            runId: 'run-restored-2',
+            type: 'thought',
+            status: 'succeeded',
+            title: 'Later step',
+            createdAt: '2026-06-10T03:00:04.000Z'
+          },
+          {
+            id: 'step-early',
+            runId: 'run-restored-2',
+            type: 'tool_call',
+            status: 'succeeded',
+            title: 'Earlier step',
+            createdAt: '2026-06-10T03:00:02.000Z'
+          }
+        ]
+      }
+    })
+
+    expect(restoredState.messagesBySession['session-1']?.map((message) => message.id)).toEqual(['message-early', 'message-late'])
+    expect(restoredState.stepsByRun['run-restored-2']?.map((step) => step.id)).toEqual(['step-early', 'step-late'])
+    expect(restoredState.runSessionIds).toMatchObject({
+      'run-restored-1': 'session-1',
+      'run-restored-2': 'session-1',
+      'run-live': 'session-1'
+    })
+    expect(restoredState.latestRunIdBySession['session-1']).toBe('run-live')
+    expect(restoredState.streamingByRun['run-live']).toBe('streaming now')
+  })
+
   it('clears the latest run pointer when a new user prompt is added optimistically', () => {
     const runCreatedState = appReducer(initialAppState, {
       type: 'agent.event',

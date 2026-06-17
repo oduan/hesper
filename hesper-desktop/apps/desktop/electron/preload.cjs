@@ -9,6 +9,9 @@ const ipcChannels = {
   sessionsSetWorkspace: 'sessions:setWorkspace',
   sessionsSetModel: 'sessions:setModel',
   sessionsSetOutputMode: 'sessions:setOutputMode',
+  conversationListMessages: 'conversation:listMessages',
+  conversationListRuns: 'conversation:listRuns',
+  conversationListSteps: 'conversation:listSteps',
   dialogSelectDirectory: 'dialog:selectDirectory',
   agentEnqueue: 'agent:enqueue',
   agentEventsSubscribe: 'agent:events:subscribe',
@@ -44,6 +47,11 @@ const hesperApi = {
     setWorkspace: (input) => ipcRenderer.invoke(ipcChannels.sessionsSetWorkspace, input),
     setModel: (input) => ipcRenderer.invoke(ipcChannels.sessionsSetModel, input),
     setOutputMode: (input) => ipcRenderer.invoke(ipcChannels.sessionsSetOutputMode, input)
+  },
+  conversation: {
+    listMessages: (sessionId) => ipcRenderer.invoke(ipcChannels.conversationListMessages, sessionId),
+    listRuns: (sessionId) => ipcRenderer.invoke(ipcChannels.conversationListRuns, sessionId),
+    listSteps: (runId) => ipcRenderer.invoke(ipcChannels.conversationListSteps, runId)
   },
   agent: {
     enqueue: (input) => ipcRenderer.invoke(ipcChannels.agentEnqueue, input),

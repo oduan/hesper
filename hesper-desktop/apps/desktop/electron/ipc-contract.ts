@@ -1,4 +1,4 @@
-import { agentRuntimeEventSchema, modelConfigSchema, modelProviderConfigSchema, sessionSchema } from '@hesper/shared'
+import { agentRunSchema, agentRuntimeEventSchema, messageSchema, modelConfigSchema, modelProviderConfigSchema, runStepSchema, sessionSchema } from '@hesper/shared'
 import { z } from 'zod'
 
 export const ipcChannels = {
@@ -10,6 +10,9 @@ export const ipcChannels = {
   sessionsSetWorkspace: 'sessions:setWorkspace',
   sessionsSetModel: 'sessions:setModel',
   sessionsSetOutputMode: 'sessions:setOutputMode',
+  conversationListMessages: 'conversation:listMessages',
+  conversationListRuns: 'conversation:listRuns',
+  conversationListSteps: 'conversation:listSteps',
   dialogSelectDirectory: 'dialog:selectDirectory',
   agentEnqueue: 'agent:enqueue',
   agentEventsSubscribe: 'agent:events:subscribe',
@@ -50,6 +53,10 @@ export const updateSessionTitleInputSchema = z.object({
 })
 
 export const sessionIdInputSchema = nonEmptyStringSchema
+export const runIdInputSchema = nonEmptyStringSchema
+export const conversationMessagesResultSchema = z.array(messageSchema)
+export const conversationRunsResultSchema = z.array(agentRunSchema)
+export const conversationStepsResultSchema = z.array(runStepSchema)
 
 export const setSessionWorkspaceInputSchema = z.object({
   id: nonEmptyStringSchema,
@@ -172,6 +179,9 @@ export type SaveModelInput = z.infer<typeof saveModelInputSchema>
 export type ProviderConnectionTestResult = z.infer<typeof providerConnectionTestResultSchema>
 export type AgentEvent = z.infer<typeof agentRuntimeEventSchema>
 export type SessionDto = z.infer<typeof sessionSchema>
+export type MessageDto = z.infer<typeof messageSchema>
+export type AgentRunDto = z.infer<typeof agentRunSchema>
+export type RunStepDto = z.infer<typeof runStepSchema>
 export type ModelProviderDto = z.infer<typeof modelProviderConfigSchema>
 export type ModelDto = z.infer<typeof modelConfigSchema>
 
@@ -185,6 +195,11 @@ export type HesperDesktopApi = {
     setWorkspace(input: SetSessionWorkspaceInput): Promise<SessionDto>
     setModel(input: SetSessionModelInput): Promise<SessionDto>
     setOutputMode(input: SetSessionOutputModeInput): Promise<SessionDto>
+  }
+  conversation: {
+    listMessages(sessionId: string): Promise<MessageDto[]>
+    listRuns(sessionId: string): Promise<AgentRunDto[]>
+    listSteps(runId: string): Promise<RunStepDto[]>
   }
   agent: {
     enqueue(input: AgentEnqueueInput): Promise<{ runId: string }>

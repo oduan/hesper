@@ -4,6 +4,9 @@ import { z } from 'zod'
 import {
   agentEnqueueInputSchema,
   appSettingsSchema,
+  conversationMessagesResultSchema,
+  conversationRunsResultSchema,
+  conversationStepsResultSchema,
   createSessionInputSchema,
   directorySelectionSchema,
   ipcChannels,
@@ -16,6 +19,7 @@ import {
   saveModelInputSchema,
   saveModelProviderInputSchema,
   saveProviderApiKeyInputSchema,
+  runIdInputSchema,
   sessionIdInputSchema,
   setSessionModelInputSchema,
   setSessionOutputModeInputSchema,
@@ -181,6 +185,18 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       const session = await options.container.sessionService.setOutputMode(input.id, input.outputMode)
       await savePersistence()
       return session
+    },
+    [ipcChannels.conversationListMessages]: async (_event, payload) => {
+      const sessionId = sessionIdInputSchema.parse(payload)
+      return conversationMessagesResultSchema.parse(await options.container.conversationService.listMessages(sessionId))
+    },
+    [ipcChannels.conversationListRuns]: async (_event, payload) => {
+      const sessionId = sessionIdInputSchema.parse(payload)
+      return conversationRunsResultSchema.parse(await options.container.conversationService.listRuns(sessionId))
+    },
+    [ipcChannels.conversationListSteps]: async (_event, payload) => {
+      const runId = runIdInputSchema.parse(payload)
+      return conversationStepsResultSchema.parse(await options.container.conversationService.listSteps(runId))
     },
     [ipcChannels.dialogSelectDirectory]: async () => {
       const result = await options.dialog.showOpenDialog({ properties: ['openDirectory'] })

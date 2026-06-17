@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react'
-import { createId, nowIso, type Message, type OutputMode, type Session } from '@hesper/shared'
+import { createId, nowIso, type Message, type OutputMode, type RunStep, type Session } from '@hesper/shared'
 import { AppShell, ConversationView, type AppSection, type ConversationShortcutCommand } from '@hesper/ui'
 import { AppStoreProvider, useAppStore } from './app-store'
 import { hesperApi } from './ipc-client'
@@ -108,6 +108,9 @@ function AppContent() {
   const [pendingSettingsBySession, setPendingSettingsBySession] = useState<Record<string, SessionSettingsOverride>>({})
   const [shortcutCommand, setShortcutCommand] = useState<ConversationShortcutCommand>()
   const [sessionModelOptions, setSessionModelOptions] = useState<string[]>(fallbackSessionModelOptions)
+  const [historyErrorsBySession, setHistoryErrorsBySession] = useState<Record<string, string>>({})
+  const loadedHistorySessionIdsRef = useRef<Set<string>>(new Set())
+  const loadingHistorySessionIdsRef = useRef<Set<string>>(new Set())
   const nextSettingsRequestIdRef = useRef(0)
   const latestSettingsRequestIdRef = useRef<RequestTokensBySession>({})
 
@@ -133,6 +136,49 @@ function AppContent() {
       cancelled = true
     }
   }, [dispatch])
+
+  useEffect(() => {
+    const sessionId = state.activeSessionId
+    if (!sessionId || loadedHistorySessionIdsRef.current.has(sessionId) || loadingHistorySessionIdsRef.current.has(sessionId)) {
+      return
+    }
+
+    const conversationApi = (hesperApi as typeof hesperApi & { conversation?: typeof hesperApi.conversation }).conversation
+    if (!conversationApi) {
+      return
+    }
+
+    let cancelled = false
+    loadingHistorySessionIdsRef.current.add(sessionId)
+
+    void (async () => {
+      try {
+        const [messages, runs] = await Promise.all([
+          conversationApi.listMessages(sessionId),
+          conversationApi.listRuns(sessionId)
+        ])
+        const stepEntries = await Promise.all(runs.map(async (run) => [run.id, await conversationApi.listSteps(run.id)] as const))
+        const stepsByRun = Object.fromEntries(stepEntries) as Record<string, RunStep[]>
+
+        if (!cancelled) {
+          loadedHistorySessionIdsRef.current.add(sessionId)
+          setHistoryErrorsBySession((current) => clearSessionSendError(current, sessionId))
+          dispatch({ type: 'history.loaded', sessionId, messages, runs, stepsByRun })
+        }
+      } catch (error) {
+        if (!cancelled) {
+          const message = error instanceof Error ? error.message : 'Unknown conversation history load error'
+          setHistoryErrorsBySession((current) => ({ ...current, [sessionId]: message }))
+        }
+      } finally {
+        loadingHistorySessionIdsRef.current.delete(sessionId)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [dispatch, state.activeSessionId])
 
   useEffect(() => {
     return hesperApi.agent.onEvent((event) => {
@@ -192,6 +238,10 @@ function AppContent() {
       const next = Object.fromEntries(Object.entries(current).filter(([sessionId]) => visible.has(sessionId)))
       return Object.keys(next).length === Object.keys(current).length ? current : next
     })
+    setHistoryErrorsBySession((current) => pruneSessionSendErrors(current, visibleSessionIds))
+    const visible = new Set(visibleSessionIds)
+    loadedHistorySessionIdsRef.current = new Set([...loadedHistorySessionIdsRef.current].filter((sessionId) => visible.has(sessionId)))
+    loadingHistorySessionIdsRef.current = new Set([...loadingHistorySessionIdsRef.current].filter((sessionId) => visible.has(sessionId)))
     latestSettingsRequestIdRef.current = pruneRequestTokens(latestSettingsRequestIdRef.current, visibleSessionIds)
   }, [state.sessions])
 
@@ -243,6 +293,7 @@ function AppContent() {
   )
   const activeSession = effectiveSessions.find((session) => session.id === state.activeSessionId)
   const activeSendError = activeSession ? sendErrorsBySession[activeSession.id] : undefined
+  const activeHistoryError = activeSession ? historyErrorsBySession[activeSession.id] : undefined
   const isSessionsSection = state.activeSection === 'sessions'
   const activeRunId = activeSession ? state.latestRunIdBySession[activeSession.id] : undefined
   const activeSteps = activeRunId ? state.stepsByRun[activeRunId] ?? [] : []
@@ -274,6 +325,11 @@ function AppContent() {
         state.activeSection === 'settings' ? <ProviderSettingsPanel onModelRegistryChanged={refreshSessionModelOptions} /> : <SectionPlaceholder section={state.activeSection} />
       ) : activeSession ? (
         <>
+          {activeHistoryError ? (
+            <p role="alert" style={{ margin: '0 0 12px', color: '#fca5a5', padding: '0 12px' }}>
+              历史加载失败：{activeHistoryError}
+            </p>
+          ) : null}
           {activeSendError ? (
             <p role="alert" style={{ margin: '0 0 12px', color: '#fca5a5', padding: '0 12px' }}>
               发送失败：{activeSendError}

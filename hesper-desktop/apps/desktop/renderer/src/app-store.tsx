@@ -1,5 +1,5 @@
 import { createContext, useContext, useMemo, useReducer, type Dispatch, type ReactNode } from 'react'
-import type { AgentRuntimeEvent, Message, RunStep, Session } from '@hesper/shared'
+import type { AgentRun, AgentRuntimeEvent, Message, RunStep, Session } from '@hesper/shared'
 import type { AppSection } from '@hesper/ui'
 
 export type AppState = {
@@ -18,6 +18,7 @@ export type AppAction =
   | { type: 'session.created'; session: Session }
   | { type: 'session.updated'; session: Session }
   | { type: 'session.selected'; sessionId: string }
+  | { type: 'history.loaded'; sessionId: string; messages: Message[]; runs: AgentRun[]; stepsByRun: Record<string, RunStep[]> }
   | { type: 'message.optimistic'; message: Message }
   | { type: 'message.run-linked'; sessionId: string; messageId: string; runId: string }
   | { type: 'message.removed'; sessionId: string; messageId: string }
@@ -74,6 +75,13 @@ function sortByCreatedAt<T extends { id: string; createdAt: string }>(items: T[]
 
 function mergeByIdChronologically<T extends { id: string; createdAt: string }>(items: T[], nextItem: T): T[] {
   return sortByCreatedAt(mergeById(items, nextItem))
+}
+
+function mergeManyByIdChronologically<T extends { id: string; createdAt: string }>(items: T[], nextItems: T[]): T[] {
+  const byId = new Map<string, T>()
+  for (const item of items) byId.set(item.id, item)
+  for (const item of nextItems) byId.set(item.id, item)
+  return sortByCreatedAt([...byId.values()])
 }
 
 function omitRecordKey<T>(record: Record<string, T>, key: string): Record<string, T> {
@@ -159,6 +167,38 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     }
     case 'session.selected':
       return { ...state, activeSessionId: action.sessionId }
+    case 'history.loaded': {
+      const nextMessagesBySession = {
+        ...state.messagesBySession,
+        [action.sessionId]: mergeManyByIdChronologically(action.messages, state.messagesBySession[action.sessionId] ?? [])
+      }
+      const nextStepsByRun = { ...state.stepsByRun }
+      const nextRunSessionIds = { ...state.runSessionIds }
+
+      for (const run of action.runs) {
+        nextRunSessionIds[run.id] = run.sessionId
+        nextStepsByRun[run.id] = mergeManyByIdChronologically(action.stepsByRun[run.id] ?? [], nextStepsByRun[run.id] ?? [])
+      }
+
+      for (const [runId, steps] of Object.entries(action.stepsByRun)) {
+        nextStepsByRun[runId] = mergeManyByIdChronologically(steps, nextStepsByRun[runId] ?? [])
+      }
+
+      const latestPersistedRunId = action.runs.at(-1)?.id
+      const currentLatestRunId = state.latestRunIdBySession[action.sessionId]
+      const shouldKeepCurrentLatest = currentLatestRunId ? state.streamingByRun[currentLatestRunId] !== undefined : false
+      const nextLatestRunIdBySession = shouldKeepCurrentLatest || !latestPersistedRunId
+        ? state.latestRunIdBySession
+        : { ...state.latestRunIdBySession, [action.sessionId]: latestPersistedRunId }
+
+      return {
+        ...state,
+        messagesBySession: nextMessagesBySession,
+        stepsByRun: nextStepsByRun,
+        runSessionIds: nextRunSessionIds,
+        latestRunIdBySession: nextLatestRunIdBySession
+      }
+    }
     case 'message.optimistic': {
       return {
         ...state,

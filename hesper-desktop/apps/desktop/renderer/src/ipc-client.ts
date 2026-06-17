@@ -1,11 +1,14 @@
 import type {
   AgentEnqueueInput,
+  AgentRunDto,
   AppSettings,
   CreateSessionInput,
   DirectorySelectionResult,
   HesperDesktopApi,
+  MessageDto,
   ModelDto,
   ModelProviderDto,
+  RunStepDto,
   SessionDto,
   SetSessionModelInput,
   SetSessionOutputModeInput,
@@ -24,10 +27,10 @@ function withDefined<T extends object>(value: T): T {
   return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined)) as T
 }
 
-function createMockSession(input: CreateSessionInput = {}): SessionDto {
+function createMockSession(input: CreateSessionInput = {}, id = `session-fallback-${Date.now()}`): SessionDto {
   const timestamp = new Date().toISOString()
   return withDefined({
-    id: 'session-test',
+    id,
     title: input.title ?? 'New chat',
     status: 'active',
     workspacePath: input.workspacePath,
@@ -38,31 +41,54 @@ function createMockSession(input: CreateSessionInput = {}): SessionDto {
   }) as SessionDto
 }
 
-function updateMockSession(id: string, overrides: Partial<SessionDto> = {}): SessionDto {
+function updateMockSession(session: SessionDto, overrides: Partial<SessionDto> = {}): SessionDto {
   return withDefined({
-    ...createMockSession(),
-    id,
+    ...session,
     ...overrides,
     updatedAt: new Date().toISOString()
   }) as SessionDto
 }
 
 export function createFallbackHesperApi(): HesperDesktopApi {
+  let nextSessionNumber = 1
+  let nextRunNumber = 1
+  let sessions: SessionDto[] = []
+  const messagesBySession: Record<string, MessageDto[]> = {}
+  const runsBySession: Record<string, AgentRunDto[]> = {}
+  const stepsByRun: Record<string, RunStepDto[]> = {}
+  const replaceSession = (id: string, updater: (session: SessionDto) => SessionDto): SessionDto => {
+    const existing = sessions.find((session) => session.id === id) ?? createMockSession({ title: 'New chat' }, id)
+    const updated = updater(existing)
+    sessions = [updated, ...sessions.filter((session) => session.id !== id)]
+    return updated
+  }
+
   return {
     sessions: {
-      list: async () => [],
-      create: async (input) => createMockSession(input),
-      updateTitle: async (input: UpdateSessionTitleInput) => updateMockSession(input.id, { title: input.title }),
-      archive: async (id: string) => updateMockSession(id, { status: 'archived' }),
-      delete: async (id: string) => updateMockSession(id, { status: 'deleted' }),
+      list: async () => sessions.filter((session) => session.status !== 'deleted'),
+      create: async (input) => {
+        const session = createMockSession(input, `session-fallback-${nextSessionNumber++}`)
+        sessions = [session, ...sessions]
+        messagesBySession[session.id] = []
+        runsBySession[session.id] = []
+        return session
+      },
+      updateTitle: async (input: UpdateSessionTitleInput) => replaceSession(input.id, (session) => updateMockSession(session, { title: input.title })),
+      archive: async (id: string) => replaceSession(id, (session) => updateMockSession(session, { status: 'archived' })),
+      delete: async (id: string) => replaceSession(id, (session) => updateMockSession(session, { status: 'deleted' })),
       setWorkspace: async (input: SetSessionWorkspaceInput) =>
-        updateMockSession(input.id, input.workspacePath ? { workspacePath: input.workspacePath } : {}),
+        replaceSession(input.id, (session) => updateMockSession(session, input.workspacePath ? { workspacePath: input.workspacePath } : {})),
       setModel: async (input: SetSessionModelInput) =>
-        updateMockSession(input.id, input.defaultModelId ? { defaultModelId: input.defaultModelId } : {}),
-      setOutputMode: async (input: SetSessionOutputModeInput) => updateMockSession(input.id, { outputMode: input.outputMode })
+        replaceSession(input.id, (session) => updateMockSession(session, input.defaultModelId ? { defaultModelId: input.defaultModelId } : {})),
+      setOutputMode: async (input: SetSessionOutputModeInput) => replaceSession(input.id, (session) => updateMockSession(session, { outputMode: input.outputMode }))
+    },
+    conversation: {
+      listMessages: async (sessionId: string) => messagesBySession[sessionId] ?? [],
+      listRuns: async (sessionId: string) => runsBySession[sessionId] ?? [],
+      listSteps: async (runId: string) => stepsByRun[runId] ?? []
     },
     agent: {
-      enqueue: async (_input: AgentEnqueueInput) => ({ runId: 'run-test' }),
+      enqueue: async (_input: AgentEnqueueInput) => ({ runId: `run-fallback-${nextRunNumber++}` }),
       subscribe: async () => ({ subscribed: true }),
       onEvent: () => () => undefined
     },

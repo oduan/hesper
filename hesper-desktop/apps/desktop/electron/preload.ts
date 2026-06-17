@@ -12,6 +12,11 @@ const hesperApi: HesperDesktopApi = {
     setModel: (input) => ipcRenderer.invoke(ipcChannels.sessionsSetModel, input),
     setOutputMode: (input) => ipcRenderer.invoke(ipcChannels.sessionsSetOutputMode, input)
   },
+  conversation: {
+    listMessages: (sessionId) => ipcRenderer.invoke(ipcChannels.conversationListMessages, sessionId),
+    listRuns: (sessionId) => ipcRenderer.invoke(ipcChannels.conversationListRuns, sessionId),
+    listSteps: (runId) => ipcRenderer.invoke(ipcChannels.conversationListSteps, runId)
+  },
   agent: {
     enqueue: (input) => ipcRenderer.invoke(ipcChannels.agentEnqueue, input),
     subscribe: () => ipcRenderer.invoke(ipcChannels.agentEventsSubscribe),

@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, clearSessionSendError, pruneSessionSendErrors } from '../src/App'
 
-const { listSessions, createSession, enqueue, onEvent, minimizeWindow, toggleMaximizeWindow, closeWindow } = vi.hoisted(() => ({
+const { listSessions, createSession, listMessages, listRuns, listSteps, enqueue, onEvent, minimizeWindow, toggleMaximizeWindow, closeWindow } = vi.hoisted(() => ({
   listSessions: vi.fn(async () => []),
   createSession: vi.fn(async () => ({
     id: 'session-1',
@@ -15,6 +15,9 @@ const { listSessions, createSession, enqueue, onEvent, minimizeWindow, toggleMax
     createdAt: '2026-06-10T03:00:00.000Z',
     updatedAt: '2026-06-10T03:00:00.000Z'
   })),
+  listMessages: vi.fn(async () => []),
+  listRuns: vi.fn(async () => []),
+  listSteps: vi.fn(async () => []),
   enqueue: vi.fn(async () => ({ runId: 'run-1' })),
   onEvent: vi.fn(() => () => undefined),
   minimizeWindow: vi.fn(async () => ({ minimized: true })),
@@ -28,6 +31,7 @@ vi.mock('../src/ipc-client', () => ({
       list: listSessions,
       create: createSession
     },
+    conversation: { listMessages, listRuns, listSteps },
     agent: { enqueue, onEvent },
     dialog: { selectDirectory: vi.fn() },
     window: {
@@ -55,12 +59,18 @@ describe('renderer App', () => {
   beforeEach(() => {
     listSessions.mockReset()
     createSession.mockClear()
+    listMessages.mockReset()
+    listRuns.mockReset()
+    listSteps.mockReset()
     enqueue.mockReset()
     onEvent.mockReset()
     minimizeWindow.mockClear()
     toggleMaximizeWindow.mockClear()
     closeWindow.mockClear()
     listSessions.mockResolvedValue([])
+    listMessages.mockResolvedValue([])
+    listRuns.mockResolvedValue([])
+    listSteps.mockResolvedValue([])
     enqueue.mockResolvedValue({ runId: 'run-1' })
     onEvent.mockImplementation(() => () => undefined)
   })
@@ -115,6 +125,55 @@ describe('renderer App', () => {
 
     expect(screen.getByRole('button', { name: '工具' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('region', { name: 'Tools 即将支持 占位区域' })).toBeInTheDocument()
+  })
+
+  it('loads the active session conversation history after sessions load and renders persisted messages', async () => {
+    listSessions.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        title: 'Restored chat',
+        status: 'active',
+        outputMode: 'markdown',
+        createdAt: '2026-06-10T03:00:00.000Z',
+        updatedAt: '2026-06-10T03:00:00.000Z'
+      }
+    ] as any)
+    listMessages.mockResolvedValueOnce([
+      {
+        id: 'message-restored-user',
+        sessionId: 'session-1',
+        role: 'user',
+        content: 'persisted hello',
+        contentType: 'plain',
+        runId: 'run-restored',
+        createdAt: '2026-06-10T03:00:01.000Z'
+      },
+      {
+        id: 'message-restored-assistant',
+        sessionId: 'session-1',
+        role: 'assistant',
+        content: 'persisted response',
+        contentType: 'markdown',
+        runId: 'run-restored',
+        createdAt: '2026-06-10T03:00:02.000Z'
+      }
+    ] as any)
+    listRuns.mockResolvedValueOnce([
+      { id: 'run-restored', sessionId: 'session-1', status: 'succeeded', modelId: 'mock/hesper-fast', retryCount: 0, maxRetries: 2 }
+    ] as any)
+    listSteps.mockResolvedValueOnce([
+      { id: 'step-restored', runId: 'run-restored', type: 'thought', status: 'succeeded', title: 'Restored thought', createdAt: '2026-06-10T03:00:01.500Z' }
+    ] as any)
+
+    render(<App />)
+
+    expect(await screen.findByText('persisted hello')).toBeInTheDocument()
+    expect(screen.getByText('persisted response')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(listMessages).toHaveBeenCalledWith('session-1')
+      expect(listRuns).toHaveBeenCalledWith('session-1')
+      expect(listSteps).toHaveBeenCalledWith('run-restored')
+    })
   })
 
   it('shows a minimal error state when initial sessions load fails', async () => {

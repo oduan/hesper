@@ -266,6 +266,57 @@ describe('registerIpcHandlers', () => {
     ])
   })
 
+  it('registers conversation history handlers and returns persisted messages, runs, and steps', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock' })
+    const handles = new Map<string, (event: any, ...args: any[]) => Promise<unknown> | unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (event: any, ...args: any[]) => Promise<unknown> | unknown) => {
+        handles.set(channel, handler)
+      }),
+      removeHandler: vi.fn()
+    }
+    const dialog = {
+      showOpenDialog: vi.fn(async () => ({ canceled: false, filePaths: ['C:/workspace'] }))
+    }
+
+    const session = await container.sessionService.createSession({ title: 'Restored chat' })
+    await persistence.runs.save({ id: 'run-restored', sessionId: session.id, status: 'succeeded', modelId: 'mock/hesper-fast', retryCount: 0, maxRetries: 2 })
+    await persistence.messages.save({
+      id: 'message-restored-user',
+      sessionId: session.id,
+      role: 'user',
+      content: 'persisted question',
+      contentType: 'plain',
+      runId: 'run-restored',
+      createdAt: '2026-06-10T03:00:01.000Z'
+    })
+    await persistence.steps.save({
+      id: 'step-restored',
+      runId: 'run-restored',
+      type: 'thought',
+      status: 'succeeded',
+      title: 'Restored thinking',
+      createdAt: '2026-06-10T03:00:02.000Z'
+    })
+
+    registerIpcHandlers({ ipcMain, dialog, container })
+
+    expect(ipcMain.handle).toHaveBeenCalledWith(ipcChannels.conversationListMessages, expect.any(Function))
+    expect(ipcMain.handle).toHaveBeenCalledWith(ipcChannels.conversationListRuns, expect.any(Function))
+    expect(ipcMain.handle).toHaveBeenCalledWith(ipcChannels.conversationListSteps, expect.any(Function))
+
+    await expect(handles.get(ipcChannels.conversationListMessages)?.({ sender: { id: 1 } }, session.id)).resolves.toEqual([
+      expect.objectContaining({ id: 'message-restored-user', content: 'persisted question' })
+    ])
+    await expect(handles.get(ipcChannels.conversationListRuns)?.({ sender: { id: 1 } }, session.id)).resolves.toEqual([
+      expect.objectContaining({ id: 'run-restored', sessionId: session.id })
+    ])
+    await expect(handles.get(ipcChannels.conversationListSteps)?.({ sender: { id: 1 } }, 'run-restored')).resolves.toEqual([
+      expect.objectContaining({ id: 'step-restored', runId: 'run-restored' })
+    ])
+  })
+
   it('validates agent enqueue input before invoking the runtime', async () => {
     const persistence = await createInMemoryPersistence()
     const container = createServiceContainer({ persistence, agentMode: 'mock' })
