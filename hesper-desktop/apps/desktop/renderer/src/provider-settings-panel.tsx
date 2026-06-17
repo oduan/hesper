@@ -6,6 +6,7 @@ import type {
   SaveModelProviderInput
 } from '../../electron/ipc-contract'
 import { hesperApi } from './ipc-client'
+import { modelNameFromNamespacedId, namespaceModelId } from './model-options'
 
 type ProtocolMode = 'openai-compatible' | 'anthropic-compatible'
 type ConnectionDialogMode = 'add' | 'edit'
@@ -29,10 +30,12 @@ export type ProviderSettingsPanelProps = {
 
 function createConnectionForm(provider?: ModelProviderDto, models: ModelDto[] = []): ConnectionFormState {
   const providerModels = provider ? models.filter((model) => model.providerId === provider.id && model.enabled !== false) : []
-  const orderedModelIds = [
-    ...(provider?.defaultModelId ? [provider.defaultModelId] : []),
-    ...providerModels.map((model) => model.id)
-  ].filter((modelId, index, modelIds) => modelId && modelIds.indexOf(modelId) === index)
+  const orderedModelIds = provider
+    ? [
+        ...(provider.defaultModelId ? [displayModelIdForProvider(provider.id, provider.defaultModelId)] : []),
+        ...providerModels.map((model) => displayModelIdForProvider(provider.id, model.id))
+      ].filter((modelId, index, modelIds) => modelId && modelIds.indexOf(modelId) === index)
+    : []
   return {
     apiKey: '',
     endpoint: provider?.baseUrl ?? '',
@@ -62,6 +65,18 @@ function titleFromSlug(slug: string): string {
 
 function providerKindForProtocol(protocol: ProtocolMode): SaveModelProviderInput['kind'] {
   return protocol === 'anthropic-compatible' ? 'anthropic' : 'openai-compatible'
+}
+
+function shouldNamespaceModelIds(providerId: string): boolean {
+  return providerId.startsWith('custom-')
+}
+
+function modelIdForProvider(providerId: string, modelName: string): string {
+  return shouldNamespaceModelIds(providerId) ? namespaceModelId(providerId, modelName) : modelName
+}
+
+function displayModelIdForProvider(providerId: string, modelId: string): string {
+  return shouldNamespaceModelIds(providerId) ? modelNameFromNamespacedId(providerId, modelId) : modelId
 }
 
 export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettingsPanelProps) {
@@ -154,7 +169,7 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
         kind: providerKindForProtocol(dialogState.form.protocol),
         enabled: true,
         ...(endpoint ? { baseUrl: endpoint } : existingProvider?.baseUrl ? { baseUrl: existingProvider.baseUrl } : {}),
-        ...(primaryModelId ? { defaultModelId: primaryModelId } : existingProvider?.defaultModelId ? { defaultModelId: existingProvider.defaultModelId } : {})
+        ...(primaryModelId ? { defaultModelId: modelIdForProvider(providerId, primaryModelId) } : existingProvider?.defaultModelId ? { defaultModelId: existingProvider.defaultModelId } : {})
       })
 
       if (apiKey) {
@@ -162,11 +177,13 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
       }
 
       for (const modelId of modelIds) {
+        const normalizedModelId = modelIdForProvider(provider.id, modelId)
+        const normalizedModelName = displayModelIdForProvider(provider.id, normalizedModelId)
         await hesperApi.models.save({
-          id: modelId,
+          id: normalizedModelId,
           providerId: provider.id,
-          modelName: modelId,
-          displayName: modelId,
+          modelName: normalizedModelName,
+          displayName: normalizedModelName,
           capabilities: ['streaming', 'toolCalls'],
           enabled: true
         })

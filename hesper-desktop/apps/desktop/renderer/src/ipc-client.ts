@@ -16,6 +16,7 @@ import type {
   UpdateSessionTitleInput,
   UpdateSettingsInput
 } from '../../electron/ipc-contract'
+import { createId } from '@hesper/shared'
 
 const defaultSettings: AppSettings = {
   defaultModelId: 'mock/hesper-fast',
@@ -27,7 +28,7 @@ function withDefined<T extends object>(value: T): T {
   return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined)) as T
 }
 
-function createMockSession(input: CreateSessionInput = {}, id = `session-fallback-${Date.now()}`): SessionDto {
+function createMockSession(input: CreateSessionInput = {}, id = createId('session')): SessionDto {
   const timestamp = new Date().toISOString()
   return withDefined({
     id,
@@ -50,7 +51,6 @@ function updateMockSession(session: SessionDto, overrides: Partial<SessionDto> =
 }
 
 export function createFallbackHesperApi(): HesperDesktopApi {
-  let nextSessionNumber = 1
   let nextRunNumber = 1
   let sessions: SessionDto[] = []
   const messagesBySession: Record<string, MessageDto[]> = {}
@@ -67,7 +67,7 @@ export function createFallbackHesperApi(): HesperDesktopApi {
     sessions: {
       list: async () => sessions.filter((session) => session.status !== 'deleted'),
       create: async (input) => {
-        const session = createMockSession(input, `session-fallback-${nextSessionNumber++}`)
+        const session = createMockSession(input)
         sessions = [session, ...sessions]
         messagesBySession[session.id] = []
         runsBySession[session.id] = []

@@ -206,7 +206,7 @@ describe('provider settings panel', () => {
     expect(await screen.findByRole('dialog', { name: 'API 配置' })).toBeInTheDocument()
     await user.type(screen.getByLabelText('添加连接 API key'), 'sk-custom-value')
     await user.type(screen.getByLabelText('添加连接 Endpoint'), 'https://api.example.com')
-    await user.type(screen.getByLabelText('添加连接默认模型'), 'example-chat, example-reasoner')
+    await user.type(screen.getByLabelText('添加连接默认模型'), 'gpt-4o, example-reasoner')
     await user.click(screen.getByRole('button', { name: '保存' }))
 
     await waitFor(() => {
@@ -215,20 +215,21 @@ describe('provider settings panel', () => {
         name: 'Api Example Com',
         kind: 'openai-compatible',
         baseUrl: 'https://api.example.com',
-        defaultModelId: 'example-chat'
+        defaultModelId: 'custom-api-example-com/gpt-4o'
       }))
     })
     expect(saveProviderApiKey).toHaveBeenCalledWith({ providerId: 'custom-api-example-com', apiKey: 'sk-custom-value' })
     expect(saveModel).toHaveBeenNthCalledWith(1, expect.objectContaining({
-      id: 'example-chat',
+      id: 'custom-api-example-com/gpt-4o',
       providerId: 'custom-api-example-com',
-      modelName: 'example-chat'
+      modelName: 'gpt-4o'
     }))
     expect(saveModel).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      id: 'example-reasoner',
+      id: 'custom-api-example-com/example-reasoner',
       providerId: 'custom-api-example-com',
       modelName: 'example-reasoner'
     }))
+    expect(saveModel).not.toHaveBeenCalledWith(expect.objectContaining({ id: 'gpt-4o' }))
     expect(screen.queryByDisplayValue('sk-custom-value')).not.toBeInTheDocument()
   })
 
@@ -271,8 +272,8 @@ describe('provider settings panel', () => {
     await waitFor(() => {
       expect(saveProvider).toHaveBeenCalledWith(expect.objectContaining({ id: 'deepseek', baseUrl: 'https://api.deepseek.com/v1' }))
     })
-    expect(saveModel).toHaveBeenCalledWith(expect.objectContaining({ id: 'deepseek-chat', providerId: 'deepseek' }))
-    expect(saveModel).toHaveBeenCalledWith(expect.objectContaining({ id: 'deepseek-reasoner', providerId: 'deepseek' }))
+    expect(saveModel).toHaveBeenCalledWith(expect.objectContaining({ id: 'deepseek-chat', providerId: 'deepseek', modelName: 'deepseek-chat' }))
+    expect(saveModel).toHaveBeenCalledWith(expect.objectContaining({ id: 'deepseek-reasoner', providerId: 'deepseek', modelName: 'deepseek-reasoner' }))
     expect(saveProviderApiKey).not.toHaveBeenCalled()
   })
 

@@ -36,7 +36,9 @@ describe('ui components', () => {
       />
     )
 
-    expect(screen.getAllByText('hesper')).not.toHaveLength(0)
+    const titleBar = screen.getByLabelText('窗口标题栏')
+    expect(titleBar).toHaveTextContent('构建 hesper MVP')
+    expect(titleBar).not.toHaveTextContent(/^hesper$/)
     expect(screen.getByText('所有会话')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '所有会话' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByLabelText('功能栏')).toHaveStyle({ boxSizing: 'border-box' })

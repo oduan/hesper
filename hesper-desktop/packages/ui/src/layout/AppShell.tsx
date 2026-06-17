@@ -20,7 +20,7 @@ export type AppShellProps = {
   children?: ReactNode
 }
 
-export function AppShell({ sessions, activeSection, title: _title, platform, activeSessionId, onCreateSession, onSelectSection, onSelectSession, onWindowMinimize, onWindowToggleMaximize, onWindowClose, children }: AppShellProps) {
+export function AppShell({ sessions, activeSection, title, platform, activeSessionId, onCreateSession, onSelectSection, onSelectSession, onWindowMinimize, onWindowToggleMaximize, onWindowClose, children }: AppShellProps) {
   return (
     <div
       style={{
@@ -36,7 +36,7 @@ export function AppShell({ sessions, activeSection, title: _title, platform, act
       }}
     >
       <TitleBar
-        title="hesper"
+        title={title}
         {...(platform ? { platform } : {})}
         {...(onWindowMinimize ? { onMinimize: onWindowMinimize } : {})}
         {...(onWindowToggleMaximize ? { onToggleMaximize: onWindowToggleMaximize } : {})}
