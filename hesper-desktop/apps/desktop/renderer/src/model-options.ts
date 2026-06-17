@@ -1,15 +1,8 @@
-import type { ModelDto, SaveModelInput } from '../../electron/ipc-contract'
+import type { ModelDto } from '../../electron/ipc-contract'
 import { hesperApi } from './ipc-client'
 
 export const defaultFallbackModelId = 'mock/hesper-fast'
 export const fallbackSessionModelOptions = [defaultFallbackModelId]
-
-export const validModelCapabilities: Array<NonNullable<SaveModelInput['capabilities']>[number]> = [
-  'streaming',
-  'toolCalls',
-  'jsonOutput',
-  'reasoning'
-]
 
 export function namespaceModelId(providerId: string, modelName: string): string {
   const normalizedProviderId = providerId.trim()
@@ -76,27 +69,3 @@ export async function loadAvailableModelOptions(): Promise<string[]> {
   return createSessionModelOptions(await listModels())
 }
 
-export function parseModelCapabilities(value: string): {
-  capabilities?: SaveModelInput['capabilities']
-  invalidCapabilities: string[]
-} {
-  const entries = value
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean)
-  const capabilities: NonNullable<SaveModelInput['capabilities']> = []
-  const invalidCapabilities: string[] = []
-
-  for (const entry of entries) {
-    if (validModelCapabilities.includes(entry as NonNullable<SaveModelInput['capabilities']>[number])) {
-      capabilities.push(entry as NonNullable<SaveModelInput['capabilities']>[number])
-    } else {
-      invalidCapabilities.push(entry)
-    }
-  }
-
-  return {
-    ...(capabilities.length ? { capabilities } : {}),
-    invalidCapabilities
-  }
-}

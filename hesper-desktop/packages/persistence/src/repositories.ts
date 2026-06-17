@@ -11,7 +11,6 @@ import {
   type ModelProviderConfig,
   type ModelRef,
   type Role,
-  type RunError,
   type RunStep,
   type Session,
   type Skill,

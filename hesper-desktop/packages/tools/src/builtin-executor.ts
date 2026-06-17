@@ -338,42 +338,6 @@ function mergeChunks(chunks: Uint8Array[], bytesRead: number, maxBytes: number):
   }
 }
 
-async function readLimitedResponseText(response: Response, maxFetchBytes: number): Promise<LimitedTextResult> {
-  if (!response.body) {
-    const text = await response.text()
-    const bytes = Buffer.byteLength(text, 'utf8')
-    return { text: text.slice(0, maxFetchBytes), bytesRead: Math.min(bytes, maxFetchBytes + 1), truncated: bytes > maxFetchBytes }
-  }
-
-  const reader = response.body.getReader()
-  const chunks: Uint8Array[] = []
-  let bytesRead = 0
-  try {
-    while (bytesRead <= maxFetchBytes) {
-      const { done, value } = await reader.read()
-      if (done) break
-      const chunk = value ?? new Uint8Array()
-      const remaining = maxFetchBytes + 1 - bytesRead
-      if (chunk.byteLength > remaining) {
-        chunks.push(chunk.slice(0, remaining))
-        bytesRead += remaining
-        await reader.cancel()
-        break
-      }
-      chunks.push(chunk)
-      bytesRead += chunk.byteLength
-      if (bytesRead > maxFetchBytes) {
-        await reader.cancel()
-        break
-      }
-    }
-  } finally {
-    reader.releaseLock()
-  }
-
-  return mergeChunks(chunks, bytesRead, maxFetchBytes)
-}
-
 function headerString(value: string | string[] | number | undefined): string | undefined {
   if (Array.isArray(value)) return value.join(', ')
   if (typeof value === 'number') return String(value)

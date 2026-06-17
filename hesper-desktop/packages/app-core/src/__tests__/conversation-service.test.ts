@@ -12,7 +12,7 @@ describe('createConversationService', () => {
     const conversation = createConversationService(persistence)
 
     const session = await sessions.createSession({ title: 'Chat', now })
-    const run = await persistence.runs.save({
+    await persistence.runs.save({
       id: 'run-1',
       sessionId: session.id,
       status: 'running',
