@@ -70,6 +70,10 @@ function omitUndefined<T extends Record<string, unknown>>(value: T): StripUndefi
   return Object.fromEntries(Object.entries(value).filter(([, candidate]) => candidate !== undefined)) as StripUndefined<T>
 }
 
+function toError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error))
+}
+
 export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => void {
   const savePersistence = options.savePersistence ?? (async () => {})
   const schedulePersistenceSave = options.schedulePersistenceSave ?? (() => {})
@@ -209,12 +213,18 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       const input = agentEnqueueInputSchema.parse(payload)
       const runContext = await assembleRunContext(input.sessionId, input.workspacePath, input.enabledToolIds)
       const run = await options.container.agentRuntime.enqueue(omitUndefined({ ...input, ...runContext }))
-      await options.container.conversationService.createUserMessage({
-        sessionId: input.sessionId,
-        content: input.prompt,
-        runId: run.id,
-        ...(input.messageId ? { id: input.messageId } : {})
-      })
+      try {
+        await options.container.conversationService.createUserMessage({
+          sessionId: input.sessionId,
+          content: input.prompt,
+          runId: run.id,
+          ...(input.messageId ? { id: input.messageId } : {})
+        })
+      } catch (error) {
+        const normalizedError = toError(error)
+        await options.container.agentRuntime.failRun(run.id, normalizedError)
+        throw normalizedError
+      }
       schedulePersistenceSave()
       await savePersistence()
       return { runId: run.id }

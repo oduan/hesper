@@ -27,6 +27,8 @@ const defaults: AppSettings = {
 
 export function createSettingsService(options: SettingsServiceOptions): SettingsService {
   const now = options.now ?? (() => new Date())
+  let updateChain: Promise<void> = Promise.resolve()
+
   const loadSettings = async (): Promise<AppSettings> => {
     const persisted = await options.persistence.settings.get()
     return {
@@ -42,12 +44,18 @@ export function createSettingsService(options: SettingsServiceOptions): Settings
     }
   }
 
+  const queueUpdate = async <T>(task: () => Promise<T>): Promise<T> => {
+    const result = updateChain.then(task, task)
+    updateChain = result.then(() => {}, () => {})
+    return result
+  }
+
   return {
     getSettings: () => loadSettings(),
-    updateSettings: async (patch) => {
+    updateSettings: (patch) => queueUpdate(async () => {
       const next = { ...(await loadSettings()), ...patch }
       await options.persistence.settings.save({ ...next, updatedAt: now().toISOString() })
       return next
-    }
+    })
   }
 }

@@ -270,6 +270,58 @@ describe('registerIpcHandlers', () => {
     expect(await persistence.messages.listBySession(session.id)).toEqual([])
   })
 
+  it('marks the run failed if the user message cannot be stored after enqueue succeeds', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock' })
+    const savePersistence = vi.fn(async () => {})
+    const schedulePersistenceSave = vi.fn()
+    const handles = new Map<string, (event: any, ...args: any[]) => Promise<unknown> | unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (event: any, ...args: any[]) => Promise<unknown> | unknown) => {
+        handles.set(channel, handler)
+      }),
+      removeHandler: vi.fn()
+    }
+    const dialog = {
+      showOpenDialog: vi.fn(async () => ({ canceled: false, filePaths: ['C:/workspace'] }))
+    }
+
+    const session = await container.sessionService.createSession({ title: 'IPC compensation' })
+    const run = {
+      id: 'run-compensate-1',
+      sessionId: session.id,
+      status: 'running',
+      modelId: 'mock/hesper-fast',
+      retryCount: 0,
+      maxRetries: 2,
+      startedAt: '2026-06-17T10:14:58.000Z'
+    } as const
+    await persistence.runs.save(run)
+
+    const enqueueSpy = vi.spyOn(container.agentRuntime, 'enqueue').mockResolvedValueOnce(run as Awaited<ReturnType<typeof container.agentRuntime.enqueue>>)
+    const createUserMessageSpy = vi.spyOn(container.conversationService, 'createUserMessage').mockRejectedValueOnce(new Error('message write failed'))
+    const failRunSpy = vi.spyOn(container.agentRuntime, 'failRun')
+
+    registerIpcHandlers({ ipcMain, dialog, container, savePersistence, schedulePersistenceSave })
+
+    await expect(
+      handles.get(ipcChannels.agentEnqueue)?.({ sender: { id: 1 } }, { sessionId: session.id, prompt: 'Persist me', modelId: 'mock/hesper-fast', messageId: 'message-compensate-1' })
+    ).rejects.toThrow('message write failed')
+
+    expect(enqueueSpy.mock.invocationCallOrder[0]!).toBeLessThan(createUserMessageSpy.mock.invocationCallOrder[0]!)
+    expect(failRunSpy).toHaveBeenCalledWith(run.id, expect.any(Error))
+    expect(schedulePersistenceSave).toHaveBeenCalled()
+    expect(savePersistence).not.toHaveBeenCalled()
+    expect(await persistence.messages.listBySession(session.id)).toEqual([])
+
+    const storedRun = await persistence.runs.get(run.id)
+    expect(storedRun?.status).toBe('failed')
+    expect(storedRun?.error?.message).toBe('message write failed')
+    expect(storedRun?.status).not.toBe('running')
+    expect(storedRun?.status).not.toBe('succeeded')
+    expect((await persistence.events.listByRun(run.id)).map((event) => event.type)).toContain('run.failed')
+  })
+
   it('registers conversation history handlers and returns persisted messages, runs, and steps', async () => {
     const persistence = await createInMemoryPersistence()
     const container = createServiceContainer({ persistence, agentMode: 'mock' })

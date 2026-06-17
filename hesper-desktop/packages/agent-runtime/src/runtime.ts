@@ -1,5 +1,5 @@
 import type { Persistence } from '@hesper/persistence'
-import { createId, nowIso, type AgentRun, type AgentRuntimeEvent, type Message, type RunStep } from '@hesper/shared'
+import { createId, nowIso, type AgentRun, type AgentRuntimeEvent, type Message, type RunError, type RunStep } from '@hesper/shared'
 import type { AgentAdapter } from './adapters'
 import { normalizeUnknownError } from './adapters'
 import { clearPiEventRunState } from './map-pi-event'
@@ -26,6 +26,7 @@ type SessionState = {
   running: boolean
   queue: Array<{ run: AgentRun; prompt: string; systemPrompt?: string; enabledToolIds?: string[] }>
   active: Promise<void> | undefined
+  activeRunId: string | undefined
   waiters: Array<() => void>
 }
 
@@ -38,6 +39,14 @@ function createMissingSessionError(sessionId: string): Error {
   return new Error(`Session not found: ${sessionId}`)
 }
 
+function runIdFromEvent(event: AgentRuntimeEvent): string | undefined {
+  if (event.type === 'run.created') return event.run.id
+  if (event.type === 'step.created' || event.type === 'step.updated') return event.step.runId
+  if (event.type === 'message.completed') return event.message.runId
+  if ('runId' in event && typeof event.runId === 'string') return event.runId
+  return undefined
+}
+
 export class AgentRuntime {
   private readonly persistence: Persistence
   private readonly adapter: AgentAdapter
@@ -45,6 +54,7 @@ export class AgentRuntime {
   private readonly listeners = new Set<RuntimeListener>()
   private readonly sessionStates = new Map<string, SessionState>()
   private readonly enqueueChains = new Map<string, Promise<void>>()
+  private readonly terminatedRuns = new Map<string, RunError>()
 
   constructor(options: AgentRuntimeOptions) {
     this.persistence = options.persistence
@@ -115,11 +125,32 @@ export class AgentRuntime {
     })
   }
 
+  async failRun(runId: string, error: unknown): Promise<AgentRun | undefined> {
+    const normalized = normalizeUnknownError(error)
+    const existing = await this.persistence.runs.get(runId)
+    if (!existing) return undefined
+
+    this.terminatedRuns.set(runId, normalized)
+    for (const state of this.sessionStates.values()) {
+      state.queue = state.queue.filter((entry) => entry.run.id !== runId)
+    }
+
+    const failedRun = await this.persistFailedRun(existing, normalized)
+    clearPiEventRunState(runId)
+    await this.emitAndPersist({ type: 'run.failed', runId, error: normalized })
+
+    if (!this.isActiveRun(runId)) {
+      this.terminatedRuns.delete(runId)
+    }
+
+    return failedRun
+  }
+
   private getSessionState(sessionId: string): SessionState {
     const existing = this.sessionStates.get(sessionId)
     if (existing) return existing
 
-    const created: SessionState = { running: false, queue: [], active: undefined, waiters: [] }
+    const created: SessionState = { running: false, queue: [], active: undefined, activeRunId: undefined, waiters: [] }
     this.sessionStates.set(sessionId, created)
     return created
   }
@@ -147,6 +178,7 @@ export class AgentRuntime {
   private startSessionRun(sessionId: string, run: AgentRun, prompt: string, systemPrompt?: string, enabledToolIds?: string[]): void {
     const state = this.getSessionState(sessionId)
     state.running = true
+    state.activeRunId = run.id
     state.active = this.executeRun(run, prompt, systemPrompt, enabledToolIds)
       .then(() => this.finishRun(sessionId))
       .catch(() => this.finishRun(sessionId))
@@ -169,6 +201,7 @@ export class AgentRuntime {
 
     state.running = false
     state.active = undefined
+    state.activeRunId = undefined
 
     const lateQueued = state.queue.shift()
     if (lateQueued) {
@@ -187,17 +220,49 @@ export class AgentRuntime {
     for (const resolve of waiters) resolve()
   }
 
+  private isActiveRun(runId: string): boolean {
+    return [...this.sessionStates.values()].some((state) => state.activeRunId === runId)
+  }
+
+  private async persistFailedRun(run: AgentRun, error: RunError): Promise<AgentRun> {
+    const failedRun: AgentRun = {
+      ...run,
+      status: 'failed',
+      endedAt: nowIso(),
+      error
+    }
+    await this.persistence.runs.save(failedRun)
+    return failedRun
+  }
+
+  private async applyTerminationIfNeeded(runId: string): Promise<boolean> {
+    const error = this.terminatedRuns.get(runId)
+    if (!error) return false
+
+    const latest = await this.persistence.runs.get(runId)
+    if (latest && latest.status !== 'failed') {
+      await this.persistFailedRun(latest, error)
+    }
+    clearPiEventRunState(runId)
+    return true
+  }
+
   private async executeRun(run: AgentRun, prompt: string, systemPrompt?: string, enabledToolIds?: string[]): Promise<void> {
-    const current: AgentRun = { ...run, status: 'running', startedAt: run.startedAt ?? nowIso() }
-    await this.persistence.runs.save(current)
-    await this.emitAndPersist({ type: 'run.started', runId: current.id })
+    try {
+      const current: AgentRun = { ...run, status: 'running', startedAt: run.startedAt ?? nowIso() }
+      await this.persistence.runs.save(current)
+      await this.emitAndPersist({ type: 'run.started', runId: current.id })
 
-    let latestRun = current
-    let attempt = latestRun.retryCount
+      let latestRun = current
+      let attempt = latestRun.retryCount
 
-    while (true) {
-      const controller = new AbortController()
-      try {
+      while (true) {
+        if (await this.applyTerminationIfNeeded(latestRun.id)) {
+          return
+        }
+
+        const controller = new AbortController()
+        try {
         await this.adapter.run(
           {
             runId: latestRun.id,
@@ -212,17 +277,27 @@ export class AgentRuntime {
           async (event) => this.handleAdapterEvent(event)
         )
 
+        if (await this.applyTerminationIfNeeded(latestRun.id)) {
+          return
+        }
+
         latestRun = {
           ...latestRun,
           status: 'succeeded',
           endedAt: nowIso()
         } satisfies AgentRun
         await this.persistence.runs.save(latestRun)
+        if (await this.applyTerminationIfNeeded(latestRun.id)) {
+          return
+        }
         clearPiEventRunState(latestRun.id)
         await this.emitAndPersist({ type: 'run.succeeded', runId: latestRun.id })
         return
       } catch (error) {
         const normalized = normalizeUnknownError(error)
+        if (await this.applyTerminationIfNeeded(latestRun.id)) {
+          return
+        }
         if (isRetryableRunError(normalized, this.retryPolicy) && attempt < this.retryPolicy.maxRetries) {
           const delayMs = getRetryDelayMs(this.retryPolicy, attempt)
           attempt += 1
@@ -254,9 +329,16 @@ export class AgentRuntime {
         return
       }
     }
+    } finally {
+      this.terminatedRuns.delete(run.id)
+    }
   }
 
   private async handleAdapterEvent(event: AgentRuntimeEvent): Promise<void> {
+    const eventRunId = runIdFromEvent(event)
+    if (eventRunId && this.terminatedRuns.has(eventRunId)) {
+      return
+    }
     if (event.type === 'step.created' || event.type === 'step.updated') {
       await this.persistence.steps.save(event.step as RunStep)
     }

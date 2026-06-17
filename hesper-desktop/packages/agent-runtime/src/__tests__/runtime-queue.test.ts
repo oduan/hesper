@@ -65,9 +65,42 @@ class RecordingAdapter implements AgentAdapter {
   }
 }
 
+class ControllableAdapter implements AgentAdapter {
+  private releaseRun!: () => void
+  private releaseRunning!: () => void
+  readonly running = new Promise<void>((resolve) => {
+    this.releaseRunning = resolve
+  })
+  readonly canFinish = new Promise<void>((resolve) => {
+    this.releaseRun = resolve
+  })
+
+  finish(): void {
+    this.releaseRun()
+  }
+
+  async run(input: AgentPromptInput, emit: (event: AgentRuntimeEvent) => void | Promise<void>): Promise<void> {
+    this.releaseRunning()
+    await this.canFinish
+    await emit({
+      type: 'message.completed',
+      message: {
+        id: `message-${input.runId}`,
+        sessionId: input.sessionId,
+        role: 'assistant',
+        content: `done:${input.prompt}`,
+        contentType: 'markdown',
+        runId: input.runId,
+        createdAt: '2026-06-10T06:00:00.000Z'
+      }
+    })
+  }
+}
+
 type RuntimeInternals = {
   enqueueChains: Map<string, Promise<void>>
   sessionStates: Map<string, unknown>
+  terminatedRuns: Map<string, unknown>
 }
 
 function getRuntimeInternals(runtime: AgentRuntime): RuntimeInternals {
@@ -118,6 +151,69 @@ describe('AgentRuntime queue', () => {
     } finally {
       consoleError.mockRestore()
     }
+  })
+
+  it('keeps a compensated active run failed and ignores later adapter events', async () => {
+    const persistence = await createInMemoryPersistence()
+    await persistence.sessions.save({ ...session, id: 'session-compensated-run' })
+
+    const adapter = new ControllableAdapter()
+    const runtime = new AgentRuntime({ persistence, adapter })
+
+    const run = await runtime.enqueue({ sessionId: 'session-compensated-run', prompt: 'will be compensated', modelId: 'mock/hesper-fast' })
+    await adapter.running
+
+    await runtime.failRun(run.id, new Error('message write failed'))
+    adapter.finish()
+    await runtime.waitForIdle('session-compensated-run')
+
+    const storedRun = await persistence.runs.get(run.id)
+    const runtimeEvents = await persistence.events.listByRun(run.id)
+    expect(storedRun?.status).toBe('failed')
+    expect(storedRun?.error?.message).toBe('message write failed')
+    expect(runtimeEvents.map((event) => event.type)).toContain('run.failed')
+    expect(runtimeEvents.map((event) => event.type)).not.toContain('run.succeeded')
+    expect(await persistence.messages.listBySession('session-compensated-run')).toEqual([])
+    expect(getRuntimeInternals(runtime).terminatedRuns.size).toBe(0)
+  })
+
+  it('does not retry an active run after it is compensated during retry backoff', async () => {
+    const persistence = await createInMemoryPersistence()
+    await persistence.sessions.save({ ...session, id: 'session-compensated-backoff' })
+
+    const adapter = new FailsOnceRecordingAdapter()
+    const runtime = new AgentRuntime({
+      persistence,
+      adapter,
+      retryPolicy: {
+        ...defaultRetryPolicy,
+        maxRetries: 1,
+        initialDelayMs: 50,
+        backoffMultiplier: 1
+      }
+    })
+    let resolveRetrying!: () => void
+    const retrying = new Promise<void>((resolve) => {
+      resolveRetrying = resolve
+    })
+    runtime.subscribe((event) => {
+      if (event.type === 'run.retrying') resolveRetrying()
+    })
+
+    const run = await runtime.enqueue({ sessionId: 'session-compensated-backoff', prompt: 'retry then compensate', modelId: 'mock/hesper-fast' })
+    await retrying
+    await runtime.failRun(run.id, new Error('message write failed'))
+    await runtime.waitForIdle('session-compensated-backoff')
+
+    const storedRun = await persistence.runs.get(run.id)
+    const runtimeEvents = await persistence.events.listByRun(run.id)
+    expect(adapter.inputs).toHaveLength(1)
+    expect(storedRun?.status).toBe('failed')
+    expect(storedRun?.error?.message).toBe('message write failed')
+    expect(runtimeEvents.map((event) => event.type)).toContain('run.failed')
+    expect(runtimeEvents.map((event) => event.type)).not.toContain('run.succeeded')
+    expect(await persistence.messages.listBySession('session-compensated-backoff')).toEqual([])
+    expect(getRuntimeInternals(runtime).terminatedRuns.size).toBe(0)
   })
 
   it('runs the first prompt immediately and queues the second prompt', async () => {
