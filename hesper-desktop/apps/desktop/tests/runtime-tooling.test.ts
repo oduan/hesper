@@ -6,6 +6,7 @@ import desktopPackage from '../package.json'
 const appRoot = path.resolve(import.meta.dirname, '..')
 const ipcContractPath = path.join(appRoot, 'electron', 'ipc-contract.ts')
 const preloadPath = path.join(appRoot, 'electron', 'preload.cjs')
+const startElectronDevPath = path.join(appRoot, 'scripts', 'start-electron-dev.mjs')
 
 function readObjectLiteral(source: string, declarationPattern: RegExp, label: string) {
   const match = source.match(declarationPattern)
@@ -43,7 +44,16 @@ describe('desktop runtime tooling', () => {
     expect(devScript).toContain('node scripts/copy-preload.mjs --watch')
     expect(devScript).toContain('node scripts/fix-esm-imports.mjs --watch')
     expect(devScript).toContain('dist/electron/preload.cjs')
+    expect(devScript).toContain('node scripts/start-electron-dev.mjs')
     expect(verifyDevRuntimeScript).toContain('node scripts/clean-dev-runtime.mjs')
     expect(verifyDevRuntimeScript).toContain('pnpm dev:prepare')
+  })
+
+  it('starts the dev Electron window against the Vite renderer server instead of stale dist output', () => {
+    const startElectronDevSource = fs.readFileSync(startElectronDevPath, 'utf8')
+
+    expect(startElectronDevSource).toContain('VITE_DEV_SERVER_URL')
+    expect(startElectronDevSource).toContain('http://127.0.0.1:5173')
+    expect(startElectronDevSource).toContain('electron')
   })
 })
