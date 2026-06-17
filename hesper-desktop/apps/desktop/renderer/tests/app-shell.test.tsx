@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, clearSessionSendError, pruneSessionSendErrors } from '../src/App'
 
-const { listSessions, createSession, listMessages, listRuns, listSteps, enqueue, onEvent, minimizeWindow, toggleMaximizeWindow, closeWindow } = vi.hoisted(() => ({
+const { listSessions, createSession, listMessages, listRuns, listSteps, enqueue, onEvent, listProviders, listModels, minimizeWindow, toggleMaximizeWindow, closeWindow } = vi.hoisted(() => ({
   listSessions: vi.fn(async () => []),
   createSession: vi.fn(async () => ({
     id: 'session-1',
@@ -20,6 +20,8 @@ const { listSessions, createSession, listMessages, listRuns, listSteps, enqueue,
   listSteps: vi.fn(async () => []),
   enqueue: vi.fn(async () => ({ runId: 'run-1' })),
   onEvent: vi.fn(() => () => undefined),
+  listProviders: vi.fn(async () => []),
+  listModels: vi.fn(async () => []),
   minimizeWindow: vi.fn(async () => ({ minimized: true })),
   toggleMaximizeWindow: vi.fn(async () => ({ isMaximized: true })),
   closeWindow: vi.fn(async () => ({ closed: true }))
@@ -34,6 +36,8 @@ vi.mock('../src/ipc-client', () => ({
     conversation: { listMessages, listRuns, listSteps },
     agent: { enqueue, onEvent },
     dialog: { selectDirectory: vi.fn() },
+    providers: { list: listProviders },
+    models: { list: listModels },
     window: {
       platform: 'win32',
       minimize: minimizeWindow,
@@ -64,6 +68,8 @@ describe('renderer App', () => {
     listSteps.mockReset()
     enqueue.mockReset()
     onEvent.mockReset()
+    listProviders.mockReset()
+    listModels.mockReset()
     minimizeWindow.mockClear()
     toggleMaximizeWindow.mockClear()
     closeWindow.mockClear()
@@ -71,6 +77,8 @@ describe('renderer App', () => {
     listMessages.mockResolvedValue([])
     listRuns.mockResolvedValue([])
     listSteps.mockResolvedValue([])
+    listProviders.mockResolvedValue([])
+    listModels.mockResolvedValue([])
     enqueue.mockResolvedValue({ runId: 'run-1' })
     onEvent.mockImplementation(() => () => undefined)
   })
@@ -256,6 +264,43 @@ describe('renderer App', () => {
     await waitFor(() => {
       expect(screen.getAllByText('hello world')).toHaveLength(1)
     })
+  })
+
+  it('uses a configured provider model instead of the mock fallback when sending from an existing mock session', async () => {
+    const user = userEvent.setup()
+
+    listProviders.mockResolvedValueOnce([
+      { id: 'mock', name: 'Mock', kind: 'mock', enabled: true, hasApiKey: false, defaultModelId: 'mock/hesper-fast', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' },
+      { id: 'deepseek', name: 'DeepSeek', kind: 'deepseek', enabled: true, hasApiKey: true, defaultModelId: 'deepseek-chat', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+    ] as any)
+    listModels.mockResolvedValueOnce([
+      { id: 'mock/hesper-fast', providerId: 'mock', modelName: 'mock/hesper-fast', displayName: 'Hesper Mock Fast', capabilities: ['streaming'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' },
+      { id: 'deepseek-chat', providerId: 'deepseek', modelName: 'deepseek-chat', displayName: 'DeepSeek Chat', capabilities: ['streaming', 'toolCalls'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+    ] as any)
+    listSessions.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        title: 'Configured chat',
+        status: 'active',
+        workspacePath: 'C:/workspace',
+        defaultModelId: 'mock/hesper-fast',
+        outputMode: 'markdown',
+        createdAt: '2026-06-10T03:00:00.000Z',
+        updatedAt: '2026-06-10T03:00:00.000Z'
+      }
+    ] as any)
+
+    render(<App />)
+
+    expect(await screen.findByRole('button', { name: '选择模型' })).toHaveTextContent('DeepSeek/deepseek-chat')
+    await user.type(screen.getByPlaceholderText(/输入消息/), 'use configured model')
+    await user.click(screen.getByRole('button', { name: '发送' }))
+
+    expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: 'session-1',
+      prompt: 'use configured model',
+      modelId: 'deepseek-chat'
+    }))
   })
 
   it('removes optimistic user message and shows an error when enqueue fails', async () => {

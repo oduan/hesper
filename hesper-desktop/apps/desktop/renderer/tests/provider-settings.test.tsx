@@ -176,6 +176,7 @@ describe('provider settings panel', () => {
 
   it('surfaces initial provider settings load failures', async () => {
     const user = userEvent.setup()
+    listProviders.mockResolvedValueOnce(baseProviders)
     listProviders.mockRejectedValueOnce(new Error('initial load failed'))
     render(<App />)
 

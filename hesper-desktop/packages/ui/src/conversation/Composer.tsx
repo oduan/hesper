@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent } from 'react'
 import type { OutputMode } from '@hesper/shared'
 import { darkTheme } from '../theme'
-import { ThemedSelect } from './ThemedSelect'
+import { ThemedSelect, type ThemedSelectOptionGroup } from './ThemedSelect'
+
+export type ModelOptionGroup = ThemedSelectOptionGroup
 
 export type ComposerProps = {
   workspacePath?: string
   modelId: string
   outputMode: OutputMode
   modelOptions?: string[]
+  modelOptionGroups?: ModelOptionGroup[]
   onSend: (content: string) => void
   onSelectWorkspace?: () => void
   onModelChange?: (modelId: string) => void
@@ -22,6 +25,7 @@ export function Composer({
   modelId,
   outputMode: _outputMode,
   modelOptions = defaultModelOptions,
+  modelOptionGroups,
   onSend,
   onSelectWorkspace,
   onModelChange,
@@ -94,9 +98,10 @@ export function Composer({
               ariaLabel="选择模型"
               value={modelId}
               options={modelOptions}
+              {...(modelOptionGroups ? { optionGroups: modelOptionGroups } : {})}
               {...(onModelChange ? { onChange: onModelChange } : {})}
               minWidth={0}
-              maxWidth={180}
+              maxWidth={240}
               menuPlacement="top"
             />
           </div>

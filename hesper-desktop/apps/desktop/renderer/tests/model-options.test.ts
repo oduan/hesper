@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { hesperApi } from '../src/ipc-client'
-import { createSessionModelOptions, fallbackSessionModelOptions, loadAvailableModelOptions, modelNameFromNamespacedId, mergeModelOptions, namespaceModelId } from '../src/model-options'
+import { createSessionModelCatalog, createSessionModelOptions, fallbackSessionModelOptions, loadAvailableModelOptions, modelNameFromNamespacedId, mergeModelOptions, namespaceModelId } from '../src/model-options'
 
 describe('model-options', () => {
   it('namespaces and denamespaces model ids symmetrically', () => {
@@ -27,6 +27,41 @@ describe('model-options', () => {
       fallbackSessionModelOptions[0],
       'alpha',
       'gamma'
+    ])
+  })
+
+  it('creates grouped session model catalog from enabled providers and models', () => {
+    const catalog = createSessionModelCatalog([
+      { id: 'mock', name: 'Mock', kind: 'mock', enabled: true, hasApiKey: false },
+      { id: 'deepseek', name: 'DeepSeek', kind: 'deepseek', enabled: true, hasApiKey: true, defaultModelId: 'deepseek-chat' },
+      { id: 'openai', name: 'OpenAI', kind: 'openai', enabled: true, hasApiKey: false },
+      { id: 'disabled', name: 'Disabled', kind: 'custom', enabled: false, hasApiKey: true }
+    ] as any, [
+      { id: 'mock/hesper-fast', providerId: 'mock', modelName: 'mock/hesper-fast', enabled: true },
+      { id: 'deepseek-chat', providerId: 'deepseek', modelName: 'deepseek-chat', enabled: true },
+      { id: 'deepseek-reasoner', providerId: 'deepseek', modelName: 'deepseek-reasoner', enabled: false },
+      { id: 'gpt-4o', providerId: 'openai', modelName: 'gpt-4o', enabled: true },
+      { id: 'disabled-model', providerId: 'disabled', modelName: 'disabled-model', enabled: true }
+    ] as any)
+
+    expect(catalog.preferredModelId).toBe('deepseek-chat')
+    expect(catalog.options).toEqual(['mock/hesper-fast', 'deepseek-chat', 'gpt-4o'])
+    expect(catalog.optionGroups).toEqual([
+      {
+        id: 'mock',
+        label: 'Mock',
+        options: [{ value: 'mock/hesper-fast', label: 'Mock/mock/hesper-fast' }]
+      },
+      {
+        id: 'deepseek',
+        label: 'DeepSeek',
+        options: [{ value: 'deepseek-chat', label: 'DeepSeek/deepseek-chat' }]
+      },
+      {
+        id: 'openai',
+        label: 'OpenAI',
+        options: [{ value: 'gpt-4o', label: 'OpenAI/gpt-4o' }]
+      }
     ])
   })
 

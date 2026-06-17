@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import type { Message, RunStep, Session } from '@hesper/shared'
 import { darkTheme } from '../theme'
-import { Composer } from './Composer'
+import { Composer, type ModelOptionGroup } from './Composer'
 import { MessageBubble } from './MessageBubble'
 import { OutputBlock } from './OutputBlock'
 import type { NavigationItem } from './RightNavigation'
@@ -22,6 +22,7 @@ export type ConversationViewProps = {
   streamingByRun?: Record<string, string>
   modelId: string
   modelOptions?: string[]
+  modelOptionGroups?: ModelOptionGroup[]
   onSend: (content: string) => void
   onSelectWorkspace?: () => void
   onModelChange?: (modelId: string) => void
@@ -78,6 +79,7 @@ export function ConversationView({
   streamingByRun,
   modelId,
   modelOptions,
+  modelOptionGroups,
   onSend,
   onSelectWorkspace,
   onModelChange,
@@ -420,6 +422,7 @@ export function ConversationView({
           modelId={modelId}
           outputMode={session.outputMode}
           {...(modelOptions ? { modelOptions } : {})}
+          {...(modelOptionGroups ? { modelOptionGroups } : {})}
           {...(onSelectWorkspace ? { onSelectWorkspace } : {})}
           {...(onModelChange ? { onModelChange } : {})}
           {...(onOutputModeChange ? { onOutputModeChange } : {})}

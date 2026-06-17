@@ -84,6 +84,41 @@ describe('ui components', () => {
     expect(sendButton).toBeEnabled()
   })
 
+  it('shows model choices as connection groups and expands models on hover', async () => {
+    const user = userEvent.setup()
+    const onModelChange = vi.fn()
+
+    render(
+      <Composer
+        workspacePath="C:/dev/hesper"
+        modelId="deepseek-chat"
+        outputMode="markdown"
+        modelOptions={['mock/hesper-fast', 'deepseek-chat', 'gpt-4o']}
+        modelOptionGroups={[
+          { id: 'mock', label: 'Mock', options: [{ value: 'mock/hesper-fast', label: 'Mock/mock/hesper-fast' }] },
+          { id: 'deepseek', label: 'DeepSeek', options: [{ value: 'deepseek-chat', label: 'DeepSeek/deepseek-chat' }] },
+          { id: 'openai', label: 'OpenAI', options: [{ value: 'gpt-4o', label: 'OpenAI/gpt-4o' }] }
+        ]}
+        onModelChange={onModelChange}
+        onSend={() => undefined}
+      />
+    )
+
+    const modelSelect = screen.getByRole('button', { name: '选择模型' })
+    expect(modelSelect).toHaveTextContent('DeepSeek/deepseek-chat')
+
+    await user.click(modelSelect)
+    expect(screen.getByRole('listbox', { name: '选择模型选项' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '连接 DeepSeek' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'DeepSeek/deepseek-chat' })).not.toBeInTheDocument()
+
+    await user.hover(screen.getByRole('button', { name: '连接 OpenAI' }))
+    const openAiModel = await screen.findByRole('option', { name: 'OpenAI/gpt-4o' })
+    await user.click(openAiModel)
+
+    expect(onModelChange).toHaveBeenCalledWith('gpt-4o')
+  })
+
   it('handles each external send signal only once', async () => {
     const user = userEvent.setup()
     const onSend = vi.fn()

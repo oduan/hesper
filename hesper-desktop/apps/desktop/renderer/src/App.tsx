@@ -3,7 +3,7 @@ import { createId, nowIso, type Message, type OutputMode, type RunStep, type Ses
 import { AppShell, ConversationView, type AppSection, type ConversationShortcutCommand } from '@hesper/ui'
 import { AppStoreProvider, useAppStore } from './app-store'
 import { hesperApi } from './ipc-client'
-import { defaultFallbackModelId, fallbackSessionModelOptions, loadAvailableModelOptions, mergeModelOptions } from './model-options'
+import { defaultFallbackModelId, fallbackSessionModelCatalog, loadAvailableModelCatalog, mergeModelOptions, type SessionModelCatalog } from './model-options'
 import { ProviderSettingsPanel } from './provider-settings-panel'
 import { createShortcutHandler } from './shortcuts'
 
@@ -107,10 +107,11 @@ function AppContent() {
   const [sendErrorsBySession, setSendErrorsBySession] = useState<Record<string, string>>({})
   const [pendingSettingsBySession, setPendingSettingsBySession] = useState<Record<string, SessionSettingsOverride>>({})
   const [shortcutCommand, setShortcutCommand] = useState<ConversationShortcutCommand>()
-  const [sessionModelOptions, setSessionModelOptions] = useState<string[]>(fallbackSessionModelOptions)
+  const [sessionModelCatalog, setSessionModelCatalog] = useState<SessionModelCatalog>(fallbackSessionModelCatalog)
   const [historyErrorsBySession, setHistoryErrorsBySession] = useState<Record<string, string>>({})
   const loadedHistorySessionIdsRef = useRef<Set<string>>(new Set())
   const loadingHistorySessionIdsRef = useRef<Set<string>>(new Set())
+  const explicitModelSelectionSessionIdsRef = useRef<Set<string>>(new Set())
   const nextSettingsRequestIdRef = useRef(0)
   const latestSettingsRequestIdRef = useRef<RequestTokensBySession>({})
 
@@ -191,13 +192,13 @@ function AppContent() {
 
     void (async () => {
       try {
-        const options = await loadAvailableModelOptions()
+        const catalog = await loadAvailableModelCatalog()
         if (!cancelled) {
-          setSessionModelOptions(options)
+          setSessionModelCatalog(catalog)
         }
       } catch {
         if (!cancelled) {
-          setSessionModelOptions(fallbackSessionModelOptions)
+          setSessionModelCatalog(fallbackSessionModelCatalog)
         }
       }
     })()
@@ -208,7 +209,7 @@ function AppContent() {
   }, [])
 
   const refreshSessionModelOptions = async () => {
-    setSessionModelOptions(await loadAvailableModelOptions())
+    setSessionModelCatalog(await loadAvailableModelCatalog())
   }
 
   useEffect(() => {
@@ -299,7 +300,8 @@ function AppContent() {
   const activeSteps = activeRunId ? state.stepsByRun[activeRunId] ?? [] : []
   const activeStreamingText = activeRunId ? state.streamingByRun[activeRunId] ?? '' : ''
   const activeMessages = activeSession ? state.messagesBySession[activeSession.id] ?? [] : []
-  const activeModelOptions = activeSession?.defaultModelId ? mergeModelOptions(sessionModelOptions, [activeSession.defaultModelId]) : sessionModelOptions
+  const activeModelId = activeSession ? resolveSessionModelId(activeSession.defaultModelId, sessionModelCatalog.preferredModelId, explicitModelSelectionSessionIdsRef.current.has(activeSession.id)) : sessionModelCatalog.preferredModelId
+  const activeModelOptions = activeSession?.defaultModelId ? mergeModelOptions(sessionModelCatalog.options, [activeModelId, activeSession.defaultModelId]) : mergeModelOptions(sessionModelCatalog.options, [activeModelId])
 
   return (
     <AppShell
@@ -310,7 +312,7 @@ function AppContent() {
       {...(state.activeSessionId ? { activeSessionId: state.activeSessionId } : {})}
       onCreateSession={async () => {
         dispatch({ type: 'section.selected', section: 'sessions' })
-        await createSession(dispatch)
+        await createSession(dispatch, sessionModelCatalog.preferredModelId)
       }}
       onSelectSection={(section) => dispatch({ type: 'section.selected', section })}
       onSelectSession={(sessionId) => {
@@ -342,8 +344,9 @@ function AppContent() {
             stepsByRun={state.stepsByRun}
             streamingText={activeStreamingText}
             streamingByRun={state.streamingByRun}
-            modelId={activeSession.defaultModelId ?? defaultFallbackModelId}
+            modelId={activeModelId}
             modelOptions={activeModelOptions}
+            modelOptionGroups={sessionModelCatalog.optionGroups}
             onSelectWorkspace={() => {
               void updateSessionWorkspace({
                 session: activeSession,
@@ -355,6 +358,7 @@ function AppContent() {
               })
             }}
             onModelChange={(modelId) => {
+              explicitModelSelectionSessionIdsRef.current.add(activeSession.id)
               void updateSessionModel({
                 session: activeSession,
                 modelId,
@@ -379,7 +383,7 @@ function AppContent() {
             onSend={(content) => {
               void sendMessage({
                 session: activeSession,
-                modelId: activeSession.defaultModelId ?? defaultFallbackModelId,
+                modelId: activeModelId,
                 content,
                 dispatch,
                 setSendErrorsBySession
@@ -391,7 +395,7 @@ function AppContent() {
       ) : (
         <EmptyConversationState
           {...(loadError ? { loadError } : {})}
-          onCreateSession={async () => createSession(dispatch)}
+          onCreateSession={async () => createSession(dispatch, sessionModelCatalog.preferredModelId)}
         />
       )}
     </AppShell>
@@ -408,6 +412,16 @@ const sectionTitles: Record<AppSection, string> = {
 
 function getSectionTitle(section: AppSection): string {
   return sectionTitles[section]
+}
+
+function resolveSessionModelId(sessionModelId: string | undefined, preferredModelId: string, useSessionModelId = false): string {
+  if (useSessionModelId && sessionModelId) {
+    return sessionModelId
+  }
+  if (!sessionModelId || sessionModelId === defaultFallbackModelId) {
+    return preferredModelId
+  }
+  return sessionModelId
 }
 
 function SectionPlaceholder({ section }: { section: AppSection }) {
@@ -468,8 +482,11 @@ function EmptyConversationState({
   )
 }
 
-async function createSession(dispatch: ReturnType<typeof useAppStore>['dispatch']) {
-  const session = await hesperApi.sessions.create({ title: 'New chat' })
+async function createSession(dispatch: ReturnType<typeof useAppStore>['dispatch'], defaultModelId = defaultFallbackModelId) {
+  const session = await hesperApi.sessions.create({
+    title: 'New chat',
+    ...(defaultModelId !== defaultFallbackModelId ? { defaultModelId } : {})
+  })
   dispatch({ type: 'session.created', session })
 }
 
