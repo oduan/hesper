@@ -11,9 +11,9 @@ describe('registry services', () => {
       'filesystem.read-file',
       'git.status',
       'web.fetch-url',
-      'agent.spawn-subagent',
       'system.show-notification'
     ])
+    expect(roles.find((role) => role.id === 'main-agent')?.defaultToolIds).not.toContain('agent.spawn-subagent')
     expect(roles.find((role) => role.id === 'main-agent')?.defaultToolIds).not.toContain('filesystem.write-file')
     expect(skills.map((skill) => skill.id)).toEqual([
       'builtin:notes',

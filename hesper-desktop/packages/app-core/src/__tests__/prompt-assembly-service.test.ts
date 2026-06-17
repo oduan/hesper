@@ -24,7 +24,7 @@ const mainRole: Role = {
   description: 'Primary desktop agent',
   systemPrompt: 'You coordinate coding work.',
   allowedSkillIds: ['skill:notes', 'skill:secret'],
-  defaultToolIds: ['filesystem.read-file', 'git.status', 'agent.spawn-subagent'],
+  defaultToolIds: ['filesystem.read-file', 'git.status'],
   canBeMainAgent: true,
   canBeSubagent: false
 }
@@ -112,6 +112,24 @@ describe('PromptAssemblyService', () => {
     expect(output.subagentRules).toContain('max depth: 1')
     expect(output.subagentRules).toContain('max subagents per run: 2')
     expect(output.systemPrompt).not.toMatch(/api[_ -]?key/i)
+  })
+
+  it('does not encourage subagent calls when the tool is absent from the catalog', () => {
+    const service = createPromptAssemblyService()
+
+    const output = service.assembleMainPrompt({
+      session: { ...session, enabledToolIds: ['filesystem.read-file'], allowedSubagentRoleIds: ['reviewer'] },
+      role: { ...mainRole, defaultToolIds: ['filesystem.read-file', 'git.status'] },
+      skills,
+      tools: tools.filter((tool) => tool.id !== 'agent.spawn-subagent'),
+      assignableSubagentRoles: [reviewerRole]
+    })
+
+    expect(output.subagentRules).toContain('agent.spawn-subagent available: no')
+    expect(output.subagentRules).toContain('do not attempt to call agent.spawn-subagent')
+    expect(output.subagentRules).not.toContain('Use a subagent only')
+    expect(output.subagentRules).not.toContain('Every subagent call must include')
+    expect(output.toolManifest).not.toContain('agent.spawn-subagent')
   })
 
   it('assembles a subagent prompt with only explicitly allowed tools and expected output', () => {

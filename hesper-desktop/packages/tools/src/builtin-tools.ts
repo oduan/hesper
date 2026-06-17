@@ -50,19 +50,6 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
       }
     },
     {
-      id: 'agent.spawn-subagent',
-      name: 'Spawn Subagent',
-      description: 'Reserved MVP1 definition for future subagent execution.',
-      category: 'agent',
-      inputSchema: {
-        type: 'object',
-        required: ['prompt'],
-        properties: {
-          prompt: { type: 'string' }
-        }
-      }
-    },
-    {
       id: 'system.show-notification',
       name: 'Show Notification',
       description: 'Show a desktop notification.',

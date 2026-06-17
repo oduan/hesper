@@ -2,9 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { createBuiltinToolDefinitions } from '../builtin-tools'
 
 describe('builtin tools', () => {
-  it('contains exactly six builtin tools', () => {
+  it('contains exactly five builtin tools', () => {
     const tools = createBuiltinToolDefinitions()
-    expect(tools).toHaveLength(6)
+    expect(tools).toHaveLength(5)
+    expect(tools.map((tool) => tool.id)).not.toContain('agent.spawn-subagent')
   })
 
   it('uses stable ids', () => {
@@ -15,10 +16,10 @@ describe('builtin tools', () => {
         'filesystem.write-file',
         'git.status',
         'web.fetch-url',
-        'agent.spawn-subagent',
         'system.show-notification'
       ])
     )
+    expect(ids).not.toContain('agent.spawn-subagent')
   })
 
   it('defines filesystem tools with required schema fields', () => {
@@ -69,16 +70,7 @@ describe('builtin tools', () => {
       }
     })
 
-    expect(tools.find((tool) => tool.id === 'agent.spawn-subagent')).toMatchObject({
-      category: 'agent',
-      inputSchema: {
-        type: 'object',
-        required: ['prompt'],
-        properties: {
-          prompt: { type: 'string' }
-        }
-      }
-    })
+    expect(tools.find((tool) => tool.id === 'agent.spawn-subagent')).toBeUndefined()
 
     expect(tools.find((tool) => tool.id === 'system.show-notification')).toMatchObject({
       category: 'system',

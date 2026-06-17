@@ -534,6 +534,7 @@ export function createBuiltinToolExecutor(options: BuiltinToolExecutorOptions = 
         case 'system.show-notification':
           return showNotification(tool, args, options.showNotification)
         case 'agent.spawn-subagent':
+          // Legacy compatibility path: the tool is no longer exposed by default.
           return subagentNotImplemented(tool)
         default:
           throw new Error(`No builtin executor registered for tool: ${tool.id}`)

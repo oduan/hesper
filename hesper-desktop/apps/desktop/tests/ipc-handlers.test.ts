@@ -168,7 +168,7 @@ describe('registerIpcHandlers', () => {
       session: expect.objectContaining({
         id: session.id,
         workspacePath: 'C:/workspace',
-        enabledToolIds: ['filesystem.read-file', 'git.status', 'web.fetch-url', 'agent.spawn-subagent', 'system.show-notification']
+        enabledToolIds: ['filesystem.read-file', 'git.status', 'web.fetch-url', 'system.show-notification']
       }),
       role: expect.objectContaining({ id: 'main-agent' }),
       skills: expect.any(Array),
@@ -180,7 +180,7 @@ describe('registerIpcHandlers', () => {
       prompt: 'Use assembled prompt',
       modelId: 'mock/hesper-fast',
       systemPrompt: 'assembled system prompt',
-      enabledToolIds: ['filesystem.read-file', 'git.status', 'web.fetch-url', 'agent.spawn-subagent', 'system.show-notification']
+      enabledToolIds: ['filesystem.read-file', 'git.status', 'web.fetch-url', 'system.show-notification']
     }))
     expect(createUserMessageSpy).toHaveBeenCalledWith(expect.objectContaining({
       id: 'message-client-1',

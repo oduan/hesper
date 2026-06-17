@@ -190,9 +190,19 @@ function renderMainSubagentRules(input: MainPromptAssemblyInput, roles: Role[], 
   const spawnToolAvailable = tools.some((tool) => tool.id === 'agent.spawn-subagent')
   const maxDepth = input.session.maxSubagentDepth ?? 1
   const maxCount = input.session.maxSubagentsPerRun ?? 3
+
+  if (!spawnToolAvailable) {
+    return [
+      'Subagent usage rules:',
+      '- agent.spawn-subagent available: no',
+      '- Subagent spawning is not available for this run; do not attempt to call agent.spawn-subagent.',
+      '- If subagent help is required, explain that the capability is unavailable.'
+    ].join('\n')
+  }
+
   return [
     'Subagent usage rules:',
-    `- agent.spawn-subagent available: ${spawnToolAvailable ? 'yes' : 'no'}`,
+    '- agent.spawn-subagent available: yes',
     `- max depth: ${maxDepth}`,
     `- max subagents per run: ${maxCount}`,
     '- Use a subagent only for independent research, review, long-context analysis, or parallelizable work.',
