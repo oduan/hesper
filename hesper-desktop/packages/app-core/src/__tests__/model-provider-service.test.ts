@@ -1,9 +1,16 @@
 import { createInMemoryPersistence, exportDatabaseBytes } from '@hesper/persistence'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createCredentialVaultService, type CredentialVaultCodec } from '../credential-vault-service'
 import { createModelProviderService } from '../model-provider-service'
 
 const now = '2026-06-10T03:00:00.000Z'
+
+function createJsonResponse(payload: unknown, status = 200): Response {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { 'content-type': 'application/json' }
+  })
+}
 
 function createMockCodec(): CredentialVaultCodec {
   return {
@@ -118,20 +125,68 @@ describe('createModelProviderService', () => {
     expect(await persistence.models.listByProvider('deepseek')).toMatchObject([{ id: 'deepseek-chat' }])
   })
 
-  it('tests connections without returning or persisting raw API keys in provider responses', async () => {
+  it('tests saved connections by probing the provider API without returning or persisting raw API keys', async () => {
     const persistence = await createInMemoryPersistence()
     const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
-    const service = createModelProviderService({ persistence, credentialVaultService, now: () => now })
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => createJsonResponse({ choices: [{ message: { content: 'hesper-ok' } }] }))
+    const service = createModelProviderService({ persistence, credentialVaultService, now: () => now, fetch: fetchMock as unknown as typeof fetch })
 
-    await service.saveProvider({ id: 'deepseek', name: 'DeepSeek', kind: 'deepseek', baseUrl: 'https://api.deepseek.com', enabled: true })
+    await service.saveProvider({ id: 'deepseek', name: 'DeepSeek', kind: 'deepseek', baseUrl: 'https://api.deepseek.com', enabled: true, defaultModelId: 'deepseek-chat' })
     expect(await service.testProviderConnection('deepseek')).toMatchObject({ status: 'needs_api_key', hasApiKey: false })
+    expect(fetchMock).not.toHaveBeenCalled()
 
     await credentialVaultService.saveProviderApiKey({ providerId: 'deepseek', apiKey: 'sk-deepseek-secret' })
     const result = await service.testProviderConnection('deepseek')
 
     expect(result).toMatchObject({ providerId: 'deepseek', status: 'ok', hasApiKey: true })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const [requestUrl, requestInit] = fetchMock.mock.calls[0]!
+    expect(requestUrl).toBe('https://api.deepseek.com/chat/completions')
+    expect((requestInit as RequestInit).headers).toMatchObject({ authorization: 'Bearer sk-deepseek-secret' })
+    expect(JSON.parse(String((requestInit as RequestInit).body))).toMatchObject({ model: 'deepseek-chat' })
     expect(JSON.stringify(result)).not.toContain('sk-deepseek-secret')
     expect(JSON.stringify(await service.getProvider('deepseek'))).not.toContain('sk-deepseek-secret')
     expect(Buffer.from(exportDatabaseBytes(persistence)).toString('latin1')).not.toContain('sk-deepseek-secret')
+  })
+
+  it('tests transient form connections with inline API keys without saving them', async () => {
+    const persistence = await createInMemoryPersistence()
+    const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => createJsonResponse({ choices: [{ message: { content: 'hesper-ok' } }] }))
+    const service = createModelProviderService({ persistence, credentialVaultService, now: () => now, fetch: fetchMock as unknown as typeof fetch })
+
+    const result = await service.testProviderConnection({
+      providerId: 'custom-api-example-com',
+      kind: 'openai-compatible',
+      baseUrl: 'https://api.example.com/v1',
+      apiKey: 'sk-inline-secret',
+      modelId: 'example-chat'
+    })
+
+    expect(result).toMatchObject({ providerId: 'custom-api-example-com', status: 'ok', hasApiKey: true })
+    const [requestUrl, requestInit] = fetchMock.mock.calls[0]!
+    expect(requestUrl).toBe('https://api.example.com/v1/chat/completions')
+    expect((requestInit as RequestInit).headers).toMatchObject({ authorization: 'Bearer sk-inline-secret' })
+    expect(JSON.parse(String((requestInit as RequestInit).body))).toMatchObject({ model: 'example-chat' })
+    expect(await persistence.modelProviders.get('custom-api-example-com')).toBeUndefined()
+    expect(Buffer.from(exportDatabaseBytes(persistence)).toString('latin1')).not.toContain('sk-inline-secret')
+  })
+
+  it('redacts inline API keys from failed connection test results', async () => {
+    const persistence = await createInMemoryPersistence()
+    const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => createJsonResponse({ error: { message: 'bad key sk-inline-secret' } }, 401))
+    const service = createModelProviderService({ persistence, credentialVaultService, now: () => now, fetch: fetchMock as unknown as typeof fetch })
+
+    const result = await service.testProviderConnection({
+      providerId: 'custom-api-example-com',
+      kind: 'openai-compatible',
+      baseUrl: 'https://api.example.com/v1',
+      apiKey: 'sk-inline-secret',
+      modelId: 'example-chat'
+    })
+
+    expect(result).toMatchObject({ providerId: 'custom-api-example-com', status: 'failed', hasApiKey: true })
+    expect(JSON.stringify(result)).not.toContain('sk-inline-secret')
   })
 })

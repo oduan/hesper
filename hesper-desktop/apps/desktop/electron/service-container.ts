@@ -21,6 +21,7 @@ export type ServiceContainerOptions = {
   persistence: Persistence
   agentMode: AgentMode
   credentialCodec?: CredentialVaultCodec
+  connectionTestFetch?: typeof fetch
 }
 
 export type ServiceContainer = ReturnType<typeof createServiceContainer>
@@ -38,7 +39,11 @@ export function createServiceContainer(options: ServiceContainerOptions) {
     persistence: options.persistence,
     ...(options.credentialCodec ? { codec: options.credentialCodec } : {})
   })
-  const modelProviderService = createModelProviderService({ persistence: options.persistence, credentialVaultService })
+  const modelProviderService = createModelProviderService({
+    persistence: options.persistence,
+    credentialVaultService,
+    ...(options.connectionTestFetch ? { fetch: options.connectionTestFetch } : {})
+  })
   void modelProviderService.ensureBuiltinProviders()
   const modelResolver = createRegistryModelResolver({
     registry: {

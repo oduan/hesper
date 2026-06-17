@@ -21,9 +21,19 @@ export type SaveModelInput = {
   enabled?: boolean
 }
 
+export type ProviderConnectionTestStatus = 'ok' | 'disabled' | 'needs_api_key' | 'not_found' | 'failed'
+
+export type ProviderConnectionTestInput = {
+  providerId?: string | undefined
+  kind?: ModelProviderKind | undefined
+  baseUrl?: string | undefined
+  apiKey?: string | undefined
+  modelId?: string | undefined
+}
+
 export type ProviderConnectionTestResult = {
   providerId: string
-  status: 'ok' | 'disabled' | 'needs_api_key' | 'not_found'
+  status: ProviderConnectionTestStatus
   hasApiKey: boolean
   message: string
 }
@@ -36,7 +46,7 @@ export type ModelProviderService = {
   deleteProvider(id: string): Promise<ModelProviderConfig | undefined>
   listModels(providerId?: string): Promise<ModelConfig[]>
   saveModel(input: SaveModelInput): Promise<ModelConfig>
-  testProviderConnection(providerId: string): Promise<ProviderConnectionTestResult>
+  testProviderConnection(input: string | ProviderConnectionTestInput): Promise<ProviderConnectionTestResult>
   ensureBuiltinProviders(): Promise<void>
 }
 
@@ -55,6 +65,8 @@ const modelPresets: SaveModelInput[] = [
 ]
 
 const builtinProviderIds = new Set(providerPresets.map((provider) => provider.id))
+const connectionTestPrompt = 'Reply with only: hesper-ok'
+const connectionTestTimeoutMs = 15_000
 
 function assertId(id: string, label = 'id'): void {
   if (!id.trim()) throw new Error(`${label} is required`)
@@ -89,12 +101,186 @@ function mergeModel(existing: ModelConfig | undefined, input: SaveModelInput, ti
   }
 }
 
+function trimOptional(value: string | undefined): string | undefined {
+  const trimmed = value?.trim()
+  return trimmed ? trimmed : undefined
+}
+
+function hasOwn<T extends object>(value: T, key: keyof T): boolean {
+  return Object.prototype.hasOwnProperty.call(value, key)
+}
+
+function normalizeModelName(providerId: string, modelId: string): string {
+  const namespacePrefix = `${providerId}/`
+  return modelId.startsWith(namespacePrefix) ? modelId.slice(namespacePrefix.length) : modelId
+}
+
+function endpointWithSuffix(baseUrl: string, suffix: string): string {
+  const normalizedBase = baseUrl.replace(/\/+$/, '')
+  return normalizedBase.endsWith(suffix) ? normalizedBase : `${normalizedBase}${suffix}`
+}
+
+function anthropicMessagesEndpoint(baseUrl: string): string {
+  const normalizedBase = baseUrl.replace(/\/+$/, '')
+  if (normalizedBase.endsWith('/v1/messages')) return normalizedBase
+  if (normalizedBase.endsWith('/messages')) return normalizedBase
+  if (normalizedBase.endsWith('/v1')) return `${normalizedBase}/messages`
+  return `${normalizedBase}/v1/messages`
+}
+
+function truncateForMessage(value: string, maxLength = 360): string {
+  const normalized = value.replace(/\s+/g, ' ').trim()
+  return normalized.length > maxLength ? `${normalized.slice(0, maxLength)}…` : normalized
+}
+
+function redactSensitive(value: string, apiKey: string | undefined): string {
+  let redacted = value
+  if (apiKey) {
+    redacted = redacted.split(apiKey).join('[redacted]')
+  }
+  return redacted.replace(/Bearer\s+[A-Za-z0-9._~+\-/=]+/gi, 'Bearer [redacted]')
+}
+
+function unknownToMessage(error: unknown, apiKey: string | undefined): string {
+  const message = error instanceof Error ? error.message : String(error)
+  return truncateForMessage(redactSensitive(message, apiKey))
+}
+
+type JsonRecord = Record<string, unknown>
+
+function asRecord(value: unknown): JsonRecord | undefined {
+  return typeof value === 'object' && value !== null ? value as JsonRecord : undefined
+}
+
+function textFromContent(value: unknown): string | undefined {
+  if (typeof value === 'string') return trimOptional(value)
+  if (!Array.isArray(value)) return undefined
+  return trimOptional(value.map((item) => {
+    const record = asRecord(item)
+    return typeof record?.text === 'string' ? record.text : ''
+  }).join(' '))
+}
+
+function extractOpenAIResponseText(payload: unknown): string | undefined {
+  const record = asRecord(payload)
+  if (!record) return undefined
+  if (typeof record.output_text === 'string') return trimOptional(record.output_text)
+
+  const choices = Array.isArray(record.choices) ? record.choices : []
+  const firstChoice = asRecord(choices[0])
+  const message = asRecord(firstChoice?.message)
+  return textFromContent(message?.content) ?? textFromContent(firstChoice?.text)
+}
+
+function extractAnthropicResponseText(payload: unknown): string | undefined {
+  const record = asRecord(payload)
+  return textFromContent(record?.content)
+}
+
+async function responsePayload(response: Response): Promise<{ text: string; json?: unknown }> {
+  const text = await response.text()
+  if (!text.trim()) return { text }
+  try {
+    return { text, json: JSON.parse(text) as unknown }
+  } catch {
+    return { text }
+  }
+}
+
+async function fetchWithTimeout(fetchImpl: typeof fetch, url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), connectionTestTimeoutMs)
+  try {
+    return await fetchImpl(url, { ...init, signal: controller.signal })
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
+function failedResult(provider: ModelProviderConfig, hasApiKey: boolean, message: string): ProviderConnectionTestResult {
+  return { providerId: provider.id, status: 'failed', hasApiKey, message }
+}
+
+async function probeOpenAICompatibleConnection(options: {
+  fetchImpl: typeof fetch
+  provider: ModelProviderConfig
+  baseUrl: string
+  apiKey: string
+  modelName: string
+}): Promise<ProviderConnectionTestResult> {
+  const endpoint = endpointWithSuffix(options.baseUrl, '/chat/completions')
+  try {
+    const response = await fetchWithTimeout(options.fetchImpl, endpoint, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${options.apiKey}`
+      },
+      body: JSON.stringify({
+        model: options.modelName,
+        messages: [{ role: 'user', content: connectionTestPrompt }],
+        temperature: 0,
+        max_tokens: 16
+      })
+    })
+    const payload = await responsePayload(response)
+    if (!response.ok) {
+      return failedResult(options.provider, true, `${options.provider.name} returned HTTP ${response.status}: ${truncateForMessage(redactSensitive(payload.text || response.statusText, options.apiKey))}`)
+    }
+    const assistantText = extractOpenAIResponseText(payload.json)
+    if (!assistantText) {
+      return failedResult(options.provider, true, `${options.provider.name} responded but did not return assistant text.`)
+    }
+    return { providerId: options.provider.id, status: 'ok', hasApiKey: true, message: `${options.provider.name} responded successfully using ${options.modelName}.` }
+  } catch (error) {
+    return failedResult(options.provider, true, `${options.provider.name} test failed: ${unknownToMessage(error, options.apiKey)}`)
+  }
+}
+
+async function probeAnthropicConnection(options: {
+  fetchImpl: typeof fetch
+  provider: ModelProviderConfig
+  baseUrl: string
+  apiKey: string
+  modelName: string
+}): Promise<ProviderConnectionTestResult> {
+  const endpoint = anthropicMessagesEndpoint(options.baseUrl)
+  try {
+    const response = await fetchWithTimeout(options.fetchImpl, endpoint, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'anthropic-version': '2023-06-01',
+        'x-api-key': options.apiKey
+      },
+      body: JSON.stringify({
+        model: options.modelName,
+        messages: [{ role: 'user', content: connectionTestPrompt }],
+        max_tokens: 16
+      })
+    })
+    const payload = await responsePayload(response)
+    if (!response.ok) {
+      return failedResult(options.provider, true, `${options.provider.name} returned HTTP ${response.status}: ${truncateForMessage(redactSensitive(payload.text || response.statusText, options.apiKey))}`)
+    }
+    const assistantText = extractAnthropicResponseText(payload.json)
+    if (!assistantText) {
+      return failedResult(options.provider, true, `${options.provider.name} responded but did not return assistant text.`)
+    }
+    return { providerId: options.provider.id, status: 'ok', hasApiKey: true, message: `${options.provider.name} responded successfully using ${options.modelName}.` }
+  } catch (error) {
+    return failedResult(options.provider, true, `${options.provider.name} test failed: ${unknownToMessage(error, options.apiKey)}`)
+  }
+}
+
 export function createModelProviderService(options: {
   persistence: Persistence
   credentialVaultService: CredentialVaultService
   now?: () => string
+  fetch?: typeof fetch
 }): ModelProviderService {
   const now = options.now ?? nowIso
+  const connectionTestFetch = options.fetch ?? globalThis.fetch
 
   const withCredentialStatus = async (provider: ModelProviderConfig): Promise<ModelProviderConfig> => {
     const credentialStatus = await options.credentialVaultService.getProviderApiKeyStatus({ providerId: provider.id })
@@ -139,6 +325,16 @@ export function createModelProviderService(options: {
         await saveModelInternal(model)
       }
     }
+  }
+
+  const connectionTestInput = (input: string | ProviderConnectionTestInput): ProviderConnectionTestInput => (
+    typeof input === 'string' ? { providerId: input } : input
+  )
+
+  const readApiKeyForTest = async (providerId: string | undefined, inlineApiKey: string | undefined): Promise<string | undefined> => {
+    if (inlineApiKey) return inlineApiKey
+    if (!providerId) return undefined
+    return trimOptional(await options.credentialVaultService.readProviderApiKey(providerId))
   }
 
   return {
@@ -188,24 +384,67 @@ export function createModelProviderService(options: {
     async saveModel(input) {
       return saveModelInternal(input)
     },
-    async testProviderConnection(providerId) {
-      assertId(providerId, 'providerId')
+    async testProviderConnection(input) {
+      const testInput = connectionTestInput(input)
+      const providerId = trimOptional(testInput.providerId)
       await ensureBuiltinProviders()
-      const provider = await options.persistence.modelProviders.get(providerId)
-      if (!provider) {
-        return { providerId, status: 'not_found', hasApiKey: false, message: `Model provider not found: ${providerId}` }
+      const existing = providerId ? await options.persistence.modelProviders.get(providerId) : undefined
+      if (!existing && !testInput.kind) {
+        return { providerId: providerId ?? 'unknown', status: 'not_found', hasApiKey: false, message: `Model provider not found: ${providerId ?? 'unknown'}` }
       }
+
+      const timestamp = now()
+      const inputHasBaseUrl = hasOwn(testInput, 'baseUrl')
+      const inputHasModelId = hasOwn(testInput, 'modelId')
+      const inputBaseUrl = trimOptional(testInput.baseUrl)
+      const inputModelId = trimOptional(testInput.modelId)
+      const providerBaseUrl = inputHasBaseUrl ? inputBaseUrl : trimOptional(existing?.baseUrl)
+      const providerDefaultModelId = inputHasModelId ? inputModelId : trimOptional(existing?.defaultModelId)
+      const provider: ModelProviderConfig = {
+        id: providerId ?? 'temporary-provider',
+        name: existing?.name ?? 'Custom AI',
+        kind: testInput.kind ?? existing?.kind ?? 'custom',
+        enabled: existing?.enabled ?? true,
+        createdAt: existing?.createdAt ?? timestamp,
+        updatedAt: existing?.updatedAt ?? timestamp,
+        ...(providerBaseUrl ? { baseUrl: providerBaseUrl } : {}),
+        ...(providerDefaultModelId ? { defaultModelId: providerDefaultModelId } : {})
+      }
+
       if (!provider.enabled) {
-        return { providerId, status: 'disabled', hasApiKey: false, message: `${provider.name} is disabled.` }
+        return { providerId: provider.id, status: 'disabled', hasApiKey: false, message: `${provider.name} is disabled.` }
       }
       if (provider.kind === 'mock') {
-        return { providerId, status: 'ok', hasApiKey: false, message: 'Mock provider is available.' }
+        return { providerId: provider.id, status: 'ok', hasApiKey: false, message: 'Mock provider is available.' }
       }
-      const credentialStatus = await options.credentialVaultService.getProviderApiKeyStatus({ providerId })
-      if (!credentialStatus.hasApiKey) {
-        return { providerId, status: 'needs_api_key', hasApiKey: false, message: `${provider.name} needs an API key before it can be used.` }
+
+      const inlineApiKey = trimOptional(testInput.apiKey)
+      let apiKey: string | undefined
+      try {
+        apiKey = await readApiKeyForTest(providerId, inlineApiKey)
+      } catch (error) {
+        return failedResult(provider, false, `${provider.name} saved API key could not be read: ${unknownToMessage(error, undefined)}`)
       }
-      return { providerId, status: 'ok', hasApiKey: true, message: `${provider.name} has credentials configured. Network test is deferred to the model resolver task.` }
+
+      if (!apiKey) {
+        return { providerId: provider.id, status: 'needs_api_key', hasApiKey: false, message: `${provider.name} needs an API key before it can be tested.` }
+      }
+
+      const baseUrl = providerBaseUrl
+      if (!baseUrl) {
+        return failedResult(provider, true, `${provider.name} needs an endpoint before it can be tested.`)
+      }
+
+      const requestedModelId = providerDefaultModelId
+      if (!requestedModelId) {
+        return failedResult(provider, true, `${provider.name} needs a model before it can be tested.`)
+      }
+      const modelName = normalizeModelName(provider.id, requestedModelId)
+
+      if (provider.kind === 'anthropic') {
+        return probeAnthropicConnection({ fetchImpl: connectionTestFetch, provider, baseUrl, apiKey, modelName })
+      }
+      return probeOpenAICompatibleConnection({ fetchImpl: connectionTestFetch, provider, baseUrl, apiKey, modelName })
     },
     async ensureBuiltinProviders() {
       await ensureBuiltinProviders()

@@ -498,11 +498,21 @@ describe('registerIpcHandlers', () => {
     await expect(
       handles.get(ipcChannels.credentialsProviderStatus)?.({ sender: { id: 1 } }, { providerId: 'provider-openai', apiKey: 'sk-test' })
     ).rejects.toThrow()
+
+    await expect(
+      handles.get(ipcChannels.providersTestConnection)?.({ sender: { id: 1 } }, { providerId: 'deepseek', unexpected: true })
+    ).rejects.toThrow()
   })
 
   it('manages providers and models through strict IPC without returning API keys', async () => {
     const persistence = await createInMemoryPersistence()
-    const container = createServiceContainer({ persistence, agentMode: 'mock', credentialCodec: createMockCredentialCodec() })
+    const connectionTestFetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({ choices: [{ message: { content: 'hesper-ok' } }] }), { status: 200 }))
+    const container = createServiceContainer({
+      persistence,
+      agentMode: 'mock',
+      credentialCodec: createMockCredentialCodec(),
+      connectionTestFetch: connectionTestFetch as unknown as typeof fetch
+    })
     const savePersistence = vi.fn(async () => {})
     const handles = new Map<string, (event: any, ...args: any[]) => Promise<unknown> | unknown>()
     const ipcMain = {
@@ -533,6 +543,8 @@ describe('registerIpcHandlers', () => {
     await handles.get(ipcChannels.credentialsSaveProviderApiKey)?.({ sender: { id: 1 } }, { providerId: 'deepseek', apiKey: 'sk-provider-secret' })
     const connected = await handles.get(ipcChannels.providersTestConnection)?.({ sender: { id: 1 } }, { providerId: 'deepseek' })
     expect(connected).toMatchObject({ providerId: 'deepseek', status: 'ok', hasApiKey: true })
+    expect(connectionTestFetch).toHaveBeenCalledTimes(1)
+    expect(connectionTestFetch.mock.calls[0]?.[0]).toBe('https://api.deepseek.com/chat/completions')
     expect(JSON.stringify(connected)).not.toContain('sk-provider-secret')
 
     const model = await handles.get(ipcChannels.modelsSave)?.({ sender: { id: 1 } }, {

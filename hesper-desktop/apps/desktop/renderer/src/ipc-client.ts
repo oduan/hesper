@@ -158,12 +158,15 @@ export function createFallbackHesperApi(): HesperDesktopApi {
         updatedAt: new Date().toISOString()
       }),
       delete: async (input) => ({ deleted: true as const, providerId: input.providerId }),
-      testConnection: async (input) => ({
-        providerId: input.providerId,
-        status: input.providerId === 'mock' ? 'ok' : 'needs_api_key',
-        hasApiKey: false,
-        message: input.providerId === 'mock' ? 'Mock provider is available.' : 'Provider needs an API key.'
-      })
+      testConnection: async (input) => {
+        const providerId = input.providerId ?? 'temporary-provider'
+        return {
+          providerId,
+          status: providerId === 'mock' ? 'ok' : 'needs_api_key',
+          hasApiKey: false,
+          message: providerId === 'mock' ? 'Mock provider is available.' : 'Provider needs an API key.'
+        }
+      }
     },
     models: {
       list: async (input = {}): Promise<ModelDto[]> => {

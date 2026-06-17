@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import type {
   ModelDto,
   ModelProviderDto,
+  ProviderConnectionTestInput,
   ProviderConnectionTestResult,
   SaveModelProviderInput
 } from '../../electron/ipc-contract'
@@ -79,6 +80,27 @@ function displayModelIdForProvider(providerId: string, modelId: string): string 
   return shouldNamespaceModelIds(providerId) ? modelNameFromNamespacedId(providerId, modelId) : modelId
 }
 
+function modelIdsFromFormValue(value: string): string[] {
+  return value.split(',').map((item) => item.trim()).filter(Boolean)
+}
+
+function connectionTestInputFromDialog(state: ConnectionDialogState, providers: ModelProviderDto[]): ProviderConnectionTestInput {
+  const endpoint = state.form.endpoint.trim()
+  const apiKey = state.form.apiKey.trim()
+  const modelIds = modelIdsFromFormValue(state.form.defaultModelId)
+  const existingProvider = state.providerId ? providers.find((provider) => provider.id === state.providerId) : undefined
+  const providerSlug = endpoint ? slugFromEndpoint(endpoint) : 'custom-ai'
+  const providerId = existingProvider?.id ?? `custom-${providerSlug}`
+
+  return {
+    providerId,
+    kind: providerKindForProtocol(state.form.protocol),
+    baseUrl: endpoint,
+    ...(apiKey ? { apiKey } : {}),
+    ...(modelIds[0] ? { modelId: modelIds[0] } : {})
+  }
+}
+
 export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettingsPanelProps) {
   const [providers, setProviders] = useState<ModelProviderDto[]>([])
   const [models, setModels] = useState<ModelDto[]>([])
@@ -150,7 +172,7 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
 
     const endpoint = dialogState.form.endpoint.trim()
     const apiKey = dialogState.form.apiKey.trim()
-    const modelIds = dialogState.form.defaultModelId.split(',').map((item) => item.trim()).filter(Boolean)
+    const modelIds = modelIdsFromFormValue(dialogState.form.defaultModelId)
     const primaryModelId = modelIds[0]
     const existingProvider = dialogState.providerId ? providers.find((provider) => provider.id === dialogState.providerId) : undefined
     const providerSlug = endpoint ? slugFromEndpoint(endpoint) : 'custom-ai'
@@ -200,11 +222,20 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
   }
 
   const testDialogConnection = async () => {
-    if (!dialogState?.providerId) return
+    if (!dialogState) return
+    const testInput = connectionTestInputFromDialog(dialogState, providers)
+    if (!testInput.modelId?.trim()) {
+      setConnectionResult(undefined)
+      setMessage(undefined)
+      setError('请填写至少一个模型后再测试连接')
+      return
+    }
+
     setError(undefined)
     setMessage(undefined)
+    setConnectionResult(undefined)
     try {
-      const result = await hesperApi.providers.testConnection({ providerId: dialogState.providerId })
+      const result = await hesperApi.providers.testConnection(testInput)
       if (!mountedRef.current) return
       setConnectionResult(result)
       setMessage(result.message)
@@ -246,14 +277,14 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
             <p style={sectionDescriptionStyle}>管理 AI 提供商连接。</p>
           </div>
           <div style={connectionListStyle}>
-            {visibleProviders.map((provider, index) => (
-              <div key={provider.id} style={{ ...connectionItemStyle, ...(index === visibleProviders.length - 1 ? { borderBottom: 0 } : {}) }}>
+            {visibleProviders.map((provider) => (
+              <div key={provider.id} style={{ ...connectionItemStyle, ...(provider.id === selectedProviderId ? selectedConnectionItemStyle : {}) }}>
                 <button
                   type="button"
                   aria-label={`选择模型来源 ${provider.name}`}
                   aria-current={provider.id === selectedProviderId ? 'page' : undefined}
                   onClick={() => setSelectedProviderId(provider.id)}
-                  style={{ ...connectionInfoButtonStyle, ...(provider.id === selectedProviderId ? { background: 'rgba(255, 255, 255, 0.055)' } : {}) }}
+                  style={connectionInfoButtonStyle}
                 >
                   <span style={providerAvatarStyle}>{provider.name.slice(0, 1).toUpperCase()}</span>
                   <span style={{ minWidth: 0 }}>
@@ -296,7 +327,7 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
             setConnectionResult(undefined)
             setDialogState(undefined)
           }}
-          {...(dialogState.mode === 'edit' ? { onTest: () => void testDialogConnection() } : {})}
+          onTest={() => void testDialogConnection()}
           onSave={() => void saveConnection()}
         />
       ) : null}
@@ -387,8 +418,8 @@ function ConnectionDialog({
         {connectionResult ? <p role="status" style={statusTextStyle}>{connectionResult.message}</p> : null}
         <footer style={{ display: 'grid', gridTemplateColumns: onTest ? '1fr 1fr 1fr' : '1fr 1fr', gap: 10, marginTop: 22 }}>
           <button type="button" onClick={onCancel} style={secondaryActionStyle}>Back</button>
-          {onTest ? <button type="button" onClick={onTest} style={secondaryActionStyle}>连接</button> : null}
-          <button type="button" onClick={onSave} style={primaryActionStyle}>保存</button>
+          {onTest ? <button type="button" onClick={onTest} style={secondaryActionStyle}>Test</button> : null}
+          <button type="button" onClick={onSave} style={primaryActionStyle}>Save</button>
         </footer>
       </div>
     </div>
@@ -452,8 +483,8 @@ const sectionDescriptionStyle: CSSProperties = {
 }
 
 const connectionListStyle: CSSProperties = {
-  borderRadius: 16,
-  background: 'rgba(255, 255, 255, 0.025)',
+  display: 'grid',
+  gap: 10,
   overflow: 'visible'
 }
 
@@ -463,7 +494,16 @@ const connectionItemStyle: CSSProperties = {
   display: 'grid',
   gridTemplateColumns: 'minmax(0, 1fr) auto',
   alignItems: 'stretch',
-  borderBottom: '1px solid rgba(255, 255, 255, 0.045)'
+  borderRadius: 16,
+  border: '1px solid rgba(255, 255, 255, 0.055)',
+  background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02))',
+  boxShadow: '0 12px 28px rgba(0, 0, 0, 0.12)',
+  overflow: 'hidden'
+}
+
+const selectedConnectionItemStyle: CSSProperties = {
+  borderColor: 'rgba(127, 158, 232, 0.5)',
+  background: 'linear-gradient(135deg, rgba(127, 158, 232, 0.14), rgba(255, 255, 255, 0.03))'
 }
 
 const connectionInfoButtonStyle: CSSProperties = {
@@ -485,8 +525,8 @@ const providerAvatarStyle: CSSProperties = {
   width: 26,
   height: 26,
   borderRadius: 999,
-  background: 'rgba(255, 255, 255, 0.055)',
-  color: mutedTextColor,
+  background: 'linear-gradient(135deg, rgba(127, 158, 232, 0.32), rgba(255, 255, 255, 0.07))',
+  color: '#eef2ff',
   display: 'grid',
   placeItems: 'center',
   fontSize: 12,
@@ -578,7 +618,7 @@ const overlayStyle: CSSProperties = {
   position: 'fixed',
   inset: 0,
   zIndex: 20,
-  background: '#171a26',
+  background: 'rgba(18, 21, 32, 0.96)',
   display: 'grid',
   placeItems: 'center',
   padding: 24
@@ -599,9 +639,14 @@ const overlayCloseStyle: CSSProperties = {
 }
 
 const overlayFormStyle: CSSProperties = {
-  width: 'min(440px, 100%)',
+  width: 'min(460px, 100%)',
   display: 'grid',
-  gap: 18
+  gap: 18,
+  borderRadius: 22,
+  border: '1px solid rgba(255, 255, 255, 0.07)',
+  background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.025))',
+  boxShadow: '0 24px 64px rgba(0, 0, 0, 0.32)',
+  padding: 24
 }
 
 const segmentedControlStyle: CSSProperties = {

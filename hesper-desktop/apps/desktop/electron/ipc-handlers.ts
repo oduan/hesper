@@ -12,6 +12,7 @@ import {
   ipcChannels,
   ipcEvents,
   listModelsInputSchema,
+  providerConnectionTestInputSchema,
   providerConnectionTestResultSchema,
   providerCredentialInputSchema,
   providerCredentialStatusSchema,
@@ -275,7 +276,7 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       return provider ? { deleted: true as const, providerId, provider: modelProviderConfigSchema.parse(provider) } : { deleted: true as const, providerId }
     },
     [ipcChannels.providersTestConnection]: async (_event, payload) => {
-      const result = await options.container.modelProviderService.testProviderConnection(providerIdInputSchema.parse(payload).providerId)
+      const result = await options.container.modelProviderService.testProviderConnection(providerConnectionTestInputSchema.parse(payload))
       return providerConnectionTestResultSchema.parse(result)
     },
     [ipcChannels.modelsList]: async (_event, payload) => {

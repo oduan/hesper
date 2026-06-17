@@ -131,6 +131,16 @@ export const providerIdInputSchema = z.object({
   providerId: nonEmptyStringSchema
 }).strict()
 
+export const providerConnectionTestInputSchema = z.object({
+  providerId: nonEmptyStringSchema.optional(),
+  kind: z.enum(['mock', 'openai', 'deepseek', 'openai-compatible', 'anthropic', 'custom']).optional(),
+  baseUrl: z.string().optional(),
+  apiKey: z.string().optional(),
+  modelId: z.string().optional()
+}).strict().refine((input) => input.providerId !== undefined || input.kind !== undefined, {
+  message: 'providerId or kind is required'
+})
+
 export const listModelsInputSchema = z.object({
   providerId: nonEmptyStringSchema.optional()
 }).strict()
@@ -147,7 +157,7 @@ export const saveModelInputSchema = z.object({
 
 export const providerConnectionTestResultSchema = z.object({
   providerId: nonEmptyStringSchema,
-  status: z.enum(['ok', 'disabled', 'needs_api_key', 'not_found']),
+  status: z.enum(['ok', 'disabled', 'needs_api_key', 'not_found', 'failed']),
   hasApiKey: z.boolean(),
   message: z.string().min(1)
 }).strict()
@@ -174,6 +184,7 @@ export type SaveProviderApiKeyInput = z.infer<typeof saveProviderApiKeyInputSche
 export type ProviderCredentialStatus = z.infer<typeof providerCredentialStatusSchema>
 export type SaveModelProviderInput = z.infer<typeof saveModelProviderInputSchema>
 export type ProviderIdInput = z.infer<typeof providerIdInputSchema>
+export type ProviderConnectionTestInput = z.infer<typeof providerConnectionTestInputSchema>
 export type ListModelsInput = z.infer<typeof listModelsInputSchema>
 export type SaveModelInput = z.infer<typeof saveModelInputSchema>
 export type ProviderConnectionTestResult = z.infer<typeof providerConnectionTestResultSchema>
@@ -223,7 +234,7 @@ export type HesperDesktopApi = {
     save(input: SaveModelProviderInput): Promise<ModelProviderDto>
     disable(input: ProviderIdInput): Promise<ModelProviderDto>
     delete(input: ProviderIdInput): Promise<{ deleted: true; providerId: string; provider?: ModelProviderDto }>
-    testConnection(input: ProviderIdInput): Promise<ProviderConnectionTestResult>
+    testConnection(input: ProviderConnectionTestInput): Promise<ProviderConnectionTestResult>
   }
   models: {
     list(input?: ListModelsInput): Promise<ModelDto[]>

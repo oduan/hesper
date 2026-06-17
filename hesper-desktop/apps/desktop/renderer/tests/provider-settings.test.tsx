@@ -207,7 +207,23 @@ describe('provider settings panel', () => {
     await user.type(screen.getByLabelText('添加连接 API key'), 'sk-custom-value')
     await user.type(screen.getByLabelText('添加连接 Endpoint'), 'https://api.example.com')
     await user.type(screen.getByLabelText('添加连接默认模型'), 'gpt-4o, example-reasoner')
-    await user.click(screen.getByRole('button', { name: '保存' }))
+    expect(screen.getByRole('button', { name: 'Test' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Test' }))
+    await waitFor(() => {
+      expect(testConnection).toHaveBeenCalledWith({
+        providerId: 'custom-api-example-com',
+        kind: 'openai-compatible',
+        baseUrl: 'https://api.example.com',
+        apiKey: 'sk-custom-value',
+        modelId: 'gpt-4o'
+      })
+    })
+    expect(saveProvider).not.toHaveBeenCalled()
+    expect(saveProviderApiKey).not.toHaveBeenCalled()
+    expect(saveModel).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => {
       expect(saveProvider).toHaveBeenCalledWith(expect.objectContaining({
@@ -260,14 +276,19 @@ describe('provider settings panel', () => {
     expect(screen.getByLabelText('添加连接默认模型')).toHaveValue('deepseek-chat, deepseek-reasoner')
     expect(screen.getByLabelText('添加连接 API key')).toHaveValue('')
 
-    await user.click(screen.getByRole('button', { name: '连接' }))
+    await user.click(screen.getByRole('button', { name: 'Test' }))
     await waitFor(() => {
-      expect(testConnection).toHaveBeenCalledWith({ providerId: 'deepseek' })
+      expect(testConnection).toHaveBeenCalledWith({
+        providerId: 'deepseek',
+        kind: 'openai-compatible',
+        baseUrl: 'https://api.deepseek.com',
+        modelId: 'deepseek-chat'
+      })
     })
 
     await user.clear(screen.getByLabelText('添加连接 Endpoint'))
     await user.type(screen.getByLabelText('添加连接 Endpoint'), 'https://api.deepseek.com/v1')
-    await user.click(screen.getByRole('button', { name: '保存' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => {
       expect(saveProvider).toHaveBeenCalledWith(expect.objectContaining({ id: 'deepseek', baseUrl: 'https://api.deepseek.com/v1' }))
