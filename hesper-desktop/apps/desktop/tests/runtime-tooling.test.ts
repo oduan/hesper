@@ -9,6 +9,7 @@ const appRoot = path.resolve(import.meta.dirname, '..')
 const ipcContractPath = path.join(appRoot, 'electron', 'ipc-contract.ts')
 const preloadPath = path.join(appRoot, 'electron', 'preload.cjs')
 const startElectronDevPath = path.join(appRoot, 'scripts', 'start-electron-dev.mjs')
+const rendererViteConfigPath = path.join(appRoot, 'renderer', 'vite.config.ts')
 const verifyPreloadContractScriptUrl = pathToFileURL(path.join(appRoot, 'scripts', 'verify-preload-contract.mjs')).href
 const require = createRequire(import.meta.url)
 
@@ -154,5 +155,15 @@ describe('desktop runtime tooling', () => {
     expect(startElectronDevSource).toContain('VITE_DEV_SERVER_URL')
     expect(startElectronDevSource).toContain('http://127.0.0.1:5173')
     expect(startElectronDevSource).toContain('electron')
+  })
+
+  it('fails dev startup instead of opening another app on the renderer dev port', () => {
+    const startElectronDevSource = fs.readFileSync(startElectronDevPath, 'utf8')
+    const rendererViteConfigSource = fs.readFileSync(rendererViteConfigPath, 'utf8')
+
+    expect(rendererViteConfigSource).toContain('strictPort: true')
+    expect(rendererViteConfigSource).toContain('port: 5173')
+    expect(startElectronDevSource).toContain('assertRendererDevServer')
+    expect(startElectronDevSource).toContain('hesper desktop')
   })
 })
