@@ -113,7 +113,14 @@ describe('ui components', () => {
     expect(screen.queryByRole('option', { name: 'DeepSeek/deepseek-chat' })).not.toBeInTheDocument()
 
     await user.hover(screen.getByRole('button', { name: '连接 OpenAI' }))
+    const openAiSubmenu = await screen.findByLabelText('OpenAI 模型')
+    expect(openAiSubmenu).toHaveStyle({
+      position: 'absolute',
+      right: 'calc(100% + 6px)',
+      top: '0px'
+    })
     const openAiModel = await screen.findByRole('option', { name: 'OpenAI/gpt-4o' })
+    expect(openAiSubmenu).toContainElement(openAiModel)
     await user.click(openAiModel)
 
     expect(onModelChange).toHaveBeenCalledWith('gpt-4o')

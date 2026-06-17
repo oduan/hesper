@@ -109,10 +109,10 @@ export function ThemedSelect({
                   style={selectGroupButtonStyle}
                 >
                   <span style={selectValueStyle}>{group.label}</span>
-                  <span aria-hidden="true" style={selectGroupArrowStyle}>{expanded ? '⌄' : '›'}</span>
+                  <span aria-hidden="true" style={selectGroupArrowStyle}>‹</span>
                 </button>
                 {expanded ? (
-                  <div style={selectGroupOptionsStyle}>
+                  <div role="group" aria-label={`${group.label} 模型`} style={selectGroupOptionsStyle}>
                     {group.options.map((option) => (
                       <button
                         key={option.value}
@@ -208,6 +208,7 @@ const selectMenuStyle: CSSProperties = {
 }
 
 const selectGroupStyle: CSSProperties = {
+  position: 'relative',
   display: 'grid',
   gap: 2
 }
@@ -238,9 +239,19 @@ const selectGroupArrowStyle: CSSProperties = {
 }
 
 const selectGroupOptionsStyle: CSSProperties = {
+  position: 'absolute',
+  right: 'calc(100% + 6px)',
+  top: 0,
+  zIndex: 31,
+  minWidth: 'max-content',
+  width: 'max-content',
+  maxWidth: 280,
   display: 'grid',
   gap: 2,
-  paddingLeft: 10
+  borderRadius: darkTheme.radius.md,
+  background: '#202434',
+  padding: 6,
+  boxShadow: '0 18px 36px rgba(0, 0, 0, 0.28)'
 }
 
 const selectOptionStyle: CSSProperties = {
