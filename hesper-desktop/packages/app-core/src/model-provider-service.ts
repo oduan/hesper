@@ -174,7 +174,7 @@ function extractOpenAIResponseText(payload: unknown): string | undefined {
   const choices = Array.isArray(record.choices) ? record.choices : []
   const firstChoice = asRecord(choices[0])
   const message = asRecord(firstChoice?.message)
-  return textFromContent(message?.content) ?? textFromContent(firstChoice?.text)
+  return textFromContent(message?.content) ?? textFromContent(message?.reasoning_content) ?? textFromContent(firstChoice?.text)
 }
 
 function extractAnthropicResponseText(payload: unknown): string | undefined {

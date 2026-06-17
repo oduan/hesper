@@ -208,6 +208,35 @@ describe('createModelProviderService', () => {
     expect(result.message).toBe('Custom AI 连接成功：模型 example-chat 返回了测试响应。')
   })
 
+  it('accepts OpenAI-compatible reasoning content as an assistant response', async () => {
+    const persistence = await createInMemoryPersistence()
+    const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => createJsonResponse({
+      id: '2f2a730f-6f37-4d8e-8354-fc3eeceb7c08',
+      object: 'chat.completion',
+      choices: [{
+        index: 0,
+        message: {
+          role: 'assistant',
+          content: '',
+          reasoning_content: 'We are asked to reply with a test response.'
+        }
+      }]
+    }))
+    const service = createModelProviderService({ persistence, credentialVaultService, now: () => now, fetch: fetchMock as unknown as typeof fetch })
+
+    const result = await service.testProviderConnection({
+      providerId: 'custom-api-example-com',
+      kind: 'openai-compatible',
+      baseUrl: 'https://api.example.com/v1',
+      apiKey: 'sk-inline-secret',
+      modelId: 'deepseek-v4-flash'
+    })
+
+    expect(result).toMatchObject({ providerId: 'custom-api-example-com', status: 'ok', hasApiKey: true })
+    expect(result.message).toBe('Custom AI 连接成功：模型 deepseek-v4-flash 返回了测试响应。')
+  })
+
   it('explains malformed successful responses as protocol or model mismatches', async () => {
     const persistence = await createInMemoryPersistence()
     const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })

@@ -427,7 +427,10 @@ function ConnectionDialog({
           <span style={{ color: mutedTextColor }}>Comma-separated list. The first model is the default.</span>
         </label>
         {connectionResult ? (
-          <p role={connectionResult.status === 'ok' ? 'status' : 'alert'} style={connectionResult.status === 'ok' ? statusTextStyle : errorTextStyle}>
+          <p
+            role={connectionResult.status === 'ok' ? 'status' : 'alert'}
+            style={{ ...connectionFeedbackTextStyle, ...(connectionResult.status === 'ok' ? statusTextStyle : errorTextStyle) }}
+          >
             {connectionResult.message}
           </p>
         ) : null}
@@ -606,6 +609,9 @@ const fieldStyle: CSSProperties = {
 }
 
 const inputStyle: CSSProperties = {
+  width: '100%',
+  boxSizing: 'border-box',
+  minWidth: 0,
   borderRadius: 10,
   border: 0,
   outline: 0,
@@ -661,6 +667,10 @@ const overlayCloseStyle: CSSProperties = {
 
 const overlayFormStyle: CSSProperties = {
   width: 'min(460px, 100%)',
+  boxSizing: 'border-box',
+  minWidth: 0,
+  maxHeight: 'calc(100vh - 48px)',
+  overflowY: 'auto',
   display: 'grid',
   gap: 18,
   borderRadius: 22,
@@ -671,8 +681,9 @@ const overlayFormStyle: CSSProperties = {
 }
 
 const segmentedControlStyle: CSSProperties = {
+  minWidth: 0,
   display: 'grid',
-  gridTemplateColumns: '1fr 1fr',
+  gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
   borderRadius: 10,
   background: 'rgba(255, 255, 255, 0.035)',
   overflow: 'hidden'
@@ -691,6 +702,16 @@ const activeSegmentButtonStyle: CSSProperties = {
   background: 'rgba(255, 255, 255, 0.055)',
   color: '#eef2ff',
   fontWeight: 700
+}
+
+const connectionFeedbackTextStyle: CSSProperties = {
+  maxWidth: '100%',
+  maxHeight: 120,
+  overflowY: 'auto',
+  overflowWrap: 'anywhere',
+  wordBreak: 'break-word',
+  lineHeight: 1.45,
+  margin: 0
 }
 
 const statusTextStyle: CSSProperties = {

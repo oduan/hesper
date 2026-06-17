@@ -281,13 +281,18 @@ describe('provider settings panel', () => {
     expect(screen.queryByDisplayValue('sk-custom-value')).not.toBeInTheDocument()
   })
 
-  it('shows failed connection test results as error feedback', async () => {
+  it('shows failed connection test results as bounded error feedback', async () => {
     const user = userEvent.setup()
+    const longMessage = 'Custom AI 连接失败：API 返回了成功状态，但响应格式中没有 assistant 文本。请检查协议类型、Endpoint 和模型是否匹配。响应预览：' + JSON.stringify({
+      id: 'bfbd7b92-de7b-4bb3-b095-4625c817cc19',
+      object: 'chat.completion',
+      choices: [{ index: 0, message: { role: 'assistant', content: '', reasoning_content: 'We need to reason through a very long response preview without stretching the dialog layout.' } }]
+    })
     testConnection.mockResolvedValueOnce({
       providerId: 'custom-api-example-com',
       status: 'failed',
       hasApiKey: true,
-      message: 'Custom AI 连接失败：API 返回了成功状态，但响应格式中没有 assistant 文本。请检查协议类型、Endpoint 和模型是否匹配。'
+      message: longMessage
     })
     render(<App />)
 
@@ -298,7 +303,14 @@ describe('provider settings panel', () => {
     await user.type(screen.getByLabelText('添加连接默认模型'), 'gpt-4o')
     await user.click(screen.getByRole('button', { name: 'Test' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Custom AI 连接失败')
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Custom AI 连接失败')
+    expect(alert).toHaveStyle({
+      maxWidth: '100%',
+      overflowWrap: 'anywhere',
+      maxHeight: '120px',
+      overflowY: 'auto'
+    })
   })
 
   it('edits a connection from the menu without pre-filling the saved API key', async () => {
