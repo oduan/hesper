@@ -196,6 +196,38 @@ describe('provider settings panel', () => {
     expect(screen.getByRole('button', { name: '选择模型来源 OpenAI' })).toBeInTheDocument()
   })
 
+  it('renders provider connections as one block with unclipped menus', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: '设置' }))
+
+    const mockButton = await screen.findByRole('button', { name: '选择模型来源 Mock' })
+    const deepSeekButton = screen.getByRole('button', { name: '选择模型来源 DeepSeek' })
+    const mockItem = mockButton.closest('div')
+    const deepSeekItem = deepSeekButton.closest('div')
+    const connectionList = mockItem?.parentElement
+
+    expect(connectionList).toHaveStyle({
+      gap: '0px',
+      background: 'rgba(255, 255, 255, 0.035)'
+    })
+    expect(mockItem?.style.border).toBe('0px')
+    expect(mockItem?.style.boxShadow).toBe('none')
+    expect(mockItem).toHaveStyle({ overflow: 'visible' })
+    expect(deepSeekItem).toHaveStyle({
+      borderTop: '1px solid rgba(255, 255, 255, 0.06)',
+      overflow: 'visible'
+    })
+
+    await user.click(deepSeekButton)
+    expect(deepSeekItem?.style.borderColor).not.toContain('127, 158, 232')
+
+    await user.click(screen.getByRole('button', { name: '打开连接菜单 DeepSeek' }))
+    expect(await screen.findByRole('menu', { name: 'DeepSeek 连接菜单' })).toBeInTheDocument()
+    expect(deepSeekItem).toHaveStyle({ overflow: 'visible' })
+  })
+
   it('adds a custom AI connection from the API configuration dialog', async () => {
     const user = userEvent.setup()
     render(<App />)

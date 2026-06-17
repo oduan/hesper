@@ -277,8 +277,15 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
             <p style={sectionDescriptionStyle}>管理 AI 提供商连接。</p>
           </div>
           <div style={connectionListStyle}>
-            {visibleProviders.map((provider) => (
-              <div key={provider.id} style={{ ...connectionItemStyle, ...(provider.id === selectedProviderId ? selectedConnectionItemStyle : {}) }}>
+            {visibleProviders.map((provider, index) => (
+              <div
+                key={provider.id}
+                style={{
+                  ...connectionItemStyle,
+                  ...(index > 0 ? connectionItemSeparatorStyle : {}),
+                  ...(provider.id === selectedProviderId ? selectedConnectionItemStyle : {})
+                }}
+              >
                 <button
                   type="button"
                   aria-label={`选择模型来源 ${provider.name}`}
@@ -484,7 +491,10 @@ const sectionDescriptionStyle: CSSProperties = {
 
 const connectionListStyle: CSSProperties = {
   display: 'grid',
-  gap: 10,
+  gap: 0,
+  border: 0,
+  borderRadius: 16,
+  background: 'rgba(255, 255, 255, 0.035)',
   overflow: 'visible'
 }
 
@@ -494,16 +504,19 @@ const connectionItemStyle: CSSProperties = {
   display: 'grid',
   gridTemplateColumns: 'minmax(0, 1fr) auto',
   alignItems: 'stretch',
-  borderRadius: 16,
-  border: '1px solid rgba(255, 255, 255, 0.055)',
-  background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02))',
-  boxShadow: '0 12px 28px rgba(0, 0, 0, 0.12)',
-  overflow: 'hidden'
+  border: 0,
+  borderRadius: 12,
+  background: 'transparent',
+  boxShadow: 'none',
+  overflow: 'visible'
+}
+
+const connectionItemSeparatorStyle: CSSProperties = {
+  borderTop: '1px solid rgba(255, 255, 255, 0.06)'
 }
 
 const selectedConnectionItemStyle: CSSProperties = {
-  borderColor: 'rgba(127, 158, 232, 0.5)',
-  background: 'linear-gradient(135deg, rgba(127, 158, 232, 0.14), rgba(255, 255, 255, 0.03))'
+  background: 'rgba(127, 158, 232, 0.14)'
 }
 
 const connectionInfoButtonStyle: CSSProperties = {
