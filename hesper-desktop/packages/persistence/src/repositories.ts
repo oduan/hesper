@@ -32,6 +32,13 @@ export type CredentialRecord = {
   updatedAt: string
 }
 
+export type AppSettingsRecord = {
+  defaultModelId: string
+  defaultOutputMode: 'markdown' | 'html'
+  themeMode: 'system' | 'light' | 'dark'
+  updatedAt: string
+}
+
 export type SessionRepository = {
   save(session: Session): Promise<void>
   get(id: string): Promise<Session | undefined>
@@ -107,7 +114,13 @@ export type CredentialRecordRepository = {
   delete(id: string): Promise<void>
 }
 
+export type AppSettingsRepository = {
+  save(settings: AppSettingsRecord): Promise<void>
+  get(): Promise<AppSettingsRecord | undefined>
+}
+
 export type Persistence = {
+  settings: AppSettingsRepository
   sessions: SessionRepository
   messages: MessageRepository
   runs: RunRepository
@@ -354,6 +367,26 @@ function toCredentialRecord(row: any): CredentialRecord {
   }
 }
 
+const appSettingsOutputModes = new Set<AppSettingsRecord['defaultOutputMode']>(['markdown', 'html'])
+const appSettingsThemeModes = new Set<AppSettingsRecord['themeMode']>(['system', 'light', 'dark'])
+
+function toAppSettingsRecord(row: any): AppSettingsRecord {
+  const defaultOutputMode = String(row.default_output_mode)
+  const themeMode = String(row.theme_mode)
+  if (!appSettingsOutputModes.has(defaultOutputMode as AppSettingsRecord['defaultOutputMode'])) {
+    throw new Error(`Invalid app settings output mode: ${defaultOutputMode}`)
+  }
+  if (!appSettingsThemeModes.has(themeMode as AppSettingsRecord['themeMode'])) {
+    throw new Error(`Invalid app settings theme mode: ${themeMode}`)
+  }
+  return {
+    defaultModelId: String(row.default_model_id),
+    defaultOutputMode: defaultOutputMode as AppSettingsRecord['defaultOutputMode'],
+    themeMode: themeMode as AppSettingsRecord['themeMode'],
+    updatedAt: String(row.updated_at)
+  }
+}
+
 function extractRunId(event: RuntimeEventRecord): string {
   switch (event.type) {
     case 'run.created':
@@ -432,6 +465,21 @@ export function createRepositories(db: Database): Persistence {
   }
 
   return {
+    settings: {
+      async save(settings) {
+        exec('DELETE FROM app_settings')
+        exec('INSERT INTO app_settings (default_model_id, default_output_mode, theme_mode, updated_at) VALUES (?, ?, ?, ?)', [
+          settings.defaultModelId,
+          settings.defaultOutputMode,
+          settings.themeMode,
+          settings.updatedAt
+        ])
+      },
+      async get() {
+        const row = fetchAll('SELECT * FROM app_settings LIMIT 1')[0]
+        return row ? toAppSettingsRecord(row) : undefined
+      }
+    },
     sessions: {
       async save(session) {
         upsert('sessions', [

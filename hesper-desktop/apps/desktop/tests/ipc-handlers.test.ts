@@ -188,7 +188,7 @@ describe('registerIpcHandlers', () => {
       content: 'Use assembled prompt',
       runId: 'run-assembled'
     }))
-    expect(enqueueSpy.mock.invocationCallOrder[0]).toBeLessThan(createUserMessageSpy.mock.invocationCallOrder[0])
+    expect(enqueueSpy.mock.invocationCallOrder[0]!).toBeLessThan(createUserMessageSpy.mock.invocationCallOrder[0]!)
   })
 
   it('narrows per-run enabled tools without expanding beyond the configured allowlist', async () => {
@@ -550,6 +550,45 @@ describe('registerIpcHandlers', () => {
     await expect(
       handles.get(ipcChannels.modelsSave)?.({ sender: { id: 1 } }, { id: 'm', providerId: 'p', modelName: 'm', displayName: 'M', unexpected: true })
     ).rejects.toThrow()
+  })
+
+  it('persists settings updates through IPC for recreated service containers', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock' })
+    const savePersistence = vi.fn(async () => {})
+    const handles = new Map<string, (event: any, ...args: any[]) => Promise<unknown> | unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (event: any, ...args: any[]) => Promise<unknown> | unknown) => {
+        handles.set(channel, handler)
+      }),
+      removeHandler: vi.fn()
+    }
+    const dialog = {
+      showOpenDialog: vi.fn(async () => ({ canceled: false, filePaths: ['C:/workspace'] }))
+    }
+
+    registerIpcHandlers({ ipcMain, dialog, container, savePersistence })
+
+    await expect(
+      handles.get(ipcChannels.settingsUpdate)?.({ sender: { id: 1 } }, { defaultModelId: 'deepseek-chat', defaultOutputMode: 'html', themeMode: 'dark' })
+    ).resolves.toEqual({ defaultModelId: 'deepseek-chat', defaultOutputMode: 'html', themeMode: 'dark' })
+    expect(savePersistence).toHaveBeenCalled()
+
+    const restoredContainer = createServiceContainer({ persistence, agentMode: 'mock' })
+    const restoredHandles = new Map<string, (event: any, ...args: any[]) => Promise<unknown> | unknown>()
+    const restoredIpcMain = {
+      handle: vi.fn((channel: string, handler: (event: any, ...args: any[]) => Promise<unknown> | unknown) => {
+        restoredHandles.set(channel, handler)
+      }),
+      removeHandler: vi.fn()
+    }
+    registerIpcHandlers({ ipcMain: restoredIpcMain, dialog, container: restoredContainer })
+
+    await expect(restoredHandles.get(ipcChannels.settingsGet)?.({ sender: { id: 1 } })).resolves.toEqual({
+      defaultModelId: 'deepseek-chat',
+      defaultOutputMode: 'html',
+      themeMode: 'dark'
+    })
   })
 
   it('rejects unknown settings:update fields at the IPC boundary', async () => {

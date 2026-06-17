@@ -164,6 +164,13 @@ CREATE TABLE IF NOT EXISTS credential_records (
   updated_at TEXT NOT NULL,
   sort_seq INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS app_settings (
+  default_model_id TEXT NOT NULL,
+  default_output_mode TEXT NOT NULL,
+  theme_mode TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 `
 
 const migrationColumns: Record<string, string[]> = {

@@ -112,6 +112,31 @@ describe('persistence repositories', () => {
     expect(await db.events.listByRun('run-1')).toHaveLength(4)
   })
 
+  it('exports and reopens persisted application settings', async () => {
+    const original = await createInMemoryPersistence()
+    await original.settings.save({
+      defaultModelId: 'deepseek-chat',
+      defaultOutputMode: 'html',
+      themeMode: 'dark',
+      updatedAt: now
+    })
+
+    const tempFile = path.join(os.tmpdir(), `hesper-settings-${Date.now()}.sqlite`)
+    fs.writeFileSync(tempFile, exportDatabaseBytes(original))
+
+    try {
+      const reopened = await createFilePersistence(tempFile)
+      expect(await reopened.settings.get()).toEqual({
+        defaultModelId: 'deepseek-chat',
+        defaultOutputMode: 'html',
+        themeMode: 'dark',
+        updatedAt: now
+      })
+    } finally {
+      fs.rmSync(tempFile, { force: true })
+    }
+  })
+
   it('exports and reopens real file persistence without breaking order', async () => {
     const original = await createInMemoryPersistence()
     await original.runs.save({ id: 'run-1', sessionId: 'session-1', status: 'queued', modelId: 'm1', retryCount: 0, maxRetries: 5 })

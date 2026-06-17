@@ -227,9 +227,9 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       unsubscribeSender(event.sender.id)
       return unsubscribeAgentEventsResultSchema.parse({ unsubscribed: true })
     },
-    [ipcChannels.settingsGet]: async () => appSettingsSchema.parse(options.container.settingsService.getSettings()),
+    [ipcChannels.settingsGet]: async () => appSettingsSchema.parse(await options.container.settingsService.getSettings()),
     [ipcChannels.settingsUpdate]: async (_event, payload) => {
-      const settings = options.container.settingsService.updateSettings(omitUndefined(updateSettingsInputSchema.parse(payload ?? {})))
+      const settings = await options.container.settingsService.updateSettings(omitUndefined(updateSettingsInputSchema.parse(payload ?? {})))
       await savePersistence()
       return appSettingsSchema.parse(settings)
     },

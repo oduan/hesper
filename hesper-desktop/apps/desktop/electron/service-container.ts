@@ -28,7 +28,7 @@ export type ServiceContainer = ReturnType<typeof createServiceContainer>
 export function createServiceContainer(options: ServiceContainerOptions) {
   const sessionService = createSessionService(options.persistence)
   const conversationService = createConversationService(options.persistence)
-  const settingsService = createSettingsService()
+  const settingsService = createSettingsService({ persistence: options.persistence })
   const roleService = createDefaultRoleService()
   const skillService = createDefaultSkillService()
   const toolDefinitions = createBuiltinToolDefinitions()
