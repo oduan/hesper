@@ -5,7 +5,7 @@ describe('desktop main renderer security', () => {
   it('ignores VITE_DEV_SERVER_URL when the app is packaged', () => {
     expect(
       resolveRendererLoadTarget({
-        devServerUrl: 'http://evil.example.test:5173',
+        devServerUrl: 'http://evil.example.test:5273',
         isPackaged: true
       })
     ).toEqual({ kind: 'file' })
@@ -14,7 +14,7 @@ describe('desktop main renderer security', () => {
   it('rejects non-localhost dev server URLs in development', () => {
     expect(() =>
       resolveRendererLoadTarget({
-        devServerUrl: 'http://evil.example.test:5173',
+        devServerUrl: 'http://evil.example.test:5273',
         isPackaged: false
       })
     ).toThrow(/localhost|127\.0\.0\.1/)
@@ -23,10 +23,10 @@ describe('desktop main renderer security', () => {
   it('allows localhost dev server URLs in development', () => {
     expect(
       resolveRendererLoadTarget({
-        devServerUrl: 'http://127.0.0.1:5173',
+        devServerUrl: 'http://127.0.0.1:5273',
         isPackaged: false
       })
-    ).toEqual({ kind: 'url', url: 'http://127.0.0.1:5173/', origin: 'http://127.0.0.1:5173' })
+    ).toEqual({ kind: 'url', url: 'http://127.0.0.1:5273/', origin: 'http://127.0.0.1:5273' })
   })
 
   it('prevents renderer navigation and window opens outside allowed origins', () => {
@@ -44,12 +44,12 @@ describe('desktop main renderer security', () => {
       }
     }
 
-    installNavigationGuards(window, ['http://127.0.0.1:5173'])
+    installNavigationGuards(window, ['http://127.0.0.1:5273'])
 
     willNavigateHandler?.({ preventDefault }, 'https://evil.example.test/phish')
     expect(preventDefault).toHaveBeenCalledTimes(1)
     expect(openHandler?.({ url: 'https://evil.example.test/phish' })).toEqual({ action: 'deny' })
-    expect(openHandler?.({ url: 'http://127.0.0.1:5173/settings' })).toEqual({ action: 'allow' })
+    expect(openHandler?.({ url: 'http://127.0.0.1:5273/settings' })).toEqual({ action: 'allow' })
   })
 
   it('denies file:// navigations and window opens when loading the packaged file renderer', () => {

@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 
-const devServerUrl = process.env.VITE_DEV_SERVER_URL ?? 'http://127.0.0.1:5173'
+const devServerUrl = process.env.VITE_DEV_SERVER_URL ?? 'http://127.0.0.1:5273'
 const expectedRendererTitle = 'hesper desktop'
 
 async function assertRendererDevServer(url) {

@@ -10,6 +10,8 @@ const ipcContractPath = path.join(appRoot, 'electron', 'ipc-contract.ts')
 const preloadPath = path.join(appRoot, 'electron', 'preload.cjs')
 const startElectronDevPath = path.join(appRoot, 'scripts', 'start-electron-dev.mjs')
 const rendererViteConfigPath = path.join(appRoot, 'renderer', 'vite.config.ts')
+const defaultRendererDevServerUrl = 'http://127.0.0.1:5273'
+const defaultRendererDevServerPort = 5273
 const verifyPreloadContractScriptUrl = pathToFileURL(path.join(appRoot, 'scripts', 'verify-preload-contract.mjs')).href
 const require = createRequire(import.meta.url)
 
@@ -144,6 +146,7 @@ describe('desktop runtime tooling', () => {
     expect(devScript).toContain('node scripts/copy-preload.mjs --watch')
     expect(devScript).toContain('node scripts/fix-esm-imports.mjs --watch')
     expect(devScript).toContain('dist/electron/preload.cjs')
+    expect(devScript).toContain(`wait-on ${defaultRendererDevServerUrl}`)
     expect(devScript).toContain('node scripts/start-electron-dev.mjs')
     expect(verifyDevRuntimeScript).toContain('node scripts/clean-dev-runtime.mjs')
     expect(verifyDevRuntimeScript).toContain('pnpm dev:prepare')
@@ -153,7 +156,7 @@ describe('desktop runtime tooling', () => {
     const startElectronDevSource = fs.readFileSync(startElectronDevPath, 'utf8')
 
     expect(startElectronDevSource).toContain('VITE_DEV_SERVER_URL')
-    expect(startElectronDevSource).toContain('http://127.0.0.1:5173')
+    expect(startElectronDevSource).toContain(defaultRendererDevServerUrl)
     expect(startElectronDevSource).toContain('electron')
   })
 
@@ -162,7 +165,7 @@ describe('desktop runtime tooling', () => {
     const rendererViteConfigSource = fs.readFileSync(rendererViteConfigPath, 'utf8')
 
     expect(rendererViteConfigSource).toContain('strictPort: true')
-    expect(rendererViteConfigSource).toContain('port: 5173')
+    expect(rendererViteConfigSource).toContain(`port: ${defaultRendererDevServerPort}`)
     expect(startElectronDevSource).toContain('assertRendererDevServer')
     expect(startElectronDevSource).toContain('hesper desktop')
   })
