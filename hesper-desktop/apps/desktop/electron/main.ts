@@ -7,6 +7,7 @@ import { createBeforeQuitHandler } from './before-quit'
 import { createElectronSafeStorageCredentialCodec } from './credential-codec'
 import { registerIpcHandlers } from './ipc-handlers'
 import { createPersistenceSaveQueue } from './persistence-save-queue'
+import { installNavigationGuards, resolveRendererLoadTarget } from './renderer-security'
 import { createServiceContainer, type AgentMode, type ServiceContainer } from './service-container'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -75,7 +76,8 @@ function createMainWindow(): BrowserWindow {
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      sandbox: true
     }
   })
 
@@ -84,9 +86,11 @@ function createMainWindow(): BrowserWindow {
 }
 
 async function loadRenderer(window: BrowserWindow): Promise<void> {
-  const devServerUrl = process.env.VITE_DEV_SERVER_URL
-  if (devServerUrl) {
-    await window.loadURL(devServerUrl)
+  const target = resolveRendererLoadTarget({ devServerUrl: process.env.VITE_DEV_SERVER_URL, isPackaged: app.isPackaged })
+  installNavigationGuards(window, target.kind === 'url' ? [target.origin] : [])
+
+  if (target.kind === 'url') {
+    await window.loadURL(target.url)
     return
   }
 
