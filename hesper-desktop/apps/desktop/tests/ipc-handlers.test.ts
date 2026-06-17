@@ -157,11 +157,12 @@ describe('registerIpcHandlers', () => {
     }
     const promptSpy = vi.spyOn(container.promptAssemblyService, 'assembleMainPrompt').mockReturnValueOnce(assembled)
     const enqueueSpy = vi.spyOn(container.agentRuntime, 'enqueue').mockResolvedValueOnce({ id: 'run-assembled' } as Awaited<ReturnType<typeof container.agentRuntime.enqueue>>)
+    const createUserMessageSpy = vi.spyOn(container.conversationService, 'createUserMessage')
 
     registerIpcHandlers({ ipcMain, dialog, container, savePersistence, schedulePersistenceSave })
     const session = await container.sessionService.createSession({ title: 'Prompt assembly IPC', workspacePath: 'C:/workspace' })
 
-    await expect(handles.get(ipcChannels.agentEnqueue)?.({ sender: { id: 1 } }, { sessionId: session.id, prompt: 'Use assembled prompt', modelId: 'mock/hesper-fast' })).resolves.toEqual({ runId: 'run-assembled' })
+    await expect(handles.get(ipcChannels.agentEnqueue)?.({ sender: { id: 1 } }, { sessionId: session.id, prompt: 'Use assembled prompt', modelId: 'mock/hesper-fast', messageId: 'message-client-1' })).resolves.toEqual({ runId: 'run-assembled' })
 
     expect(promptSpy).toHaveBeenCalledWith(expect.objectContaining({
       session: expect.objectContaining({
@@ -181,6 +182,13 @@ describe('registerIpcHandlers', () => {
       systemPrompt: 'assembled system prompt',
       enabledToolIds: ['filesystem.read-file', 'git.status', 'web.fetch-url', 'agent.spawn-subagent', 'system.show-notification']
     }))
+    expect(createUserMessageSpy).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'message-client-1',
+      sessionId: session.id,
+      content: 'Use assembled prompt',
+      runId: 'run-assembled'
+    }))
+    expect(enqueueSpy.mock.invocationCallOrder[0]).toBeLessThan(createUserMessageSpy.mock.invocationCallOrder[0])
   })
 
   it('narrows per-run enabled tools without expanding beyond the configured allowlist', async () => {
@@ -229,7 +237,7 @@ describe('registerIpcHandlers', () => {
     }))
   })
 
-  it('flushes the persisted user message before surfacing runtime enqueue failures', async () => {
+  it('does not persist a user message when runtime enqueue fails', async () => {
     const persistence = await createInMemoryPersistence()
     const container = createServiceContainer({ persistence, agentMode: 'mock' })
     const savePersistence = vi.fn(async () => {})
@@ -245,6 +253,7 @@ describe('registerIpcHandlers', () => {
       showOpenDialog: vi.fn(async () => ({ canceled: false, filePaths: ['C:/workspace'] }))
     }
 
+    const createUserMessageSpy = vi.spyOn(container.conversationService, 'createUserMessage')
     const enqueueSpy = vi.spyOn(container.agentRuntime, 'enqueue').mockRejectedValueOnce(new Error('runtime failed'))
 
     registerIpcHandlers({ ipcMain, dialog, container, savePersistence, schedulePersistenceSave })
@@ -255,15 +264,10 @@ describe('registerIpcHandlers', () => {
     ).rejects.toThrow('runtime failed')
 
     expect(enqueueSpy).toHaveBeenCalled()
-    expect(schedulePersistenceSave).toHaveBeenCalled()
-    expect(savePersistence).toHaveBeenCalled()
-    expect(await persistence.messages.listBySession(session.id)).toEqual([
-      expect.objectContaining({
-        id: 'message-failure-1',
-        role: 'user',
-        content: 'Persist me'
-      })
-    ])
+    expect(createUserMessageSpy).not.toHaveBeenCalled()
+    expect(schedulePersistenceSave).not.toHaveBeenCalled()
+    expect(savePersistence).not.toHaveBeenCalled()
+    expect(await persistence.messages.listBySession(session.id)).toEqual([])
   })
 
   it('registers conversation history handlers and returns persisted messages, runs, and steps', async () => {
