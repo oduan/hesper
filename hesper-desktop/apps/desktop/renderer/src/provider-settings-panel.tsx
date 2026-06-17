@@ -106,11 +106,15 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
   const [models, setModels] = useState<ModelDto[]>([])
   const [dialogState, setDialogState] = useState<ConnectionDialogState>()
   const [openMenuProviderId, setOpenMenuProviderId] = useState<string>()
+  const [hoveredProviderId, setHoveredProviderId] = useState<string>()
+  const [renamingProviderId, setRenamingProviderId] = useState<string>()
+  const [renameValue, setRenameValue] = useState('')
   const [connectionResult, setConnectionResult] = useState<ProviderConnectionTestResult>()
   const [message, setMessage] = useState<string>()
   const [error, setError] = useState<string>()
   const mountedRef = useRef(true)
   const loadRequestIdRef = useRef(0)
+  const renameInputRef = useRef<HTMLInputElement | null>(null)
 
   const visibleProviders = useMemo(() => providers.filter((provider) => provider.enabled !== false), [providers])
 
@@ -141,6 +145,15 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
       loadRequestIdRef.current += 1
     }
   }, [])
+
+  useEffect(() => {
+    if (!renamingProviderId) return undefined
+    const timer = window.setTimeout(() => {
+      renameInputRef.current?.focus()
+      renameInputRef.current?.select()
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [renamingProviderId])
 
   const openAddConnection = () => {
     setError(undefined)
@@ -239,6 +252,48 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
     }
   }
 
+  const startRenameConnection = (provider: ModelProviderDto) => {
+    setError(undefined)
+    setMessage(undefined)
+    setOpenMenuProviderId(undefined)
+    setRenamingProviderId(provider.id)
+    setRenameValue(provider.name)
+  }
+
+  const cancelRenameConnection = () => {
+    setRenamingProviderId(undefined)
+    setRenameValue('')
+  }
+
+  const saveRenamedConnection = async (provider: ModelProviderDto) => {
+    const nextName = renameValue.trim()
+    if (!nextName || nextName === provider.name) {
+      cancelRenameConnection()
+      return
+    }
+
+    setError(undefined)
+    setMessage(undefined)
+    try {
+      await hesperApi.providers.save({
+        id: provider.id,
+        name: nextName,
+        kind: provider.kind,
+        enabled: provider.enabled !== false,
+        ...(provider.baseUrl ? { baseUrl: provider.baseUrl } : {}),
+        ...(provider.defaultModelId ? { defaultModelId: provider.defaultModelId } : {})
+      })
+      if (!mountedRef.current) return
+      cancelRenameConnection()
+      setMessage(`已重命名连接：${nextName}`)
+      await loadProviderSettings()
+      await onModelRegistryChanged?.()
+    } catch (renameError) {
+      if (!mountedRef.current) return
+      setError(renameError instanceof Error ? renameError.message : '连接重命名失败')
+    }
+  }
+
   const deleteConnection = async (provider: ModelProviderDto) => {
     setOpenMenuProviderId(undefined)
     setError(undefined)
@@ -275,6 +330,8 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
             {visibleProviders.map((provider, index) => (
               <div
                 key={provider.id}
+                onMouseEnter={() => setHoveredProviderId(provider.id)}
+                onMouseLeave={() => setHoveredProviderId((current) => current === provider.id ? undefined : current)}
                 style={{
                   ...connectionItemStyle,
                   ...(index > 0 ? connectionItemSeparatorStyle : {})
@@ -283,7 +340,49 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
                 <div style={connectionInfoStyle}>
                   <span style={providerAvatarStyle}>{provider.name.slice(0, 1).toUpperCase()}</span>
                   <span style={{ minWidth: 0 }}>
-                    <strong>{provider.name}</strong>
+                    <span style={connectionNameRowStyle}>
+                      {renamingProviderId === provider.id ? (
+                        <input
+                          ref={renameInputRef}
+                          aria-label={`连接名称 ${provider.name}`}
+                          value={renameValue}
+                          onChange={(event) => setRenameValue(event.target.value)}
+                          onBlur={() => void saveRenamedConnection(provider)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') event.currentTarget.blur()
+                            if (event.key === 'Escape') cancelRenameConnection()
+                          }}
+                          style={renameInputStyle}
+                        />
+                      ) : (
+                        <>
+                          <strong>{provider.name}</strong>
+                          <button
+                            type="button"
+                            aria-label={`重命名连接 ${provider.name}`}
+                            aria-hidden={hoveredProviderId === provider.id ? undefined : true}
+                            tabIndex={hoveredProviderId === provider.id ? 0 : -1}
+                            onPointerDown={(event) => {
+                              event.preventDefault()
+                              event.stopPropagation()
+                              startRenameConnection(provider)
+                            }}
+                            onMouseDown={(event) => {
+                              event.preventDefault()
+                              event.stopPropagation()
+                              startRenameConnection(provider)
+                            }}
+                            onClick={(event) => event.stopPropagation()}
+                            style={{
+                              ...renameButtonStyle,
+                              opacity: hoveredProviderId === provider.id ? 1 : 0
+                            }}
+                          >
+                            ✎
+                          </button>
+                        </>
+                      )}
+                    </span>
                     <span style={providerMetaStyle}>
                       {provider.kind} · {provider.baseUrl ?? '使用默认端点'} · {provider.hasApiKey ? '已保存 key' : '未保存 key'}
                     </span>
@@ -533,6 +632,44 @@ const providerAvatarStyle: CSSProperties = {
   display: 'grid',
   placeItems: 'center',
   fontSize: 12,
+  fontWeight: 700
+}
+
+const connectionNameRowStyle: CSSProperties = {
+  minWidth: 0,
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 6,
+  maxWidth: '100%'
+}
+
+const renameButtonStyle: CSSProperties = {
+  width: 18,
+  height: 18,
+  border: 0,
+  outline: 0,
+  borderRadius: 0,
+  background: 'transparent',
+  color: mutedTextColor,
+  padding: 0,
+  display: 'inline-grid',
+  placeItems: 'center',
+  cursor: 'pointer',
+  fontSize: 12,
+  lineHeight: 1
+}
+
+const renameInputStyle: CSSProperties = {
+  width: 'min(160px, 100%)',
+  minWidth: 0,
+  boxSizing: 'border-box',
+  border: 0,
+  outline: 0,
+  borderRadius: 6,
+  background: 'rgba(255, 255, 255, 0.08)',
+  color: '#f8fafc',
+  padding: '2px 6px',
+  fontSize: 13,
   fontWeight: 700
 }
 

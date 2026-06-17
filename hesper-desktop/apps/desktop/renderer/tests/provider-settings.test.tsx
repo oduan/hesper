@@ -231,6 +231,40 @@ describe('provider settings panel', () => {
     expect(deepSeekItem).toHaveStyle({ overflow: 'visible' })
   })
 
+  it('renames a connection inline from the hover edit icon on blur', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: '设置' }))
+
+    const deepSeekName = await screen.findByText('DeepSeek')
+    expect(screen.queryByRole('button', { name: '重命名连接 DeepSeek' })).not.toBeInTheDocument()
+
+    await user.hover(deepSeekName)
+    const renameButton = await screen.findByRole('button', { name: '重命名连接 DeepSeek' })
+    expect(renameButton).toHaveStyle({ background: 'transparent' })
+    expect(renameButton.style.border).toBe('0px')
+
+    await user.click(renameButton)
+    const renameInput = await screen.findByRole('textbox', { name: '连接名称 DeepSeek' })
+    expect(renameInput).toHaveValue('DeepSeek')
+
+    await user.clear(renameInput)
+    await user.type(renameInput, 'DeepSeek Official')
+    await user.click(screen.getByText('管理 AI 提供商连接。'))
+
+    await waitFor(() => {
+      expect(saveProvider).toHaveBeenCalledWith(expect.objectContaining({
+        id: 'deepseek',
+        name: 'DeepSeek Official',
+        kind: 'deepseek',
+        baseUrl: 'https://api.deepseek.com',
+        enabled: true,
+        defaultModelId: 'deepseek-chat'
+      }))
+    })
+  })
+
   it('adds a custom AI connection from the API configuration dialog', async () => {
     const user = userEvent.setup()
     testConnection.mockResolvedValueOnce({ providerId: 'custom-api-example-com', status: 'ok', hasApiKey: true, message: '连接成功' })
