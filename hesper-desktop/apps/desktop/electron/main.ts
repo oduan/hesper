@@ -8,7 +8,8 @@ import { createElectronSafeStorageCredentialCodec } from './credential-codec'
 import { registerIpcHandlers } from './ipc-handlers'
 import { createPersistenceSaveQueue } from './persistence-save-queue'
 import { installNavigationGuards, resolveRendererLoadTarget } from './renderer-security'
-import { createServiceContainer, type AgentMode, type ServiceContainer } from './service-container'
+import { resolveAgentMode } from './agent-mode'
+import { createServiceContainer, type ServiceContainer } from './service-container'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -58,10 +59,6 @@ async function flushScheduledPersistence(): Promise<void> {
     return
   }
   await persistenceSaveQueue.flush()
-}
-
-function resolveAgentMode(): AgentMode {
-  return process.env.HESPER_AGENT_MODE === 'pi-core' ? 'pi-core' : 'mock'
 }
 
 function createMainWindow(): BrowserWindow {

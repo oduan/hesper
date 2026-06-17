@@ -94,6 +94,70 @@ describe('pi event mapping', () => {
     )
   })
 
+  it('maps assistant thinking deltas to a live thought step', () => {
+    const startEvents = mapPiEventToHesperEvents('run-thinking', {
+      type: 'message_update',
+      assistantMessageEvent: { type: 'thinking_start', contentIndex: 0 }
+    })
+    const firstDeltaEvents = mapPiEventToHesperEvents('run-thinking', {
+      type: 'message_update',
+      assistantMessageEvent: { type: 'thinking_delta', contentIndex: 0, delta: '先分析问题。' }
+    })
+    const secondDeltaEvents = mapPiEventToHesperEvents('run-thinking', {
+      type: 'message_update',
+      assistantMessageEvent: { type: 'thinking_delta', contentIndex: 0, delta: '再给出答案。' }
+    })
+    const endEvents = mapPiEventToHesperEvents('run-thinking', {
+      type: 'message_update',
+      assistantMessageEvent: { type: 'thinking_end', contentIndex: 0, content: '最终思考。' }
+    })
+
+    expect(startEvents).toEqual([
+      expect.objectContaining({
+        type: 'step.created',
+        step: expect.objectContaining({
+          id: 'step-run-thinking-thinking-0',
+          runId: 'run-thinking',
+          type: 'thought',
+          status: 'running',
+          title: '思考过程',
+          summary: '正在思考…'
+        })
+      })
+    ])
+    expect(firstDeltaEvents).toEqual([
+      expect.objectContaining({
+        type: 'step.updated',
+        step: expect.objectContaining({
+          id: 'step-run-thinking-thinking-0',
+          type: 'thought',
+          status: 'running',
+          summary: '先分析问题。'
+        })
+      })
+    ])
+    expect(secondDeltaEvents).toEqual([
+      expect.objectContaining({
+        type: 'step.updated',
+        step: expect.objectContaining({
+          id: 'step-run-thinking-thinking-0',
+          summary: '先分析问题。再给出答案。'
+        })
+      })
+    ])
+    expect(endEvents).toEqual([
+      expect.objectContaining({
+        type: 'step.updated',
+        step: expect.objectContaining({
+          id: 'step-run-thinking-thinking-0',
+          type: 'thought',
+          status: 'succeeded',
+          summary: '最终思考。'
+        })
+      })
+    ])
+  })
+
   it('maps turn start to a model_call step creation', () => {
     const events = mapPiEventToHesperEvents('run-turn-start', {
       type: 'turn_start'

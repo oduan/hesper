@@ -37,6 +37,7 @@ export class PiCoreAgentAdapter implements AgentAdapter {
       initialState: {
         systemPrompt: input.systemPrompt ?? this.options.systemPrompt ?? DEFAULT_SYSTEM_PROMPT,
         model: resolved.model,
+        thinkingLevel: resolved.model.reasoning || resolved.modelConfig.capabilities.includes('reasoning') ? 'medium' : 'off',
         tools,
         messages: []
       },

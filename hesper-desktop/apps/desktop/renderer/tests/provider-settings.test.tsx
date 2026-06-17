@@ -315,7 +315,8 @@ describe('provider settings panel', () => {
     expect(saveModel).toHaveBeenNthCalledWith(2, expect.objectContaining({
       id: 'custom-api-example-com/example-reasoner',
       providerId: 'custom-api-example-com',
-      modelName: 'example-reasoner'
+      modelName: 'example-reasoner',
+      capabilities: ['streaming', 'toolCalls', 'reasoning']
     }))
     expect(saveModel).not.toHaveBeenCalledWith(expect.objectContaining({ id: 'gpt-4o' }))
     expect(screen.queryByDisplayValue('sk-custom-value')).not.toBeInTheDocument()

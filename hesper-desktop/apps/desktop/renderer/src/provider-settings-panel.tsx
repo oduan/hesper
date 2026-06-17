@@ -84,6 +84,14 @@ function modelIdsFromFormValue(value: string): string[] {
   return value.split(',').map((item) => item.trim()).filter(Boolean)
 }
 
+function capabilitiesForModelName(modelName: string): ModelDto['capabilities'] {
+  const capabilities: ModelDto['capabilities'] = ['streaming', 'toolCalls']
+  if (/(^|[-_:/])(reasoner|reasoning|r1|thinking|think)([-_:/]|$)/i.test(modelName)) {
+    capabilities.push('reasoning')
+  }
+  return capabilities
+}
+
 function connectionTestInputFromDialog(state: ConnectionDialogState, providers: ModelProviderDto[]): ProviderConnectionTestInput {
   const endpoint = state.form.endpoint.trim()
   const apiKey = state.form.apiKey.trim()
@@ -214,7 +222,7 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
           providerId: provider.id,
           modelName: normalizedModelName,
           displayName: normalizedModelName,
-          capabilities: ['streaming', 'toolCalls'],
+          capabilities: capabilitiesForModelName(normalizedModelName),
           enabled: true
         })
       }

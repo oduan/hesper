@@ -9,9 +9,15 @@ type MappingContext = {
   sessionId?: string
 }
 
+type ThinkingState = {
+  stepId: string
+  text: string
+}
+
 type RunState = {
   turnCounter: number
   activeTurnIds: string[]
+  thinkingByContentIndex: Map<number, ThinkingState>
 }
 
 const runStates = new Map<string, RunState>()
@@ -23,7 +29,7 @@ function nowIso(): string {
 function getRunState(runId: string): RunState {
   const existing = runStates.get(runId)
   if (existing) return existing
-  const created: RunState = { turnCounter: 0, activeTurnIds: [] }
+  const created: RunState = { turnCounter: 0, activeTurnIds: [], thinkingByContentIndex: new Map() }
   runStates.set(runId, created)
   return created
 }
@@ -108,6 +114,39 @@ function createToolStepEvent(kind: StepEvent['type'], runId: string, event: PiEv
   }
 }
 
+function createThinkingStepEvent(kind: StepEvent['type'], runId: string, event: PiEventLike): StepEvent | undefined {
+  const assistantMessageEvent = event.assistantMessageEvent as { contentIndex?: number; delta?: string; content?: string } | undefined
+  const contentIndex = assistantMessageEvent?.contentIndex ?? 0
+  const stepId = `step-${runId}-thinking-${contentIndex}`
+  const state = getRunState(runId)
+
+  if (kind === 'step.created') {
+    state.thinkingByContentIndex.set(contentIndex, { stepId, text: '' })
+    return {
+      type: 'step.created',
+      step: createStep(runId, stepId, 'thought', 'running', '思考过程', '正在思考…')
+    }
+  }
+
+  const existing = state.thinkingByContentIndex.get(contentIndex) ?? { stepId, text: '' }
+  const nextText = typeof assistantMessageEvent?.content === 'string'
+    ? assistantMessageEvent.content
+    : `${existing.text}${assistantMessageEvent?.delta ?? ''}`
+  const finalText = nextText || '正在思考…'
+  const isDone = typeof assistantMessageEvent?.content === 'string'
+
+  if (isDone) {
+    state.thinkingByContentIndex.delete(contentIndex)
+  } else {
+    state.thinkingByContentIndex.set(contentIndex, { stepId: existing.stepId, text: nextText })
+  }
+
+  return {
+    type: 'step.updated',
+    step: createStep(runId, existing.stepId, 'thought', isDone ? 'succeeded' : 'running', '思考过程', finalText, finalText, isDone ? nowIso() : undefined)
+  }
+}
+
 function createModelStepEvent(kind: StepEvent['type'], runId: string, summary?: string): StepEvent {
   const state = getRunState(runId)
 
@@ -158,6 +197,12 @@ export function mapPiEventToHesperEvents(context: string | MappingContext, piEve
       const assistantMessageEvent = event.assistantMessageEvent as { type?: string; delta?: string } | undefined
       if (assistantMessageEvent?.type === 'text_delta') {
         return [{ type: 'message.delta', runId: normalizedContext.runId, delta: assistantMessageEvent.delta ?? '' }]
+      }
+      if (assistantMessageEvent?.type === 'thinking_start') {
+        return [createThinkingStepEvent('step.created', normalizedContext.runId, event)].filter((candidate): candidate is StepEvent => Boolean(candidate))
+      }
+      if (assistantMessageEvent?.type === 'thinking_delta' || assistantMessageEvent?.type === 'thinking_end') {
+        return [createThinkingStepEvent('step.updated', normalizedContext.runId, event)].filter((candidate): candidate is StepEvent => Boolean(candidate))
       }
       return []
     }
