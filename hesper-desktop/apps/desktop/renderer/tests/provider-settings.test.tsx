@@ -206,7 +206,7 @@ describe('provider settings panel', () => {
     expect(await screen.findByRole('dialog', { name: 'API 配置' })).toBeInTheDocument()
     await user.type(screen.getByLabelText('添加连接 API key'), 'sk-custom-value')
     await user.type(screen.getByLabelText('添加连接 Endpoint'), 'https://api.example.com')
-    await user.type(screen.getByLabelText('添加连接默认模型'), 'example-chat')
+    await user.type(screen.getByLabelText('添加连接默认模型'), 'example-chat, example-reasoner')
     await user.click(screen.getByRole('button', { name: '保存' }))
 
     await waitFor(() => {
@@ -219,16 +219,34 @@ describe('provider settings panel', () => {
       }))
     })
     expect(saveProviderApiKey).toHaveBeenCalledWith({ providerId: 'custom-api-example-com', apiKey: 'sk-custom-value' })
-    expect(saveModel).toHaveBeenCalledWith(expect.objectContaining({
+    expect(saveModel).toHaveBeenNthCalledWith(1, expect.objectContaining({
       id: 'example-chat',
       providerId: 'custom-api-example-com',
       modelName: 'example-chat'
+    }))
+    expect(saveModel).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      id: 'example-reasoner',
+      providerId: 'custom-api-example-com',
+      modelName: 'example-reasoner'
     }))
     expect(screen.queryByDisplayValue('sk-custom-value')).not.toBeInTheDocument()
   })
 
   it('edits a connection from the menu without pre-filling the saved API key', async () => {
     const user = userEvent.setup()
+    listModels.mockResolvedValue([
+      ...baseModels,
+      {
+        id: 'deepseek-reasoner',
+        providerId: 'deepseek',
+        modelName: 'deepseek-reasoner',
+        displayName: 'DeepSeek Reasoner',
+        capabilities: ['streaming', 'toolCalls'],
+        enabled: true,
+        createdAt: now,
+        updatedAt: now
+      }
+    ])
     render(<App />)
 
     await user.click(await screen.findByRole('button', { name: '设置' }))
@@ -238,7 +256,7 @@ describe('provider settings panel', () => {
 
     expect(await screen.findByRole('dialog', { name: 'API 配置' })).toBeInTheDocument()
     expect(screen.getByLabelText('添加连接 Endpoint')).toHaveValue('https://api.deepseek.com')
-    expect(screen.getByLabelText('添加连接默认模型')).toHaveValue('deepseek-chat')
+    expect(screen.getByLabelText('添加连接默认模型')).toHaveValue('deepseek-chat, deepseek-reasoner')
     expect(screen.getByLabelText('添加连接 API key')).toHaveValue('')
 
     await user.click(screen.getByRole('button', { name: '连接' }))
@@ -253,6 +271,8 @@ describe('provider settings panel', () => {
     await waitFor(() => {
       expect(saveProvider).toHaveBeenCalledWith(expect.objectContaining({ id: 'deepseek', baseUrl: 'https://api.deepseek.com/v1' }))
     })
+    expect(saveModel).toHaveBeenCalledWith(expect.objectContaining({ id: 'deepseek-chat', providerId: 'deepseek' }))
+    expect(saveModel).toHaveBeenCalledWith(expect.objectContaining({ id: 'deepseek-reasoner', providerId: 'deepseek' }))
     expect(saveProviderApiKey).not.toHaveBeenCalled()
   })
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, type CSSProperties } from 'react'
 import type { MessageContentType } from '@hesper/shared'
 import { darkTheme } from '../theme'
 import { createSandboxedHtmlDocument } from './html-document'
@@ -40,48 +40,29 @@ export function FullscreenOutput({ open, content, contentType, onClose }: Fullsc
       role="dialog"
       aria-modal="true"
       aria-label="输出全屏查看"
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(0, 0, 0, 0.55)',
-        display: 'flex',
-        alignItems: 'stretch',
-        justifyContent: 'center',
-        padding: darkTheme.spacing.xl,
-        zIndex: 1000
-      }}
+      style={overlayStyle}
     >
       <div
-        style={{
-          flex: 1,
-          display: 'grid',
-          gridTemplateRows: 'auto minmax(0, 1fr)',
-          borderRadius: darkTheme.radius.lg,
-          overflow: 'hidden',
-          background: darkTheme.color.surface,
-          border: `1px solid ${darkTheme.color.border}`
-        }}
+        aria-label="最大化输出内容"
+        style={contentShellStyle}
       >
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            padding: darkTheme.spacing.md,
-            borderBottom: `1px solid ${darkTheme.color.border}`
-          }}
-        >
+        <div style={toolbarStyle}>
           <strong>输出</strong>
           <div style={{ display: 'flex', gap: darkTheme.spacing.sm }}>
-            <button type="button" onClick={() => navigator.clipboard?.writeText(content)}>
-              复制内容
+            <button type="button" aria-label="复制输出内容" onClick={() => { void navigator.clipboard?.writeText(content) }} style={iconButtonStyle}>
+              <svg aria-hidden="true" viewBox="0 0 24 24" style={iconStyle}>
+                <rect x="8" y="8" width="10" height="12" rx="2" fill="none" stroke="currentColor" strokeWidth="1.8" />
+                <path d="M6 16H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
             </button>
-            <button type="button" onClick={onClose}>
-              关闭
+            <button type="button" aria-label="关闭全屏输出" onClick={onClose} style={iconButtonStyle}>
+              <svg aria-hidden="true" viewBox="0 0 24 24" style={iconStyle}>
+                <path d="M7 7l10 10M17 7 7 17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
             </button>
           </div>
         </div>
-        <div className="hesper-theme-scrollbar" style={{ minHeight: 0, overflow: 'auto', padding: darkTheme.spacing.md }}>
+        <div className="hesper-theme-scrollbar" style={{ minHeight: 0, overflow: 'auto', padding: darkTheme.spacing.lg }}>
           {contentType === 'html' ? (
             <iframe
               title="HTML 输出"
@@ -96,4 +77,60 @@ export function FullscreenOutput({ open, content, contentType, onClose }: Fullsc
       </div>
     </div>
   )
+}
+
+const overlayStyle: CSSProperties = {
+  position: 'fixed',
+  top: 36,
+  right: 0,
+  bottom: 0,
+  left: 0,
+  background: 'rgba(0, 0, 0, 0.58)',
+  display: 'grid',
+  placeItems: 'stretch center',
+  padding: `${darkTheme.spacing.xl} max(${darkTheme.spacing.xl}, 6vw)`,
+  boxSizing: 'border-box',
+  zIndex: 1000
+}
+
+const contentShellStyle: CSSProperties = {
+  width: '100%',
+  maxWidth: 1120,
+  height: '100%',
+  minHeight: 0,
+  margin: '0 auto',
+  display: 'grid',
+  gridTemplateRows: 'auto minmax(0, 1fr)',
+  borderRadius: darkTheme.radius.xl,
+  overflow: 'hidden',
+  background: darkTheme.color.surface,
+  border: `1px solid ${darkTheme.color.border}`,
+  boxShadow: '0 24px 80px rgba(0, 0, 0, 0.38)'
+}
+
+const toolbarStyle: CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  padding: `${darkTheme.spacing.md} ${darkTheme.spacing.lg}`,
+  borderBottom: `1px solid ${darkTheme.color.border}`
+}
+
+const iconButtonStyle: CSSProperties = {
+  width: 34,
+  height: 34,
+  border: 0,
+  outline: 0,
+  borderRadius: darkTheme.radius.md,
+  background: 'rgba(255, 255, 255, 0.055)',
+  color: darkTheme.color.text,
+  display: 'inline-grid',
+  placeItems: 'center',
+  cursor: 'pointer'
+}
+
+const iconStyle: CSSProperties = {
+  width: 18,
+  height: 18,
+  display: 'block'
 }

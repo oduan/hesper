@@ -28,12 +28,16 @@ export type ProviderSettingsPanelProps = {
 }
 
 function createConnectionForm(provider?: ModelProviderDto, models: ModelDto[] = []): ConnectionFormState {
-  const primaryModel = provider ? models.find((model) => model.providerId === provider.id) : undefined
+  const providerModels = provider ? models.filter((model) => model.providerId === provider.id && model.enabled !== false) : []
+  const orderedModelIds = [
+    ...(provider?.defaultModelId ? [provider.defaultModelId] : []),
+    ...providerModels.map((model) => model.id)
+  ].filter((modelId, index, modelIds) => modelId && modelIds.indexOf(modelId) === index)
   return {
     apiKey: '',
     endpoint: provider?.baseUrl ?? '',
     protocol: provider?.kind === 'anthropic' ? 'anthropic-compatible' : 'openai-compatible',
-    defaultModelId: provider?.defaultModelId ?? primaryModel?.id ?? ''
+    defaultModelId: orderedModelIds.join(', ')
   }
 }
 
@@ -157,12 +161,12 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
         await hesperApi.credentials.saveProviderApiKey({ providerId: provider.id, apiKey })
       }
 
-      if (primaryModelId) {
+      for (const modelId of modelIds) {
         await hesperApi.models.save({
-          id: primaryModelId,
+          id: modelId,
           providerId: provider.id,
-          modelName: primaryModelId,
-          displayName: primaryModelId,
+          modelName: modelId,
+          displayName: modelId,
           capabilities: ['streaming', 'toolCalls'],
           enabled: true
         })

@@ -65,6 +65,10 @@ function sortChronologically<T extends { id: string; createdAt: string }>(items:
   return [...items].sort(compareCreatedAt)
 }
 
+function isNearScrollBottom(element: HTMLElement): boolean {
+  return element.scrollHeight - element.scrollTop - element.clientHeight <= 24
+}
+
 export function ConversationView({
   session,
   messages,
@@ -81,7 +85,11 @@ export function ConversationView({
   shortcutCommand
 }: ConversationViewProps) {
   const [closeFullscreenSignal, setCloseFullscreenSignal] = useState(0)
+  const [showJumpToBottom, setShowJumpToBottom] = useState(false)
   const anchorRefs = useRef<Record<string, HTMLElement | null>>({})
+  const messagesScrollRef = useRef<HTMLDivElement | null>(null)
+  const pinnedToBottomRef = useRef(true)
+  const didMeasureContentRef = useRef(false)
   const orderedMessages = useMemo(() => sortChronologically(messages), [messages])
   const orderedSteps = useMemo(() => sortChronologically(steps), [steps])
   const orderedStepsByRun = useMemo(() => {
@@ -164,11 +172,46 @@ export function ConversationView({
     () => anchorOrder.filter((entry) => entry.kind === 'user' || entry.kind === 'assistant'),
     [anchorOrder]
   )
+  const contentSignature = useMemo(() => JSON.stringify({
+    messages: orderedMessages.map((message) => [message.id, message.role, message.content, message.runId, message.createdAt]),
+    steps: orderedSteps.map((step) => [step.id, step.status, step.summary, step.title, step.createdAt]),
+    stepsByRun: Object.entries(orderedStepsByRun).map(([runId, runSteps]) => [runId, runSteps.map((step) => [step.id, step.status, step.summary, step.title, step.createdAt])]),
+    streamingText,
+    streamingByRun: Object.entries(streamingByRun ?? {})
+  }), [orderedMessages, orderedSteps, orderedStepsByRun, streamingByRun, streamingText])
 
   const focusAnchor = (id: string) => {
     const element = anchorRefs.current[id]
     element?.focus({ preventScroll: true })
     element?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+
+  const scrollMessagesToBottom = (behavior: ScrollBehavior = 'smooth') => {
+    const element = messagesScrollRef.current
+    if (!element) {
+      return
+    }
+
+    if (typeof element.scrollTo === 'function') {
+      element.scrollTo({ top: element.scrollHeight, behavior })
+    } else {
+      element.scrollTop = element.scrollHeight
+    }
+    pinnedToBottomRef.current = true
+    setShowJumpToBottom(false)
+  }
+
+  const handleMessagesScroll = () => {
+    const element = messagesScrollRef.current
+    if (!element) {
+      return
+    }
+
+    const atBottom = isNearScrollBottom(element)
+    pinnedToBottomRef.current = atBottom
+    if (atBottom) {
+      setShowJumpToBottom(false)
+    }
   }
 
   useEffect(() => {
@@ -203,6 +246,25 @@ export function ConversationView({
     }
   }, [jumpTargets, shortcutCommand])
 
+  useEffect(() => {
+    const element = messagesScrollRef.current
+    if (!element) {
+      return
+    }
+
+    if (!didMeasureContentRef.current) {
+      didMeasureContentRef.current = true
+      pinnedToBottomRef.current = isNearScrollBottom(element)
+      return
+    }
+
+    if (pinnedToBottomRef.current) {
+      scrollMessagesToBottom('auto')
+    } else {
+      setShowJumpToBottom(true)
+    }
+  }, [contentSignature])
+
   return (
     <div style={{ height: '100%', minHeight: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', fontSize: 13 }}>
       <section
@@ -230,18 +292,23 @@ export function ConversationView({
             />
           </div>
         </header>
-        <div
-          className="hesper-theme-scrollbar"
-          style={{
-            minHeight: 0,
-            overflow: 'auto',
-            display: 'grid',
-            alignContent: 'start',
-            gap: darkTheme.spacing.md,
-            paddingRight: darkTheme.spacing.xs
-          }}
-        >
-          {orderedMessages.map((message) => {
+        <div style={messagesAreaStyle}>
+          <div
+            ref={messagesScrollRef}
+            aria-label="消息列表"
+            className="hesper-theme-scrollbar"
+            onScroll={handleMessagesScroll}
+            style={{
+              height: '100%',
+              minHeight: 0,
+              overflow: 'auto',
+              display: 'grid',
+              alignContent: 'start',
+              gap: darkTheme.spacing.md,
+              paddingRight: darkTheme.spacing.xs
+            }}
+          >
+            {orderedMessages.map((message) => {
             const anchorId = createMessageAnchorId(message.id)
             const messageSteps = getMessageSteps(message)
             const messageStreamingText = getMessageStreamingText(message)
@@ -321,22 +388,31 @@ export function ConversationView({
               }}
             />
           ) : null}
-          {streamingText && !Object.values(streamingByRun ?? {}).includes(streamingText) ? (
-            <div
-              id="streaming-output"
-              data-anchor-id="streaming-output"
-              ref={(node) => {
-                anchorRefs.current['streaming-output'] = node
-              }}
-              tabIndex={-1}
-              style={{ outline: 'none' }}
-            >
-              <OutputBlock
-                content={streamingText}
-                contentType={session.outputMode}
-                closeFullscreenSignal={closeFullscreenSignal}
-              />
-            </div>
+            {streamingText && !Object.values(streamingByRun ?? {}).includes(streamingText) ? (
+              <div
+                id="streaming-output"
+                data-anchor-id="streaming-output"
+                ref={(node) => {
+                  anchorRefs.current['streaming-output'] = node
+                }}
+                tabIndex={-1}
+                style={{ outline: 'none' }}
+              >
+                <OutputBlock
+                  content={streamingText}
+                  contentType={session.outputMode}
+                  closeFullscreenSignal={closeFullscreenSignal}
+                />
+              </div>
+            ) : null}
+          </div>
+          {showJumpToBottom ? (
+            <button type="button" aria-label="滚动到底部" onClick={() => scrollMessagesToBottom('smooth')} style={jumpToBottomButtonStyle}>
+              <svg aria-hidden="true" viewBox="0 0 24 24" style={jumpToBottomIconStyle}>
+                <path d="M12 5v12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+                <path d="m6.5 11.5 5.5 5.5 5.5-5.5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
           ) : null}
         </div>
         <Composer
@@ -354,6 +430,36 @@ export function ConversationView({
     </div>
   )
 }
+
+const messagesAreaStyle = {
+  position: 'relative',
+  minHeight: 0,
+  overflow: 'hidden'
+} satisfies CSSProperties
+
+const jumpToBottomButtonStyle = {
+  position: 'absolute',
+  right: 16,
+  bottom: 16,
+  width: 38,
+  height: 38,
+  border: 0,
+  outline: 0,
+  borderRadius: 999,
+  background: 'rgba(127, 158, 232, 0.26)',
+  color: darkTheme.color.text,
+  display: 'inline-grid',
+  placeItems: 'center',
+  boxShadow: '0 12px 32px rgba(0, 0, 0, 0.32)',
+  cursor: 'pointer',
+  zIndex: 2
+} satisfies CSSProperties
+
+const jumpToBottomIconStyle = {
+  width: 21,
+  height: 21,
+  display: 'block'
+} satisfies CSSProperties
 
 const outputModeLabelStyle = {
   position: 'absolute',

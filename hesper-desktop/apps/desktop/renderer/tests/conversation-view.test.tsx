@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ConversationView, type ConversationShortcutCommand } from '@hesper/ui'
@@ -15,6 +15,7 @@ const session = {
 } as const
 
 let scrollIntoViewMock: ReturnType<typeof vi.fn>
+let scrollToMock: ReturnType<typeof vi.fn>
 
 afterEach(() => {
   cleanup()
@@ -22,7 +23,15 @@ afterEach(() => {
 
 beforeEach(() => {
   scrollIntoViewMock = vi.fn()
+  scrollToMock = vi.fn(function (this: HTMLElement, options?: ScrollToOptions | number) {
+    if (typeof options === 'object' && typeof options.top === 'number') {
+      this.scrollTop = options.top
+    } else if (typeof options === 'number') {
+      this.scrollTop = options
+    }
+  })
   HTMLElement.prototype.scrollIntoView = scrollIntoViewMock as unknown as typeof HTMLElement.prototype.scrollIntoView
+  HTMLElement.prototype.scrollTo = scrollToMock as unknown as typeof HTMLElement.prototype.scrollTo
 })
 
 function renderConversation(shortcutCommand?: ConversationShortcutCommand) {
@@ -123,6 +132,66 @@ describe('ConversationView', () => {
 
     await user.click(screen.getByRole('button', { name: '全屏查看输出' }))
     expect(screen.getByRole('dialog', { name: '输出全屏查看' })).toBeInTheDocument()
+  })
+
+  it('shows a floating jump-to-bottom button when new content arrives while scrolled up', async () => {
+    const user = userEvent.setup()
+    const baseMessages = [
+      {
+        id: 'u1',
+        sessionId: 'session-1',
+        role: 'user' as const,
+        content: 'hello',
+        contentType: 'plain' as const,
+        createdAt: '2026-06-10T03:00:00.000Z'
+      }
+    ]
+    const { rerender } = render(
+      <ConversationView
+        session={session}
+        messages={baseMessages}
+        steps={[]}
+        streamingText=""
+        modelId="mock/hesper-fast"
+        onSend={() => undefined}
+      />
+    )
+    const messageList = screen.getByLabelText('消息列表')
+    Object.defineProperty(messageList, 'clientHeight', { configurable: true, value: 100 })
+    Object.defineProperty(messageList, 'scrollHeight', { configurable: true, value: 320 })
+    messageList.scrollTop = 0
+    fireEvent.scroll(messageList)
+
+    expect(screen.queryByRole('button', { name: '滚动到底部' })).not.toBeInTheDocument()
+
+    rerender(
+      <ConversationView
+        session={session}
+        messages={[
+          ...baseMessages,
+          {
+            id: 'a1',
+            sessionId: 'session-1',
+            role: 'assistant' as const,
+            content: 'new answer',
+            contentType: 'markdown' as const,
+            createdAt: '2026-06-10T03:00:01.000Z'
+          }
+        ]}
+        steps={[]}
+        streamingText=""
+        modelId="mock/hesper-fast"
+        onSend={() => undefined}
+      />
+    )
+
+    const jumpButton = await screen.findByRole('button', { name: '滚动到底部' })
+    expect(jumpButton).toHaveStyle({ position: 'absolute', right: '16px', bottom: '16px' })
+    expect(jumpButton.querySelector('svg[aria-hidden="true"]')).toBeInTheDocument()
+
+    await user.click(jumpButton)
+    expect(scrollToMock).toHaveBeenCalledWith(expect.objectContaining({ top: 320, behavior: 'smooth' }))
+    await waitFor(() => expect(screen.queryByRole('button', { name: '滚动到底部' })).not.toBeInTheDocument())
   })
 
   it('renders messages in chronological order even when props arrive reversed', () => {

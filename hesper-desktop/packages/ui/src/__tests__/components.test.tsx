@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppShell } from '../layout/AppShell'
 import { Composer } from '../conversation/Composer'
+import { FullscreenOutput } from '../conversation/FullscreenOutput'
 import { OutputBlock } from '../conversation/OutputBlock'
 import { RunSteps } from '../conversation/RunSteps'
 
@@ -122,6 +123,34 @@ describe('ui components', () => {
     expect(fullscreenFrame.closest('.hesper-theme-scrollbar')).toBeInTheDocument()
     expect(fullscreenFrame.getAttribute('srcdoc')).toContain("default-src 'none'")
     expect(fullscreenFrame.getAttribute('srcdoc')).toContain('img-src data:')
+  })
+
+  it('renders fullscreen output below the titlebar with centered content and themed icon controls', async () => {
+    const user = userEvent.setup()
+    const writeText = vi.fn()
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    const onClose = vi.fn()
+
+    render(<FullscreenOutput open content="copy me" contentType="markdown" onClose={onClose} />)
+
+    const dialog = screen.getByRole('dialog', { name: '输出全屏查看' })
+    expect(dialog).toHaveStyle({ position: 'fixed', top: '36px', right: '0px', bottom: '0px', left: '0px', display: 'grid' })
+    expect(dialog).toHaveStyle({ placeItems: 'stretch center' })
+    const contentShell = screen.getByLabelText('最大化输出内容')
+    expect(contentShell).toHaveStyle({ width: '100%', maxWidth: '1120px' })
+    expect(contentShell).toHaveStyle({ margin: '0 auto' })
+
+    const copyButton = screen.getByRole('button', { name: '复制输出内容' })
+    const closeButton = screen.getByRole('button', { name: '关闭全屏输出' })
+    expect(copyButton.querySelector('svg[aria-hidden="true"]')).toBeInTheDocument()
+    expect(closeButton.querySelector('svg[aria-hidden="true"]')).toBeInTheDocument()
+    expect(copyButton).not.toHaveTextContent('复制内容')
+    expect(closeButton).not.toHaveTextContent('关闭')
+
+    await user.click(copyButton)
+    expect(writeText).toHaveBeenCalledWith('copy me')
+    await user.click(closeButton)
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 
   it('renders run steps without latest-step label or header status dot', async () => {
