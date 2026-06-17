@@ -6,6 +6,7 @@ import { createFilePersistence, exportDatabaseBytes } from '@hesper/persistence'
 import { createBeforeQuitHandler } from './before-quit'
 import { createElectronSafeStorageCredentialCodec } from './credential-codec'
 import { registerIpcHandlers } from './ipc-handlers'
+import { createPersistenceSaveQueue } from './persistence-save-queue'
 import { createServiceContainer, type AgentMode, type ServiceContainer } from './service-container'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -23,20 +24,21 @@ let mainWindow: BrowserWindow | null = null
 let container: ServiceContainer | null = null
 let disposeIpcHandlers: (() => void) | undefined
 let persistencePath = ''
-let pendingPersistenceWrite: Promise<void> | null = null
 let persistenceFlushTimer: NodeJS.Timeout | undefined
+
+const persistenceSaveQueue = createPersistenceSaveQueue({
+  exportBytes: () => {
+    if (!container) throw new Error('Cannot export persistence before the service container is initialized.')
+    return exportDatabaseBytes(container.persistence)
+  },
+  writeFile: (filePath, snapshot) => fs.promises.writeFile(filePath, snapshot).then(() => undefined),
+  mkdir: (dirPath) => fs.promises.mkdir(dirPath, { recursive: true }).then(() => undefined),
+  dirname: path.dirname
+})
 
 async function savePersistence(): Promise<void> {
   if (!container || !persistencePath) return
-  fs.mkdirSync(path.dirname(persistencePath), { recursive: true })
-  const snapshot = exportDatabaseBytes(container.persistence)
-  const writeTask = fs.promises.writeFile(persistencePath, snapshot).then(() => undefined)
-  pendingPersistenceWrite = writeTask
-  try {
-    await writeTask
-  } finally {
-    if (pendingPersistenceWrite === writeTask) pendingPersistenceWrite = null
-  }
+  await persistenceSaveQueue.save(persistencePath)
 }
 
 function schedulePersistenceSave(delayMs = 50): void {
@@ -54,7 +56,7 @@ async function flushScheduledPersistence(): Promise<void> {
     await savePersistence()
     return
   }
-  if (pendingPersistenceWrite) await pendingPersistenceWrite
+  await persistenceSaveQueue.flush()
 }
 
 function resolveAgentMode(): AgentMode {
