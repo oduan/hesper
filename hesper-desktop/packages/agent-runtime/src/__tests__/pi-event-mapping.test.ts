@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mapPiEventToHesperEvents } from '../map-pi-event'
+import { clearPiEventRunState, mapPiEventToHesperEvents } from '../map-pi-event'
 
 describe('pi event mapping', () => {
   it('maps assistant text deltas to message.delta', () => {
@@ -134,6 +134,19 @@ describe('pi event mapping', () => {
     expect((startEvents[0] as Extract<(typeof startEvents)[number], { type: 'step.created' }>).step.id).toBe(
       (endEvents[0] as Extract<(typeof endEvents)[number], { type: 'step.updated' }>).step.id
     )
+  })
+
+  it('clears per-run turn state so a later run does not inherit active turns', () => {
+    const firstStart = mapPiEventToHesperEvents('run-clear-state', { type: 'turn_start' })
+    const firstStartId = (firstStart[0] as Extract<(typeof firstStart)[number], { type: 'step.created' }>).step.id
+
+    clearPiEventRunState('run-clear-state')
+
+    const nextStart = mapPiEventToHesperEvents('run-clear-state', { type: 'turn_start' })
+    const nextStartId = (nextStart[0] as Extract<(typeof nextStart)[number], { type: 'step.created' }>).step.id
+
+    expect(firstStartId).toBe('step-run-clear-state-model-call-1')
+    expect(nextStartId).toBe('step-run-clear-state-model-call-1')
   })
 
   it('uses unique step ids for multiple turns in the same run', () => {

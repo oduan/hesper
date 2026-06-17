@@ -28,6 +28,10 @@ function getRunState(runId: string): RunState {
   return created
 }
 
+export function clearPiEventRunState(runId: string): void {
+  runStates.delete(runId)
+}
+
 function createStep(runId: string, stepId: string, type: RunStepType, status: RunStepStatus, title: string, summary?: string, detail?: string, completedAt?: string): RunStep {
   return {
     id: stepId,

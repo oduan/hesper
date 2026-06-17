@@ -2,6 +2,7 @@ import type { Persistence } from '@hesper/persistence'
 import { createId, nowIso, type AgentRun, type AgentRuntimeEvent, type Message, type RunStep } from '@hesper/shared'
 import type { AgentAdapter } from './adapters'
 import { normalizeUnknownError } from './adapters'
+import { clearPiEventRunState } from './map-pi-event'
 import { defaultRetryPolicy, getRetryDelayMs, isRetryableRunError, type RetryPolicy } from './retry-policy'
 
 export type EnqueueRunInput = {
@@ -129,14 +130,15 @@ export class AgentRuntime {
     const current = new Promise<void>((resolve) => {
       release = resolve
     })
-    this.enqueueChains.set(sessionId, previous.then(() => current))
+    const chained = previous.then(() => current)
+    this.enqueueChains.set(sessionId, chained)
 
     await previous
     try {
       return await task()
     } finally {
       release()
-      if (this.enqueueChains.get(sessionId) === current) {
+      if (this.enqueueChains.get(sessionId) === chained) {
         this.enqueueChains.delete(sessionId)
       }
     }
@@ -181,6 +183,7 @@ export class AgentRuntime {
     }
 
     const waiters = state.waiters.splice(0)
+    this.sessionStates.delete(sessionId)
     for (const resolve of waiters) resolve()
   }
 
@@ -215,6 +218,7 @@ export class AgentRuntime {
           endedAt: nowIso()
         } satisfies AgentRun
         await this.persistence.runs.save(latestRun)
+        clearPiEventRunState(latestRun.id)
         await this.emitAndPersist({ type: 'run.succeeded', runId: latestRun.id })
         return
       } catch (error) {
@@ -245,6 +249,7 @@ export class AgentRuntime {
           error: normalized
         } satisfies AgentRun
         await this.persistence.runs.save(latestRun)
+        clearPiEventRunState(latestRun.id)
         await this.emitAndPersist({ type: 'run.failed', runId: latestRun.id, error: normalized })
         return
       }
@@ -264,7 +269,11 @@ export class AgentRuntime {
   private async emitAndPersist(event: AgentRuntimeEvent): Promise<void> {
     await this.persistence.events.append(event)
     for (const listener of this.listeners) {
-      await listener(event)
+      try {
+        await listener(event)
+      } catch (error) {
+        console.error('AgentRuntime listener failed', error)
+      }
     }
   }
 }

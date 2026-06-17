@@ -1,6 +1,6 @@
 import type { AgentRuntimeEvent, Session } from '@hesper/shared'
 import { createInMemoryPersistence } from '@hesper/persistence'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { AgentAdapter, AgentPromptInput } from '../adapters'
 import { MockAgentAdapter } from '../mock-adapter'
 import { defaultRetryPolicy } from '../retry-policy'
@@ -65,7 +65,61 @@ class RecordingAdapter implements AgentAdapter {
   }
 }
 
+type RuntimeInternals = {
+  enqueueChains: Map<string, Promise<void>>
+  sessionStates: Map<string, unknown>
+}
+
+function getRuntimeInternals(runtime: AgentRuntime): RuntimeInternals {
+  return runtime as unknown as RuntimeInternals
+}
+
 describe('AgentRuntime queue', () => {
+  it('cleans enqueue chains and idle session state after queued runs drain', async () => {
+    const persistence = await createInMemoryPersistence()
+    await persistence.sessions.save({ ...session, id: 'session-cleanup' })
+
+    const adapter = new RecordingAdapter()
+    const runtime = new AgentRuntime({ persistence, adapter })
+
+    await runtime.enqueue({ sessionId: 'session-cleanup', prompt: 'first', modelId: 'mock/hesper-fast' })
+    await runtime.enqueue({ sessionId: 'session-cleanup', prompt: 'second', modelId: 'mock/hesper-fast' })
+    await runtime.enqueue({ sessionId: 'session-cleanup', prompt: 'third', modelId: 'mock/hesper-fast' })
+    await runtime.waitForIdle('session-cleanup')
+
+    const internals = getRuntimeInternals(runtime)
+    expect(internals.enqueueChains.has('session-cleanup')).toBe(false)
+    expect(internals.sessionStates.has('session-cleanup')).toBe(false)
+  })
+
+  it('keeps adapter success when runtime listeners throw during event delivery', async () => {
+    const persistence = await createInMemoryPersistence()
+    await persistence.sessions.save({ ...session, id: 'session-listener-failure' })
+
+    const adapter = new RecordingAdapter()
+    const runtime = new AgentRuntime({ persistence, adapter })
+    const listenerError = new Error('listener delivery failed')
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    runtime.subscribe((event) => {
+      if (event.type === 'message.completed') throw listenerError
+    })
+
+    try {
+      const run = await runtime.enqueue({ sessionId: 'session-listener-failure', prompt: 'listener fails', modelId: 'mock/hesper-fast' })
+      await runtime.waitForIdle('session-listener-failure')
+
+      const storedRun = await persistence.runs.get(run.id)
+      const runtimeEvents = await persistence.events.listByRun(run.id)
+      expect(storedRun?.status).toBe('succeeded')
+      expect(runtimeEvents.map((event) => event.type)).toContain('run.succeeded')
+      expect(runtimeEvents.map((event) => event.type)).not.toContain('run.failed')
+      expect(consoleError).toHaveBeenCalledWith('AgentRuntime listener failed', listenerError)
+    } finally {
+      consoleError.mockRestore()
+    }
+  })
+
   it('runs the first prompt immediately and queues the second prompt', async () => {
     const persistence = await createInMemoryPersistence()
     await persistence.sessions.save(session)
