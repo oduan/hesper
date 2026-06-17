@@ -192,8 +192,10 @@ describe('provider settings panel', () => {
 
     expect(await screen.findByRole('region', { name: '模型来源设置' })).toBeInTheDocument()
     expect(screen.queryByText('应用默认模型')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '选择模型来源 DeepSeek' })).toHaveTextContent('未保存 key')
-    expect(screen.getByRole('button', { name: '选择模型来源 OpenAI' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /选择模型来源/ })).not.toBeInTheDocument()
+    expect(screen.getByText('DeepSeek')).toBeInTheDocument()
+    expect(screen.getAllByText(/未保存 key/).length).toBeGreaterThan(0)
+    expect(screen.getByText('OpenAI')).toBeInTheDocument()
   })
 
   it('renders provider connections as one block with unclipped menus', async () => {
@@ -202,10 +204,10 @@ describe('provider settings panel', () => {
 
     await user.click(await screen.findByRole('button', { name: '设置' }))
 
-    const mockButton = await screen.findByRole('button', { name: '选择模型来源 Mock' })
-    const deepSeekButton = screen.getByRole('button', { name: '选择模型来源 DeepSeek' })
-    const mockItem = mockButton.closest('div')
-    const deepSeekItem = deepSeekButton.closest('div')
+    const mockMenuButton = await screen.findByRole('button', { name: '打开连接菜单 Mock' })
+    const deepSeekMenuButton = screen.getByRole('button', { name: '打开连接菜单 DeepSeek' })
+    const mockItem = mockMenuButton.closest('div')
+    const deepSeekItem = deepSeekMenuButton.closest('div')
     const connectionList = mockItem?.parentElement
 
     expect(connectionList).toHaveStyle({
@@ -220,16 +222,18 @@ describe('provider settings panel', () => {
       overflow: 'visible'
     })
 
-    await user.click(deepSeekButton)
-    expect(deepSeekItem?.style.borderColor).not.toContain('127, 158, 232')
+    expect(screen.queryByRole('button', { name: /选择模型来源/ })).not.toBeInTheDocument()
+    expect(mockItem).toHaveStyle({ background: 'transparent' })
+    expect(deepSeekItem).toHaveStyle({ background: 'transparent' })
 
-    await user.click(screen.getByRole('button', { name: '打开连接菜单 DeepSeek' }))
+    await user.click(deepSeekMenuButton)
     expect(await screen.findByRole('menu', { name: 'DeepSeek 连接菜单' })).toBeInTheDocument()
     expect(deepSeekItem).toHaveStyle({ overflow: 'visible' })
   })
 
   it('adds a custom AI connection from the API configuration dialog', async () => {
     const user = userEvent.setup()
+    testConnection.mockResolvedValueOnce({ providerId: 'custom-api-example-com', status: 'ok', hasApiKey: true, message: '连接成功' })
     render(<App />)
 
     await user.click(await screen.findByRole('button', { name: '设置' }))
@@ -251,6 +255,7 @@ describe('provider settings panel', () => {
         modelId: 'gpt-4o'
       })
     })
+    expect(await screen.findByRole('status')).toHaveTextContent('连接成功')
     expect(saveProvider).not.toHaveBeenCalled()
     expect(saveProviderApiKey).not.toHaveBeenCalled()
     expect(saveModel).not.toHaveBeenCalled()
@@ -283,11 +288,7 @@ describe('provider settings panel', () => {
 
   it('shows failed connection test results as bounded error feedback', async () => {
     const user = userEvent.setup()
-    const longMessage = 'Custom AI 连接失败：API 返回了成功状态，但响应格式中没有 assistant 文本。请检查协议类型、Endpoint 和模型是否匹配。响应预览：' + JSON.stringify({
-      id: 'bfbd7b92-de7b-4bb3-b095-4625c817cc19',
-      object: 'chat.completion',
-      choices: [{ index: 0, message: { role: 'assistant', content: '', reasoning_content: 'We need to reason through a very long response preview without stretching the dialog layout.' } }]
-    })
+    const longMessage = '连接失败：API 返回 HTTP 400。模型不支持当前 Endpoint，请检查协议类型、Endpoint 和模型是否匹配。'.repeat(6)
     testConnection.mockResolvedValueOnce({
       providerId: 'custom-api-example-com',
       status: 'failed',
@@ -304,13 +305,14 @@ describe('provider settings panel', () => {
     await user.click(screen.getByRole('button', { name: 'Test' }))
 
     const alert = await screen.findByRole('alert')
-    expect(alert).toHaveTextContent('Custom AI 连接失败')
+    expect(alert).toHaveTextContent('连接失败：API 返回 HTTP 400')
     expect(alert).toHaveStyle({
       maxWidth: '100%',
       overflowWrap: 'anywhere',
       maxHeight: '120px',
       overflowY: 'auto'
     })
+    expect(alert).not.toHaveTextContent('响应预览')
   })
 
   it('edits a connection from the menu without pre-filling the saved API key', async () => {

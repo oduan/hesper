@@ -104,7 +104,6 @@ function connectionTestInputFromDialog(state: ConnectionDialogState, providers: 
 export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettingsPanelProps) {
   const [providers, setProviders] = useState<ModelProviderDto[]>([])
   const [models, setModels] = useState<ModelDto[]>([])
-  const [selectedProviderId, setSelectedProviderId] = useState<string>()
   const [dialogState, setDialogState] = useState<ConnectionDialogState>()
   const [openMenuProviderId, setOpenMenuProviderId] = useState<string>()
   const [connectionResult, setConnectionResult] = useState<ProviderConnectionTestResult>()
@@ -115,7 +114,7 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
 
   const visibleProviders = useMemo(() => providers.filter((provider) => provider.enabled !== false), [providers])
 
-  const loadProviderSettings = async (preferredProviderId = selectedProviderId) => {
+  const loadProviderSettings = async () => {
     const requestId = loadRequestIdRef.current + 1
     loadRequestIdRef.current = requestId
     const [nextProviders, nextModels] = await Promise.all([
@@ -129,9 +128,6 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
 
     setProviders(nextProviders)
     setModels(nextModels)
-    const nextVisibleProviders = nextProviders.filter((provider) => provider.enabled !== false)
-    const nextSelectedProvider = nextVisibleProviders.find((provider) => provider.id === preferredProviderId) ?? nextVisibleProviders[0]
-    setSelectedProviderId(nextSelectedProvider?.id)
   }
 
   useEffect(() => {
@@ -159,7 +155,6 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
     setMessage(undefined)
     setConnectionResult(undefined)
     setOpenMenuProviderId(undefined)
-    setSelectedProviderId(provider.id)
     setDialogState({ mode: 'edit', providerId: provider.id, form: createConnectionForm(provider, models) })
   }
 
@@ -214,7 +209,7 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
       if (!mountedRef.current) return
       setDialogState(undefined)
       setMessage(dialogState.mode === 'edit' ? `已保存连接：${provider.name}` : `已添加连接：${provider.name}`)
-      await loadProviderSettings(provider.id)
+      await loadProviderSettings()
       await onModelRegistryChanged?.()
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : '连接保存失败')
@@ -238,11 +233,7 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
       const result = await hesperApi.providers.testConnection(testInput)
       if (!mountedRef.current) return
       setConnectionResult(result)
-      if (result.status === 'ok') {
-        setMessage(result.message)
-      } else {
-        setMessage(undefined)
-      }
+      setMessage(undefined)
     } catch (testError) {
       setError(testError instanceof Error ? testError.message : '连接测试失败')
     }
@@ -286,17 +277,10 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
                 key={provider.id}
                 style={{
                   ...connectionItemStyle,
-                  ...(index > 0 ? connectionItemSeparatorStyle : {}),
-                  ...(provider.id === selectedProviderId ? selectedConnectionItemStyle : {})
+                  ...(index > 0 ? connectionItemSeparatorStyle : {})
                 }}
               >
-                <button
-                  type="button"
-                  aria-label={`选择模型来源 ${provider.name}`}
-                  aria-current={provider.id === selectedProviderId ? 'page' : undefined}
-                  onClick={() => setSelectedProviderId(provider.id)}
-                  style={connectionInfoButtonStyle}
-                >
+                <div style={connectionInfoStyle}>
                   <span style={providerAvatarStyle}>{provider.name.slice(0, 1).toUpperCase()}</span>
                   <span style={{ minWidth: 0 }}>
                     <strong>{provider.name}</strong>
@@ -304,7 +288,7 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
                       {provider.kind} · {provider.baseUrl ?? '使用默认端点'} · {provider.hasApiKey ? '已保存 key' : '未保存 key'}
                     </span>
                   </span>
-                </button>
+                </div>
                 <button
                   type="button"
                   aria-label={`打开连接菜单 ${provider.name}`}
@@ -526,11 +510,7 @@ const connectionItemSeparatorStyle: CSSProperties = {
   borderTop: '1px solid rgba(255, 255, 255, 0.06)'
 }
 
-const selectedConnectionItemStyle: CSSProperties = {
-  background: 'rgba(127, 158, 232, 0.14)'
-}
-
-const connectionInfoButtonStyle: CSSProperties = {
+const connectionInfoStyle: CSSProperties = {
   width: '100%',
   border: 0,
   outline: 0,
@@ -541,8 +521,7 @@ const connectionInfoButtonStyle: CSSProperties = {
   gridTemplateColumns: '28px minmax(0, 1fr)',
   alignItems: 'center',
   gap: 12,
-  textAlign: 'left',
-  cursor: 'pointer'
+  textAlign: 'left'
 }
 
 const providerAvatarStyle: CSSProperties = {

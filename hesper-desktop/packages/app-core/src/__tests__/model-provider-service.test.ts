@@ -205,7 +205,7 @@ describe('createModelProviderService', () => {
     })
 
     expect(result).toMatchObject({ providerId: 'custom-api-example-com', status: 'ok', hasApiKey: true })
-    expect(result.message).toBe('Custom AI 连接成功：模型 example-chat 返回了测试响应。')
+    expect(result.message).toBe('连接成功')
   })
 
   it('accepts OpenAI-compatible reasoning content as an assistant response', async () => {
@@ -234,7 +234,7 @@ describe('createModelProviderService', () => {
     })
 
     expect(result).toMatchObject({ providerId: 'custom-api-example-com', status: 'ok', hasApiKey: true })
-    expect(result.message).toBe('Custom AI 连接成功：模型 deepseek-v4-flash 返回了测试响应。')
+    expect(result.message).toBe('连接成功')
   })
 
   it('explains malformed successful responses as protocol or model mismatches', async () => {
@@ -252,9 +252,8 @@ describe('createModelProviderService', () => {
     })
 
     expect(result).toMatchObject({ providerId: 'custom-api-example-com', status: 'failed', hasApiKey: true })
-    expect(result.message).toContain('Custom AI 连接失败：API 返回了成功状态，但响应格式中没有 assistant 文本。')
-    expect(result.message).toContain('请检查协议类型、Endpoint 和模型是否匹配。')
-    expect(result.message).toContain('响应预览：')
+    expect(result.message).toBe('连接失败：API 返回成功状态，但响应格式中没有可读取的 assistant 内容。请检查协议类型、Endpoint 和模型是否匹配。')
+    expect(result.message).not.toContain('响应预览：')
     expect(JSON.stringify(result)).not.toContain('sk-inline-secret')
   })
 })
