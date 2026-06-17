@@ -146,6 +146,11 @@ function unknownToMessage(error: unknown, apiKey: string | undefined): string {
   return truncateForMessage(redactSensitive(message, apiKey))
 }
 
+function safePayloadPreview(payload: { text: string }, apiKey: string | undefined): string {
+  const preview = truncateForMessage(redactSensitive(payload.text, apiKey), 220)
+  return preview ? ` 响应预览：${preview}` : ''
+}
+
 type JsonRecord = Record<string, unknown>
 
 function asRecord(value: unknown): JsonRecord | undefined {
@@ -225,15 +230,15 @@ async function probeOpenAICompatibleConnection(options: {
     })
     const payload = await responsePayload(response)
     if (!response.ok) {
-      return failedResult(options.provider, true, `${options.provider.name} returned HTTP ${response.status}: ${truncateForMessage(redactSensitive(payload.text || response.statusText, options.apiKey))}`)
+      return failedResult(options.provider, true, `${options.provider.name} 连接失败：API 返回 HTTP ${response.status}。${truncateForMessage(redactSensitive(payload.text || response.statusText, options.apiKey))}`)
     }
     const assistantText = extractOpenAIResponseText(payload.json)
     if (!assistantText) {
-      return failedResult(options.provider, true, `${options.provider.name} responded but did not return assistant text.`)
+      return failedResult(options.provider, true, `${options.provider.name} 连接失败：API 返回了成功状态，但响应格式中没有 assistant 文本。请检查协议类型、Endpoint 和模型是否匹配。${safePayloadPreview(payload, options.apiKey)}`)
     }
-    return { providerId: options.provider.id, status: 'ok', hasApiKey: true, message: `${options.provider.name} responded successfully using ${options.modelName}.` }
+    return { providerId: options.provider.id, status: 'ok', hasApiKey: true, message: `${options.provider.name} 连接成功：模型 ${options.modelName} 返回了测试响应。` }
   } catch (error) {
-    return failedResult(options.provider, true, `${options.provider.name} test failed: ${unknownToMessage(error, options.apiKey)}`)
+    return failedResult(options.provider, true, `${options.provider.name} 连接失败：${unknownToMessage(error, options.apiKey)}`)
   }
 }
 
@@ -261,15 +266,15 @@ async function probeAnthropicConnection(options: {
     })
     const payload = await responsePayload(response)
     if (!response.ok) {
-      return failedResult(options.provider, true, `${options.provider.name} returned HTTP ${response.status}: ${truncateForMessage(redactSensitive(payload.text || response.statusText, options.apiKey))}`)
+      return failedResult(options.provider, true, `${options.provider.name} 连接失败：API 返回 HTTP ${response.status}。${truncateForMessage(redactSensitive(payload.text || response.statusText, options.apiKey))}`)
     }
     const assistantText = extractAnthropicResponseText(payload.json)
     if (!assistantText) {
-      return failedResult(options.provider, true, `${options.provider.name} responded but did not return assistant text.`)
+      return failedResult(options.provider, true, `${options.provider.name} 连接失败：API 返回了成功状态，但响应格式中没有 assistant 文本。请检查协议类型、Endpoint 和模型是否匹配。${safePayloadPreview(payload, options.apiKey)}`)
     }
-    return { providerId: options.provider.id, status: 'ok', hasApiKey: true, message: `${options.provider.name} responded successfully using ${options.modelName}.` }
+    return { providerId: options.provider.id, status: 'ok', hasApiKey: true, message: `${options.provider.name} 连接成功：模型 ${options.modelName} 返回了测试响应。` }
   } catch (error) {
-    return failedResult(options.provider, true, `${options.provider.name} test failed: ${unknownToMessage(error, options.apiKey)}`)
+    return failedResult(options.provider, true, `${options.provider.name} 连接失败：${unknownToMessage(error, options.apiKey)}`)
   }
 }
 

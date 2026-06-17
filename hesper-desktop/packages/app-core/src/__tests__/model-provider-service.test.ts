@@ -189,4 +189,43 @@ describe('createModelProviderService', () => {
     expect(result).toMatchObject({ providerId: 'custom-api-example-com', status: 'failed', hasApiKey: true })
     expect(JSON.stringify(result)).not.toContain('sk-inline-secret')
   })
+
+  it('explains successful connection tests with a user-facing success message', async () => {
+    const persistence = await createInMemoryPersistence()
+    const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => createJsonResponse({ choices: [{ message: { content: 'hesper-ok' } }] }))
+    const service = createModelProviderService({ persistence, credentialVaultService, now: () => now, fetch: fetchMock as unknown as typeof fetch })
+
+    const result = await service.testProviderConnection({
+      providerId: 'custom-api-example-com',
+      kind: 'openai-compatible',
+      baseUrl: 'https://api.example.com/v1',
+      apiKey: 'sk-inline-secret',
+      modelId: 'example-chat'
+    })
+
+    expect(result).toMatchObject({ providerId: 'custom-api-example-com', status: 'ok', hasApiKey: true })
+    expect(result.message).toBe('Custom AI 连接成功：模型 example-chat 返回了测试响应。')
+  })
+
+  it('explains malformed successful responses as protocol or model mismatches', async () => {
+    const persistence = await createInMemoryPersistence()
+    const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => createJsonResponse({ ok: true, data: [] }))
+    const service = createModelProviderService({ persistence, credentialVaultService, now: () => now, fetch: fetchMock as unknown as typeof fetch })
+
+    const result = await service.testProviderConnection({
+      providerId: 'custom-api-example-com',
+      kind: 'openai-compatible',
+      baseUrl: 'https://api.example.com/v1',
+      apiKey: 'sk-inline-secret',
+      modelId: 'example-chat'
+    })
+
+    expect(result).toMatchObject({ providerId: 'custom-api-example-com', status: 'failed', hasApiKey: true })
+    expect(result.message).toContain('Custom AI 连接失败：API 返回了成功状态，但响应格式中没有 assistant 文本。')
+    expect(result.message).toContain('请检查协议类型、Endpoint 和模型是否匹配。')
+    expect(result.message).toContain('响应预览：')
+    expect(JSON.stringify(result)).not.toContain('sk-inline-secret')
+  })
 })

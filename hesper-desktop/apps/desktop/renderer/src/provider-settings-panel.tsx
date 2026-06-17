@@ -238,7 +238,11 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
       const result = await hesperApi.providers.testConnection(testInput)
       if (!mountedRef.current) return
       setConnectionResult(result)
-      setMessage(result.message)
+      if (result.status === 'ok') {
+        setMessage(result.message)
+      } else {
+        setMessage(undefined)
+      }
     } catch (testError) {
       setError(testError instanceof Error ? testError.message : '连接测试失败')
     }
@@ -422,7 +426,11 @@ function ConnectionDialog({
           />
           <span style={{ color: mutedTextColor }}>Comma-separated list. The first model is the default.</span>
         </label>
-        {connectionResult ? <p role="status" style={statusTextStyle}>{connectionResult.message}</p> : null}
+        {connectionResult ? (
+          <p role={connectionResult.status === 'ok' ? 'status' : 'alert'} style={connectionResult.status === 'ok' ? statusTextStyle : errorTextStyle}>
+            {connectionResult.message}
+          </p>
+        ) : null}
         <footer style={{ display: 'grid', gridTemplateColumns: onTest ? '1fr 1fr 1fr' : '1fr 1fr', gap: 10, marginTop: 22 }}>
           <button type="button" onClick={onCancel} style={secondaryActionStyle}>Back</button>
           {onTest ? <button type="button" onClick={onTest} style={secondaryActionStyle}>Test</button> : null}

@@ -281,6 +281,26 @@ describe('provider settings panel', () => {
     expect(screen.queryByDisplayValue('sk-custom-value')).not.toBeInTheDocument()
   })
 
+  it('shows failed connection test results as error feedback', async () => {
+    const user = userEvent.setup()
+    testConnection.mockResolvedValueOnce({
+      providerId: 'custom-api-example-com',
+      status: 'failed',
+      hasApiKey: true,
+      message: 'Custom AI 连接失败：API 返回了成功状态，但响应格式中没有 assistant 文本。请检查协议类型、Endpoint 和模型是否匹配。'
+    })
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: '设置' }))
+    await user.click(await screen.findByRole('button', { name: '+ 添加连接' }))
+    await user.type(screen.getByLabelText('添加连接 API key'), 'sk-custom-value')
+    await user.type(screen.getByLabelText('添加连接 Endpoint'), 'https://api.example.com')
+    await user.type(screen.getByLabelText('添加连接默认模型'), 'gpt-4o')
+    await user.click(screen.getByRole('button', { name: 'Test' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Custom AI 连接失败')
+  })
+
   it('edits a connection from the menu without pre-filling the saved API key', async () => {
     const user = userEvent.setup()
     listModels.mockResolvedValue([
