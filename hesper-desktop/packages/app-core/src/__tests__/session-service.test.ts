@@ -5,6 +5,154 @@ import { createSessionService } from '../session-service'
 const now = '2026-06-10T05:00:00.000Z'
 
 describe('createSessionService', () => {
+  it('preserves session config fields across title, workspace, model, output mode and archive updates', async () => {
+    const persistence = await createInMemoryPersistence()
+    const service = createSessionService(persistence)
+
+    const session = {
+      id: 'session-config',
+      title: 'Build hesper',
+      status: 'active' as const,
+      workspacePath: 'C:/workspace',
+      defaultModelId: 'mock/model-default',
+      providerId: 'provider-deepseek',
+      modelId: 'deepseek-chat',
+      roleId: 'coding',
+      enabledSkillIds: ['skill-review'],
+      enabledToolIds: ['filesystem.read-file', 'agent.spawn-subagent'],
+      allowedSubagentRoleIds: ['reviewer'],
+      maxSubagentDepth: 2,
+      maxSubagentsPerRun: 4,
+      outputMode: 'markdown' as const,
+      createdAt: now,
+      updatedAt: now
+    }
+    await persistence.sessions.save(session)
+
+    const renamed = await service.updateTitle(session.id, 'Updated')
+    expect(renamed).toMatchObject({
+      title: 'Updated',
+      workspacePath: session.workspacePath,
+      defaultModelId: session.defaultModelId,
+      providerId: session.providerId,
+      modelId: session.modelId,
+      roleId: session.roleId,
+      enabledSkillIds: session.enabledSkillIds,
+      enabledToolIds: session.enabledToolIds,
+      allowedSubagentRoleIds: session.allowedSubagentRoleIds,
+      maxSubagentDepth: session.maxSubagentDepth,
+      maxSubagentsPerRun: session.maxSubagentsPerRun,
+      outputMode: session.outputMode,
+      status: 'active'
+    })
+
+    const moved = await service.setWorkspacePath(session.id, 'D:/workspace')
+    expect(moved).toMatchObject({
+      workspacePath: 'D:/workspace',
+      defaultModelId: session.defaultModelId,
+      providerId: session.providerId,
+      modelId: session.modelId,
+      roleId: session.roleId,
+      enabledSkillIds: session.enabledSkillIds,
+      enabledToolIds: session.enabledToolIds,
+      allowedSubagentRoleIds: session.allowedSubagentRoleIds,
+      maxSubagentDepth: session.maxSubagentDepth,
+      maxSubagentsPerRun: session.maxSubagentsPerRun,
+      outputMode: session.outputMode,
+      title: 'Updated'
+    })
+
+    const modeled = await service.setDefaultModel(session.id, 'mock/model-updated')
+    expect(modeled).toMatchObject({
+      workspacePath: 'D:/workspace',
+      defaultModelId: 'mock/model-updated',
+      providerId: session.providerId,
+      modelId: session.modelId,
+      roleId: session.roleId,
+      enabledSkillIds: session.enabledSkillIds,
+      enabledToolIds: session.enabledToolIds,
+      allowedSubagentRoleIds: session.allowedSubagentRoleIds,
+      maxSubagentDepth: session.maxSubagentDepth,
+      maxSubagentsPerRun: session.maxSubagentsPerRun,
+      outputMode: session.outputMode,
+      title: 'Updated'
+    })
+
+    const outputMode = await service.setOutputMode(session.id, 'html')
+    expect(outputMode).toMatchObject({
+      workspacePath: 'D:/workspace',
+      defaultModelId: 'mock/model-updated',
+      providerId: session.providerId,
+      modelId: session.modelId,
+      roleId: session.roleId,
+      enabledSkillIds: session.enabledSkillIds,
+      enabledToolIds: session.enabledToolIds,
+      allowedSubagentRoleIds: session.allowedSubagentRoleIds,
+      maxSubagentDepth: session.maxSubagentDepth,
+      maxSubagentsPerRun: session.maxSubagentsPerRun,
+      outputMode: 'html',
+      title: 'Updated'
+    })
+
+    const archived = await service.archiveSession(session.id)
+    expect(archived).toMatchObject({
+      title: 'Updated',
+      workspacePath: 'D:/workspace',
+      defaultModelId: 'mock/model-updated',
+      providerId: session.providerId,
+      modelId: session.modelId,
+      roleId: session.roleId,
+      enabledSkillIds: session.enabledSkillIds,
+      enabledToolIds: session.enabledToolIds,
+      allowedSubagentRoleIds: session.allowedSubagentRoleIds,
+      maxSubagentDepth: session.maxSubagentDepth,
+      maxSubagentsPerRun: session.maxSubagentsPerRun,
+      outputMode: 'html',
+      status: 'archived'
+    })
+
+    const persisted = await service.getSession(session.id)
+    expect(persisted).toMatchObject({
+      providerId: session.providerId,
+      modelId: session.modelId,
+      roleId: session.roleId,
+      enabledSkillIds: session.enabledSkillIds,
+      enabledToolIds: session.enabledToolIds,
+      allowedSubagentRoleIds: session.allowedSubagentRoleIds,
+      maxSubagentDepth: session.maxSubagentDepth,
+      maxSubagentsPerRun: session.maxSubagentsPerRun
+    })
+  })
+
+  it('keeps workspace and model unchanged when setWorkspacePath and setDefaultModel receive undefined', async () => {
+    const persistence = await createInMemoryPersistence()
+    const service = createSessionService(persistence)
+
+    const session = {
+      id: 'session-undefined',
+      title: 'Build hesper',
+      status: 'active' as const,
+      workspacePath: 'C:/workspace',
+      defaultModelId: 'mock/model-default',
+      outputMode: 'markdown' as const,
+      createdAt: now,
+      updatedAt: now
+    }
+    await persistence.sessions.save(session)
+
+    const workspaceUnchanged = await service.setWorkspacePath(session.id, undefined)
+    const modelUnchanged = await service.setDefaultModel(session.id, undefined)
+
+    expect(workspaceUnchanged).toMatchObject({
+      workspacePath: 'C:/workspace',
+      defaultModelId: 'mock/model-default'
+    })
+    expect(modelUnchanged).toMatchObject({
+      workspacePath: 'C:/workspace',
+      defaultModelId: 'mock/model-default'
+    })
+  })
+
   it('creates, updates, archives and deletes sessions', async () => {
     const persistence = await createInMemoryPersistence()
     const service = createSessionService(persistence)

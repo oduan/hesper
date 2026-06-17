@@ -37,16 +37,11 @@ async function loadSession(persistence: Persistence, id: string): Promise<Sessio
 }
 
 async function saveSession(persistence: Persistence, session: Session, status: SessionStatus = session.status): Promise<Session> {
-  const updated = {
-    id: session.id,
-    title: session.title,
+  const updated: Session = {
+    ...session,
     status,
-    outputMode: session.outputMode,
-    createdAt: session.createdAt,
-    updatedAt: nowIso(),
-    ...(session.workspacePath !== undefined ? { workspacePath: session.workspacePath } : {}),
-    ...(session.defaultModelId !== undefined ? { defaultModelId: session.defaultModelId } : {})
-  } satisfies Session
+    updatedAt: nowIso()
+  }
   await persistence.sessions.save(updated)
   return updated
 }
@@ -81,28 +76,16 @@ export function createSessionService(persistence: Persistence): SessionService {
     async setWorkspacePath(id, workspacePath) {
       const session = await loadSession(persistence, id)
       return saveSession(persistence, {
-        id: session.id,
-        title: session.title,
-        status: session.status,
-        outputMode: session.outputMode,
-        createdAt: session.createdAt,
-        updatedAt: session.updatedAt,
-        ...(workspacePath !== undefined ? { workspacePath } : {}),
-        ...(session.defaultModelId !== undefined ? { defaultModelId: session.defaultModelId } : {})
-      } satisfies Session)
+        ...session,
+        ...(workspacePath !== undefined ? { workspacePath } : {})
+      })
     },
     async setDefaultModel(id, defaultModelId) {
       const session = await loadSession(persistence, id)
       return saveSession(persistence, {
-        id: session.id,
-        title: session.title,
-        status: session.status,
-        outputMode: session.outputMode,
-        createdAt: session.createdAt,
-        updatedAt: session.updatedAt,
-        ...(session.workspacePath !== undefined ? { workspacePath: session.workspacePath } : {}),
+        ...session,
         ...(defaultModelId !== undefined ? { defaultModelId } : {})
-      } satisfies Session)
+      })
     },
     async setOutputMode(id, outputMode) {
       const session = await loadSession(persistence, id)
