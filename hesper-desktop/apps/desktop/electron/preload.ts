@@ -1,6 +1,26 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { ipcChannels, ipcEvents, type AgentEvent, type HesperDesktopApi } from './ipc-contract'
 
+let agentEventListenerCount = 0
+
+function retainAgentEventSubscription() {
+  if (agentEventListenerCount === 0) {
+    void ipcRenderer.invoke(ipcChannels.agentEventsSubscribe)
+  }
+  agentEventListenerCount += 1
+}
+
+function releaseAgentEventSubscription() {
+  if (agentEventListenerCount === 0) {
+    return
+  }
+
+  agentEventListenerCount -= 1
+  if (agentEventListenerCount === 0) {
+    void ipcRenderer.invoke(ipcChannels.agentEventsUnsubscribe)
+  }
+}
+
 const hesperApi: HesperDesktopApi = {
   sessions: {
     list: () => ipcRenderer.invoke(ipcChannels.sessionsList),
@@ -22,11 +42,16 @@ const hesperApi: HesperDesktopApi = {
     subscribe: () => ipcRenderer.invoke(ipcChannels.agentEventsSubscribe),
     onEvent: (listener) => {
       const handler = (_event: unknown, runtimeEvent: AgentEvent) => listener(runtimeEvent)
-      void ipcRenderer.invoke(ipcChannels.agentEventsSubscribe)
+      let disposed = false
+      retainAgentEventSubscription()
       ipcRenderer.on(ipcEvents.agentEvent, handler)
       return () => {
+        if (disposed) {
+          return
+        }
+        disposed = true
         ipcRenderer.off(ipcEvents.agentEvent, handler)
-        void ipcRenderer.invoke(ipcChannels.agentEventsUnsubscribe)
+        releaseAgentEventSubscription()
       }
     }
   },

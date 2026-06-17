@@ -1,12 +1,68 @@
 import fs from 'node:fs'
+import Module, { createRequire } from 'node:module'
 import path from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { pathToFileURL } from 'node:url'
+import { describe, expect, it, vi } from 'vitest'
 import desktopPackage from '../package.json'
 
 const appRoot = path.resolve(import.meta.dirname, '..')
 const ipcContractPath = path.join(appRoot, 'electron', 'ipc-contract.ts')
 const preloadPath = path.join(appRoot, 'electron', 'preload.cjs')
 const startElectronDevPath = path.join(appRoot, 'scripts', 'start-electron-dev.mjs')
+const verifyPreloadContractScriptUrl = pathToFileURL(path.join(appRoot, 'scripts', 'verify-preload-contract.mjs')).href
+const require = createRequire(import.meta.url)
+
+type MockIpcRenderer = {
+  invoke: ReturnType<typeof vi.fn>
+  on: ReturnType<typeof vi.fn>
+  off: ReturnType<typeof vi.fn>
+}
+
+function loadPreloadApiWithMockedElectron() {
+  const exposed: Record<string, any> = {}
+  const listeners = new Map<string, Set<(...args: unknown[]) => void>>()
+  const ipcRenderer: MockIpcRenderer = {
+    invoke: vi.fn(() => Promise.resolve({})),
+    on: vi.fn((channel: string, handler: (...args: unknown[]) => void) => {
+      const channelListeners = listeners.get(channel) ?? new Set<(...args: unknown[]) => void>()
+      channelListeners.add(handler)
+      listeners.set(channel, channelListeners)
+      return ipcRenderer
+    }),
+    off: vi.fn((channel: string, handler: (...args: unknown[]) => void) => {
+      listeners.get(channel)?.delete(handler)
+      return ipcRenderer
+    })
+  }
+  const electronMock = {
+    contextBridge: {
+      exposeInMainWorld: vi.fn((key: string, api: unknown) => {
+        exposed[key] = api
+      })
+    },
+    ipcRenderer
+  }
+  const moduleLoader = Module as unknown as {
+    _load(request: string, parent: unknown, isMain: boolean): unknown
+  }
+  const originalLoad = moduleLoader._load
+
+  moduleLoader._load = function mockedLoad(request: string, parent: unknown, isMain: boolean) {
+    if (request === 'electron') {
+      return electronMock
+    }
+    return originalLoad.call(this, request, parent, isMain)
+  }
+
+  try {
+    delete require.cache[require.resolve(preloadPath)]
+    require(preloadPath)
+  } finally {
+    moduleLoader._load = originalLoad
+  }
+
+  return { api: exposed.hesper, ipcRenderer, listeners }
+}
 
 function readObjectLiteral(source: string, declarationPattern: RegExp, label: string) {
   const match = source.match(declarationPattern)
@@ -18,6 +74,49 @@ function readObjectLiteral(source: string, declarationPattern: RegExp, label: st
 }
 
 describe('desktop runtime tooling', () => {
+  it('keeps one main-process agent event subscription until every preload listener unsubscribes', () => {
+    const { api, ipcRenderer } = loadPreloadApiWithMockedElectron()
+
+    const stopFirst = api.agent.onEvent(() => undefined)
+    const stopSecond = api.agent.onEvent(() => undefined)
+
+    expect(ipcRenderer.invoke).toHaveBeenCalledTimes(1)
+    expect(ipcRenderer.invoke).toHaveBeenNthCalledWith(1, 'agent:events:subscribe')
+
+    stopFirst()
+    expect(ipcRenderer.invoke.mock.calls.filter(([channel]) => channel === 'agent:events:unsubscribe')).toHaveLength(0)
+
+    stopSecond()
+    expect(ipcRenderer.invoke.mock.calls.filter(([channel]) => channel === 'agent:events:unsubscribe')).toHaveLength(1)
+  })
+
+  it('detects preload API namespace and method drift between TypeScript and CommonJS preload files', async () => {
+    const { assertPreloadApiMethodsAligned } = await import(verifyPreloadContractScriptUrl)
+    const tsSource = `
+      const hesperApi = {
+        agent: {
+          enqueue: () => undefined,
+          onEvent: () => undefined
+        },
+        settings: {
+          get: () => undefined
+        }
+      }
+    `
+    const cjsSource = `
+      const hesperApi = {
+        agent: {
+          enqueue: () => undefined
+        },
+        settings: {
+          get: () => undefined
+        }
+      }
+    `
+
+    expect(() => assertPreloadApiMethodsAligned(tsSource, cjsSource)).toThrow(/preload API methods drifted/)
+  })
+
   it('keeps preload.cjs channels and events aligned with ipc-contract.ts', () => {
     const ipcContractSource = fs.readFileSync(ipcContractPath, 'utf8')
     const preloadSource = fs.readFileSync(preloadPath, 'utf8')

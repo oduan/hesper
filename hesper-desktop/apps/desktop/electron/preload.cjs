@@ -37,6 +37,26 @@ const ipcEvents = {
   agentEvent: 'agent:event'
 }
 
+let agentEventListenerCount = 0
+
+function retainAgentEventSubscription() {
+  if (agentEventListenerCount === 0) {
+    void ipcRenderer.invoke(ipcChannels.agentEventsSubscribe)
+  }
+  agentEventListenerCount += 1
+}
+
+function releaseAgentEventSubscription() {
+  if (agentEventListenerCount === 0) {
+    return
+  }
+
+  agentEventListenerCount -= 1
+  if (agentEventListenerCount === 0) {
+    void ipcRenderer.invoke(ipcChannels.agentEventsUnsubscribe)
+  }
+}
+
 const hesperApi = {
   sessions: {
     list: () => ipcRenderer.invoke(ipcChannels.sessionsList),
@@ -58,11 +78,16 @@ const hesperApi = {
     subscribe: () => ipcRenderer.invoke(ipcChannels.agentEventsSubscribe),
     onEvent: (listener) => {
       const handler = (_event, runtimeEvent) => listener(runtimeEvent)
-      void ipcRenderer.invoke(ipcChannels.agentEventsSubscribe)
+      let disposed = false
+      retainAgentEventSubscription()
       ipcRenderer.on(ipcEvents.agentEvent, handler)
       return () => {
+        if (disposed) {
+          return
+        }
+        disposed = true
         ipcRenderer.off(ipcEvents.agentEvent, handler)
-        void ipcRenderer.invoke(ipcChannels.agentEventsUnsubscribe)
+        releaseAgentEventSubscription()
       }
     }
   },
