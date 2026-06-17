@@ -17,7 +17,9 @@ export type ConversationViewProps = {
   session: Session
   messages: Message[]
   steps: RunStep[]
+  stepsByRun?: Record<string, RunStep[]>
   streamingText: string
+  streamingByRun?: Record<string, string>
   modelId: string
   modelOptions?: string[]
   onSend: (content: string) => void
@@ -67,7 +69,9 @@ export function ConversationView({
   session,
   messages,
   steps,
+  stepsByRun,
   streamingText,
+  streamingByRun,
   modelId,
   modelOptions,
   onSend,
@@ -80,9 +84,36 @@ export function ConversationView({
   const anchorRefs = useRef<Record<string, HTMLElement | null>>({})
   const orderedMessages = useMemo(() => sortChronologically(messages), [messages])
   const orderedSteps = useMemo(() => sortChronologically(steps), [steps])
+  const orderedStepsByRun = useMemo(() => {
+    if (!stepsByRun) {
+      return {}
+    }
+
+    return Object.fromEntries(
+      Object.entries(stepsByRun).map(([runId, runSteps]) => [runId, sortChronologically(runSteps)])
+    )
+  }, [stepsByRun])
+  const latestUserMessageId = [...orderedMessages].reverse().find((message) => message.role === 'user')?.id
+  const getMessageSteps = (message: Message): RunStep[] => {
+    if (message.role !== 'user') {
+      return []
+    }
+
+    if (message.runId) {
+      return orderedStepsByRun[message.runId] ?? []
+    }
+
+    return message.id === latestUserMessageId ? orderedSteps : []
+  }
+  const getMessageStreamingText = (message: Message): string => {
+    if (message.role !== 'user' || !message.runId) {
+      return ''
+    }
+
+    return streamingByRun?.[message.runId] ?? ''
+  }
   const anchorOrder = useMemo<AnchorEntry[]>(() => {
     const entries: AnchorEntry[] = []
-    const latestUserMessageId = [...orderedMessages].reverse().find((message) => message.role === 'user')?.id
 
     for (const message of orderedMessages) {
       entries.push({
@@ -91,14 +122,21 @@ export function ConversationView({
         label: trimLabel(message.content, message.role === 'user' ? '用户消息' : '助手输出')
       })
 
-      if (message.id === latestUserMessageId) {
-        for (const step of orderedSteps) {
-          entries.push({
-            id: createStepAnchorId(step.id),
-            kind: createStepNavigationKind(step),
-            label: trimLabel(step.summary ?? step.title, step.title)
-          })
-        }
+      for (const step of getMessageSteps(message)) {
+        entries.push({
+          id: createStepAnchorId(step.id),
+          kind: createStepNavigationKind(step),
+          label: trimLabel(step.summary ?? step.title, step.title)
+        })
+      }
+
+      const messageStreamingText = getMessageStreamingText(message)
+      if (messageStreamingText) {
+        entries.push({
+          id: `streaming-output-${message.runId}`,
+          kind: 'assistant',
+          label: trimLabel(messageStreamingText, '流式输出')
+        })
       }
     }
 
@@ -112,7 +150,7 @@ export function ConversationView({
       }
     }
 
-    if (streamingText) {
+    if (streamingText && !Object.values(streamingByRun ?? {}).includes(streamingText)) {
       entries.push({
         id: 'streaming-output',
         kind: 'assistant',
@@ -121,8 +159,7 @@ export function ConversationView({
     }
 
     return entries
-  }, [orderedMessages, orderedSteps, streamingText])
-  const latestUserMessageId = [...orderedMessages].reverse().find((message) => message.role === 'user')?.id
+  }, [orderedMessages, orderedSteps, orderedStepsByRun, streamingByRun, streamingText])
   const jumpTargets = useMemo(
     () => anchorOrder.filter((entry) => entry.kind === 'user' || entry.kind === 'assistant'),
     [anchorOrder]
@@ -206,7 +243,9 @@ export function ConversationView({
         >
           {orderedMessages.map((message) => {
             const anchorId = createMessageAnchorId(message.id)
-            const isLatestUserMessage = message.id === latestUserMessageId
+            const messageSteps = getMessageSteps(message)
+            const messageStreamingText = getMessageStreamingText(message)
+            const streamingAnchorId = message.runId ? `streaming-output-${message.runId}` : 'streaming-output'
 
             return (
               <div
@@ -228,10 +267,10 @@ export function ConversationView({
                 ) : (
                   <MessageBubble message={message} />
                 )}
-                {isLatestUserMessage && orderedSteps.length > 0 ? (
+                {messageSteps.length > 0 ? (
                   <div style={{ marginTop: darkTheme.spacing.sm }}>
                     <RunSteps
-                      steps={orderedSteps}
+                      steps={messageSteps}
                       getStepProps={(step) => {
                         const stepAnchorId = createStepAnchorId(step.id)
                         return {
@@ -243,6 +282,23 @@ export function ConversationView({
                           }
                         }
                       }}
+                    />
+                  </div>
+                ) : null}
+                {messageStreamingText ? (
+                  <div
+                    id={streamingAnchorId}
+                    data-anchor-id={streamingAnchorId}
+                    ref={(node) => {
+                      anchorRefs.current[streamingAnchorId] = node
+                    }}
+                    tabIndex={-1}
+                    style={{ marginTop: darkTheme.spacing.sm, outline: 'none' }}
+                  >
+                    <OutputBlock
+                      content={messageStreamingText}
+                      contentType={session.outputMode}
+                      closeFullscreenSignal={closeFullscreenSignal}
                     />
                   </div>
                 ) : null}
@@ -265,7 +321,7 @@ export function ConversationView({
               }}
             />
           ) : null}
-          {streamingText ? (
+          {streamingText && !Object.values(streamingByRun ?? {}).includes(streamingText) ? (
             <div
               id="streaming-output"
               data-anchor-id="streaming-output"

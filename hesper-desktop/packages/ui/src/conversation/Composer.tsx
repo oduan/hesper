@@ -88,15 +88,15 @@ export function Composer({
         >
           工作目录：{workspacePath ?? '未设置'}
         </button>
-        <div style={{ display: 'flex', alignItems: 'center', gap: darkTheme.spacing.sm, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: darkTheme.spacing.xs, flexWrap: 'wrap' }}>
           <div style={modelControlStyle}>
             <ThemedSelect
               ariaLabel="选择模型"
               value={modelId}
               options={modelOptions}
               {...(onModelChange ? { onChange: onModelChange } : {})}
-              minWidth={150}
-              maxWidth={220}
+              minWidth={0}
+              maxWidth={180}
               menuPlacement="top"
             />
           </div>
@@ -112,7 +112,10 @@ export function Composer({
               cursor: canSend ? 'pointer' : 'not-allowed'
             }}
           >
-            ↑
+            <svg aria-hidden="true" viewBox="0 0 24 24" style={sendIconStyle}>
+              <path d="M12 17V7" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+              <path d="M6.5 12.5 12 7l5.5 5.5" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
           </button>
         </div>
       </div>
@@ -170,6 +173,11 @@ const sendButtonStyle = {
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',
-  fontSize: 22,
   lineHeight: 1
+} satisfies CSSProperties
+
+const sendIconStyle = {
+  width: 23,
+  height: 23,
+  display: 'block'
 } satisfies CSSProperties

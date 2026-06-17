@@ -92,7 +92,7 @@ describe('registerIpcHandlers', () => {
 
     await handles.get(ipcChannels.agentEventsSubscribe)?.({ sender })
     const session = (await handles.get(ipcChannels.sessionsCreate)?.({ sender }, { title: 'IPC created' })) as { id: string }
-    await handles.get(ipcChannels.agentEnqueue)?.({ sender }, { sessionId: session.id, prompt: 'Ping', modelId: 'mock/hesper-fast', messageId: 'message-client-1' })
+    const enqueueResult = await handles.get(ipcChannels.agentEnqueue)?.({ sender }, { sessionId: session.id, prompt: 'Ping', modelId: 'mock/hesper-fast', messageId: 'message-client-1' }) as { runId: string }
     await container.agentRuntime.waitForIdle(session.id)
 
     expect(await persistence.messages.listBySession(session.id)).toEqual([
@@ -100,7 +100,8 @@ describe('registerIpcHandlers', () => {
         id: 'message-client-1',
         sessionId: session.id,
         role: 'user',
-        content: 'Ping'
+        content: 'Ping',
+        runId: enqueueResult.runId
       }),
       expect.objectContaining({
         sessionId: session.id,

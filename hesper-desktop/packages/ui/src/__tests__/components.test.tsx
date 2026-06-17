@@ -69,7 +69,13 @@ describe('ui components', () => {
     expect(textarea).toHaveClass('hesper-theme-scrollbar')
     expect(screen.queryByText('模型')).not.toBeInTheDocument()
     expect(modelSelect).toHaveStyle({ background: 'transparent', borderRadius: '0', padding: '0' })
-    expect(sendButton).toHaveStyle({ fontSize: '22px', display: 'inline-flex' })
+    expect(modelSelect.querySelector('svg[aria-hidden="true"]')).toBeInTheDocument()
+    expect(modelSelect.parentElement).toHaveStyle({ minWidth: '0' })
+    expect(sendButton.parentElement).toHaveStyle({ gap: '4px' })
+    expect(sendButton.querySelector('svg[aria-hidden="true"]')).toBeInTheDocument()
+
+    await user.click(modelSelect)
+    expect(screen.getByRole('listbox', { name: '选择模型选项' })).toHaveStyle({ display: 'grid' })
 
     await user.type(textarea, 'hello')
     expect(sendButton).toBeEnabled()
@@ -118,42 +124,42 @@ describe('ui components', () => {
     expect(fullscreenFrame.getAttribute('srcdoc')).toContain('img-src data:')
   })
 
-  it('renders run steps as a collapsed latest-step row with aligned status dots', async () => {
+  it('renders run steps without latest-step label or header status dot', async () => {
     const user = userEvent.setup()
     render(
       <RunSteps
         steps={[
-          { id: 'step-1', runId: 'run-1', type: 'thought', status: 'succeeded', title: 'Thinking', createdAt: now },
-          { id: 'step-2', runId: 'run-1', type: 'tool_call', status: 'running', title: 'Search Files', createdAt: '2026-06-10T03:00:01.000Z' },
-          { id: 'step-3', runId: 'run-1', type: 'tool_result', status: 'succeeded', title: 'Search Results', createdAt: '2026-06-10T03:00:02.000Z' },
-          { id: 'step-4', runId: 'run-1', type: 'model_call', status: 'pending', title: 'Call Model', createdAt: '2026-06-10T03:00:03.000Z' },
-          { id: 'step-5', runId: 'run-1', type: 'warning', status: 'failed', title: 'Network Warning', createdAt: '2026-06-10T03:00:04.000Z' }
+          { id: 'step-1', runId: 'run-1', type: 'thought', status: 'succeeded', title: 'Mock thinking', summary: 'Generated deterministic mock response', createdAt: now },
+          { id: 'step-2', runId: 'run-1', type: 'tool_call', status: 'running', title: 'Search Files', summary: 'Searching repo', createdAt: '2026-06-10T03:00:01.000Z' },
+          { id: 'step-3', runId: 'run-1', type: 'warning', status: 'failed', title: 'Network Warning', createdAt: '2026-06-10T03:00:02.000Z' }
         ]}
       />
     )
 
-    const toggle = screen.getByRole('button', { name: /最新步骤/ })
+    const toggle = screen.getByRole('button', { name: /Network Warning/ })
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
-    expect(toggle).toHaveTextContent('5')
+    expect(toggle).toHaveTextContent('3')
     expect(toggle).toHaveTextContent('Network Warning')
-    expect(screen.queryByText('Thinking')).not.toBeInTheDocument()
-    expect(screen.queryByText('思考 / 成功')).not.toBeInTheDocument()
+    expect(toggle).not.toHaveTextContent('最新步骤')
+    expect(within(toggle).queryByLabelText(/步骤状态/)).not.toBeInTheDocument()
+    expect(toggle).toHaveStyle({ gridTemplateColumns: '16px 28px minmax(0, 1fr)' })
+    expect(screen.queryByText('Generated deterministic mock response')).not.toBeInTheDocument()
 
     await user.click(toggle)
 
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByText('Thinking')).toBeInTheDocument()
-    expect(screen.getByText('Search Files')).toBeInTheDocument()
-    expect(screen.getByText('Search Results')).toBeInTheDocument()
-    expect(screen.getByText('Call Model')).toBeInTheDocument()
-    expect(screen.getByText('Network Warning')).toBeInTheDocument()
-    expect(screen.getAllByLabelText('步骤状态：成功')).toHaveLength(2)
-    expect(screen.getAllByLabelText('步骤状态：失败')).toHaveLength(2)
+    expect(screen.getByText('Generated deterministic mock response')).toBeInTheDocument()
+    expect(screen.queryByText('Mock thinking')).not.toBeInTheDocument()
+    expect(screen.getByText('Searching repo')).toBeInTheDocument()
+    expect(screen.getAllByText('Network Warning')).toHaveLength(2)
+    expect(screen.getByLabelText('步骤状态：成功')).toBeInTheDocument()
+    expect(screen.getByLabelText('步骤状态：运行中')).toBeInTheDocument()
+    expect(screen.getByLabelText('步骤状态：失败')).toBeInTheDocument()
 
     const items = screen.getAllByRole('listitem')
-    expect(items).toHaveLength(5)
-    expect(items[0]).toHaveStyle({ gridTemplateColumns: '16px 28px 10px minmax(0, 1fr)' })
-    expect(within(items[0]!).getByText('Thinking').parentElement).toHaveStyle({ whiteSpace: 'nowrap' })
+    expect(items).toHaveLength(3)
+    expect(items[0]).toHaveStyle({ gridTemplateColumns: '16px 28px minmax(0, 1fr)' })
+    expect(within(items[0]!).getByText('Generated deterministic mock response')).toHaveStyle({ whiteSpace: 'nowrap' })
     expect(within(items[0]!).queryByText('思考 / 成功')).not.toBeInTheDocument()
   })
 })

@@ -19,6 +19,7 @@ export type AppAction =
   | { type: 'session.updated'; session: Session }
   | { type: 'session.selected'; sessionId: string }
   | { type: 'message.optimistic'; message: Message }
+  | { type: 'message.run-linked'; sessionId: string; messageId: string; runId: string }
   | { type: 'message.removed'; sessionId: string; messageId: string }
   | { type: 'agent.event'; event: AgentRuntimeEvent }
   | { type: 'section.selected'; section: AppSection }
@@ -166,6 +167,18 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           [action.message.sessionId]: mergeByIdChronologically(state.messagesBySession[action.message.sessionId] ?? [], action.message)
         },
         latestRunIdBySession: omitRecordKey(state.latestRunIdBySession, action.message.sessionId)
+      }
+    }
+    case 'message.run-linked': {
+      const messages = state.messagesBySession[action.sessionId] ?? []
+      return {
+        ...state,
+        messagesBySession: {
+          ...state.messagesBySession,
+          [action.sessionId]: sortByCreatedAt(messages.map((message) => (
+            message.id === action.messageId ? { ...message, runId: action.runId } : message
+          )))
+        }
       }
     }
     case 'message.removed': {

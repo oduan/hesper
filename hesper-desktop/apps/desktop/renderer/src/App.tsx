@@ -283,7 +283,9 @@ function AppContent() {
             session={activeSession}
             messages={activeMessages}
             steps={activeSteps}
+            stepsByRun={state.stepsByRun}
             streamingText={activeStreamingText}
+            streamingByRun={state.streamingByRun}
             modelId={activeSession.defaultModelId ?? defaultFallbackModelId}
             modelOptions={activeModelOptions}
             onSelectWorkspace={() => {
@@ -547,13 +549,14 @@ async function sendMessage({
   dispatch({ type: 'message.optimistic', message })
 
   try {
-    await hesperApi.agent.enqueue({
+    const result = await hesperApi.agent.enqueue({
       sessionId: session.id,
       prompt: content,
       modelId,
       messageId: message.id,
       ...(session.workspacePath ? { workspacePath: session.workspacePath } : {})
     })
+    dispatch({ type: 'message.run-linked', sessionId: session.id, messageId: message.id, runId: result.runId })
   } catch (error) {
     dispatch({ type: 'message.removed', sessionId: session.id, messageId: message.id })
     setSendErrorsBySession((current) => ({

@@ -69,6 +69,48 @@ describe('app-store reducer', () => {
     ])
   })
 
+
+
+  it('links an optimistic user message to the returned run id', () => {
+    const sessionLoadedState = appReducer(initialAppState, {
+      type: 'sessions.loaded',
+      sessions: [
+        {
+          id: 'session-1',
+          title: 'Chat',
+          status: 'active',
+          outputMode: 'markdown',
+          createdAt: now,
+          updatedAt: now
+        }
+      ]
+    })
+
+    const withOptimisticMessage = appReducer(sessionLoadedState, {
+      type: 'message.optimistic',
+      message: {
+        id: 'message-user-1',
+        sessionId: 'session-1',
+        role: 'user',
+        content: 'first prompt',
+        contentType: 'plain',
+        createdAt: now
+      }
+    })
+
+    const linkedState = appReducer(withOptimisticMessage, {
+      type: 'message.run-linked',
+      sessionId: 'session-1',
+      messageId: 'message-user-1',
+      runId: 'run-1'
+    } as any)
+
+    expect(linkedState.messagesBySession['session-1']?.[0]).toMatchObject({
+      id: 'message-user-1',
+      runId: 'run-1'
+    })
+  })
+
   it('aggregates message deltas and removes streaming state when message completes', () => {
     const runCreatedState = appReducer(initialAppState, {
       type: 'agent.event',

@@ -38,7 +38,7 @@ function getStatusColor(status: RunStepStatus): string {
 }
 
 function createStepText(step: RunStep): string {
-  return step.summary ? `${step.title} · ${step.summary}` : step.title
+  return step.summary ?? step.title
 }
 
 function StatusDot({ status }: { status: RunStepStatus }) {
@@ -63,7 +63,7 @@ export function RunSteps({ steps, getStepProps }: RunStepsProps) {
   const [expanded, setExpanded] = useState(false)
   const orderedSteps = useMemo(() => [...steps].sort(compareCreatedAt), [steps])
   const latest = orderedSteps.at(-1)
-  const summary = latest ? `最新步骤：${createStepText(latest)}` : '暂无步骤'
+  const summary = latest ? createStepText(latest) : '暂无步骤'
 
   return (
     <section
@@ -85,7 +85,6 @@ export function RunSteps({ steps, getStepProps }: RunStepsProps) {
       >
         <span aria-hidden="true" style={chevronStyle}>{expanded ? '▾' : '▸'}</span>
         <span style={countBadgeStyle}>{orderedSteps.length}</span>
-        {latest ? <StatusDot status={latest.status} /> : <span aria-hidden="true" />}
         <span style={summaryTextStyle} title={summary}>{summary}</span>
       </button>
       {expanded ? (
@@ -100,11 +99,9 @@ export function RunSteps({ steps, getStepProps }: RunStepsProps) {
                 style={stepRowStyle}
               >
                 <span aria-hidden="true" />
-                <span aria-hidden="true" />
                 <StatusDot status={step.status} />
                 <span style={stepTextStyle} title={text}>
-                  <strong style={{ fontWeight: 600 }}>{step.title}</strong>
-                  {step.summary ? <span style={{ color: darkTheme.color.textMuted }}> · {step.summary}</span> : null}
+                  {text}
                 </span>
               </li>
             )
@@ -115,7 +112,7 @@ export function RunSteps({ steps, getStepProps }: RunStepsProps) {
   )
 }
 
-const rowColumns = '16px 28px 10px minmax(0, 1fr)'
+const rowColumns = '16px 28px minmax(0, 1fr)'
 
 const summaryButtonStyle: CSSProperties = {
   width: '100%',

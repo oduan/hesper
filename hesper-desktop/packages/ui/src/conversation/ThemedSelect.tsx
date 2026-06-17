@@ -46,7 +46,9 @@ export function ThemedSelect({
         style={selectButtonStyle}
       >
         <span style={selectValueStyle}>{value}</span>
-        <span aria-hidden="true" style={selectArrowStyle}>⌄</span>
+        <svg aria-hidden="true" viewBox="0 0 16 16" style={selectArrowStyle}>
+          <path d="M4 6.25 8 10.25 12 6.25" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
       </button>
       {open ? (
         <div
@@ -110,14 +112,11 @@ const selectValueStyle: CSSProperties = {
 }
 
 const selectArrowStyle: CSSProperties = {
+  width: 16,
+  height: 16,
   color: darkTheme.color.textMuted,
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  flex: '0 0 auto',
-  fontSize: 18,
-  lineHeight: 1,
-  transform: 'translateY(-1px)'
+  display: 'block',
+  flex: '0 0 auto'
 }
 
 const selectMenuStyle: CSSProperties = {
@@ -125,6 +124,8 @@ const selectMenuStyle: CSSProperties = {
   zIndex: 30,
   left: 0,
   right: 0,
+  display: 'grid',
+  gap: 4,
   borderRadius: darkTheme.radius.md,
   background: '#202434',
   padding: 6,
@@ -139,6 +140,7 @@ const selectOptionStyle: CSSProperties = {
   background: 'transparent',
   color: darkTheme.color.text,
   padding: `${darkTheme.spacing.xs} ${darkTheme.spacing.sm}`,
+  display: 'block',
   textAlign: 'left',
   cursor: 'pointer',
   fontSize: 12,
