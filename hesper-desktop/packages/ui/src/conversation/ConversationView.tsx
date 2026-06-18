@@ -35,6 +35,8 @@ type AnchorEntry = {
   label: string
 }
 
+const userMessageAnchorSelector = '[data-hesper-user-message-anchor="true"]'
+
 let globalCtrlWheelListenerInstalled = false
 
 function ensureGlobalCtrlWheelListener() {
@@ -75,7 +77,7 @@ function ensureGlobalCtrlWheelListener() {
     event.preventDefault()
     event.stopPropagation()
     event.stopImmediatePropagation()
-    scrollElementByDelta(scroller, event.deltaX, event.deltaY)
+    jumpToUserMessageByWheel(scroller, event.deltaY !== 0 ? event.deltaY : event.deltaX)
     scroller.dispatchEvent(new Event('scroll', { bubbles: false }))
   }, { capture: true, passive: false })
   globalCtrlWheelListenerInstalled = true
@@ -132,6 +134,44 @@ function isInsideFullscreenOutput(target: EventTarget | null): boolean {
 function scrollElementByDelta(element: HTMLElement, deltaX: number, deltaY: number): void {
   element.scrollTop += deltaY
   element.scrollLeft += deltaX
+}
+
+function getElementTopWithinScroller(scroller: HTMLElement, element: HTMLElement): number {
+  if (element.offsetTop !== 0) return element.offsetTop
+
+  const scrollerRect = scroller.getBoundingClientRect()
+  const elementRect = element.getBoundingClientRect()
+  return scroller.scrollTop + elementRect.top - scrollerRect.top
+}
+
+function scrollScrollerTo(scroller: HTMLElement, top: number): void {
+  const nextTop = Math.max(0, top)
+  if (typeof scroller.scrollTo === 'function') {
+    scroller.scrollTo({ top: nextTop, behavior: 'auto' })
+  } else {
+    scroller.scrollTop = nextTop
+  }
+}
+
+function jumpToUserMessageByWheel(scroller: HTMLElement, delta: number): boolean {
+  if (delta === 0) return false
+
+  const anchors = Array.from(scroller.querySelectorAll<HTMLElement>(userMessageAnchorSelector))
+    .map((element) => ({ element, top: getElementTopWithinScroller(scroller, element) }))
+    .sort((left, right) => left.top - right.top)
+
+  if (anchors.length === 0) return false
+
+  const currentTop = scroller.scrollTop
+  const tolerance = 1
+  const target = delta < 0
+    ? [...anchors].reverse().find((anchor) => anchor.top < currentTop - tolerance)
+    : anchors.find((anchor) => anchor.top > currentTop + tolerance)
+
+  if (!target) return false
+
+  scrollScrollerTo(scroller, target.top)
+  return true
 }
 
 export function ConversationView({
@@ -337,6 +377,14 @@ export function ConversationView({
 
     event.preventDefault()
     event.stopPropagation()
+    if (event.ctrlKey || event.metaKey) {
+      const scroller = messagesScrollRef.current
+      if (scroller) {
+        jumpToUserMessageByWheel(scroller, event.deltaY !== 0 ? event.deltaY : event.deltaX)
+        updateMessagesScrollState()
+      }
+      return
+    }
     scrollMessagesByDelta(event.deltaX, event.deltaY)
   }
 
@@ -437,6 +485,7 @@ export function ConversationView({
                 key={message.id}
                 id={anchorId}
                 data-anchor-id={anchorId}
+                data-hesper-user-message-anchor={message.role === 'user' ? 'true' : undefined}
                 ref={(node) => {
                   anchorRefs.current[anchorId] = node
                 }}

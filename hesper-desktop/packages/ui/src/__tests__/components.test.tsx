@@ -396,25 +396,61 @@ describe('ui components', () => {
     expect(screen.getByText('最终输出')).toBeInTheDocument()
   })
 
-  it('routes wheel scrolling to output blocks unless Ctrl is held', () => {
+  it('routes wheel scrolling to output blocks and uses Ctrl wheel to jump between user inputs', () => {
     const messages = [
       {
-        id: 'message-user',
+        id: 'message-user-1',
         sessionId: 'session-1',
         role: 'user',
-        content: '生成长输出',
+        content: '第一条用户输入',
         contentType: 'markdown',
         runId: 'run-1',
         createdAt: now
       },
       {
-        id: 'message-assistant',
+        id: 'message-assistant-1',
         sessionId: 'session-1',
         role: 'assistant',
         content: Array.from({ length: 30 }, (_, index) => `第 ${index + 1} 行`).join('\n\n'),
         contentType: 'markdown',
         runId: 'run-1',
         createdAt: '2026-06-10T03:00:01.000Z'
+      },
+      {
+        id: 'message-user-2',
+        sessionId: 'session-1',
+        role: 'user',
+        content: '第二条用户输入',
+        contentType: 'markdown',
+        runId: 'run-2',
+        createdAt: '2026-06-10T03:01:00.000Z'
+      },
+      {
+        id: 'message-assistant-2',
+        sessionId: 'session-1',
+        role: 'assistant',
+        content: '第二条输出',
+        contentType: 'markdown',
+        runId: 'run-2',
+        createdAt: '2026-06-10T03:01:01.000Z'
+      },
+      {
+        id: 'message-user-3',
+        sessionId: 'session-1',
+        role: 'user',
+        content: '第三条用户输入',
+        contentType: 'markdown',
+        runId: 'run-3',
+        createdAt: '2026-06-10T03:02:00.000Z'
+      },
+      {
+        id: 'message-assistant-3',
+        sessionId: 'session-1',
+        role: 'assistant',
+        content: '第三条输出',
+        contentType: 'markdown',
+        runId: 'run-3',
+        createdAt: '2026-06-10T03:02:01.000Z'
       }
     ] satisfies Message[]
 
@@ -429,9 +465,15 @@ describe('ui components', () => {
       />
     )
 
-    const conversationScroller = screen.getByLabelText('消息列表')
-    const outputScroller = screen.getByLabelText('输出内容滚动区')
+    const conversationScroller = screen.getByLabelText('消息列表') as HTMLElement
+    const outputScroller = screen.getAllByLabelText('输出内容滚动区')[0] as HTMLElement
     expect(outputScroller).toHaveStyle({ maxHeight: '380px', boxSizing: 'border-box', overscrollBehavior: 'contain' })
+
+    const userAnchors = [...conversationScroller.querySelectorAll<HTMLElement>('[data-hesper-user-message-anchor="true"]')]
+    expect(userAnchors).toHaveLength(3)
+    for (const [index, anchor] of userAnchors.entries()) {
+      Object.defineProperty(anchor, 'offsetTop', { configurable: true, value: [0, 420, 860][index] })
+    }
 
     const regularWheel = new WheelEvent('wheel', { deltaY: 48, bubbles: true, cancelable: true })
     outputScroller.dispatchEvent(regularWheel)
@@ -441,15 +483,16 @@ describe('ui components', () => {
     outputScroller.scrollTop = 48
     fireEvent.wheel(outputScroller, { deltaY: 32, ctrlKey: true })
     expect(outputScroller.scrollTop).toBe(48)
-    expect(conversationScroller.scrollTop).toBe(32)
+    expect(conversationScroller.scrollTop).toBe(420)
 
     fireEvent.wheel(conversationScroller, { deltaY: 20 })
-    expect(conversationScroller.scrollTop).toBe(52)
+    expect(conversationScroller.scrollTop).toBe(440)
 
-    const ctrlWheelOnConversationChrome = new WheelEvent('wheel', { deltaY: 80, ctrlKey: true, bubbles: true, cancelable: true })
+    conversationScroller.scrollTop = 860
+    const ctrlWheelOnConversationChrome = new WheelEvent('wheel', { deltaY: -80, ctrlKey: true, bubbles: true, cancelable: true })
     screen.getByRole('heading', { name: '测试会话' }).dispatchEvent(ctrlWheelOnConversationChrome)
     expect(ctrlWheelOnConversationChrome.defaultPrevented).toBe(true)
-    expect(conversationScroller.scrollTop).toBe(132)
+    expect(conversationScroller.scrollTop).toBe(420)
   })
 
   it('opens fullscreen output when ctrl-left-clicking inside an output block', () => {
