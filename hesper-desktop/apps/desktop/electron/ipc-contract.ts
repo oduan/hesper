@@ -56,8 +56,7 @@ export const updateSessionTitleInputSchema = z.object({
 export const generateSessionTitleInputSchema = z.object({
   id: nonEmptyStringSchema,
   modelId: nonEmptyStringSchema,
-  userPrompt: nonEmptyStringSchema,
-  assistantResponse: nonEmptyStringSchema
+  userPrompt: nonEmptyStringSchema
 })
 
 export const sessionIdInputSchema = nonEmptyStringSchema

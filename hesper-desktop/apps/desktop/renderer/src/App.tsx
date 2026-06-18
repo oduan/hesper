@@ -198,17 +198,16 @@ function AppContent() {
         const messages = stateRef.current.messagesBySession[event.message.sessionId] ?? []
         const fallbackPrompt = pendingTitlePromptsBySessionRef.current[event.message.sessionId]
         const source = session && isDefaultSessionTitle(session.title)
-          ? firstRoundTitleSource(messages, event.message) ?? (fallbackPrompt ? { userPrompt: fallbackPrompt, assistantResponse: event.message.content.trim() } : undefined)
+          ? firstUserTitleSource(messages) ?? (fallbackPrompt ? { userPrompt: fallbackPrompt } : undefined)
           : undefined
         const modelId = runModelIdsRef.current[event.message.runId] ?? session?.defaultModelId ?? defaultFallbackModelId
 
-        if (session && source?.assistantResponse && !titleGeneratedRunIdsRef.current.has(event.message.runId)) {
+        if (session && source?.userPrompt && !titleGeneratedRunIdsRef.current.has(event.message.runId)) {
           titleGeneratedRunIdsRef.current.add(event.message.runId)
           void hesperApi.sessions.generateTitle({
             id: session.id,
             modelId,
-            userPrompt: source.userPrompt,
-            assistantResponse: source.assistantResponse
+            userPrompt: source.userPrompt
           }).then((updatedSession) => {
             dispatch({ type: 'session.updated', session: updatedSession })
           }).catch((error) => {
@@ -371,8 +370,7 @@ function AppContent() {
     const updatedSession = await hesperApi.sessions.generateTitle({
       id: session.id,
       modelId,
-      userPrompt: source.userPrompt,
-      assistantResponse: source.assistantResponse
+      userPrompt: source.userPrompt
     })
     dispatch({ type: 'session.updated', session: updatedSession })
   }
@@ -510,37 +508,26 @@ function isDefaultSessionTitle(title: string): boolean {
   return normalized === 'new chat' || normalized === '新建会话' || normalized === 'untitled' || normalized === '无标题'
 }
 
-function firstRoundTitleSource(messages: Message[], completedAssistant?: Message): { userPrompt: string; assistantResponse: string } | undefined {
+function firstUserTitleSource(messages: Message[]): { userPrompt: string } | undefined {
   const userMessages = messages.filter((message) => message.role === 'user')
-  const assistantMessages = messages.filter((message) => message.role === 'assistant')
-  if (userMessages.length !== 1 || assistantMessages.length > 0) {
+  if (userMessages.length !== 1) {
     return undefined
   }
 
   const userPrompt = userMessages[0]?.content.trim()
-  const assistantResponse = completedAssistant?.content.trim()
-  return userPrompt && assistantResponse ? { userPrompt, assistantResponse } : undefined
+  return userPrompt ? { userPrompt } : undefined
 }
 
-function latestTitleSource(messages: Message[]): { userPrompt: string; assistantResponse: string } | undefined {
-  const orderedMessages = [...messages].sort((left, right) => {
-    const byCreatedAt = left.createdAt.localeCompare(right.createdAt)
-    return byCreatedAt === 0 ? left.id.localeCompare(right.id) : byCreatedAt
-  })
+function latestTitleSource(messages: Message[]): { userPrompt: string } | undefined {
+  const latestUser = [...messages]
+    .filter((message) => message.role === 'user' && message.content.trim())
+    .sort((left, right) => {
+      const byCreatedAt = right.createdAt.localeCompare(left.createdAt)
+      return byCreatedAt === 0 ? right.id.localeCompare(left.id) : byCreatedAt
+    })[0]
 
-  for (let assistantIndex = orderedMessages.length - 1; assistantIndex >= 0; assistantIndex -= 1) {
-    const assistant = orderedMessages[assistantIndex]
-    const assistantResponse = assistant?.role === 'assistant' ? assistant.content.trim() : ''
-    if (!assistantResponse) continue
-
-    for (let userIndex = assistantIndex - 1; userIndex >= 0; userIndex -= 1) {
-      const user = orderedMessages[userIndex]
-      const userPrompt = user?.role === 'user' ? user.content.trim() : ''
-      if (userPrompt) return { userPrompt, assistantResponse }
-    }
-  }
-
-  return undefined
+  const userPrompt = latestUser?.content.trim()
+  return userPrompt ? { userPrompt } : undefined
 }
 
 function SectionPlaceholder({ section }: { section: AppSection }) {

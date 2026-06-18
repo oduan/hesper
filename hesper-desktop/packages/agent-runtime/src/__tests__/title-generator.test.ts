@@ -47,8 +47,8 @@ function assistantMessage(text: string): AssistantMessage {
 }
 
 describe('session title generator', () => {
-  it('uses the first enabled model from the same provider connection and sends a title-only prompt', async () => {
-    const complete = vi.fn(async () => assistantMessage('「视频脚本规划」'))
+  it('uses the first enabled model from the same provider connection and sends only the user prompt with JSON title instructions', async () => {
+    const complete = vi.fn(async () => assistantMessage('{"title":"视频脚本规划"}'))
     const resolve = vi.fn(async () => ({
       model: { id: 'deepseek-title', name: 'DeepSeek Title', api: 'openai-completions', provider: 'deepseek', baseUrl: 'https://api.deepseek.com', reasoning: false, input: ['text' as const], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 64000, maxTokens: 1024 },
       provider,
@@ -66,15 +66,13 @@ describe('session title generator', () => {
 
     const result = await generator.generateTitle({
       usedModelId: 'deepseek-chat',
-      userPrompt: '请帮我设计一个视频脚本',
-      assistantResponse: '可以，先确定主题、受众和分镜。'
+      userPrompt: '请帮我设计一个视频脚本'
     })
 
     expect(resolve).toHaveBeenCalledWith({ modelId: 'deepseek-title', providerId: 'deepseek' })
     expect(complete).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'deepseek-title', provider: 'deepseek' }),
       expect.objectContaining({
-        systemPrompt: expect.stringContaining('只输出标题'),
         messages: [expect.objectContaining({
           role: 'user',
           content: expect.stringContaining('请帮我设计一个视频脚本')
@@ -82,13 +80,17 @@ describe('session title generator', () => {
       }),
       expect.objectContaining({ maxTokens: 48, temperature: 0, reasoning: 'minimal' })
     )
+    const context = (complete.mock.calls[0] as unknown[] | undefined)?.[1] as { systemPrompt?: string; messages: Array<{ content: string }> } | undefined
+    expect(context?.systemPrompt).toBeUndefined()
+    expect(context?.messages[0]?.content).toContain('只返回 JSON')
+    expect(context?.messages[0]?.content).not.toContain('可以，先确定主题、受众和分镜。')
     expect(result).toEqual({ title: '视频脚本规划', modelId: 'deepseek-title' })
   })
 
-  it('retries with the same model when the model returns a generic title', async () => {
+  it('retries with the same model when the model returns a generic structured title', async () => {
     const complete = vi.fn()
-      .mockResolvedValueOnce(assistantMessage('新对话'))
-      .mockResolvedValueOnce(assistantMessage('登录按钮无响应修复'))
+      .mockResolvedValueOnce(assistantMessage('{"title":"新对话"}'))
+      .mockResolvedValueOnce(assistantMessage('{"title":"登录按钮无响应修复"}'))
     const resolve = vi.fn(async () => ({
       model: { id: 'deepseek-title', name: 'DeepSeek Title', api: 'openai-completions', provider: 'deepseek', baseUrl: 'https://api.deepseek.com', reasoning: false, input: ['text' as const], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 64000, maxTokens: 1024 },
       provider,
@@ -106,8 +108,7 @@ describe('session title generator', () => {
 
     const result = await generator.generateTitle({
       usedModelId: 'deepseek-chat',
-      userPrompt: '帮我修复登录按钮点击无响应的问题',
-      assistantResponse: '可以，从事件绑定、禁用状态和请求错误三个方向排查。'
+      userPrompt: '帮我修复登录按钮点击无响应的问题'
     })
 
     expect(result).toEqual({ title: '登录按钮无响应修复', modelId: 'deepseek-title' })
@@ -117,10 +118,10 @@ describe('session title generator', () => {
     }))
   })
 
-  it('throws instead of updating to a generic title when the model cannot produce a valid title', async () => {
+  it('throws instead of updating to a generic title when the model cannot produce a valid structured title', async () => {
     const complete = vi.fn()
-      .mockResolvedValueOnce(assistantMessage('新对话'))
-      .mockResolvedValueOnce(assistantMessage('新会话'))
+      .mockResolvedValueOnce(assistantMessage('{"title":"新对话"}'))
+      .mockResolvedValueOnce(assistantMessage('{"title":"新会话"}'))
     const resolve = vi.fn(async () => ({
       model: { id: 'deepseek-title', name: 'DeepSeek Title', api: 'openai-completions', provider: 'deepseek', baseUrl: 'https://api.deepseek.com', reasoning: false, input: ['text' as const], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 64000, maxTokens: 1024 },
       provider,
@@ -138,8 +139,7 @@ describe('session title generator', () => {
 
     await expect(generator.generateTitle({
       usedModelId: 'deepseek-chat',
-      userPrompt: '帮我修复登录按钮点击无响应的问题',
-      assistantResponse: '可以，从事件绑定、禁用状态和请求错误三个方向排查。'
+      userPrompt: '帮我修复登录按钮点击无响应的问题'
     })).rejects.toThrow('Title generation returned invalid title')
   })
 })

@@ -31,7 +31,7 @@ const { listSessions, createSession, updateTitle, deleteSession, generateTitle, 
     createdAt: '2026-06-10T03:00:00.000Z',
     updatedAt: '2026-06-10T03:00:12.000Z'
   })),
-  generateTitle: vi.fn(async (input: { id: string; modelId: string; userPrompt: string; assistantResponse: string }) => ({
+  generateTitle: vi.fn(async (input: { id: string; modelId: string; userPrompt: string }) => ({
     id: input.id,
     title: '模型生成标题',
     status: 'active',
@@ -323,8 +323,7 @@ describe('renderer App', () => {
       expect(generateTitle).toHaveBeenCalledWith({
         id: 'session-2',
         modelId: 'deepseek-chat',
-        userPrompt: '最近一次用户输入',
-        assistantResponse: '最近一次 Agent 回答'
+        userPrompt: '最近一次用户输入'
       })
     })
   })
@@ -392,8 +391,7 @@ describe('renderer App', () => {
       expect(generateTitle).toHaveBeenCalledWith({
         id: 'session-1',
         modelId: 'deepseek-chat',
-        userPrompt: '请规划一个发布会视频脚本',
-        assistantResponse: '可以，标题、分镜、旁白和镜头节奏可以这样安排。'
+        userPrompt: '请规划一个发布会视频脚本'
       })
     })
     expect(await screen.findAllByText('模型生成标题')).not.toHaveLength(0)
