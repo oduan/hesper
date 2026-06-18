@@ -523,9 +523,24 @@ function firstRoundTitleSource(messages: Message[], completedAssistant?: Message
 }
 
 function latestTitleSource(messages: Message[]): { userPrompt: string; assistantResponse: string } | undefined {
-  const firstUser = messages.find((message) => message.role === 'user')?.content.trim()
-  const firstAssistant = messages.find((message) => message.role === 'assistant')?.content.trim()
-  return firstUser && firstAssistant ? { userPrompt: firstUser, assistantResponse: firstAssistant } : undefined
+  const orderedMessages = [...messages].sort((left, right) => {
+    const byCreatedAt = left.createdAt.localeCompare(right.createdAt)
+    return byCreatedAt === 0 ? left.id.localeCompare(right.id) : byCreatedAt
+  })
+
+  for (let assistantIndex = orderedMessages.length - 1; assistantIndex >= 0; assistantIndex -= 1) {
+    const assistant = orderedMessages[assistantIndex]
+    const assistantResponse = assistant?.role === 'assistant' ? assistant.content.trim() : ''
+    if (!assistantResponse) continue
+
+    for (let userIndex = assistantIndex - 1; userIndex >= 0; userIndex -= 1) {
+      const user = orderedMessages[userIndex]
+      const userPrompt = user?.role === 'user' ? user.content.trim() : ''
+      if (userPrompt) return { userPrompt, assistantResponse }
+    }
+  }
+
+  return undefined
 }
 
 function SectionPlaceholder({ section }: { section: AppSection }) {

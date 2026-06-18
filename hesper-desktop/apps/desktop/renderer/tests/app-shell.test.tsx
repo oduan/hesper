@@ -305,8 +305,10 @@ describe('renderer App', () => {
     ] as any)
     listMessages.mockImplementation(async (sessionId?: string) => sessionId === 'session-2'
       ? [
-          { id: 'message-user-2', sessionId: 'session-2', role: 'user', content: '旧会话的问题', contentType: 'plain', createdAt: '2026-06-10T02:00:01.000Z' },
-          { id: 'message-assistant-2', sessionId: 'session-2', role: 'assistant', content: '旧会话的回答', contentType: 'markdown', createdAt: '2026-06-10T02:00:02.000Z' }
+          { id: 'message-user-1', sessionId: 'session-2', role: 'user', content: '第一轮旧问题', contentType: 'plain', createdAt: '2026-06-10T02:00:01.000Z' },
+          { id: 'message-assistant-1', sessionId: 'session-2', role: 'assistant', content: '第一轮旧回答', contentType: 'markdown', createdAt: '2026-06-10T02:00:02.000Z' },
+          { id: 'message-user-2', sessionId: 'session-2', role: 'user', content: '最近一次用户输入', contentType: 'plain', createdAt: '2026-06-10T02:05:01.000Z' },
+          { id: 'message-assistant-2', sessionId: 'session-2', role: 'assistant', content: '最近一次 Agent 回答', contentType: 'markdown', createdAt: '2026-06-10T02:05:02.000Z' }
         ] as any
       : [] as any)
 
@@ -321,8 +323,8 @@ describe('renderer App', () => {
       expect(generateTitle).toHaveBeenCalledWith({
         id: 'session-2',
         modelId: 'deepseek-chat',
-        userPrompt: '旧会话的问题',
-        assistantResponse: '旧会话的回答'
+        userPrompt: '最近一次用户输入',
+        assistantResponse: '最近一次 Agent 回答'
       })
     })
   })
