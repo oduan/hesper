@@ -21,11 +21,12 @@ describe('createPiAgentTools', () => {
     })
 
     expect(tool).toMatchObject({
-      name: 'filesystem.read-file',
+      name: 'filesystem_read-file',
       label: 'Read File',
       description: 'Read a file',
       parameters: readTool.inputSchema
     })
+    expect(tool!.name).toMatch(/^[a-zA-Z0-9_-]+$/)
   })
 
   it('executes through ToolRunner with run context and returns text content', async () => {

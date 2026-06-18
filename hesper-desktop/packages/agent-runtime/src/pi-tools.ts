@@ -8,6 +8,11 @@ type PiToolAdapterInput = {
   context: Omit<ToolExecutionContext, 'signal'>
 }
 
+function normalizePiToolName(toolId: string): string {
+  const normalized = toolId.replace(/[^a-zA-Z0-9_-]/g, '_')
+  return normalized || 'tool'
+}
+
 function toPiToolResult(tool: ToolDefinition, toolCallId: string, result: Awaited<ReturnType<ToolRunner['run']>>): AgentToolResult<unknown> {
   return {
     content: [{ type: 'text', text: result.content }],
@@ -22,7 +27,7 @@ function toPiToolResult(tool: ToolDefinition, toolCallId: string, result: Awaite
 
 export function createPiAgentTools(input: PiToolAdapterInput): AgentTool<any>[] {
   return input.tools.map((tool) => ({
-    name: tool.id,
+    name: normalizePiToolName(tool.id),
     label: tool.name,
     description: tool.description,
     parameters: tool.inputSchema as any,
