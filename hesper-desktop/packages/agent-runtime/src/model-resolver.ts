@@ -88,11 +88,17 @@ function createOpenAICompatibleModel(provider: ModelProviderConfig, model: Model
   return {
     id: model.modelName,
     name: model.displayName,
-    api: 'openai-responses',
+    api: 'openai-completions',
     provider: provider.id,
     baseUrl,
     reasoning: model.capabilities.includes('reasoning'),
     input: ['text'],
+    compat: {
+      supportsDeveloperRole: false,
+      supportsStore: false,
+      supportsUsageInStreaming: false,
+      maxTokensField: 'max_tokens'
+    },
     cost: defaultCost,
     contextWindow,
     maxTokens: Math.min(contextWindow, 8192)

@@ -40,6 +40,34 @@ describe('pi event mapping', () => {
     ])
   })
 
+  it('maps assistant message_end failures to a visible assistant error message', () => {
+    const events = mapPiEventToHesperEvents(
+      { runId: 'run-failed-message', sessionId: 'session-1' },
+      {
+        type: 'message_end',
+        message: {
+          role: 'assistant',
+          content: [{ type: 'text', text: '' }],
+          stopReason: 'error',
+          errorMessage: 'OpenAI API error (404): unsupported endpoint',
+          timestamp: Date.parse('2026-06-10T06:00:00.000Z')
+        }
+      }
+    )
+
+    expect(events).toEqual([
+      {
+        type: 'message.completed',
+        message: expect.objectContaining({
+          sessionId: 'session-1',
+          role: 'assistant',
+          content: '运行失败：OpenAI API error (404): unsupported endpoint',
+          runId: 'run-failed-message'
+        })
+      }
+    ])
+  })
+
   it('maps tool execution start to a running tool step', () => {
     const events = mapPiEventToHesperEvents('run-1', {
       type: 'tool_execution_start',
@@ -192,6 +220,38 @@ describe('pi event mapping', () => {
           type: 'model_call',
           status: 'succeeded',
           title: 'Model turn'
+        })
+      })
+    ])
+    expect((startEvents[0] as Extract<(typeof startEvents)[number], { type: 'step.created' }>).step.id).toBe(
+      (endEvents[0] as Extract<(typeof endEvents)[number], { type: 'step.updated' }>).step.id
+    )
+  })
+
+  it('maps turn end failures to a failed model step with the provider error visible', () => {
+    const startEvents = mapPiEventToHesperEvents('run-turn-failed', { type: 'turn_start' })
+    const endEvents = mapPiEventToHesperEvents('run-turn-failed', {
+      type: 'turn_end',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'text', text: '' }],
+        stopReason: 'error',
+        errorMessage: 'No API key for provider: custom-api'
+      },
+      toolResults: []
+    })
+
+    expect(endEvents).toEqual([
+      expect.objectContaining({
+        type: 'step.updated',
+        step: expect.objectContaining({
+          id: 'step-run-turn-failed-model-call-1',
+          runId: 'run-turn-failed',
+          type: 'model_call',
+          status: 'failed',
+          title: 'Model turn',
+          summary: '运行失败：No API key for provider: custom-api',
+          detail: '运行失败：No API key for provider: custom-api'
         })
       })
     ])

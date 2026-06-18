@@ -76,6 +76,13 @@ function extractTextFromContent(content: unknown): string {
     .join('')
 }
 
+function formatFailureMessage(errorMessage: unknown): string | undefined {
+  if (typeof errorMessage !== 'string') return undefined
+  const normalized = errorMessage.replace(/\s+/g, ' ').trim()
+  if (!normalized) return undefined
+  return `运行失败：${normalized}`
+}
+
 function inferContentType(message: { content?: unknown }): MessageContentType {
   if (typeof message.content === 'string') return 'plain'
   return 'markdown'
@@ -147,7 +154,7 @@ function createThinkingStepEvent(kind: StepEvent['type'], runId: string, event: 
   }
 }
 
-function createModelStepEvent(kind: StepEvent['type'], runId: string, summary?: string): StepEvent {
+function createModelStepEvent(kind: StepEvent['type'], runId: string, summary?: string, status: RunStepStatus = 'succeeded'): StepEvent {
   const state = getRunState(runId)
 
   if (kind === 'step.created') {
@@ -163,17 +170,17 @@ function createModelStepEvent(kind: StepEvent['type'], runId: string, summary?: 
   const stepId = state.activeTurnIds.shift() ?? `step-${runId}-model-call-${state.turnCounter + 1}`
   return {
     type: 'step.updated',
-    step: createStep(runId, stepId, 'model_call', 'succeeded', 'Model turn', summary, undefined, nowIso())
+    step: createStep(runId, stepId, 'model_call', status, 'Model turn', summary, summary, nowIso())
   }
 }
 
 function createMessageCompletedEvent(context: MappingContext, event: PiEventLike): AgentRuntimeEvent[] {
   if (!context.sessionId) return []
 
-  const message = event.message as { role?: string; content?: unknown; timestamp?: number } | undefined
+  const message = event.message as { role?: string; content?: unknown; timestamp?: number; errorMessage?: unknown; stopReason?: unknown } | undefined
   if (!message || message.role !== 'assistant') return []
 
-  const content = extractTextFromContent(message.content)
+  const content = formatFailureMessage(message.errorMessage) ?? extractTextFromContent(message.content)
   return [{
     type: 'message.completed',
     message: {
@@ -214,8 +221,11 @@ export function mapPiEventToHesperEvents(context: string | MappingContext, piEve
       return [createToolStepEvent('step.updated', normalizedContext.runId, event)]
     case 'turn_start':
       return [createModelStepEvent('step.created', normalizedContext.runId)]
-    case 'turn_end':
-      return [createModelStepEvent('step.updated', normalizedContext.runId)]
+    case 'turn_end': {
+      const message = event.message as { errorMessage?: unknown; stopReason?: unknown } | undefined
+      const failureSummary = formatFailureMessage(message?.errorMessage)
+      return [createModelStepEvent('step.updated', normalizedContext.runId, failureSummary, failureSummary ? 'failed' : 'succeeded')]
+    }
     default:
       return []
   }

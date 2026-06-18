@@ -159,10 +159,16 @@ describe('ModelResolver', () => {
     expect(getPiModel).not.toHaveBeenCalled()
     expect(resolved.model).toEqual(expect.objectContaining({
       id: 'local-chat',
-      api: 'openai-responses',
+      api: 'openai-completions',
       provider: 'local-compatible',
       baseUrl: 'http://127.0.0.1:11434/v1',
-      contextWindow: 32000
+      contextWindow: 32000,
+      compat: expect.objectContaining({
+        supportsDeveloperRole: false,
+        supportsStore: false,
+        supportsUsageInStreaming: false,
+        maxTokensField: 'max_tokens'
+      })
     }))
     await expect(resolved.getApiKey?.('local-compatible')).resolves.toBe('sk-local')
     await expect(resolved.getApiKey?.('openai')).resolves.toBe('sk-local')
