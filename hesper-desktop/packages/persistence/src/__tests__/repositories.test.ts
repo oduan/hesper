@@ -118,6 +118,7 @@ describe('persistence repositories', () => {
       defaultModelId: 'deepseek-chat',
       defaultOutputMode: 'html',
       themeMode: 'dark',
+      fontSize: 16,
       updatedAt: now
     })
 
@@ -130,6 +131,7 @@ describe('persistence repositories', () => {
         defaultModelId: 'deepseek-chat',
         defaultOutputMode: 'html',
         themeMode: 'dark',
+        fontSize: 16,
         updatedAt: now
       })
     } finally {

@@ -25,7 +25,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             padding: `${darkTheme.spacing.sm} ${darkTheme.spacing.md}`,
             borderRadius: darkTheme.radius.lg,
             border: 0,
-            background: isUser ? 'rgba(255, 255, 255, 0.055)' : darkTheme.color.surfaceMuted,
+            background: isUser ? 'var(--hesper-color-soft-control, rgba(122, 162, 247, 0.14))' : darkTheme.color.surfaceMuted,
             color: darkTheme.color.text,
             whiteSpace: 'pre-wrap',
             overflowWrap: 'anywhere',

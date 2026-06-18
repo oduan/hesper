@@ -6,6 +6,7 @@ export type AppSettings = {
   defaultModelId: string
   defaultOutputMode: 'markdown' | 'html'
   themeMode: ThemeMode
+  fontSize: number
 }
 
 export type SettingsService = {
@@ -22,7 +23,8 @@ type SettingsServiceOptions = {
 const defaults: AppSettings = {
   defaultModelId: 'mock/hesper-fast',
   defaultOutputMode: 'markdown',
-  themeMode: 'system'
+  themeMode: 'system',
+  fontSize: 14
 }
 
 export function createSettingsService(options: SettingsServiceOptions): SettingsService {
@@ -38,7 +40,8 @@ export function createSettingsService(options: SettingsServiceOptions): Settings
         ? {
             defaultModelId: persisted.defaultModelId,
             defaultOutputMode: persisted.defaultOutputMode,
-            themeMode: persisted.themeMode
+            themeMode: persisted.themeMode,
+            fontSize: persisted.fontSize
           }
         : {})
     }

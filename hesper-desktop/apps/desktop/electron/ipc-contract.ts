@@ -91,16 +91,20 @@ export const agentEnqueueInputSchema = z.object({
   messageId: nonEmptyStringSchema.optional()
 })
 
+export const appFontSizeSchema = z.number().int().min(12).max(18)
+
 export const appSettingsSchema = z.object({
   defaultModelId: z.string().min(1),
   defaultOutputMode: z.enum(['markdown', 'html']),
-  themeMode: z.enum(['system', 'light', 'dark'])
+  themeMode: z.enum(['system', 'light', 'dark']),
+  fontSize: appFontSizeSchema
 }).strict()
 
 export const updateSettingsInputSchema = z.object({
   defaultModelId: z.string().min(1).optional(),
   defaultOutputMode: z.enum(['markdown', 'html']).optional(),
-  themeMode: z.enum(['system', 'light', 'dark']).optional()
+  themeMode: z.enum(['system', 'light', 'dark']).optional(),
+  fontSize: appFontSizeSchema.optional()
 }).strict()
 
 export const directorySelectionSchema = z.object({

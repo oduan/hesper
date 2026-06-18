@@ -22,7 +22,8 @@ import { createId } from '@hesper/shared'
 const defaultSettings: AppSettings = {
   defaultModelId: 'mock/hesper-fast',
   defaultOutputMode: 'markdown',
-  themeMode: 'dark'
+  themeMode: 'dark',
+  fontSize: 14
 }
 
 function withDefined<T extends object>(value: T): T {
@@ -105,7 +106,8 @@ export function createFallbackHesperApi(): HesperDesktopApi {
       update: async (input: UpdateSettingsInput) => ({
         defaultModelId: input.defaultModelId ?? defaultSettings.defaultModelId,
         defaultOutputMode: input.defaultOutputMode ?? defaultSettings.defaultOutputMode,
-        themeMode: input.themeMode ?? defaultSettings.themeMode
+        themeMode: input.themeMode ?? defaultSettings.themeMode,
+        fontSize: input.fontSize ?? defaultSettings.fontSize
       })
     },
     credentials: {

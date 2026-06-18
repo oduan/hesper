@@ -1,3 +1,5 @@
+import type { CSSProperties } from 'react'
+
 export type ThemeTokens = {
   color: {
     background: string
@@ -13,41 +15,127 @@ export type ThemeTokens = {
   }
   radius: { sm: string; md: string; lg: string; xl: string }
   spacing: { xs: string; sm: string; md: string; lg: string; xl: string }
-  typography: { body: number; tiny: number }
+  typography: { body: string | number; tiny: number }
 }
+
+export type ThemeMode = 'light' | 'dark'
+
+const radius = { sm: '8px', md: '12px', lg: '16px', xl: '20px' }
+const spacing = { xs: '4px', sm: '8px', md: '12px', lg: '16px', xl: '24px' }
+
+const lightPalette = {
+  // Catppuccin Latte
+  background: '#dce0e8',
+  surface: '#eff1f5',
+  surfaceMuted: '#e6e9ef',
+  text: '#4c4f69',
+  textMuted: '#6c6f85',
+  border: '#bcc0cc',
+  accent: '#8839ef',
+  success: '#40a02b',
+  danger: '#d20f39',
+  warning: '#df8e1d',
+  hover: 'rgba(76, 79, 105, 0.10)',
+  softControl: 'rgba(136, 57, 239, 0.12)',
+  scrollbarThumb: 'rgba(136, 57, 239, 0.32)',
+  scrollbarThumbHover: 'rgba(136, 57, 239, 0.50)'
+}
+
+const darkPalette = {
+  // Tokyo Night
+  background: '#1a1b26',
+  surface: '#16161e',
+  surfaceMuted: '#24283b',
+  text: '#c0caf5',
+  textMuted: '#737aa2',
+  border: '#414868',
+  accent: '#7aa2f7',
+  success: '#9ece6a',
+  danger: '#f7768e',
+  warning: '#e0af68',
+  hover: 'rgba(122, 162, 247, 0.12)',
+  softControl: 'rgba(122, 162, 247, 0.14)',
+  scrollbarThumb: 'rgba(122, 162, 247, 0.36)',
+  scrollbarThumbHover: 'rgba(122, 162, 247, 0.60)'
+}
+
+const colorVariableNames: Record<keyof typeof darkPalette, string> = {
+  background: 'background',
+  surface: 'surface',
+  surfaceMuted: 'surface-muted',
+  text: 'text',
+  textMuted: 'text-muted',
+  border: 'border',
+  accent: 'accent',
+  success: 'success',
+  danger: 'danger',
+  warning: 'warning',
+  hover: 'hover',
+  softControl: 'soft-control',
+  scrollbarThumb: 'scrollbar-thumb',
+  scrollbarThumbHover: 'scrollbar-thumb-hover'
+}
+
+const cssColor = (name: keyof typeof darkPalette, fallback: string) => `var(--hesper-color-${colorVariableNames[name]}, ${fallback})`
 
 export const lightTheme: ThemeTokens = {
   color: {
-    background: '#f2efe8',
-    surface: '#fffefb',
-    surfaceMuted: '#f7f4ee',
-    text: '#22211f',
-    textMuted: '#6f6a62',
-    border: '#ded7cc',
-    accent: '#725cff',
-    success: '#199b63',
-    danger: '#d44f4b',
-    warning: '#ac741b'
+    background: lightPalette.background,
+    surface: lightPalette.surface,
+    surfaceMuted: lightPalette.surfaceMuted,
+    text: lightPalette.text,
+    textMuted: lightPalette.textMuted,
+    border: lightPalette.border,
+    accent: lightPalette.accent,
+    success: lightPalette.success,
+    danger: lightPalette.danger,
+    warning: lightPalette.warning
   },
-  radius: { sm: '8px', md: '12px', lg: '16px', xl: '20px' },
-  spacing: { xs: '4px', sm: '8px', md: '12px', lg: '16px', xl: '24px' },
+  radius,
+  spacing,
   typography: { body: 14, tiny: 9 }
 }
 
 export const darkTheme: ThemeTokens = {
   color: {
-    background: '#262a3b',
-    surface: '#171a26',
-    surfaceMuted: '#202434',
-    text: '#e8ecfb',
-    textMuted: '#969db8',
-    border: 'rgba(255, 255, 255, 0.07)',
-    accent: '#7f9ee8',
-    success: '#68c69a',
-    danger: '#ef817d',
-    warning: '#d8b66b'
+    background: cssColor('background', darkPalette.background),
+    surface: cssColor('surface', darkPalette.surface),
+    surfaceMuted: cssColor('surfaceMuted', darkPalette.surfaceMuted),
+    text: cssColor('text', darkPalette.text),
+    textMuted: cssColor('textMuted', darkPalette.textMuted),
+    border: cssColor('border', darkPalette.border),
+    accent: cssColor('accent', darkPalette.accent),
+    success: cssColor('success', darkPalette.success),
+    danger: cssColor('danger', darkPalette.danger),
+    warning: cssColor('warning', darkPalette.warning)
   },
-  radius: lightTheme.radius,
-  spacing: lightTheme.spacing,
-  typography: lightTheme.typography
+  radius,
+  spacing,
+  typography: { body: 'var(--hesper-font-size, 14px)', tiny: 9 }
+}
+
+type ThemePalette = typeof darkPalette
+
+const paletteForMode = (mode: ThemeMode): ThemePalette => (mode === 'light' ? lightPalette : darkPalette)
+
+export function createThemeVariables(mode: ThemeMode, fontSize: number): CSSProperties {
+  const palette = paletteForMode(mode)
+  return {
+    colorScheme: mode,
+    '--hesper-font-size': `${fontSize}px`,
+    '--hesper-color-background': palette.background,
+    '--hesper-color-surface': palette.surface,
+    '--hesper-color-surface-muted': palette.surfaceMuted,
+    '--hesper-color-text': palette.text,
+    '--hesper-color-text-muted': palette.textMuted,
+    '--hesper-color-border': palette.border,
+    '--hesper-color-accent': palette.accent,
+    '--hesper-color-success': palette.success,
+    '--hesper-color-danger': palette.danger,
+    '--hesper-color-warning': palette.warning,
+    '--hesper-color-hover': palette.hover,
+    '--hesper-color-soft-control': palette.softControl,
+    '--hesper-color-scrollbar-thumb': palette.scrollbarThumb,
+    '--hesper-color-scrollbar-thumb-hover': palette.scrollbarThumbHover
+  } as CSSProperties
 }

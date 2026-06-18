@@ -1,7 +1,7 @@
 :root {
   color-scheme: light;
-  --hesper-body-background: #f5f7fb;
-  --hesper-body-text: #162033;
+  --hesper-body-background: var(--hesper-color-background, #1a1b26);
+  --hesper-body-text: var(--hesper-color-text, #c0caf5);
 }
 
 *,
@@ -62,10 +62,10 @@ button {
   border: 0;
   border-radius: 10px;
   background: transparent;
-  color: #c8cde0;
+  color: var(--hesper-color-text-muted, #737aa2);
   padding: 7px 10px;
   text-align: left;
-  font-size: 14px;
+  font-size: var(--hesper-font-size, 14px);
   font-weight: 600;
   cursor: pointer;
   transition: background 120ms ease, color 120ms ease;
@@ -73,12 +73,12 @@ button {
 
 .hesper-nav-item:hover,
 .hesper-nav-item.is-active {
-  background: rgba(255, 255, 255, 0.07);
-  color: #eef2ff;
+  background: var(--hesper-color-hover, rgba(122, 162, 247, 0.12));
+  color: var(--hesper-color-text, #c0caf5);
 }
 
 .hesper-nav-item-strong {
-  color: #eef2ff;
+  color: var(--hesper-color-text, #c0caf5);
 }
 
 .hesper-list-row {
@@ -87,20 +87,20 @@ button {
   border: 0;
   border-radius: 10px;
   background: transparent;
-  color: #e8ecfb;
+  color: var(--hesper-color-text, #c0caf5);
   padding: 7px 10px;
   text-align: left;
   cursor: pointer;
   display: grid;
   align-items: center;
   gap: 2px;
-  font-size: 14px;
+  font-size: var(--hesper-font-size, 14px);
   transition: background 120ms ease;
 }
 
 .hesper-list-row:hover,
 .hesper-list-row.is-active {
-  background: rgba(255, 255, 255, 0.055);
+  background: var(--hesper-color-hover, rgba(122, 162, 247, 0.12));
 }
 
 .hesper-settings-row {
@@ -109,19 +109,19 @@ button {
   border: 0;
   border-radius: 12px;
   background: transparent;
-  color: #e8ecfb;
+  color: var(--hesper-color-text, #c0caf5);
   padding: 10px 12px;
   text-align: left;
   cursor: pointer;
   display: grid;
   gap: 3px;
-  font-size: 14px;
+  font-size: var(--hesper-font-size, 14px);
   transition: background 120ms ease;
 }
 
 .hesper-settings-row:hover,
 .hesper-settings-row.is-active {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--hesper-color-hover, rgba(122, 162, 247, 0.12));
 }
 
 .hesper-scroll-invisible {
@@ -135,7 +135,7 @@ button {
 
 .hesper-theme-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: rgba(127, 158, 232, 0.58) rgba(255, 255, 255, 0.035);
+  scrollbar-color: var(--hesper-color-scrollbar-thumb, rgba(122, 162, 247, 0.36)) transparent;
 }
 
 .hesper-theme-scrollbar::-webkit-scrollbar {
@@ -144,7 +144,7 @@ button {
 }
 
 .hesper-theme-scrollbar::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.035);
+  background: transparent;
   border-radius: 999px;
 }
 
@@ -152,12 +152,12 @@ button {
   min-height: 32px;
   border: 2px solid transparent;
   border-radius: 999px;
-  background: linear-gradient(180deg, rgba(127, 158, 232, 0.76), rgba(104, 198, 154, 0.58)) border-box;
+  background: var(--hesper-color-scrollbar-thumb, rgba(122, 162, 247, 0.36)) border-box;
   background-clip: padding-box;
 }
 
 .hesper-theme-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, rgba(154, 176, 255, 0.92), rgba(104, 198, 154, 0.78)) border-box;
+  background: var(--hesper-color-scrollbar-thumb-hover, rgba(122, 162, 247, 0.60)) border-box;
   background-clip: padding-box;
 }
 
@@ -168,7 +168,7 @@ button {
 
 .hesper-soft-control:hover,
 .hesper-send-button:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.075) !important;
+  background: var(--hesper-color-soft-control, rgba(122, 162, 247, 0.14)) !important;
 }
 
 .hesper-output-block {
@@ -185,6 +185,6 @@ button {
 
 [data-theme='dark'] {
   color-scheme: dark;
-  --hesper-body-background: #262a3b;
-  --hesper-body-text: #e8ecfb;
+  --hesper-body-background: var(--hesper-color-background, #1a1b26);
+  --hesper-body-text: var(--hesper-color-text, #c0caf5);
 }

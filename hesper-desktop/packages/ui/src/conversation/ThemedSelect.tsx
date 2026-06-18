@@ -202,7 +202,7 @@ const selectMenuStyle: CSSProperties = {
   display: 'grid',
   gap: 4,
   borderRadius: darkTheme.radius.md,
-  background: '#202434',
+  background: darkTheme.color.surfaceMuted,
   padding: 6,
   boxShadow: '0 18px 36px rgba(0, 0, 0, 0.28)'
 }
@@ -249,7 +249,7 @@ const selectGroupOptionsStyle: CSSProperties = {
   display: 'grid',
   gap: 2,
   borderRadius: darkTheme.radius.md,
-  background: '#202434',
+  background: darkTheme.color.surfaceMuted,
   padding: 6,
   boxShadow: '0 18px 36px rgba(0, 0, 0, 0.28)'
 }
@@ -272,6 +272,6 @@ const selectOptionStyle: CSSProperties = {
 }
 
 const activeSelectOptionStyle: CSSProperties = {
-  background: 'rgba(255, 255, 255, 0.06)',
-  color: '#eef2ff'
+  background: 'var(--hesper-color-soft-control, rgba(122, 162, 247, 0.14))',
+  color: darkTheme.color.text
 }

@@ -160,8 +160,13 @@ function resetProviderMocks() {
   testConnection.mockResolvedValue({ providerId: 'deepseek', status: 'needs_api_key', hasApiKey: false, message: 'API key missing' })
   saveModel.mockImplementation(async (input: any) => ({ ...baseModels[1], ...input, createdAt: now, updatedAt: now }))
   saveProviderApiKey.mockResolvedValue({ providerId: 'deepseek', apiKeyRef: 'provider:deepseek:api-key', hasApiKey: true, encryptionAvailable: true })
-  getSettings.mockResolvedValue({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark' })
-  updateSettings.mockImplementation(async (input: any) => ({ defaultModelId: input.defaultModelId ?? 'mock/hesper-fast', defaultOutputMode: input.defaultOutputMode ?? 'markdown', themeMode: input.themeMode ?? 'dark' }))
+  getSettings.mockResolvedValue({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', fontSize: 14 })
+  updateSettings.mockImplementation(async (input: any) => ({
+    defaultModelId: input.defaultModelId ?? 'mock/hesper-fast',
+    defaultOutputMode: input.defaultOutputMode ?? 'markdown',
+    themeMode: input.themeMode ?? 'dark',
+    fontSize: input.fontSize ?? 14
+  }))
 }
 
 describe('provider settings panel', () => {
@@ -213,13 +218,15 @@ describe('provider settings panel', () => {
 
     expect(connectionList).toHaveStyle({
       gap: '0px',
-      background: 'rgba(255, 255, 255, 0.035)'
+      background: 'var(--hesper-color-surface-muted, #24283b)'
     })
     expect(mockItem?.style.border).toBe('0px')
     expect(mockItem?.style.boxShadow).toBe('none')
     expect(mockItem).toHaveStyle({ overflow: 'visible' })
     expect(deepSeekItem).toHaveStyle({
-      borderTop: '1px solid rgba(255, 255, 255, 0.06)',
+      borderTopWidth: '1px',
+      borderTopStyle: 'solid',
+      borderTopColor: 'var(--hesper-color-border, #414868)',
       overflow: 'visible'
     })
 

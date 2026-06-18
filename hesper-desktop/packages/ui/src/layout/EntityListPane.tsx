@@ -8,7 +8,9 @@ export type EntityListPaneProps = {
   activeSection: AppSection
   sessions: Session[]
   activeSessionId?: string
+  activeSettingsCategory?: 'ai' | 'appearance'
   onSelectSession?: (sessionId: string) => void
+  onSelectSettingsCategory?: (category: 'ai' | 'appearance') => void
   onRenameSession?: (sessionId: string, title: string) => void
   onRegenerateSessionTitle?: (sessionId: string) => void
   onDeleteSession?: (sessionId: string) => void
@@ -42,7 +44,9 @@ export function EntityListPane({
   activeSection,
   sessions,
   activeSessionId,
+  activeSettingsCategory = 'ai',
   onSelectSession,
+  onSelectSettingsCategory,
   onRenameSession,
   onRegenerateSessionTitle,
   onDeleteSession
@@ -183,14 +187,22 @@ export function EntityListPane({
         )
       ) : activeSection === 'settings' ? (
         <nav aria-label="设置分类" style={{ display: 'grid', gap: 4 }}>
-          <button type="button" className="hesper-settings-row" aria-label="应用设置">
-            <span style={{ fontWeight: 700 }}>应用</span>
-            <span style={{ fontSize: darkTheme.typography.body, color: darkTheme.color.textMuted }}>通知和更新</span>
-          </button>
-          <button type="button" className="hesper-settings-row is-active" aria-current="page" aria-label="AI 设置">
-            <span style={{ fontWeight: 700 }}>AI</span>
-            <span style={{ fontSize: darkTheme.typography.body, color: darkTheme.color.textMuted }}>模型、思考、连接</span>
-          </button>
+          {settingsCategories.map((category) => {
+            const isActive = category.id === activeSettingsCategory
+            return (
+              <button
+                key={category.id}
+                type="button"
+                className={`hesper-settings-row${isActive ? ' is-active' : ''}`}
+                aria-current={isActive ? 'page' : undefined}
+                aria-label={category.label}
+                onClick={() => onSelectSettingsCategory?.(category.id)}
+              >
+                <span style={{ fontWeight: 700 }}>{category.title}</span>
+                <span style={{ fontSize: darkTheme.typography.body, color: darkTheme.color.textMuted }}>{category.description}</span>
+              </button>
+            )
+          })}
         </nav>
       ) : (
         <div style={{ margin: 'auto', color: darkTheme.color.textMuted, fontSize: darkTheme.typography.body, textAlign: 'center' }}>该区域将在后续任务接入真实数据。</div>
@@ -226,6 +238,11 @@ export function EntityListPane({
   )
 }
 
+const settingsCategories: Array<{ id: 'ai' | 'appearance'; title: string; label: string; description: string }> = [
+  { id: 'ai', title: 'AI', label: 'AI 设置', description: '模型、思考、连接' },
+  { id: 'appearance', title: '外观', label: '外观设置', description: '字体大小、亮色与暗色' }
+]
+
 const sessionRowStyle: CSSProperties = {
   alignItems: 'center'
 }
@@ -236,7 +253,7 @@ const renameInputStyle: CSSProperties = {
   border: 0,
   outline: '1px solid rgba(124, 108, 255, 0.55)',
   borderRadius: 6,
-  background: 'rgba(255, 255, 255, 0.06)',
+  background: 'var(--hesper-color-soft-control, rgba(122, 162, 247, 0.14))',
   color: darkTheme.color.text,
   font: 'inherit',
   fontWeight: 600,

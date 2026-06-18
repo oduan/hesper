@@ -410,7 +410,7 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
                 {openMenuProviderId === provider.id ? (
                   <div role="menu" aria-label={`${provider.name} 连接菜单`} style={connectionMenuStyle} onClick={(event) => event.stopPropagation()}>
                     <button type="button" role="menuitem" style={connectionMenuItemStyle} onClick={() => openEditConnection(provider)}>编辑</button>
-                    <button type="button" role="menuitem" style={{ ...connectionMenuItemStyle, color: '#fca5a5' }} onClick={() => void deleteConnection(provider)}>删除</button>
+                    <button type="button" role="menuitem" style={{ ...connectionMenuItemStyle, color: dangerTextColor }} onClick={() => void deleteConnection(provider)}>删除</button>
                   </div>
                 ) : null}
               </div>
@@ -535,8 +535,16 @@ function ConnectionDialog({
   )
 }
 
-const mutedTextColor = '#969db8'
-const bodyFontSize = 14
+const mutedTextColor = 'var(--hesper-color-text-muted, #737aa2)'
+const bodyTextColor = 'var(--hesper-color-text, #c0caf5)'
+const surfaceColor = 'var(--hesper-color-surface, #16161e)'
+const surfaceMutedColor = 'var(--hesper-color-surface-muted, #24283b)'
+const borderColor = 'var(--hesper-color-border, #414868)'
+const accentColor = 'var(--hesper-color-accent, #7aa2f7)'
+const dangerTextColor = 'var(--hesper-color-danger, #f7768e)'
+const successTextColor = 'var(--hesper-color-success, #9ece6a)'
+const softControlColor = 'var(--hesper-color-soft-control, rgba(122, 162, 247, 0.14))'
+const bodyFontSize = 'var(--hesper-font-size, 14px)'
 
 const settingsPanelStyle: CSSProperties = {
   height: '100%',
@@ -597,7 +605,7 @@ const connectionListStyle: CSSProperties = {
   gap: 0,
   border: 0,
   borderRadius: 16,
-  background: 'rgba(255, 255, 255, 0.035)',
+  background: surfaceMutedColor,
   overflow: 'visible'
 }
 
@@ -615,7 +623,9 @@ const connectionItemStyle: CSSProperties = {
 }
 
 const connectionItemSeparatorStyle: CSSProperties = {
-  borderTop: '1px solid rgba(255, 255, 255, 0.06)'
+  borderTopWidth: 1,
+  borderTopStyle: 'solid',
+  borderTopColor: borderColor
 }
 
 const connectionInfoStyle: CSSProperties = {
@@ -623,7 +633,7 @@ const connectionInfoStyle: CSSProperties = {
   border: 0,
   outline: 0,
   background: 'transparent',
-  color: '#e8ecfb',
+  color: bodyTextColor,
   padding: '12px 14px',
   display: 'grid',
   gridTemplateColumns: '28px minmax(0, 1fr)',
@@ -636,8 +646,8 @@ const providerAvatarStyle: CSSProperties = {
   width: 26,
   height: 26,
   borderRadius: 999,
-  background: 'linear-gradient(135deg, rgba(127, 158, 232, 0.32), rgba(255, 255, 255, 0.07))',
-  color: '#eef2ff',
+  background: softControlColor,
+  color: accentColor,
   display: 'grid',
   placeItems: 'center',
   fontSize: bodyFontSize,
@@ -675,8 +685,8 @@ const renameInputStyle: CSSProperties = {
   border: 0,
   outline: 0,
   borderRadius: 6,
-  background: 'rgba(255, 255, 255, 0.08)',
-  color: '#f8fafc',
+  background: softControlColor,
+  color: bodyTextColor,
   padding: '2px 6px',
   fontSize: bodyFontSize,
   fontWeight: 700
@@ -708,7 +718,7 @@ const connectionMenuStyle: CSSProperties = {
   top: 46,
   minWidth: 112,
   borderRadius: 12,
-  background: '#202434',
+  background: surfaceMutedColor,
   padding: 6,
   boxShadow: '0 18px 36px rgba(0, 0, 0, 0.28)'
 }
@@ -719,7 +729,7 @@ const connectionMenuItemStyle: CSSProperties = {
   outline: 0,
   borderRadius: 9,
   background: 'transparent',
-  color: '#e8ecfb',
+  color: bodyTextColor,
   padding: '8px 10px',
   textAlign: 'left',
   cursor: 'pointer'
@@ -729,7 +739,7 @@ const fieldStyle: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: 7,
-  color: '#cbd3ee',
+  color: bodyTextColor,
   fontSize: bodyFontSize
 }
 
@@ -740,8 +750,8 @@ const inputStyle: CSSProperties = {
   borderRadius: 10,
   border: 0,
   outline: 0,
-  background: 'rgba(255, 255, 255, 0.045)',
-  color: '#f8fafc',
+  background: softControlColor,
+  color: bodyTextColor,
   padding: '9px 11px'
 }
 
@@ -750,8 +760,8 @@ const primaryActionStyle: CSSProperties = {
   outline: 0,
   borderRadius: 10,
   padding: '10px 18px',
-  background: 'rgba(127, 158, 232, 0.24)',
-  color: '#eef2ff',
+  background: softControlColor,
+  color: accentColor,
   fontWeight: 700,
   cursor: 'pointer'
 }
@@ -760,8 +770,8 @@ const secondaryActionStyle: CSSProperties = {
   borderRadius: 10,
   border: 0,
   outline: 0,
-  background: 'rgba(255, 255, 255, 0.045)',
-  color: '#e5e7eb',
+  background: softControlColor,
+  color: bodyTextColor,
   padding: '8px 12px',
   cursor: 'pointer'
 }
@@ -770,7 +780,7 @@ const overlayStyle: CSSProperties = {
   position: 'fixed',
   inset: 0,
   zIndex: 20,
-  background: 'rgba(18, 21, 32, 0.96)',
+  background: surfaceColor,
   display: 'grid',
   placeItems: 'center',
   padding: 24
@@ -785,7 +795,7 @@ const overlayCloseStyle: CSSProperties = {
   border: 0,
   outline: 0,
   borderRadius: 10,
-  background: 'rgba(255, 255, 255, 0.04)',
+  background: softControlColor,
   color: mutedTextColor,
   cursor: 'pointer'
 }
@@ -799,8 +809,8 @@ const overlayFormStyle: CSSProperties = {
   display: 'grid',
   gap: 18,
   borderRadius: 22,
-  border: '1px solid rgba(255, 255, 255, 0.07)',
-  background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.025))',
+  border: `1px solid ${borderColor}`,
+  background: surfaceMutedColor,
   boxShadow: '0 24px 64px rgba(0, 0, 0, 0.32)',
   padding: 24
 }
@@ -810,7 +820,7 @@ const segmentedControlStyle: CSSProperties = {
   display: 'grid',
   gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
   borderRadius: 10,
-  background: 'rgba(255, 255, 255, 0.035)',
+  background: surfaceColor,
   overflow: 'hidden'
 }
 
@@ -824,8 +834,8 @@ const segmentButtonStyle: CSSProperties = {
 }
 
 const activeSegmentButtonStyle: CSSProperties = {
-  background: 'rgba(255, 255, 255, 0.055)',
-  color: '#eef2ff',
+  background: softControlColor,
+  color: bodyTextColor,
   fontWeight: 700
 }
 
@@ -841,10 +851,10 @@ const connectionFeedbackTextStyle: CSSProperties = {
 
 const statusTextStyle: CSSProperties = {
   margin: 0,
-  color: '#86efac'
+  color: successTextColor
 }
 
 const errorTextStyle: CSSProperties = {
   margin: 0,
-  color: '#fca5a5'
+  color: dangerTextColor
 }

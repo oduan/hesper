@@ -34,7 +34,7 @@ async function chooseThemedOption(user: ReturnType<typeof userEvent.setup>, labe
   await user.click(await screen.findByRole('option', { name: option }))
 }
 
-const { listSessions, setWorkspace, setModel, setOutputMode, selectDirectory, onEvent, enqueue, listModels } = vi.hoisted(() => ({
+const { listSessions, setWorkspace, setModel, setOutputMode, selectDirectory, onEvent, enqueue, getSettings, updateSettings, listModels } = vi.hoisted(() => ({
   listSessions: vi.fn(async () => []),
   setWorkspace: vi.fn(async (input: { id: string; workspacePath?: string }) =>
     createSession({ id: input.id, workspacePath: input.workspacePath, updatedAt: '2026-06-10T03:05:00.000Z' })
@@ -48,6 +48,13 @@ const { listSessions, setWorkspace, setModel, setOutputMode, selectDirectory, on
   selectDirectory: vi.fn(async () => ({ canceled: false, path: 'D:/updated-workspace' })),
   onEvent: vi.fn(() => () => undefined),
   enqueue: vi.fn(async () => ({ runId: 'run-1' })),
+  getSettings: vi.fn(async () => ({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', fontSize: 14 })),
+  updateSettings: vi.fn(async (input: Partial<{ defaultModelId: string; defaultOutputMode: 'markdown' | 'html'; themeMode: 'system' | 'light' | 'dark'; fontSize: number }>) => ({
+    defaultModelId: input.defaultModelId ?? 'mock/hesper-fast',
+    defaultOutputMode: input.defaultOutputMode ?? 'markdown',
+    themeMode: input.themeMode ?? 'dark',
+    fontSize: input.fontSize ?? 14
+  })),
   listModels: vi.fn(async () => [
     { id: 'mock/hesper-fast', providerId: 'mock', modelName: 'mock/hesper-fast', displayName: 'Hesper Mock Fast', capabilities: ['streaming'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' },
     { id: 'gpt-4o', providerId: 'openai', modelName: 'gpt-4o', displayName: 'GPT-4o', capabilities: ['streaming', 'toolCalls'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' },
@@ -74,8 +81,8 @@ vi.mock('../src/ipc-client', () => ({
       subscribe: vi.fn()
     },
     settings: {
-      get: vi.fn(),
-      update: vi.fn()
+      get: getSettings,
+      update: updateSettings
     },
     models: {
       list: listModels,
@@ -103,9 +110,18 @@ describe('session settings and restore flow', () => {
     selectDirectory.mockClear()
     onEvent.mockReset()
     enqueue.mockReset()
+    getSettings.mockReset()
+    updateSettings.mockReset()
     listModels.mockClear()
     onEvent.mockImplementation(() => () => undefined)
     enqueue.mockResolvedValue({ runId: 'run-1' })
+    getSettings.mockResolvedValue({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', fontSize: 14 })
+    updateSettings.mockImplementation(async (input) => ({
+      defaultModelId: input.defaultModelId ?? 'mock/hesper-fast',
+      defaultOutputMode: input.defaultOutputMode ?? 'markdown',
+      themeMode: input.themeMode ?? 'dark',
+      fontSize: input.fontSize ?? 14
+    }))
   })
 
   it('restores the most recent active session instead of a newer archived session', async () => {

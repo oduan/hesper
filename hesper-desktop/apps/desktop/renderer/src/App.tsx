@@ -4,6 +4,8 @@ import { AppShell, ConversationView, type AppSection, type ConversationShortcutC
 import { AppStoreProvider, useAppStore } from './app-store'
 import { hesperApi } from './ipc-client'
 import { defaultFallbackModelId, fallbackSessionModelCatalog, loadAvailableModelCatalog, mergeModelOptions, type SessionModelCatalog } from './model-options'
+import type { AppSettings, UpdateSettingsInput } from '../../electron/ipc-contract'
+import { AppearanceSettingsPanel } from './appearance-settings-panel'
 import { ProviderSettingsPanel } from './provider-settings-panel'
 import { createShortcutHandler } from './shortcuts'
 
@@ -23,6 +25,15 @@ type SessionSettingsOverride = {
 type SessionSettingsField = keyof SessionSettingsOverride
 
 type RequestTokensBySession = Record<string, Partial<Record<SessionSettingsField, number>>>
+
+type SettingsCategory = 'ai' | 'appearance'
+
+const defaultAppSettings: AppSettings = {
+  defaultModelId: 'mock/hesper-fast',
+  defaultOutputMode: 'markdown',
+  themeMode: 'system',
+  fontSize: 14
+}
 
 export function clearSessionSendError(errors: Record<string, string>, sessionId: string): Record<string, string> {
   if (!(sessionId in errors)) {
@@ -108,6 +119,10 @@ function AppContent() {
   const [shortcutCommand, setShortcutCommand] = useState<ConversationShortcutCommand>()
   const [sessionModelCatalog, setSessionModelCatalog] = useState<SessionModelCatalog>(fallbackSessionModelCatalog)
   const [historyErrorsBySession, setHistoryErrorsBySession] = useState<Record<string, string>>({})
+  const [appSettings, setAppSettings] = useState<AppSettings>(defaultAppSettings)
+  const [settingsError, setSettingsError] = useState<string>()
+  const [activeSettingsCategory, setActiveSettingsCategory] = useState<SettingsCategory>('ai')
+  const resolvedThemeMode = useResolvedThemeMode(appSettings.themeMode)
   const loadedHistorySessionIdsRef = useRef<Set<string>>(new Set())
   const loadingHistorySessionIdsRef = useRef<Set<string>>(new Set())
   const explicitModelSelectionSessionIdsRef = useRef<Set<string>>(new Set())
@@ -119,10 +134,34 @@ function AppContent() {
   const latestRenameRequestIdBySessionRef = useRef<Record<string, number>>({})
   const nextSettingsRequestIdRef = useRef(0)
   const latestSettingsRequestIdRef = useRef<RequestTokensBySession>({})
+  const latestAppSettingsRequestIdRef = useRef(0)
 
   useEffect(() => {
     stateRef.current = state
   }, [state])
+
+  useEffect(() => {
+    let cancelled = false
+
+    void hesperApi.settings.get().then((settings) => {
+      if (!cancelled) {
+        setAppSettings(settings)
+        setSettingsError(undefined)
+      }
+    }).catch((error) => {
+      if (!cancelled) {
+        setSettingsError(error instanceof Error ? error.message : '未知设置加载错误')
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = resolvedThemeMode
+  }, [resolvedThemeMode])
 
   useEffect(() => {
     let cancelled = false
@@ -343,6 +382,40 @@ function AppContent() {
   const activeModelId = activeSession ? resolveSessionModelId(activeSession.defaultModelId, sessionModelCatalog.preferredModelId, explicitModelSelectionSessionIdsRef.current.has(activeSession.id)) : sessionModelCatalog.preferredModelId
   const activeModelOptions = activeSession?.defaultModelId ? mergeModelOptions(sessionModelCatalog.options, [activeModelId, activeSession.defaultModelId]) : mergeModelOptions(sessionModelCatalog.options, [activeModelId])
 
+  const updateAppSettings = async (patch: UpdateSettingsInput) => {
+    const requestId = latestAppSettingsRequestIdRef.current + 1
+    latestAppSettingsRequestIdRef.current = requestId
+    setSettingsError(undefined)
+    setAppSettings((current) => applySettingsPatch(current, patch))
+
+    try {
+      const updated = await hesperApi.settings.update(patch)
+      if (latestAppSettingsRequestIdRef.current === requestId) {
+        setAppSettings(updated)
+      }
+      return updated
+    } catch (error) {
+      if (latestAppSettingsRequestIdRef.current !== requestId) {
+        return appSettings
+      }
+
+      const message = error instanceof Error ? error.message : '未知设置保存错误'
+      setSettingsError(message)
+      try {
+        const current = await hesperApi.settings.get()
+        if (latestAppSettingsRequestIdRef.current === requestId) {
+          setAppSettings(current)
+        }
+        return current
+      } catch {
+        if (latestAppSettingsRequestIdRef.current === requestId) {
+          setAppSettings(defaultAppSettings)
+        }
+        return defaultAppSettings
+      }
+    }
+  }
+
   const renameSession = async (sessionId: string, title: string) => {
     const session = stateRef.current.sessions.find((candidate) => candidate.id === sessionId)
     const nextTitle = title.trim()
@@ -430,12 +503,15 @@ function AppContent() {
       activeSection={state.activeSection}
       title={isSessionsSection ? activeSession?.title ?? '新建会话' : getSectionTitle(state.activeSection)}
       platform={hesperApi.window.platform}
+      appearance={{ themeMode: resolvedThemeMode, fontSize: appSettings.fontSize }}
+      activeSettingsCategory={activeSettingsCategory}
       {...(state.activeSessionId ? { activeSessionId: state.activeSessionId } : {})}
       onCreateSession={async () => {
         dispatch({ type: 'section.selected', section: 'sessions' })
         await createSession(dispatch, sessionModelCatalog.preferredModelId)
       }}
       onSelectSection={(section) => dispatch({ type: 'section.selected', section })}
+      onSelectSettingsCategory={setActiveSettingsCategory}
       onSelectSession={(sessionId) => {
         dispatch({ type: 'section.selected', section: 'sessions' })
         dispatch({ type: 'session.selected', sessionId })
@@ -454,7 +530,13 @@ function AppContent() {
       onWindowClose={() => hesperApi.window.close()}
     >
       {!isSessionsSection ? (
-        state.activeSection === 'settings' ? <ProviderSettingsPanel onModelRegistryChanged={refreshSessionModelOptions} /> : <SectionPlaceholder section={state.activeSection} />
+        state.activeSection === 'settings' ? (
+          activeSettingsCategory === 'appearance' ? (
+            <AppearanceSettingsPanel settings={appSettings} {...(settingsError ? { error: settingsError } : {})} onUpdate={updateAppSettings} />
+          ) : (
+            <ProviderSettingsPanel onModelRegistryChanged={refreshSessionModelOptions} />
+          )
+        ) : <SectionPlaceholder section={state.activeSection} />
       ) : activeSession ? (
         <>
           {titleGenerationError ? (
@@ -539,6 +621,41 @@ function getSectionTitle(section: AppSection): string {
   return sectionTitles[section]
 }
 
+function applySettingsPatch(settings: AppSettings, patch: UpdateSettingsInput): AppSettings {
+  return {
+    ...settings,
+    ...(patch.defaultModelId !== undefined ? { defaultModelId: patch.defaultModelId } : {}),
+    ...(patch.defaultOutputMode !== undefined ? { defaultOutputMode: patch.defaultOutputMode } : {}),
+    ...(patch.themeMode !== undefined ? { themeMode: patch.themeMode } : {}),
+    ...(patch.fontSize !== undefined ? { fontSize: patch.fontSize } : {})
+  }
+}
+
+function getSystemThemeMode(): 'light' | 'dark' {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    return 'dark'
+  }
+  return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+}
+
+function useResolvedThemeMode(themeMode: AppSettings['themeMode']): 'light' | 'dark' {
+  const [systemThemeMode, setSystemThemeMode] = useState<'light' | 'dark'>(() => getSystemThemeMode())
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return undefined
+    }
+
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: light)')
+    const updateSystemThemeMode = () => setSystemThemeMode(mediaQuery.matches ? 'light' : 'dark')
+    updateSystemThemeMode()
+    mediaQuery.addEventListener?.('change', updateSystemThemeMode)
+    return () => mediaQuery.removeEventListener?.('change', updateSystemThemeMode)
+  }, [])
+
+  return themeMode === 'system' ? systemThemeMode : themeMode
+}
+
 function resolveSessionModelId(sessionModelId: string | undefined, preferredModelId: string, useSessionModelId = false): string {
   if (useSessionModelId && sessionModelId) {
     return sessionModelId
@@ -606,9 +723,9 @@ function SectionPlaceholder({ section }: { section: AppSection }) {
       aria-label={`${getSectionTitle(section)} 占位区域`}
       style={{
         height: '100%',
-        border: '1px solid rgba(148, 163, 184, 0.18)',
+        border: '1px solid var(--hesper-color-border, #414868)',
         borderRadius: 14,
-        background: 'rgba(15, 23, 42, 0.52)',
+        background: 'var(--hesper-color-surface-muted, #24283b)',
         display: 'grid',
         placeItems: 'center',
         textAlign: 'center',

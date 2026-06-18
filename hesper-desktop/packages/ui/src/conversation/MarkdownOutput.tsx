@@ -325,7 +325,7 @@ const inlineCodeStyle: CSSProperties = {
   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
   fontSize: '1em',
   color: darkTheme.color.text,
-  background: 'rgba(255, 255, 255, 0.07)',
+  background: 'var(--hesper-color-soft-control, rgba(122, 162, 247, 0.14))',
   borderRadius: darkTheme.radius.sm,
   padding: '1px 5px'
 }
@@ -372,7 +372,7 @@ const tableHeaderStyle: CSSProperties = {
   borderBottom: `1px solid ${darkTheme.color.border}`,
   color: darkTheme.color.text,
   fontWeight: 700,
-  background: 'rgba(255, 255, 255, 0.035)'
+  background: darkTheme.color.surfaceMuted
 }
 
 const tableCellStyle: CSSProperties = {

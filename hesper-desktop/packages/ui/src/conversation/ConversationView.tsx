@@ -560,7 +560,7 @@ const jumpToBottomButtonStyle = {
   border: 0,
   outline: 0,
   borderRadius: 999,
-  background: 'rgba(127, 158, 232, 0.26)',
+  background: 'var(--hesper-color-soft-control, rgba(122, 162, 247, 0.14))',
   color: darkTheme.color.text,
   display: 'inline-grid',
   placeItems: 'center',

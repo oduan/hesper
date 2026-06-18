@@ -82,7 +82,7 @@ describe('ui components', () => {
 
     fireEvent.contextMenu(sessionRow)
     const menu = screen.getByRole('menu', { name: '会话操作' })
-    expect(menu).toHaveStyle({ background: '#202434', borderRadius: '12px', padding: '4px 0' })
+    expect(menu).toHaveStyle({ background: 'var(--hesper-color-surface-muted, #24283b)', borderRadius: '12px', padding: '4px 0' })
     for (const label of ['重命名', '重新生成标题', '删除']) {
       const item = within(menu).getByRole('menuitem', { name: label })
       expect(item).toHaveStyle({ width: '100%', borderRadius: '0px', justifyContent: 'flex-start' })
@@ -126,7 +126,7 @@ describe('ui components', () => {
     expect(sendButton).toBeDisabled()
     expect(screen.getByLabelText('消息输入区')).toHaveStyle({ borderRadius: '20px' })
     expect(textarea).toHaveStyle({ borderRadius: '0' })
-    expect(textarea).toHaveStyle({ boxSizing: 'border-box', fontSize: '14px', lineHeight: '1.5', padding: '0px 1px' })
+    expect(textarea).toHaveStyle({ boxSizing: 'border-box', fontSize: 'var(--hesper-font-size, 14px)', lineHeight: '1.5', padding: '0px 1px' })
     expect(textarea).not.toHaveStyle({ font: 'inherit' })
     expect(textarea).toHaveClass('hesper-theme-scrollbar')
     expect(screen.queryByText('模型')).not.toBeInTheDocument()
@@ -220,7 +220,7 @@ describe('ui components', () => {
     )
 
     const bubble = screen.getByLabelText('用户消息')
-    expect(bubble).toHaveStyle({ fontSize: '14px' })
+    expect(bubble).toHaveStyle({ fontSize: 'var(--hesper-font-size, 14px)' })
     const timestamp = screen.getByLabelText(/^发送时间：/)
     expect(bubble).not.toContainElement(timestamp)
     expect(timestamp.parentElement).toContainElement(bubble)
@@ -244,7 +244,7 @@ describe('ui components', () => {
       />
     )
 
-    expect(screen.getByLabelText('助手消息')).toHaveStyle({ fontSize: '14px' })
+    expect(screen.getByLabelText('助手消息')).toHaveStyle({ fontSize: 'var(--hesper-font-size, 14px)' })
     expect(screen.queryByLabelText(/^发送时间：/)).not.toBeInTheDocument()
   })
 
@@ -485,7 +485,7 @@ describe('ui components', () => {
 
     const dialog = screen.getByRole('dialog', { name: '输出全屏查看' })
     expect(dialog).toHaveStyle({ position: 'fixed', top: '36px', right: '0px', bottom: '0px', left: '0px', display: 'block' })
-    expect(dialog).toHaveStyle({ background: '#171a26' })
+    expect(dialog).toHaveStyle({ background: 'var(--hesper-color-surface, #16161e)' })
     expect(dialog).not.toHaveStyle({ backdropFilter: 'blur(18px) saturate(140%)' })
 
     const contentShell = screen.getByLabelText('最大化输出内容')
@@ -724,7 +724,7 @@ describe('ui components', () => {
 
     const item = screen.getByRole('listitem')
     expect(within(item).getByText('工具：web_fetch-url')).toBeInTheDocument()
-    expect(within(item).getByText('搜索 Hesper 是什么')).toHaveStyle({ color: '#969db8' })
-    expect(within(item).getByText('{"url":"https://example.com"}')).toHaveStyle({ color: '#969db8' })
+    expect(within(item).getByText('搜索 Hesper 是什么')).toHaveStyle({ color: 'var(--hesper-color-text-muted, #737aa2)' })
+    expect(within(item).getByText('{"url":"https://example.com"}')).toHaveStyle({ color: 'var(--hesper-color-text-muted, #737aa2)' })
   })
 })

@@ -662,8 +662,8 @@ describe('registerIpcHandlers', () => {
     registerIpcHandlers({ ipcMain, dialog, container, savePersistence })
 
     await expect(
-      handles.get(ipcChannels.settingsUpdate)?.({ sender: { id: 1 } }, { defaultModelId: 'deepseek-chat', defaultOutputMode: 'html', themeMode: 'dark' })
-    ).resolves.toEqual({ defaultModelId: 'deepseek-chat', defaultOutputMode: 'html', themeMode: 'dark' })
+      handles.get(ipcChannels.settingsUpdate)?.({ sender: { id: 1 } }, { defaultModelId: 'deepseek-chat', defaultOutputMode: 'html', themeMode: 'dark', fontSize: 16 })
+    ).resolves.toEqual({ defaultModelId: 'deepseek-chat', defaultOutputMode: 'html', themeMode: 'dark', fontSize: 16 })
     expect(savePersistence).toHaveBeenCalled()
 
     const restoredContainer = createServiceContainer({ persistence, agentMode: 'mock' })
@@ -679,7 +679,8 @@ describe('registerIpcHandlers', () => {
     await expect(restoredHandles.get(ipcChannels.settingsGet)?.({ sender: { id: 1 } })).resolves.toEqual({
       defaultModelId: 'deepseek-chat',
       defaultOutputMode: 'html',
-      themeMode: 'dark'
+      themeMode: 'dark',
+      fontSize: 16
     })
   })
 
@@ -704,7 +705,7 @@ describe('registerIpcHandlers', () => {
     ).rejects.toThrow()
 
     await expect(
-      handles.get(ipcChannels.settingsUpdate)?.({ sender: { id: 1 } }, { defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'html' })
-    ).resolves.toMatchObject({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'html' })
+      handles.get(ipcChannels.settingsUpdate)?.({ sender: { id: 1 } }, { defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'html', fontSize: 15 })
+    ).resolves.toMatchObject({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'html', fontSize: 15 })
   })
 })

@@ -35,6 +35,7 @@ export type AppSettingsRecord = {
   defaultModelId: string
   defaultOutputMode: 'markdown' | 'html'
   themeMode: 'system' | 'light' | 'dark'
+  fontSize: number
   updatedAt: string
 }
 
@@ -378,10 +379,13 @@ function toAppSettingsRecord(row: any): AppSettingsRecord {
   if (!appSettingsThemeModes.has(themeMode as AppSettingsRecord['themeMode'])) {
     throw new Error(`Invalid app settings theme mode: ${themeMode}`)
   }
+  const parsedFontSize = Number(row.font_size ?? 14)
+  const fontSize = Number.isInteger(parsedFontSize) && parsedFontSize >= 12 && parsedFontSize <= 18 ? parsedFontSize : 14
   return {
     defaultModelId: String(row.default_model_id),
     defaultOutputMode: defaultOutputMode as AppSettingsRecord['defaultOutputMode'],
     themeMode: themeMode as AppSettingsRecord['themeMode'],
+    fontSize,
     updatedAt: String(row.updated_at)
   }
 }
@@ -467,10 +471,11 @@ export function createRepositories(db: Database): Persistence {
     settings: {
       async save(settings) {
         exec('DELETE FROM app_settings')
-        exec('INSERT INTO app_settings (default_model_id, default_output_mode, theme_mode, updated_at) VALUES (?, ?, ?, ?)', [
+        exec('INSERT INTO app_settings (default_model_id, default_output_mode, theme_mode, font_size, updated_at) VALUES (?, ?, ?, ?, ?)', [
           settings.defaultModelId,
           settings.defaultOutputMode,
           settings.themeMode,
+          settings.fontSize,
           settings.updatedAt
         ])
       },

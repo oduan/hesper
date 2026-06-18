@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import type { Session } from '@hesper/shared'
-import { darkTheme } from '../theme'
+import { createThemeVariables, darkTheme, type ThemeMode } from '../theme'
 import { ActivityRail, type AppSection } from './ActivityRail'
 import { EntityListPane } from './EntityListPane'
 import { TitleBar, type DesktopPlatform, type WindowControlAction } from './TitleBar'
@@ -11,9 +11,12 @@ export type AppShellProps = {
   title: string
   platform?: DesktopPlatform
   activeSessionId?: string
+  activeSettingsCategory?: 'ai' | 'appearance'
+  appearance?: { themeMode: ThemeMode; fontSize: number }
   onCreateSession?: () => void | Promise<void>
   onSelectSection?: (section: AppSection) => void
   onSelectSession?: (sessionId: string) => void
+  onSelectSettingsCategory?: (category: 'ai' | 'appearance') => void
   onRenameSession?: (sessionId: string, title: string) => void
   onRegenerateSessionTitle?: (sessionId: string) => void
   onDeleteSession?: (sessionId: string) => void
@@ -23,10 +26,13 @@ export type AppShellProps = {
   children?: ReactNode
 }
 
-export function AppShell({ sessions, activeSection, title, platform, activeSessionId, onCreateSession, onSelectSection, onSelectSession, onRenameSession, onRegenerateSessionTitle, onDeleteSession, onWindowMinimize, onWindowToggleMaximize, onWindowClose, children }: AppShellProps) {
+export function AppShell({ sessions, activeSection, title, platform, activeSessionId, activeSettingsCategory, appearance, onCreateSession, onSelectSection, onSelectSession, onSelectSettingsCategory, onRenameSession, onRegenerateSessionTitle, onDeleteSession, onWindowMinimize, onWindowToggleMaximize, onWindowClose, children }: AppShellProps) {
+  const themeVariables = createThemeVariables(appearance?.themeMode ?? 'dark', appearance?.fontSize ?? 14)
+
   return (
     <div
       style={{
+        ...themeVariables,
         height: '100vh',
         minHeight: 0,
         overflow: 'hidden',
@@ -65,7 +71,9 @@ export function AppShell({ sessions, activeSection, title, platform, activeSessi
           activeSection={activeSection}
           sessions={sessions}
           {...(activeSessionId ? { activeSessionId } : {})}
+          {...(activeSettingsCategory ? { activeSettingsCategory } : {})}
           {...(onSelectSession ? { onSelectSession } : {})}
+          {...(onSelectSettingsCategory ? { onSelectSettingsCategory } : {})}
           {...(onRenameSession ? { onRenameSession } : {})}
           {...(onRegenerateSessionTitle ? { onRegenerateSessionTitle } : {})}
           {...(onDeleteSession ? { onDeleteSession } : {})}

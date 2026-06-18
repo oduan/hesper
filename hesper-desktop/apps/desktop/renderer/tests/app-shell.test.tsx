@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, clearSessionSendError, pruneSessionSendErrors } from '../src/App'
 
-const { listSessions, createSession, updateTitle, deleteSession, generateTitle, listMessages, listRuns, listSteps, enqueue, onEvent, listProviders, listModels, minimizeWindow, toggleMaximizeWindow, closeWindow } = vi.hoisted(() => ({
+const { listSessions, createSession, updateTitle, deleteSession, generateTitle, listMessages, listRuns, listSteps, enqueue, onEvent, getSettings, updateSettings, listProviders, listModels, minimizeWindow, toggleMaximizeWindow, closeWindow } = vi.hoisted(() => ({
   listSessions: vi.fn(async () => []),
   createSession: vi.fn(async () => ({
     id: 'session-1',
@@ -44,6 +44,13 @@ const { listSessions, createSession, updateTitle, deleteSession, generateTitle, 
   listSteps: vi.fn(async (_runId?: string) => []),
   enqueue: vi.fn(async () => ({ runId: 'run-1' })),
   onEvent: vi.fn(() => () => undefined),
+  getSettings: vi.fn(async () => ({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', fontSize: 14 })),
+  updateSettings: vi.fn(async (input: Partial<{ defaultModelId: string; defaultOutputMode: 'markdown' | 'html'; themeMode: 'system' | 'light' | 'dark'; fontSize: number }>) => ({
+    defaultModelId: input.defaultModelId ?? 'mock/hesper-fast',
+    defaultOutputMode: input.defaultOutputMode ?? 'markdown',
+    themeMode: input.themeMode ?? 'dark',
+    fontSize: input.fontSize ?? 14
+  })),
   listProviders: vi.fn(async () => []),
   listModels: vi.fn(async () => []),
   minimizeWindow: vi.fn(async () => ({ minimized: true })),
@@ -63,6 +70,7 @@ vi.mock('../src/ipc-client', () => ({
     conversation: { listMessages, listRuns, listSteps },
     agent: { enqueue, onEvent },
     dialog: { selectDirectory: vi.fn() },
+    settings: { get: getSettings, update: updateSettings },
     providers: { list: listProviders },
     models: { list: listModels },
     window: {
@@ -99,6 +107,8 @@ describe('renderer App', () => {
     listSteps.mockReset()
     enqueue.mockReset()
     onEvent.mockReset()
+    getSettings.mockReset()
+    updateSettings.mockReset()
     listProviders.mockReset()
     listModels.mockReset()
     minimizeWindow.mockClear()
@@ -112,6 +122,13 @@ describe('renderer App', () => {
     listModels.mockResolvedValue([])
     enqueue.mockResolvedValue({ runId: 'run-1' })
     onEvent.mockImplementation(() => () => undefined)
+    getSettings.mockResolvedValue({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', fontSize: 14 })
+    updateSettings.mockImplementation(async (input) => ({
+      defaultModelId: input.defaultModelId ?? 'mock/hesper-fast',
+      defaultOutputMode: input.defaultOutputMode ?? 'markdown',
+      themeMode: input.themeMode ?? 'dark',
+      fontSize: input.fontSize ?? 14
+    }))
   })
 
   it('renders the high-density shell, native titlebar controls, and empty conversation state', async () => {
@@ -164,6 +181,41 @@ describe('renderer App', () => {
 
     expect(screen.getByRole('button', { name: '工具' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('region', { name: 'Tools 即将支持 占位区域' })).toBeInTheDocument()
+  })
+
+  it('opens appearance settings and persists theme mode and global font size', async () => {
+    const user = userEvent.setup()
+    let storedSettings: { defaultModelId: string; defaultOutputMode: 'markdown' | 'html'; themeMode: 'system' | 'light' | 'dark'; fontSize: number } = {
+      defaultModelId: 'mock/hesper-fast',
+      defaultOutputMode: 'markdown',
+      themeMode: 'dark',
+      fontSize: 14
+    }
+    getSettings.mockImplementation(async () => storedSettings)
+    updateSettings.mockImplementation(async (input) => {
+      storedSettings = { ...storedSettings, ...input }
+      return storedSettings
+    })
+
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: '设置' }))
+    await user.click(screen.getByRole('button', { name: '外观设置' }))
+
+    expect(screen.getByRole('region', { name: '外观设置面板' })).toBeInTheDocument()
+    const appRoot = screen.getByLabelText('主工作区').parentElement
+    await waitFor(() => expect(appRoot?.style.getPropertyValue('--hesper-color-background')).toBe('#1a1b26'))
+    expect(appRoot?.style.getPropertyValue('--hesper-color-accent')).toBe('#7aa2f7')
+
+    await user.click(screen.getByRole('button', { name: /^亮色/ }))
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledWith({ themeMode: 'light' }))
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe('light'))
+    expect(appRoot?.style.getPropertyValue('--hesper-color-background')).toBe('#dce0e8')
+    expect(appRoot?.style.getPropertyValue('--hesper-color-accent')).toBe('#8839ef')
+
+    await user.click(screen.getByRole('button', { name: '16px' }))
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledWith({ fontSize: 16 }))
+    expect(screen.getByLabelText('主工作区').parentElement?.style.getPropertyValue('--hesper-font-size')).toBe('16px')
   })
 
   it('loads the active session conversation history after sessions load and renders persisted messages', async () => {

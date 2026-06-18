@@ -63,7 +63,7 @@ export const OutputBlock = memo(function OutputBlock({ content, contentType, clo
             zIndex: 1,
             borderRadius: darkTheme.radius.md,
             border: 0,
-            background: 'rgba(255, 255, 255, 0.055)',
+            background: 'var(--hesper-color-soft-control, rgba(122, 162, 247, 0.14))',
             color: darkTheme.color.text,
             cursor: 'pointer'
           }}

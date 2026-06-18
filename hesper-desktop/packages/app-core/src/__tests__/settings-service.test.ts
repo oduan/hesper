@@ -63,7 +63,8 @@ describe('createSettingsService', () => {
     expect(settings).toEqual({
       defaultModelId: 'mock/hesper-fast',
       defaultOutputMode: 'markdown',
-      themeMode: 'system'
+      themeMode: 'system',
+      fontSize: 14
     })
   })
 
@@ -74,14 +75,16 @@ describe('createSettingsService', () => {
     await first.updateSettings({
       defaultModelId: 'deepseek-chat',
       defaultOutputMode: 'html',
-      themeMode: 'dark'
+      themeMode: 'dark',
+      fontSize: 16
     })
 
     const second = createSettingsService({ persistence })
     await expect(second.getSettings()).resolves.toEqual({
       defaultModelId: 'deepseek-chat',
       defaultOutputMode: 'html',
-      themeMode: 'dark'
+      themeMode: 'dark',
+      fontSize: 16
     })
   })
 
@@ -101,7 +104,8 @@ describe('createSettingsService', () => {
     await expect(service.getSettings()).resolves.toEqual({
       defaultModelId: 'deepseek-chat',
       defaultOutputMode: 'markdown',
-      themeMode: 'dark'
+      themeMode: 'dark',
+      fontSize: 14
     })
   })
 
@@ -137,12 +141,14 @@ describe('createSettingsService', () => {
     await expect(secondUpdate).resolves.toEqual({
       defaultModelId: 'mock/hesper-fast',
       defaultOutputMode: 'markdown',
-      themeMode: 'dark'
+      themeMode: 'dark',
+      fontSize: 14
     })
     await expect(service.getSettings()).resolves.toEqual({
       defaultModelId: 'mock/hesper-fast',
       defaultOutputMode: 'markdown',
-      themeMode: 'dark'
+      themeMode: 'dark',
+      fontSize: 14
     })
   })
 })
