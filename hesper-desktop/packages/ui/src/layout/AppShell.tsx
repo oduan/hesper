@@ -11,6 +11,7 @@ export type AppShellProps = {
   title: string
   platform?: DesktopPlatform
   activeSessionId?: string
+  runningSessionIds?: string[]
   activeSettingsCategory?: 'ai' | 'appearance'
   appearance?: { themeMode: ThemeMode; fontSize: number }
   onCreateSession?: () => void | Promise<void>
@@ -26,7 +27,7 @@ export type AppShellProps = {
   children?: ReactNode
 }
 
-export function AppShell({ sessions, activeSection, title, platform, activeSessionId, activeSettingsCategory, appearance, onCreateSession, onSelectSection, onSelectSession, onSelectSettingsCategory, onRenameSession, onRegenerateSessionTitle, onDeleteSession, onWindowMinimize, onWindowToggleMaximize, onWindowClose, children }: AppShellProps) {
+export function AppShell({ sessions, activeSection, title, platform, activeSessionId, runningSessionIds, activeSettingsCategory, appearance, onCreateSession, onSelectSection, onSelectSession, onSelectSettingsCategory, onRenameSession, onRegenerateSessionTitle, onDeleteSession, onWindowMinimize, onWindowToggleMaximize, onWindowClose, children }: AppShellProps) {
   const themeVariables = createThemeVariables(appearance?.themeMode ?? 'dark', appearance?.fontSize ?? 14)
 
   return (
@@ -71,6 +72,7 @@ export function AppShell({ sessions, activeSection, title, platform, activeSessi
           activeSection={activeSection}
           sessions={sessions}
           {...(activeSessionId ? { activeSessionId } : {})}
+          {...(runningSessionIds ? { runningSessionIds } : {})}
           {...(activeSettingsCategory ? { activeSettingsCategory } : {})}
           {...(onSelectSession ? { onSelectSession } : {})}
           {...(onSelectSettingsCategory ? { onSelectSettingsCategory } : {})}

@@ -120,6 +120,48 @@ describe('ui components', () => {
     expect(onSelectSection).toHaveBeenCalledWith('tools')
   })
 
+  it('shows the same nine-dot running animation before running session titles', () => {
+    render(
+      <AppShell
+        sessions={[
+          {
+            id: 'session-running',
+            title: '正在执行会话',
+            status: 'active',
+            outputMode: 'markdown',
+            createdAt: now,
+            updatedAt: now
+          },
+          {
+            id: 'session-idle',
+            title: '空闲会话',
+            status: 'active',
+            outputMode: 'markdown',
+            createdAt: now,
+            updatedAt: now
+          }
+        ]}
+        activeSection="sessions"
+        activeSessionId="session-running"
+        runningSessionIds={['session-running']}
+        title="运行中会话测试"
+      />
+    )
+
+    const runningRow = screen.getByRole('button', { name: '正在执行会话' })
+    const idleRow = screen.getByRole('button', { name: '空闲会话' })
+    const runningIcon = runningRow.querySelector('[data-step-status-icon="running-nine-dot-sweep"]')
+    expect(runningIcon).toBeInTheDocument()
+    expect(runningIcon).toHaveAttribute('aria-hidden', 'true')
+    expect(runningIcon).not.toHaveAttribute('aria-label')
+    const runningDots = [...runningIcon?.querySelectorAll('[data-step-running-dot]') ?? []]
+    expect(runningDots.map((dot) => dot.getAttribute('data-step-running-dot')).join('')).toBe('321478965')
+    expect(runningDots[0]).toHaveStyle({ animationDuration: '1260ms', animationDelay: '0ms' })
+    expect(runningDots.at(-1)).toHaveStyle({ animationDelay: '720ms' })
+    expect(runningIcon?.querySelector('style')).toHaveTextContent('34%')
+    expect(idleRow.querySelector('[data-step-status-icon="running-nine-dot-sweep"]')).not.toBeInTheDocument()
+  })
+
   it('supports shift range selection for session context bulk actions while rename stays target-only', async () => {
     const user = userEvent.setup()
     const onSelectSession = vi.fn()

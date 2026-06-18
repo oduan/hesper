@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import type { Session } from '@hesper/shared'
+import { RunningStatusIcon } from '../conversation/RunningStatusIcon'
 import { darkTheme } from '../theme'
 import type { AppSection } from './ActivityRail'
 
@@ -8,6 +9,7 @@ export type EntityListPaneProps = {
   activeSection: AppSection
   sessions: Session[]
   activeSessionId?: string
+  runningSessionIds?: string[]
   activeSettingsCategory?: 'ai' | 'appearance'
   onSelectSession?: (sessionId: string) => void
   onSelectSettingsCategory?: (category: 'ai' | 'appearance') => void
@@ -49,6 +51,7 @@ export function EntityListPane({
   activeSection,
   sessions,
   activeSessionId,
+  runningSessionIds = [],
   activeSettingsCategory = 'ai',
   onSelectSession,
   onSelectSettingsCategory,
@@ -57,6 +60,7 @@ export function EntityListPane({
   onDeleteSession
 }: EntityListPaneProps) {
   const heading = title ?? (activeSection === 'sessions' ? '所有会话' : activeSection === 'settings' ? '设置' : '列表')
+  const runningSessionIdSet = new Set(runningSessionIds)
   const [sessionMenu, setSessionMenu] = useState<SessionMenuState>()
   const [editingSession, setEditingSession] = useState<EditingSessionState>()
   const [selectedSessionIds, setSelectedSessionIds] = useState<string[]>([])
@@ -180,6 +184,7 @@ export function EntityListPane({
             {sessions.map((session) => {
               const isActive = session.id === activeSessionId
               const isSelected = selectedSessionIds.includes(session.id)
+              const isRunning = runningSessionIdSet.has(session.id)
               const sessionRowClassName = `hesper-list-row${isActive ? ' is-active' : ''}${isSelected ? ' is-selected' : ''}`
               return (
                 <li key={session.id}>
@@ -227,7 +232,10 @@ export function EntityListPane({
                         openSessionMenu(session.id, event.clientX, event.clientY)
                       }}
                     >
-                      <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{session.title}</div>
+                      <div style={sessionTitleRowStyle}>
+                        {isRunning ? <RunningStatusIcon ariaHidden /> : null}
+                        <span style={sessionTitleTextStyle}>{session.title}</span>
+                      </div>
                     </button>
                   )}
                 </li>
@@ -299,6 +307,22 @@ const settingsCategories: Array<{ id: 'ai' | 'appearance'; title: string; label:
 
 const sessionRowStyle: CSSProperties = {
   alignItems: 'center'
+}
+
+const sessionTitleRowStyle: CSSProperties = {
+  minWidth: 0,
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  fontWeight: 600,
+  overflow: 'hidden'
+}
+
+const sessionTitleTextStyle: CSSProperties = {
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap'
 }
 
 const renameInputStyle: CSSProperties = {

@@ -375,6 +375,12 @@ function AppContent() {
   const activeSendError = activeSession ? sendErrorsBySession[activeSession.id] : undefined
   const activeHistoryError = activeSession ? historyErrorsBySession[activeSession.id] : undefined
   const isSessionsSection = state.activeSection === 'sessions'
+  const runningSessionIds = useMemo(() => {
+    const visibleSessionIds = new Set(effectiveSessions.map((session) => session.id))
+    return [...new Set(Object.values(state.runsById)
+      .filter((run) => run.status === 'running' && visibleSessionIds.has(run.sessionId))
+      .map((run) => run.sessionId))]
+  }, [effectiveSessions, state.runsById])
   const activeRunId = activeSession ? state.latestRunIdBySession[activeSession.id] : undefined
   const activeSteps = activeRunId ? state.stepsByRun[activeRunId] ?? [] : []
   const activeStreamingText = activeRunId ? state.streamingByRun[activeRunId] ?? '' : ''
@@ -524,6 +530,7 @@ function AppContent() {
       platform={hesperApi.window.platform}
       appearance={{ themeMode: resolvedThemeMode, fontSize: appSettings.fontSize }}
       activeSettingsCategory={activeSettingsCategory}
+      runningSessionIds={runningSessionIds}
       {...(state.activeSessionId ? { activeSessionId: state.activeSessionId } : {})}
       onCreateSession={async () => {
         dispatch({ type: 'section.selected', section: 'sessions' })

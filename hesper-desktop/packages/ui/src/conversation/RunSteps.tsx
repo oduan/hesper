@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from
 import type { RunStep, RunStepStatus } from '@hesper/shared'
 import { darkTheme } from '../theme'
 import { MarkdownOutput } from './MarkdownOutput'
+import { RunningStatusIcon } from './RunningStatusIcon'
 
 export type RunStepsProps = {
   steps: RunStep[]
@@ -160,37 +161,6 @@ function createStepDisplayParts(step: RunStep): StepDisplayParts {
   }
 }
 
-const runningDotScanOrder = [3, 2, 1, 4, 7, 8, 9, 6, 5]
-
-function RunningStatusIcon() {
-  return (
-    <span
-      aria-label={`步骤状态：${statusLabels.running}`}
-      data-step-status-icon="running-nine-dot-sweep"
-      style={runningStatusIconStyle}
-    >
-      <style>{runningDotAnimationCss}</style>
-      {runningDotScanOrder.map((dot, index) => {
-        const row = Math.ceil(dot / 3)
-        const column = ((dot - 1) % 3) + 1
-        return (
-          <span
-            key={dot}
-            aria-hidden="true"
-            data-step-running-dot={dot}
-            style={{
-              ...runningDotStyle,
-              gridRow: row,
-              gridColumn: column,
-              animationDelay: `${index * 90}ms`
-            }}
-          />
-        )
-      })}
-    </span>
-  )
-}
-
 function CompletedStatusIcon({ status }: { status: 'succeeded' | 'failed' }) {
   const isSucceeded = status === 'succeeded'
   const color = getStatusColor(status)
@@ -229,7 +199,7 @@ function PendingStatusIcon() {
 }
 
 function StatusDot({ status }: { status: RunStepStatus }) {
-  if (status === 'running') return <RunningStatusIcon />
+  if (status === 'running') return <RunningStatusIcon ariaLabel={`步骤状态：${statusLabels.running}`} />
   if (status === 'succeeded' || status === 'failed') return <CompletedStatusIcon status={status} />
   return <PendingStatusIcon />
 }
@@ -412,15 +382,6 @@ export function RunSteps({ steps, autoExpanded = false, runStartedAt, runEndedAt
   )
 }
 
-const runningDotAnimationCss = `
-@keyframes hesper-step-running-dot-sweep {
-  0%, 100% { opacity: 0.24; transform: scale(0.78); }
-  10% { opacity: 1; transform: scale(1.24); }
-  24% { opacity: 0.68; transform: scale(1.04); }
-  34% { opacity: 0.24; transform: scale(0.78); }
-}
-`
-
 const stepRowHoverCss = `
 [data-hesper-step-row-button]:hover [data-hesper-step-row-text],
 [data-hesper-step-row-button]:focus-visible [data-hesper-step-row-text] {
@@ -497,25 +458,6 @@ const statusIconSlotStyle: CSSProperties = {
   placeItems: 'center',
   alignSelf: 'center',
   justifySelf: 'center'
-}
-
-const runningStatusIconStyle: CSSProperties = {
-  ...statusIconSlotStyle,
-  gridTemplateColumns: 'repeat(3, 4px)',
-  gridTemplateRows: 'repeat(3, 4px)',
-  gap: 2
-}
-
-const runningDotStyle: CSSProperties = {
-  width: 3.5,
-  height: 3.5,
-  borderRadius: 999,
-  background: darkTheme.color.accent,
-  opacity: 0.28,
-  animationName: 'hesper-step-running-dot-sweep',
-  animationDuration: '1260ms',
-  animationTimingFunction: 'linear',
-  animationIterationCount: 'infinite'
 }
 
 const pendingStatusIconStyle: CSSProperties = {
