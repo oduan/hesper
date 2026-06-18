@@ -129,7 +129,7 @@ describe('pi event mapping', () => {
   })
 
   it('maps tool execution start to a running tool step', () => {
-    const events = mapPiEventToHesperEvents('run-1', {
+    const events = mapPiEventToHesperEvents('run-tool-start', {
       type: 'tool_execution_start',
       toolCallId: 'tool-call-1',
       toolName: 'read_file',
@@ -140,8 +140,8 @@ describe('pi event mapping', () => {
       expect.objectContaining({
         type: 'step.created',
         step: expect.objectContaining({
-          id: 'step-run-1-tool-tool-call-1',
-          runId: 'run-1',
+          id: 'step-run-tool-start-tool-tool-call-1',
+          runId: 'run-tool-start',
           type: 'tool_call',
           status: 'running',
           title: '工具：read_file'
@@ -150,14 +150,92 @@ describe('pi event mapping', () => {
     ])
   })
 
+  it('keeps separate steps for multiple tool calls that do not provide tool call ids', () => {
+    const firstStart = mapPiEventToHesperEvents('run-anonymous-tools', {
+      type: 'tool_execution_start',
+      toolCallId: '',
+      toolName: 'web_fetch-url',
+      args: { url: 'https://example.com/a' }
+    })
+    const secondStart = mapPiEventToHesperEvents('run-anonymous-tools', {
+      type: 'tool_execution_start',
+      toolCallId: '',
+      toolName: 'web_fetch-url',
+      args: { url: 'https://example.com/b' }
+    })
+    const firstEnd = mapPiEventToHesperEvents('run-anonymous-tools', {
+      type: 'tool_execution_end',
+      toolCallId: '',
+      toolName: 'web_fetch-url',
+      result: { content: 'a' },
+      isError: false
+    })
+    const secondEnd = mapPiEventToHesperEvents('run-anonymous-tools', {
+      type: 'tool_execution_end',
+      toolCallId: '',
+      toolName: 'web_fetch-url',
+      result: { content: 'b' },
+      isError: false
+    })
+
+    const firstStartId = (firstStart[0] as Extract<(typeof firstStart)[number], { type: 'step.created' }>).step.id
+    const secondStartId = (secondStart[0] as Extract<(typeof secondStart)[number], { type: 'step.created' }>).step.id
+    const firstEndId = (firstEnd[0] as Extract<(typeof firstEnd)[number], { type: 'step.updated' }>).step.id
+    const secondEndId = (secondEnd[0] as Extract<(typeof secondEnd)[number], { type: 'step.updated' }>).step.id
+
+    expect(firstStartId).toBe('step-run-anonymous-tools-tool-anonymous-1')
+    expect(secondStartId).toBe('step-run-anonymous-tools-tool-anonymous-2')
+    expect(firstEndId).toBe(firstStartId)
+    expect(secondEndId).toBe(secondStartId)
+  })
+
+  it('keeps separate steps when a provider reuses the same tool call id', () => {
+    const firstStart = mapPiEventToHesperEvents('run-duplicate-tools', {
+      type: 'tool_execution_start',
+      toolCallId: 'call-reused',
+      toolName: 'web_fetch-url',
+      args: { url: 'https://example.com/a' }
+    })
+    const secondStart = mapPiEventToHesperEvents('run-duplicate-tools', {
+      type: 'tool_execution_start',
+      toolCallId: 'call-reused',
+      toolName: 'web_fetch-url',
+      args: { url: 'https://example.com/b' }
+    })
+    const firstEnd = mapPiEventToHesperEvents('run-duplicate-tools', {
+      type: 'tool_execution_end',
+      toolCallId: 'call-reused',
+      toolName: 'web_fetch-url',
+      result: { content: 'a' },
+      isError: false
+    })
+    const secondEnd = mapPiEventToHesperEvents('run-duplicate-tools', {
+      type: 'tool_execution_end',
+      toolCallId: 'call-reused',
+      toolName: 'web_fetch-url',
+      result: { content: 'b' },
+      isError: false
+    })
+
+    const firstStartId = (firstStart[0] as Extract<(typeof firstStart)[number], { type: 'step.created' }>).step.id
+    const secondStartId = (secondStart[0] as Extract<(typeof secondStart)[number], { type: 'step.created' }>).step.id
+    const firstEndId = (firstEnd[0] as Extract<(typeof firstEnd)[number], { type: 'step.updated' }>).step.id
+    const secondEndId = (secondEnd[0] as Extract<(typeof secondEnd)[number], { type: 'step.updated' }>).step.id
+
+    expect(firstStartId).toBe('step-run-duplicate-tools-tool-call-reused')
+    expect(secondStartId).toBe('step-run-duplicate-tools-tool-call-reused-2')
+    expect(firstEndId).toBe(firstStartId)
+    expect(secondEndId).toBe(secondStartId)
+  })
+
   it('maps tool execution end to a tool_call step update without changing step id or type', () => {
-    const startEvents = mapPiEventToHesperEvents('run-1', {
+    const startEvents = mapPiEventToHesperEvents('run-tool-end', {
       type: 'tool_execution_start',
       toolCallId: 'tool-call-1',
       toolName: 'read_file',
       args: { path: 'README.md' }
     })
-    const endEvents = mapPiEventToHesperEvents('run-1', {
+    const endEvents = mapPiEventToHesperEvents('run-tool-end', {
       type: 'tool_execution_end',
       toolCallId: 'tool-call-1',
       toolName: 'read_file',
@@ -169,8 +247,8 @@ describe('pi event mapping', () => {
       expect.objectContaining({
         type: 'step.updated',
         step: expect.objectContaining({
-          id: 'step-run-1-tool-tool-call-1',
-          runId: 'run-1',
+          id: 'step-run-tool-end-tool-tool-call-1',
+          runId: 'run-tool-end',
           type: 'tool_call',
           status: 'succeeded',
           title: '工具：read_file'

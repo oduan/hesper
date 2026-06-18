@@ -16,6 +16,9 @@ type ThinkingState = {
 
 type RunState = {
   commentaryCounter: number
+  anonymousToolCounter: number
+  toolCountsByKey: Map<string, number>
+  pendingToolStepIdsByKey: Map<string, string[]>
   thinkingByContentIndex: Map<number, ThinkingState>
 }
 
@@ -35,7 +38,13 @@ function nowIso(): string {
 function getRunState(runId: string): RunState {
   const existing = runStates.get(runId)
   if (existing) return existing
-  const created: RunState = { commentaryCounter: 0, thinkingByContentIndex: new Map() }
+  const created: RunState = {
+    commentaryCounter: 0,
+    anonymousToolCounter: 0,
+    toolCountsByKey: new Map(),
+    pendingToolStepIdsByKey: new Map(),
+    thinkingByContentIndex: new Map()
+  }
   runStates.set(runId, created)
   return created
 }
@@ -113,18 +122,62 @@ function normalizeContext(context: string | MappingContext): MappingContext {
   return typeof context === 'string' ? { runId: context } : context
 }
 
+function getToolCallId(event: PiEventLike): string | undefined {
+  return typeof event.toolCallId === 'string' && event.toolCallId.trim() ? event.toolCallId : undefined
+}
+
+function toolCorrelationKey(event: PiEventLike): string {
+  return getToolCallId(event) ?? `anonymous:${String(event.toolName ?? 'unknown')}`
+}
+
+function queuePendingToolStepId(state: RunState, key: string, stepId: string): void {
+  const pending = state.pendingToolStepIdsByKey.get(key) ?? []
+  pending.push(stepId)
+  state.pendingToolStepIdsByKey.set(key, pending)
+}
+
+function takePendingToolStepId(state: RunState, key: string, runId: string, event: PiEventLike): string {
+  const pending = state.pendingToolStepIdsByKey.get(key) ?? []
+  const stepId = pending.shift()
+  if (pending.length === 0) {
+    state.pendingToolStepIdsByKey.delete(key)
+  } else {
+    state.pendingToolStepIdsByKey.set(key, pending)
+  }
+  if (stepId) return stepId
+
+  const toolCallId = getToolCallId(event)
+  return `step-${runId}-tool-${toolCallId ?? 'unknown'}`
+}
+
+function createToolStepId(runId: string, event: PiEventLike, state: RunState, key: string): string {
+  const toolCallId = getToolCallId(event)
+  if (!toolCallId) {
+    state.anonymousToolCounter += 1
+    return `step-${runId}-tool-anonymous-${state.anonymousToolCounter}`
+  }
+
+  const nextCount = (state.toolCountsByKey.get(key) ?? 0) + 1
+  state.toolCountsByKey.set(key, nextCount)
+  return nextCount === 1 ? `step-${runId}-tool-${toolCallId}` : `step-${runId}-tool-${toolCallId}-${nextCount}`
+}
+
 function createToolStepEvent(kind: StepEvent['type'], runId: string, event: PiEventLike): StepEvent {
-  const stepId = `step-${runId}-tool-${String(event.toolCallId ?? 'unknown')}`
+  const state = getRunState(runId)
+  const key = toolCorrelationKey(event)
   const title = `工具：${String(event.toolName ?? 'unknown')}`
   const argsText = stringify(event.args)
 
   if (kind === 'step.created') {
+    const stepId = createToolStepId(runId, event, state, key)
+    queuePendingToolStepId(state, key, stepId)
     return {
       type: 'step.created',
       step: createStep(runId, stepId, 'tool_call', 'running', title, argsText, argsText)
     }
   }
 
+  const stepId = takePendingToolStepId(state, key, runId, event)
   const resultText = stringify(event.result)
   const isError = event.isError === true
   return {
