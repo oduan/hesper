@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type WheelEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type WheelEvent } from 'react'
 import type { Message, RunStep, Session } from '@hesper/shared'
 import { darkTheme } from '../theme'
 import { Composer, type ModelOptionGroup } from './Composer'
@@ -35,6 +35,39 @@ type AnchorEntry = {
   kind: NavigationItem['kind']
   label: string
 }
+
+let globalCtrlWheelListenerInstalled = false
+
+function ensureGlobalCtrlWheelListener() {
+  if (globalCtrlWheelListenerInstalled || typeof window === 'undefined') {
+    return
+  }
+
+  window.addEventListener('wheel', (event) => {
+    if (!(event.ctrlKey || event.metaKey) || (event.deltaX === 0 && event.deltaY === 0)) {
+      return
+    }
+
+    const root = getElementTarget(event.target)?.closest('[data-hesper-conversation-root="true"]')
+    if (!(root instanceof HTMLElement)) {
+      return
+    }
+
+    const scroller = root.querySelector<HTMLElement>('[data-hesper-message-list="true"]')
+    if (!scroller) {
+      return
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
+    event.stopImmediatePropagation()
+    scrollElementByDelta(scroller, event.deltaX, event.deltaY)
+    scroller.dispatchEvent(new Event('scroll', { bubbles: false }))
+  }, { capture: true, passive: false })
+  globalCtrlWheelListenerInstalled = true
+}
+
+ensureGlobalCtrlWheelListener()
 
 function trimLabel(value: string, fallback: string): string {
   const compact = value.replace(/\s+/g, ' ').trim()
@@ -78,9 +111,9 @@ function isInsideOutputScrollArea(target: EventTarget | null): boolean {
   return Boolean(getElementTarget(target)?.closest('[data-hesper-output-scroll="true"]'))
 }
 
-function scrollElementByWheel(element: HTMLElement, event: WheelEvent): void {
-  element.scrollTop += event.deltaY
-  element.scrollLeft += event.deltaX
+function scrollElementByDelta(element: HTMLElement, deltaX: number, deltaY: number): void {
+  element.scrollTop += deltaY
+  element.scrollLeft += deltaX
 }
 
 export function ConversationView({
@@ -101,6 +134,7 @@ export function ConversationView({
 }: ConversationViewProps) {
   const [closeFullscreenSignal, setCloseFullscreenSignal] = useState(0)
   const [showJumpToBottom, setShowJumpToBottom] = useState(false)
+  ensureGlobalCtrlWheelListener()
   const anchorRefs = useRef<Record<string, HTMLElement | null>>({})
   const messagesScrollRef = useRef<HTMLDivElement | null>(null)
   const pinnedToBottomRef = useRef(true)
@@ -221,7 +255,7 @@ export function ConversationView({
     setShowJumpToBottom(false)
   }
 
-  const updateMessagesScrollState = () => {
+  const updateMessagesScrollState = useCallback(() => {
     const element = messagesScrollRef.current
     if (!element) {
       return
@@ -232,26 +266,34 @@ export function ConversationView({
     if (atBottom) {
       setShowJumpToBottom(false)
     }
-  }
+  }, [])
+
+  const scrollMessagesByDelta = useCallback((deltaX: number, deltaY: number) => {
+    const element = messagesScrollRef.current
+    if (!element || (deltaX === 0 && deltaY === 0)) {
+      return
+    }
+
+    scrollElementByDelta(element, deltaX, deltaY)
+    updateMessagesScrollState()
+  }, [updateMessagesScrollState])
 
   const handleMessagesScroll = () => {
     updateMessagesScrollState()
   }
 
   const handleMessagesWheelCapture = (event: WheelEvent<HTMLDivElement>) => {
-    if (isInsideOutputScrollArea(event.target) && !event.ctrlKey) {
+    if (isInsideOutputScrollArea(event.target) && !event.ctrlKey && !event.metaKey) {
       return
     }
 
-    const element = messagesScrollRef.current
-    if (!element || (event.deltaX === 0 && event.deltaY === 0)) {
+    if (event.deltaX === 0 && event.deltaY === 0) {
       return
     }
 
     event.preventDefault()
     event.stopPropagation()
-    scrollElementByWheel(element, event)
-    updateMessagesScrollState()
+    scrollMessagesByDelta(event.deltaX, event.deltaY)
   }
 
   useEffect(() => {
@@ -306,7 +348,7 @@ export function ConversationView({
   }, [contentSignature])
 
   return (
-    <div style={{ height: '100%', minHeight: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', fontSize: 13 }}>
+    <div data-hesper-conversation-root="true" style={{ height: '100%', minHeight: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', fontSize: 13 }}>
       <section
         aria-label="会话详情"
         style={{ display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr) auto', gap: darkTheme.spacing.md, minWidth: 0, minHeight: 0 }}
@@ -337,6 +379,7 @@ export function ConversationView({
             ref={messagesScrollRef}
             aria-label="消息列表"
             className="hesper-theme-scrollbar"
+            data-hesper-message-list="true"
             onScroll={handleMessagesScroll}
             onWheelCapture={handleMessagesWheelCapture}
             style={{

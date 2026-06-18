@@ -281,6 +281,11 @@ describe('ui components', () => {
 
     fireEvent.wheel(conversationScroller, { deltaY: 20 })
     expect(conversationScroller.scrollTop).toBe(52)
+
+    const ctrlWheelOnConversationChrome = new WheelEvent('wheel', { deltaY: 80, ctrlKey: true, bubbles: true, cancelable: true })
+    screen.getByRole('heading', { name: '测试会话' }).dispatchEvent(ctrlWheelOnConversationChrome)
+    expect(ctrlWheelOnConversationChrome.defaultPrevented).toBe(true)
+    expect(conversationScroller.scrollTop).toBe(132)
   })
 
   it('renders output blocks with CSP wrapped html, themed scrollbars and fullscreen dialog', async () => {
