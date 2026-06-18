@@ -36,8 +36,20 @@ describe('ui components', () => {
 
     render(
       <AppShell
-        sessions={[]}
+        sessions={[
+          {
+            id: 'session-list-1',
+            title: '视频脚本生成',
+            status: 'active',
+            workspacePath: 'C:/workspace',
+            defaultModelId: 'gpt-4o',
+            outputMode: 'markdown',
+            createdAt: now,
+            updatedAt: now
+          }
+        ]}
         activeSection="sessions"
+        activeSessionId="session-list-1"
         title="构建 hesper MVP"
         onCreateSession={onCreateSession}
         onSelectSection={onSelectSection}
@@ -54,7 +66,20 @@ describe('ui components', () => {
     expect(screen.getByRole('button', { name: '所有会话' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByLabelText('功能栏')).toHaveStyle({ boxSizing: 'border-box' })
     expect(screen.getByLabelText('实体列表')).toHaveStyle({ boxSizing: 'border-box' })
+    expect(screen.getByLabelText('主工作区')).toHaveStyle({ gridTemplateColumns: '204px 320px minmax(0, 1fr)' })
+    const sessionRow = screen.getByRole('button', { name: '视频脚本生成' })
+    expect(sessionRow).toHaveTextContent('视频脚本生成')
+    expect(sessionRow).not.toHaveTextContent('gpt-4o')
+    expect(sessionRow).not.toHaveTextContent('C:/workspace')
     expect(screen.getByLabelText('窗口标题栏')).toHaveClass('titlebar-drag')
+
+    fireEvent.contextMenu(sessionRow)
+    const menu = screen.getByRole('menu', { name: '会话操作' })
+    expect(menu).toHaveStyle({ background: '#202434', borderRadius: '12px', padding: '4px 0' })
+    for (const label of ['重命名', '重新生成标题', '删除']) {
+      const item = within(menu).getByRole('menuitem', { name: label })
+      expect(item).toHaveStyle({ width: '100%', borderRadius: '0px', justifyContent: 'flex-start' })
+    }
 
     await user.click(screen.getByRole('button', { name: '最小化窗口' }))
     await user.click(screen.getByRole('button', { name: '最大化窗口' }))

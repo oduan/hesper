@@ -1,4 +1,4 @@
-import { AgentRuntime, MockAgentAdapter, PiCoreAgentAdapter, createPiAgentTools, createRegistryModelResolver } from '@hesper/agent-runtime'
+import { AgentRuntime, MockAgentAdapter, PiCoreAgentAdapter, createPiAgentTools, createRegistryModelResolver, createSessionTitleGenerator } from '@hesper/agent-runtime'
 import {
   createConversationService,
   createCredentialVaultService,
@@ -64,6 +64,14 @@ export function createServiceContainer(options: ServiceContainerOptions) {
       }
     })
   })
+  const sessionTitleGenerator = createSessionTitleGenerator({
+    registry: {
+      ensureReady: () => modelProviderService.ensureBuiltinProviders(),
+      getProvider: (id) => modelProviderService.getProvider(id),
+      listModels: (providerId) => modelProviderService.listModels(providerId)
+    },
+    modelResolver
+  })
   const adapter = options.agentMode === 'pi-core'
     ? new PiCoreAgentAdapter({
         modelResolver,
@@ -93,6 +101,7 @@ export function createServiceContainer(options: ServiceContainerOptions) {
     toolRunner,
     credentialVaultService,
     modelProviderService,
+    sessionTitleGenerator,
     agentRuntime
   }
 }

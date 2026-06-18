@@ -5,6 +5,7 @@ export const ipcChannels = {
   sessionsList: 'sessions:list',
   sessionsCreate: 'sessions:create',
   sessionsUpdateTitle: 'sessions:updateTitle',
+  sessionsGenerateTitle: 'sessions:generateTitle',
   sessionsArchive: 'sessions:archive',
   sessionsDelete: 'sessions:delete',
   sessionsSetWorkspace: 'sessions:setWorkspace',
@@ -50,6 +51,13 @@ export const nonEmptyStringSchema = z.string().min(1)
 export const updateSessionTitleInputSchema = z.object({
   id: nonEmptyStringSchema,
   title: z.string()
+})
+
+export const generateSessionTitleInputSchema = z.object({
+  id: nonEmptyStringSchema,
+  modelId: nonEmptyStringSchema,
+  userPrompt: nonEmptyStringSchema,
+  assistantResponse: nonEmptyStringSchema
 })
 
 export const sessionIdInputSchema = nonEmptyStringSchema
@@ -172,6 +180,7 @@ export const unsubscribeAgentEventsResultSchema = z.object({
 
 export type CreateSessionInput = z.infer<typeof createSessionInputSchema>
 export type UpdateSessionTitleInput = z.infer<typeof updateSessionTitleInputSchema>
+export type GenerateSessionTitleInput = z.infer<typeof generateSessionTitleInputSchema>
 export type SetSessionWorkspaceInput = z.infer<typeof setSessionWorkspaceInputSchema>
 export type SetSessionModelInput = z.infer<typeof setSessionModelInputSchema>
 export type SetSessionOutputModeInput = z.infer<typeof setSessionOutputModeInputSchema>
@@ -201,6 +210,7 @@ export type HesperDesktopApi = {
     list(): Promise<SessionDto[]>
     create(input: CreateSessionInput): Promise<SessionDto>
     updateTitle(input: UpdateSessionTitleInput): Promise<SessionDto>
+    generateTitle(input: GenerateSessionTitleInput): Promise<SessionDto>
     archive(id: string): Promise<SessionDto>
     delete(id: string): Promise<SessionDto>
     setWorkspace(input: SetSessionWorkspaceInput): Promise<SessionDto>

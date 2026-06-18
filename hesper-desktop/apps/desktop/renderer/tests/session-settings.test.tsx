@@ -169,7 +169,9 @@ describe('session settings and restore flow', () => {
       expect(setModel).toHaveBeenCalledWith({ id: 'session-1', defaultModelId: 'gpt-4o' })
     })
     expect(screen.getByRole('button', { name: '选择模型' })).toHaveTextContent('gpt-4o')
-    expect(screen.getByRole('button', { name: /Current chat/ })).toHaveTextContent('gpt-4o')
+    const sessionRow = screen.getByRole('button', { name: 'Current chat' })
+    expect(sessionRow).toHaveTextContent('Current chat')
+    expect(sessionRow).not.toHaveTextContent('gpt-4o')
 
     expect(screen.queryByRole('button', { name: '选择输出模式' })).not.toBeInTheDocument()
     expect(setOutputMode).not.toHaveBeenCalled()

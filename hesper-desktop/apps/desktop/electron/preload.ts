@@ -26,6 +26,7 @@ const hesperApi: HesperDesktopApi = {
     list: () => ipcRenderer.invoke(ipcChannels.sessionsList),
     create: (input) => ipcRenderer.invoke(ipcChannels.sessionsCreate, input),
     updateTitle: (input) => ipcRenderer.invoke(ipcChannels.sessionsUpdateTitle, input),
+    generateTitle: (input) => ipcRenderer.invoke(ipcChannels.sessionsGenerateTitle, input),
     archive: (id) => ipcRenderer.invoke(ipcChannels.sessionsArchive, id),
     delete: (id) => ipcRenderer.invoke(ipcChannels.sessionsDelete, id),
     setWorkspace: (input) => ipcRenderer.invoke(ipcChannels.sessionsSetWorkspace, input),

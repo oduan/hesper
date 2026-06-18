@@ -110,8 +110,16 @@ function AppContent() {
   const loadedHistorySessionIdsRef = useRef<Set<string>>(new Set())
   const loadingHistorySessionIdsRef = useRef<Set<string>>(new Set())
   const explicitModelSelectionSessionIdsRef = useRef<Set<string>>(new Set())
+  const runModelIdsRef = useRef<Record<string, string>>({})
+  const pendingTitlePromptsBySessionRef = useRef<Record<string, string>>({})
+  const titleGeneratedRunIdsRef = useRef<Set<string>>(new Set())
+  const stateRef = useRef(state)
   const nextSettingsRequestIdRef = useRef(0)
   const latestSettingsRequestIdRef = useRef<RequestTokensBySession>({})
+
+  useEffect(() => {
+    stateRef.current = state
+  }, [state])
 
   useEffect(() => {
     let cancelled = false
@@ -181,6 +189,37 @@ function AppContent() {
 
   useEffect(() => {
     return hesperApi.agent.onEvent((event) => {
+      if (event.type === 'run.created') {
+        runModelIdsRef.current[event.run.id] = event.run.modelId
+      }
+
+      if (event.type === 'message.completed' && event.message.role === 'assistant' && event.message.runId) {
+        const session = stateRef.current.sessions.find((candidate) => candidate.id === event.message.sessionId)
+        const messages = stateRef.current.messagesBySession[event.message.sessionId] ?? []
+        const fallbackPrompt = pendingTitlePromptsBySessionRef.current[event.message.sessionId]
+        const source = session && isDefaultSessionTitle(session.title)
+          ? firstRoundTitleSource(messages, event.message) ?? (fallbackPrompt ? { userPrompt: fallbackPrompt, assistantResponse: event.message.content.trim() } : undefined)
+          : undefined
+        const modelId = runModelIdsRef.current[event.message.runId] ?? session?.defaultModelId ?? defaultFallbackModelId
+
+        if (session && source?.assistantResponse && !titleGeneratedRunIdsRef.current.has(event.message.runId)) {
+          titleGeneratedRunIdsRef.current.add(event.message.runId)
+          void hesperApi.sessions.generateTitle({
+            id: session.id,
+            modelId,
+            userPrompt: source.userPrompt,
+            assistantResponse: source.assistantResponse
+          }).then((updatedSession) => {
+            dispatch({ type: 'session.updated', session: updatedSession })
+          }).catch((error) => {
+            titleGeneratedRunIdsRef.current.delete(event.message.runId!)
+            console.warn('Failed to generate session title', error)
+          }).finally(() => {
+            delete pendingTitlePromptsBySessionRef.current[event.message.sessionId]
+          })
+        }
+      }
+
       dispatch({ type: 'agent.event', event })
     })
   }, [dispatch])
@@ -301,6 +340,44 @@ function AppContent() {
   const activeModelId = activeSession ? resolveSessionModelId(activeSession.defaultModelId, sessionModelCatalog.preferredModelId, explicitModelSelectionSessionIdsRef.current.has(activeSession.id)) : sessionModelCatalog.preferredModelId
   const activeModelOptions = activeSession?.defaultModelId ? mergeModelOptions(sessionModelCatalog.options, [activeModelId, activeSession.defaultModelId]) : mergeModelOptions(sessionModelCatalog.options, [activeModelId])
 
+  const renameSession = async (sessionId: string) => {
+    const session = stateRef.current.sessions.find((candidate) => candidate.id === sessionId)
+    if (!session) return
+
+    const nextTitle = window.prompt('重命名会话', session.title)?.trim()
+    if (!nextTitle || nextTitle === session.title) return
+
+    const updatedSession = await hesperApi.sessions.updateTitle({ id: session.id, title: nextTitle })
+    dispatch({ type: 'session.updated', session: updatedSession })
+  }
+
+  const regenerateSessionTitle = async (sessionId: string) => {
+    const session = stateRef.current.sessions.find((candidate) => candidate.id === sessionId)
+    if (!session) return
+
+    const source = latestTitleSource(stateRef.current.messagesBySession[sessionId] ?? [])
+    if (!source) return
+
+    const latestRunId = stateRef.current.latestRunIdBySession[sessionId]
+    const modelId = latestRunId ? runModelIdsRef.current[latestRunId] ?? session.defaultModelId ?? defaultFallbackModelId : session.defaultModelId ?? defaultFallbackModelId
+    const updatedSession = await hesperApi.sessions.generateTitle({
+      id: session.id,
+      modelId,
+      userPrompt: source.userPrompt,
+      assistantResponse: source.assistantResponse
+    })
+    dispatch({ type: 'session.updated', session: updatedSession })
+  }
+
+  const deleteSession = async (sessionId: string) => {
+    const session = stateRef.current.sessions.find((candidate) => candidate.id === sessionId)
+    if (!session) return
+    if (!window.confirm(`删除会话“${session.title}”？`)) return
+
+    const updatedSession = await hesperApi.sessions.delete(session.id)
+    dispatch({ type: 'session.updated', session: updatedSession })
+  }
+
   return (
     <AppShell
       sessions={effectiveSessions}
@@ -316,6 +393,15 @@ function AppContent() {
       onSelectSession={(sessionId) => {
         dispatch({ type: 'section.selected', section: 'sessions' })
         dispatch({ type: 'session.selected', sessionId })
+      }}
+      onRenameSession={(sessionId) => {
+        void renameSession(sessionId)
+      }}
+      onRegenerateSessionTitle={(sessionId) => {
+        void regenerateSessionTitle(sessionId)
+      }}
+      onDeleteSession={(sessionId) => {
+        void deleteSession(sessionId)
       }}
       onWindowMinimize={() => hesperApi.window.minimize()}
       onWindowToggleMaximize={() => hesperApi.window.toggleMaximize()}
@@ -368,6 +454,7 @@ function AppContent() {
               })
             }}
             onSend={(content) => {
+              pendingTitlePromptsBySessionRef.current[activeSession.id] = content
               void sendMessage({
                 session: activeSession,
                 modelId: activeModelId,
@@ -409,6 +496,29 @@ function resolveSessionModelId(sessionModelId: string | undefined, preferredMode
     return preferredModelId
   }
   return sessionModelId
+}
+
+function isDefaultSessionTitle(title: string): boolean {
+  const normalized = title.replace(/\s+/g, ' ').trim().toLowerCase()
+  return normalized === 'new chat' || normalized === '新建会话' || normalized === 'untitled' || normalized === '无标题'
+}
+
+function firstRoundTitleSource(messages: Message[], completedAssistant?: Message): { userPrompt: string; assistantResponse: string } | undefined {
+  const userMessages = messages.filter((message) => message.role === 'user')
+  const assistantMessages = messages.filter((message) => message.role === 'assistant')
+  if (userMessages.length !== 1 || assistantMessages.length > 0) {
+    return undefined
+  }
+
+  const userPrompt = userMessages[0]?.content.trim()
+  const assistantResponse = completedAssistant?.content.trim()
+  return userPrompt && assistantResponse ? { userPrompt, assistantResponse } : undefined
+}
+
+function latestTitleSource(messages: Message[]): { userPrompt: string; assistantResponse: string } | undefined {
+  const firstUser = messages.find((message) => message.role === 'user')?.content.trim()
+  const firstAssistant = messages.find((message) => message.role === 'assistant')?.content.trim()
+  return firstUser && firstAssistant ? { userPrompt: firstUser, assistantResponse: firstAssistant } : undefined
 }
 
 function SectionPlaceholder({ section }: { section: AppSection }) {

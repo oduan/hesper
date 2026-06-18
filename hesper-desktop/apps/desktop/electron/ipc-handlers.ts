@@ -9,6 +9,7 @@ import {
   conversationStepsResultSchema,
   createSessionInputSchema,
   directorySelectionSchema,
+  generateSessionTitleInputSchema,
   ipcChannels,
   ipcEvents,
   listModelsInputSchema,
@@ -46,6 +47,7 @@ export type RegisterIpcHandlersOptions = {
 const mutatingChannels = [
   ipcChannels.sessionsCreate,
   ipcChannels.sessionsUpdateTitle,
+  ipcChannels.sessionsGenerateTitle,
   ipcChannels.sessionsArchive,
   ipcChannels.sessionsDelete,
   ipcChannels.sessionsSetWorkspace,
@@ -160,6 +162,17 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
     [ipcChannels.sessionsUpdateTitle]: async (_event, payload) => {
       const input = updateSessionTitleInputSchema.parse(payload)
       const session = await options.container.sessionService.updateTitle(input.id, input.title)
+      await savePersistence()
+      return session
+    },
+    [ipcChannels.sessionsGenerateTitle]: async (_event, payload) => {
+      const input = generateSessionTitleInputSchema.parse(payload)
+      const result = await options.container.sessionTitleGenerator.generateTitle({
+        usedModelId: input.modelId,
+        userPrompt: input.userPrompt,
+        assistantResponse: input.assistantResponse
+      })
+      const session = await options.container.sessionService.updateTitle(input.id, result.title)
       await savePersistence()
       return session
     },

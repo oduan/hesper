@@ -14,13 +14,16 @@ export type AppShellProps = {
   onCreateSession?: () => void | Promise<void>
   onSelectSection?: (section: AppSection) => void
   onSelectSession?: (sessionId: string) => void
+  onRenameSession?: (sessionId: string) => void
+  onRegenerateSessionTitle?: (sessionId: string) => void
+  onDeleteSession?: (sessionId: string) => void
   onWindowMinimize?: WindowControlAction
   onWindowToggleMaximize?: WindowControlAction
   onWindowClose?: WindowControlAction
   children?: ReactNode
 }
 
-export function AppShell({ sessions, activeSection, title, platform, activeSessionId, onCreateSession, onSelectSection, onSelectSession, onWindowMinimize, onWindowToggleMaximize, onWindowClose, children }: AppShellProps) {
+export function AppShell({ sessions, activeSection, title, platform, activeSessionId, onCreateSession, onSelectSection, onSelectSession, onRenameSession, onRegenerateSessionTitle, onDeleteSession, onWindowMinimize, onWindowToggleMaximize, onWindowClose, children }: AppShellProps) {
   return (
     <div
       style={{
@@ -43,10 +46,11 @@ export function AppShell({ sessions, activeSection, title, platform, activeSessi
         {...(onWindowClose ? { onClose: onWindowClose } : {})}
       />
       <div
+        aria-label="主工作区"
         style={{
           minHeight: 0,
           display: 'grid',
-          gridTemplateColumns: '204px minmax(280px, 35vw) minmax(0, 1fr)',
+          gridTemplateColumns: '204px 320px minmax(0, 1fr)',
           gap: darkTheme.spacing.sm,
           overflow: 'hidden',
           padding: `0 ${darkTheme.spacing.sm} ${darkTheme.spacing.sm} 0`
@@ -62,6 +66,9 @@ export function AppShell({ sessions, activeSection, title, platform, activeSessi
           sessions={sessions}
           {...(activeSessionId ? { activeSessionId } : {})}
           {...(onSelectSession ? { onSelectSession } : {})}
+          {...(onRenameSession ? { onRenameSession } : {})}
+          {...(onRegenerateSessionTitle ? { onRegenerateSessionTitle } : {})}
+          {...(onDeleteSession ? { onDeleteSession } : {})}
         />
         <section
           aria-label="详情区域"

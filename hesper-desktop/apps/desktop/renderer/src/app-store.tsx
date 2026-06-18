@@ -155,6 +155,11 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       }
     }
     case 'session.updated': {
+      if (action.session.status === 'deleted') {
+        const sessions = sortSessions(removeById(state.sessions, action.session.id))
+        return withActiveSessionId({ ...state, sessions }, pickActiveSessionId(state.activeSessionId === action.session.id ? undefined : state.activeSessionId, sessions))
+      }
+
       const sessions = sortSessions(mergeById(state.sessions, action.session))
       return {
         ...state,

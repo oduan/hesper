@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, clearSessionSendError, pruneSessionSendErrors } from '../src/App'
 
-const { listSessions, createSession, listMessages, listRuns, listSteps, enqueue, onEvent, listProviders, listModels, minimizeWindow, toggleMaximizeWindow, closeWindow } = vi.hoisted(() => ({
+const { listSessions, createSession, updateTitle, deleteSession, generateTitle, listMessages, listRuns, listSteps, enqueue, onEvent, listProviders, listModels, minimizeWindow, toggleMaximizeWindow, closeWindow } = vi.hoisted(() => ({
   listSessions: vi.fn(async () => []),
   createSession: vi.fn(async () => ({
     id: 'session-1',
@@ -14,6 +14,30 @@ const { listSessions, createSession, listMessages, listRuns, listSteps, enqueue,
     outputMode: 'markdown',
     createdAt: '2026-06-10T03:00:00.000Z',
     updatedAt: '2026-06-10T03:00:00.000Z'
+  })),
+  updateTitle: vi.fn(async (input: { id: string; title: string }) => ({
+    id: input.id,
+    title: input.title,
+    status: 'active',
+    outputMode: 'markdown',
+    createdAt: '2026-06-10T03:00:00.000Z',
+    updatedAt: '2026-06-10T03:00:12.000Z'
+  })),
+  deleteSession: vi.fn(async (id: string) => ({
+    id,
+    title: 'Deleted chat',
+    status: 'deleted',
+    outputMode: 'markdown',
+    createdAt: '2026-06-10T03:00:00.000Z',
+    updatedAt: '2026-06-10T03:00:12.000Z'
+  })),
+  generateTitle: vi.fn(async (input: { id: string; modelId: string; userPrompt: string; assistantResponse: string }) => ({
+    id: input.id,
+    title: '模型生成标题',
+    status: 'active',
+    outputMode: 'markdown',
+    createdAt: '2026-06-10T03:00:00.000Z',
+    updatedAt: '2026-06-10T03:00:12.000Z'
   })),
   listMessages: vi.fn(async () => []),
   listRuns: vi.fn(async () => []),
@@ -31,7 +55,10 @@ vi.mock('../src/ipc-client', () => ({
   hesperApi: {
     sessions: {
       list: listSessions,
-      create: createSession
+      create: createSession,
+      updateTitle,
+      delete: deleteSession,
+      generateTitle
     },
     conversation: { listMessages, listRuns, listSteps },
     agent: { enqueue, onEvent },
@@ -58,11 +85,15 @@ describe('renderer App', () => {
 
   afterEach(() => {
     cleanup()
+    vi.restoreAllMocks()
   })
 
   beforeEach(() => {
     listSessions.mockReset()
     createSession.mockClear()
+    updateTitle.mockClear()
+    deleteSession.mockClear()
+    generateTitle.mockClear()
     listMessages.mockReset()
     listRuns.mockReset()
     listSteps.mockReset()
@@ -190,6 +221,101 @@ describe('renderer App', () => {
     render(<App />)
 
     expect(await screen.findByRole('alert')).toHaveTextContent('会话加载失败：IPC unavailable')
+  })
+
+  it('handles session context-menu rename action', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(window, 'prompt').mockReturnValue('Renamed chat')
+
+    listSessions.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        title: 'Existing chat',
+        status: 'active',
+        outputMode: 'markdown',
+        createdAt: '2026-06-10T03:00:00.000Z',
+        updatedAt: '2026-06-10T03:00:00.000Z'
+      }
+    ] as any)
+
+    render(<App />)
+
+    const row = (await screen.findAllByRole('button', { name: 'Existing chat' }))[0]!
+    row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 120, clientY: 160 }))
+    await user.click(await screen.findByRole('menuitem', { name: '重命名' }))
+
+    expect(updateTitle).toHaveBeenCalledWith({ id: 'session-1', title: 'Renamed chat' })
+    expect(await screen.findAllByText('Renamed chat')).not.toHaveLength(0)
+  })
+
+  it('generates a concise title after the first assistant turn completes', async () => {
+    const user = userEvent.setup()
+    let runtimeListener: ((event: { type: string; [key: string]: unknown }) => void) | undefined
+
+    listProviders.mockResolvedValueOnce([
+      { id: 'deepseek', name: 'DeepSeek', kind: 'deepseek', enabled: true, hasApiKey: true, defaultModelId: 'deepseek-title', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+    ] as any)
+    listModels.mockResolvedValueOnce([
+      { id: 'deepseek-title', providerId: 'deepseek', modelName: 'deepseek-title', displayName: 'DeepSeek Title', capabilities: ['streaming'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' },
+      { id: 'deepseek-chat', providerId: 'deepseek', modelName: 'deepseek-chat', displayName: 'DeepSeek Chat', capabilities: ['streaming', 'toolCalls'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+    ] as any)
+    listSessions.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        title: 'New chat',
+        status: 'active',
+        defaultModelId: 'deepseek-chat',
+        outputMode: 'markdown',
+        createdAt: '2026-06-10T03:00:00.000Z',
+        updatedAt: '2026-06-10T03:00:00.000Z'
+      }
+    ] as any)
+    onEvent.mockImplementation(((listener: (event: { type: string; [key: string]: unknown }) => void) => {
+      runtimeListener = listener
+      return () => {
+        runtimeListener = undefined
+      }
+    }) as any)
+
+    render(<App />)
+
+    await user.type(await screen.findByPlaceholderText(/输入消息/), '请规划一个发布会视频脚本')
+    await user.click(screen.getByRole('button', { name: '发送' }))
+    expect(await screen.findByText('请规划一个发布会视频脚本')).toBeInTheDocument()
+
+    runtimeListener?.({
+      type: 'run.created',
+      run: {
+        id: 'run-1',
+        sessionId: 'session-1',
+        status: 'running',
+        modelId: 'deepseek-chat',
+        retryCount: 0,
+        maxRetries: 5
+      }
+    })
+    runtimeListener?.({
+      type: 'message.completed',
+      message: {
+        id: 'message-assistant-1',
+        sessionId: 'session-1',
+        role: 'assistant',
+        content: '可以，标题、分镜、旁白和镜头节奏可以这样安排。',
+        contentType: 'markdown',
+        runId: 'run-1',
+        createdAt: '2026-06-10T03:00:10.000Z'
+      }
+    })
+
+    await waitFor(() => {
+      expect(generateTitle).toHaveBeenCalledWith({
+        id: 'session-1',
+        modelId: 'deepseek-chat',
+        userPrompt: '请规划一个发布会视频脚本',
+        assistantResponse: '可以，标题、分镜、旁白和镜头节奏可以这样安排。'
+      })
+    })
+    expect(await screen.findAllByText('模型生成标题')).not.toHaveLength(0)
   })
 
   it('sends messages through IPC, renders optimistic user text, and hydrates assistant output from runtime events', async () => {

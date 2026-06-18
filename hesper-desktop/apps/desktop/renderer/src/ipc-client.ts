@@ -6,6 +6,7 @@ import type {
   DirectorySelectionResult,
   HesperDesktopApi,
   MessageDto,
+  GenerateSessionTitleInput,
   ModelDto,
   ModelProviderDto,
   RunStepDto,
@@ -74,6 +75,10 @@ export function createFallbackHesperApi(): HesperDesktopApi {
         return session
       },
       updateTitle: async (input: UpdateSessionTitleInput) => replaceSession(input.id, (session) => updateMockSession(session, { title: input.title })),
+      generateTitle: async (input: GenerateSessionTitleInput) => {
+        const words = input.userPrompt.replace(/\s+/g, ' ').trim().slice(0, 18)
+        return replaceSession(input.id, (session) => updateMockSession(session, { title: words || '新会话' }))
+      },
       archive: async (id: string) => replaceSession(id, (session) => updateMockSession(session, { status: 'archived' })),
       delete: async (id: string) => replaceSession(id, (session) => updateMockSession(session, { status: 'deleted' })),
       setWorkspace: async (input: SetSessionWorkspaceInput) =>
