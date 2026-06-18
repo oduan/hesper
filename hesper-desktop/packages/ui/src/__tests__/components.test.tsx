@@ -150,7 +150,7 @@ describe('ui components', () => {
   it('renders markdown output as formatted elements instead of raw text', () => {
     render(
       <OutputBlock
-        content={'## Summary\n\nThis is **important** and `inline code`.\n\n- first item\n- second item\n\n[Docs](https://example.com/docs)'}
+        content={'## Summary\n\nThis is **important** and `inline code`.\n\n- first item\n- second item\n\n| Name | Status |\n| --- | --- |\n| Alpha | **Ready** |\n| Beta | `Blocked` |\n\n[Docs](https://example.com/docs)'}
         contentType="markdown"
       />
     )
@@ -161,8 +161,15 @@ describe('ui components', () => {
     const list = screen.getByRole('list')
     expect(list).toBeInTheDocument()
     expect(within(list).getByText('first item')).toBeInTheDocument()
+    expect(screen.getByRole('table')).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Name' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Status' })).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: 'Alpha' })).toBeInTheDocument()
+    expect(within(screen.getByRole('cell', { name: 'Ready' })).getByText('Ready')).toHaveStyle({ fontWeight: '700' })
+    expect(within(screen.getByRole('cell', { name: 'Blocked' })).getByText('Blocked').tagName).toBe('CODE')
     expect(screen.getByRole('link', { name: 'Docs' })).toHaveAttribute('href', 'https://example.com/docs')
     expect(screen.queryByText('## Summary')).not.toBeInTheDocument()
+    expect(screen.queryByText('| Name | Status |')).not.toBeInTheDocument()
   })
 
   it('renders output blocks with CSP wrapped html, themed scrollbars and fullscreen dialog', async () => {

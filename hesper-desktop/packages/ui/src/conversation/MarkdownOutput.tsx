@@ -8,6 +8,7 @@ type MarkdownBlock =
   | { type: 'ordered-list'; items: string[] }
   | { type: 'code'; language?: string; text: string }
   | { type: 'blockquote'; text: string }
+  | { type: 'table'; headers: string[]; rows: string[][] }
   | { type: 'rule' }
 
 export type MarkdownOutputProps = {
@@ -42,8 +43,33 @@ function isRule(line: string): boolean {
   return /^\s*(?:-{3,}|_{3,}|\*{3,})\s*$/.test(line)
 }
 
-function startsBlock(line: string): boolean {
-  return isBlank(line) || isHeading(line) || isFence(line) || isUnorderedListItem(line) || isOrderedListItem(line) || isBlockquote(line) || isRule(line)
+function splitTableRow(line: string): string[] {
+  const trimmed = line.trim().replace(/^\|/, '').replace(/\|$/, '')
+  return trimmed.split('|').map((cell) => cell.trim())
+}
+
+function isTableSeparator(line: string): boolean {
+  const cells = splitTableRow(line)
+  return cells.length > 1 && cells.every((cell) => /^:?-{3,}:?$/.test(cell))
+}
+
+function isTableStart(line: string, nextLine: string | undefined): boolean {
+  if (!nextLine || !line.includes('|')) return false
+  return splitTableRow(line).length > 1 && isTableSeparator(nextLine)
+}
+
+function isTableRow(line: string): boolean {
+  return line.includes('|') && splitTableRow(line).length > 1
+}
+
+function normalizeTableRow(cells: string[], columnCount: number): string[] {
+  if (cells.length === columnCount) return cells
+  if (cells.length > columnCount) return cells.slice(0, columnCount)
+  return [...cells, ...Array.from({ length: columnCount - cells.length }, () => '')]
+}
+
+function startsBlock(line: string, nextLine?: string): boolean {
+  return isBlank(line) || isHeading(line) || isFence(line) || isUnorderedListItem(line) || isOrderedListItem(line) || isBlockquote(line) || isRule(line) || isTableStart(line, nextLine)
 }
 
 function parseMarkdown(content: string): MarkdownBlock[] {
@@ -76,6 +102,19 @@ function parseMarkdown(content: string): MarkdownBlock[] {
     if (headingMatch) {
       blocks.push({ type: 'heading', level: headingMatch[1]!.length as 1 | 2 | 3 | 4 | 5 | 6, text: headingMatch[2]!.trim() })
       index += 1
+      continue
+    }
+
+    if (isTableStart(line, lines[index + 1])) {
+      const headers = splitTableRow(line)
+      const rows: string[][] = []
+      const columnCount = headers.length
+      index += 2
+      while (index < lines.length && isTableRow(lines[index] ?? '')) {
+        rows.push(normalizeTableRow(splitTableRow(lines[index] ?? ''), columnCount))
+        index += 1
+      }
+      blocks.push({ type: 'table', headers, rows })
       continue
     }
 
@@ -116,7 +155,7 @@ function parseMarkdown(content: string): MarkdownBlock[] {
     }
 
     const paragraphLines: string[] = []
-    while (index < lines.length && !startsBlock(lines[index] ?? '')) {
+    while (index < lines.length && !startsBlock(lines[index] ?? '', lines[index + 1])) {
       paragraphLines.push((lines[index] ?? '').trim())
       index += 1
     }
@@ -215,6 +254,29 @@ function renderBlock(block: MarkdownBlock, index: number): ReactNode {
       )
     case 'blockquote':
       return <blockquote key={index} style={blockquoteStyle}>{renderInline(block.text, `blockquote-${index}`)}</blockquote>
+    case 'table':
+      return (
+        <div key={index} style={tableWrapStyle} className="hesper-theme-scrollbar">
+          <table style={tableStyle}>
+            <thead>
+              <tr>
+                {block.headers.map((header, headerIndex) => (
+                  <th key={headerIndex} scope="col" style={tableHeaderStyle}>{renderInline(header, `table-${index}-header-${headerIndex}`)}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {block.rows.map((row, rowIndex) => (
+                <tr key={rowIndex}>
+                  {row.map((cell, cellIndex) => (
+                    <td key={cellIndex} style={tableCellStyle}>{renderInline(cell, `table-${index}-row-${rowIndex}-${cellIndex}`)}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )
     case 'rule':
       return <hr key={index} style={ruleStyle} />
   }
@@ -291,6 +353,32 @@ const blockquoteStyle: CSSProperties = {
   padding: `0 0 0 ${darkTheme.spacing.md}`,
   borderLeft: `3px solid ${darkTheme.color.border}`,
   color: darkTheme.color.textMuted
+}
+
+const tableWrapStyle: CSSProperties = {
+  margin: '0 0 10px',
+  overflowX: 'auto'
+}
+
+const tableStyle: CSSProperties = {
+  width: '100%',
+  borderCollapse: 'collapse',
+  fontSize: 13
+}
+
+const tableHeaderStyle: CSSProperties = {
+  textAlign: 'left',
+  padding: `${darkTheme.spacing.sm} ${darkTheme.spacing.md}`,
+  borderBottom: `1px solid ${darkTheme.color.border}`,
+  color: darkTheme.color.text,
+  fontWeight: 700,
+  background: 'rgba(255, 255, 255, 0.035)'
+}
+
+const tableCellStyle: CSSProperties = {
+  padding: `${darkTheme.spacing.sm} ${darkTheme.spacing.md}`,
+  borderBottom: `1px solid ${darkTheme.color.border}`,
+  verticalAlign: 'top'
 }
 
 const ruleStyle: CSSProperties = {
