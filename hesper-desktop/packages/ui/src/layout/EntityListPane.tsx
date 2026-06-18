@@ -274,18 +274,20 @@ export function EntityListPane({
           }}
           onClick={(event) => event.stopPropagation()}
         >
+          <style>{sessionMenuRippleCss}</style>
           {sessionMenuItems.map((item) => (
             <button
               key={item.key}
               type="button"
               role="menuitem"
+              className="hesper-session-menu-item"
               onClick={() => handleMenuAction(item.key, sessionMenu)}
               style={{
                 ...sessionMenuItemStyle,
                 ...(item.danger ? { color: darkTheme.color.danger } : {})
               }}
             >
-              {item.label}
+              <span>{item.label}</span>
             </button>
           ))}
         </div>
@@ -329,6 +331,9 @@ const sessionMenuStyle: CSSProperties = {
 }
 
 const sessionMenuItemStyle: CSSProperties = {
+  position: 'relative',
+  isolation: 'isolate',
+  overflow: 'hidden',
   width: '100%',
   minHeight: 34,
   display: 'flex',
@@ -336,6 +341,7 @@ const sessionMenuItemStyle: CSSProperties = {
   justifyContent: 'flex-start',
   padding: `0 ${darkTheme.spacing.md}`,
   border: 0,
+  outline: 0,
   borderRadius: 0,
   background: 'transparent',
   color: darkTheme.color.text,
@@ -343,3 +349,51 @@ const sessionMenuItemStyle: CSSProperties = {
   cursor: 'pointer',
   textAlign: 'left'
 }
+
+const sessionMenuRippleCss = `
+@keyframes hesper-session-menu-ripple {
+  0% { opacity: 0.22; transform: translate(-50%, -50%) scale(0); }
+  72% { opacity: 0.14; }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(18); }
+}
+
+.hesper-session-menu-item::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: var(--hesper-color-hover, rgba(122, 162, 247, 0.12));
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.hesper-session-menu-item::before {
+  content: '';
+  position: absolute;
+  left: 18px;
+  top: 50%;
+  z-index: 1;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -50%) scale(0);
+}
+
+.hesper-session-menu-item:hover::after,
+.hesper-session-menu-item:focus-visible::after {
+  opacity: 1;
+}
+
+.hesper-session-menu-item:hover::before,
+.hesper-session-menu-item:focus-visible::before {
+  animation: hesper-session-menu-ripple 520ms ease-out;
+}
+
+.hesper-session-menu-item > span {
+  position: relative;
+  z-index: 2;
+}
+`

@@ -83,9 +83,12 @@ describe('ui components', () => {
     fireEvent.contextMenu(sessionRow)
     const menu = screen.getByRole('menu', { name: '会话操作' })
     expect(menu).toHaveStyle({ background: 'var(--hesper-color-surface-muted, #24283b)', borderRadius: '12px', padding: '4px 0' })
+    expect(menu.querySelector('style')).toHaveTextContent('hesper-session-menu-ripple')
+    expect(menu.querySelector('style')).toHaveTextContent('.hesper-session-menu-item:hover::before')
     for (const label of ['重命名', '重新生成标题', '删除']) {
       const item = within(menu).getByRole('menuitem', { name: label })
-      expect(item).toHaveStyle({ width: '100%', borderRadius: '0px', justifyContent: 'flex-start' })
+      expect(item).toHaveClass('hesper-session-menu-item')
+      expect(item).toHaveStyle({ width: '100%', borderRadius: '0px', justifyContent: 'flex-start', overflow: 'hidden' })
     }
 
     await user.click(within(menu).getByRole('menuitem', { name: '重命名' }))
