@@ -75,34 +75,19 @@ function isGenericTitle(value: string): boolean {
   ].includes(normalized)
 }
 
-function fallbackTitleFromText(value: string): string {
-  const compact = value
-    .replace(/https?:\/\/\S+/g, '')
-    .replace(/[\r\n\t]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/^(请|麻烦|帮我|请帮我|能不能|可以帮我|我想|我要|帮忙)\s*/i, '')
-    .replace(/^(分析|总结|生成|创建|写一个|设计|修复|实现|优化|改进|调整)\s+(.+)/i, '$1 $2')
-    .replace(/[。.!！?？,，:：;；、]+$/g, '')
-    .replace(/的问题$/g, '')
-    .trim()
-
-  if (!compact) return '整理当前任务'
-
-  if (/[^\x00-\x7F]/.test(compact)) {
-    return compact.replace(/\s+/g, '').slice(0, 18)
+function isTooLongTitle(value: string): boolean {
+  if (/[^\x00-\x7F]/.test(value)) {
+    return value.replace(/\s+/g, '').length > 24
   }
-
-  return compact.split(/\s+/).filter(Boolean).slice(0, 8).join(' ')
+  return value.split(/\s+/).filter(Boolean).length > 10
 }
 
-function chooseTitle(candidate: string, input: SessionTitleGenerationInput): string {
+function validGeneratedTitle(candidate: string): string | undefined {
   const stripped = stripTitleNoise(candidate)
-  if (stripped && !isGenericTitle(stripped)) {
-    return stripped
+  if (!stripped || isGenericTitle(stripped) || isTooLongTitle(stripped)) {
+    return undefined
   }
-
-  return fallbackTitleFromText(input.userPrompt) || fallbackTitleFromText(input.assistantResponse)
+  return stripped
 }
 
 function extractAssistantText(message: AssistantMessage): string {
@@ -144,16 +129,31 @@ async function resolveTitleModel(registry: ModelRegistryReader, usedModelId: str
   }
 }
 
-function createTitlePrompt(input: SessionTitleGenerationInput): string {
+function createTitlePrompt(input: SessionTitleGenerationInput, previousInvalidTitle?: string): string {
   return [
-    '请为下面这段最近一轮对话生成一个会话标题。',
+    previousInvalidTitle ? `上一次输出无效：${previousInvalidTitle}。它太泛化、为空或过长，没有体现最近一轮对话正在做的具体事情。` : undefined,
+    '请根据下面这段最近一轮对话生成一个会话标题。',
     '',
-    `用户消息：${normalizeText(input.userPrompt, 1200)}`,
+    '目标：用户只看标题，就能知道这个对话正在做什么。',
     '',
-    `助手回复：${normalizeText(input.assistantResponse, 1600)}`,
+    '硬性要求：',
+    '1. 只输出标题本身，不要解释，不要 Markdown，不要引号。',
+    '2. 标题必须包含具体任务对象或正在处理的问题。',
+    '3. 中文 6-18 个汉字左右；英文不超过 8 个词。',
+    '4. 禁止输出：新会话、新对话、会话、对话、聊天、总结、当前任务。',
+    '5. 不要复述“用户消息”“助手回复”等标签。',
     '',
-    '再次强调：只输出标题本身。'
-  ].join('\n')
+    '示例：',
+    '用户消息：帮我修复登录按钮点击无响应的问题',
+    '助手回复：可以，从事件绑定、禁用状态和请求错误三个方向排查。',
+    '标题：登录按钮无响应修复',
+    '',
+    '最近一轮对话：',
+    `<用户消息>${normalizeText(input.userPrompt, 1200)}</用户消息>`,
+    `<Agent回答>${normalizeText(input.assistantResponse, 1600)}</Agent回答>`,
+    '',
+    '请输出标题：'
+  ].filter(Boolean).join('\n')
 }
 
 export function createSessionTitleGenerator(options: SessionTitleGeneratorOptions): SessionTitleGenerator {
@@ -164,24 +164,34 @@ export function createSessionTitleGenerator(options: SessionTitleGeneratorOption
       const titleModel = await resolveTitleModel(options.registry, input.usedModelId)
       const resolved = await options.modelResolver.resolve(titleModel)
       const apiKey = await resolved.getApiKey?.(resolved.model.provider) ?? await resolved.getApiKey?.(resolved.provider.id)
-      const message = await complete(
-        resolved.model,
-        {
-          systemPrompt: titleSystemPrompt,
-          messages: [{ role: 'user', content: createTitlePrompt(input), timestamp: Date.now() }]
-        },
-        {
-          maxTokens: 32,
-          reasoning: 'minimal',
-          ...(apiKey ? { apiKey } : {}),
-          ...(input.signal ? { signal: input.signal } : {})
+      let previousInvalidTitle: string | undefined
+
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const message = await complete(
+          resolved.model,
+          {
+            systemPrompt: titleSystemPrompt,
+            messages: [{ role: 'user', content: createTitlePrompt(input, previousInvalidTitle), timestamp: Date.now() }]
+          },
+          {
+            maxTokens: 48,
+            temperature: 0,
+            reasoning: 'minimal',
+            ...(apiKey ? { apiKey } : {}),
+            ...(input.signal ? { signal: input.signal } : {})
+          }
+        )
+        previousInvalidTitle = extractAssistantText(message)
+        const title = validGeneratedTitle(previousInvalidTitle)
+        if (title) {
+          return {
+            title,
+            modelId: titleModel.modelId
+          }
         }
-      )
-      const title = chooseTitle(extractAssistantText(message), input)
-      return {
-        title,
-        modelId: titleModel.modelId
       }
+
+      throw new Error(`Title generation returned invalid title: ${previousInvalidTitle || '(empty)'}`)
     }
   }
 }
