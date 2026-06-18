@@ -29,10 +29,10 @@ export type SessionTitleGeneratorOptions = {
 
 const titleSystemPrompt = [
   '你是 Hesper 的会话标题生成器。',
-  '你的唯一任务是根据第一轮用户消息和助手回复生成一个简短标题。',
+  '你的唯一任务是根据最近一轮用户消息和助手回复生成一个简短标题。',
   '只输出标题，不要解释，不要 Markdown，不要引号，不要句号。',
   '标题应使用用户语言，中文标题建议 4 到 12 个汉字；英文标题建议不超过 8 个词。',
-  '标题要具体概括任务目标，避免“新会话”“总结”“对话”等空泛词。'
+  '标题要具体概括任务目标，禁止输出“新会话”“新对话”“总结”“对话”等空泛词。'
 ].join('\n')
 
 function normalizeText(value: string, maxLength: number): string {
@@ -47,6 +47,62 @@ function stripTitleNoise(value: string): string {
     .replace(/^标题\s*[:：]\s*/i, '')
     .replace(/\s+/g, ' ')
     .trim()
+}
+
+function normalizeTitleForComparison(value: string): string {
+  return value.replace(/[\s\-＿_—–,，.。!！?？:：;；"'“”‘’「」《》]/g, '').toLowerCase()
+}
+
+function isGenericTitle(value: string): boolean {
+  const normalized = normalizeTitleForComparison(value)
+  return [
+    '新会话',
+    '新对话',
+    '新聊天',
+    '新的会话',
+    '新的对话',
+    '会话',
+    '对话',
+    '聊天',
+    '会话总结',
+    '对话总结',
+    '总结',
+    'newchat',
+    'newconversation',
+    'conversation',
+    'chat',
+    'summary'
+  ].includes(normalized)
+}
+
+function fallbackTitleFromText(value: string): string {
+  const compact = value
+    .replace(/https?:\/\/\S+/g, '')
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^(请|麻烦|帮我|请帮我|能不能|可以帮我|我想|我要|帮忙)\s*/i, '')
+    .replace(/^(分析|总结|生成|创建|写一个|设计|修复|实现|优化|改进|调整)\s+(.+)/i, '$1 $2')
+    .replace(/[。.!！?？,，:：;；、]+$/g, '')
+    .replace(/的问题$/g, '')
+    .trim()
+
+  if (!compact) return '整理当前任务'
+
+  if (/[^\x00-\x7F]/.test(compact)) {
+    return compact.replace(/\s+/g, '').slice(0, 18)
+  }
+
+  return compact.split(/\s+/).filter(Boolean).slice(0, 8).join(' ')
+}
+
+function chooseTitle(candidate: string, input: SessionTitleGenerationInput): string {
+  const stripped = stripTitleNoise(candidate)
+  if (stripped && !isGenericTitle(stripped)) {
+    return stripped
+  }
+
+  return fallbackTitleFromText(input.userPrompt) || fallbackTitleFromText(input.assistantResponse)
 }
 
 function extractAssistantText(message: AssistantMessage): string {
@@ -90,7 +146,7 @@ async function resolveTitleModel(registry: ModelRegistryReader, usedModelId: str
 
 function createTitlePrompt(input: SessionTitleGenerationInput): string {
   return [
-    '请为下面这段第一轮对话生成一个会话标题。',
+    '请为下面这段最近一轮对话生成一个会话标题。',
     '',
     `用户消息：${normalizeText(input.userPrompt, 1200)}`,
     '',
@@ -121,9 +177,9 @@ export function createSessionTitleGenerator(options: SessionTitleGeneratorOption
           ...(input.signal ? { signal: input.signal } : {})
         }
       )
-      const title = stripTitleNoise(extractAssistantText(message))
+      const title = chooseTitle(extractAssistantText(message), input)
       return {
-        title: title || '新会话',
+        title,
         modelId: titleModel.modelId
       }
     }

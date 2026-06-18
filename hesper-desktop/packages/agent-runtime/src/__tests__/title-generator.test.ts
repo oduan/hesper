@@ -84,4 +84,30 @@ describe('session title generator', () => {
     )
     expect(result).toEqual({ title: '视频脚本规划', modelId: 'deepseek-title' })
   })
+
+  it('rejects generic model titles and falls back to the latest user request', async () => {
+    const complete = vi.fn(async () => assistantMessage('新对话'))
+    const resolve = vi.fn(async () => ({
+      model: { id: 'deepseek-title', name: 'DeepSeek Title', api: 'openai-completions', provider: 'deepseek', baseUrl: 'https://api.deepseek.com', reasoning: false, input: ['text' as const], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 64000, maxTokens: 1024 },
+      provider,
+      modelConfig: titleModel
+    }))
+    const generator = createSessionTitleGenerator({
+      registry: {
+        ensureReady: vi.fn(async () => undefined),
+        getProvider: vi.fn(async () => provider),
+        listModels: vi.fn(async (providerId?: string) => providerId === 'deepseek' ? [titleModel, chatModel] : [titleModel, chatModel])
+      },
+      modelResolver: { resolve },
+      complete
+    })
+
+    const result = await generator.generateTitle({
+      usedModelId: 'deepseek-chat',
+      userPrompt: '帮我修复登录按钮点击无响应的问题',
+      assistantResponse: '可以，从事件绑定、禁用状态和请求错误三个方向排查。'
+    })
+
+    expect(result).toEqual({ title: '修复登录按钮点击无响应', modelId: 'deepseek-title' })
+  })
 })
