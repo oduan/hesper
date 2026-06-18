@@ -37,8 +37,8 @@ const lightPalette = {
   warning: '#df8e1d',
   hover: 'rgba(76, 79, 105, 0.10)',
   softControl: 'rgba(136, 57, 239, 0.12)',
-  scrollbarThumb: 'rgba(136, 57, 239, 0.32)',
-  scrollbarThumbHover: 'rgba(136, 57, 239, 0.50)'
+  scrollbarThumb: 'rgba(76, 79, 105, 0.18)',
+  scrollbarThumbHover: 'rgba(76, 79, 105, 0.34)'
 }
 
 const darkPalette = {
@@ -55,8 +55,8 @@ const darkPalette = {
   warning: '#e0af68',
   hover: 'rgba(122, 162, 247, 0.12)',
   softControl: 'rgba(122, 162, 247, 0.14)',
-  scrollbarThumb: 'rgba(122, 162, 247, 0.36)',
-  scrollbarThumbHover: 'rgba(122, 162, 247, 0.60)'
+  scrollbarThumb: 'rgba(192, 202, 245, 0.18)',
+  scrollbarThumbHover: 'rgba(192, 202, 245, 0.34)'
 }
 
 const colorVariableNames: Record<keyof typeof darkPalette, string> = {
