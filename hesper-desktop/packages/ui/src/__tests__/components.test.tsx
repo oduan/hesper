@@ -33,6 +33,7 @@ describe('ui components', () => {
     const onWindowMinimize = vi.fn()
     const onWindowToggleMaximize = vi.fn()
     const onWindowClose = vi.fn()
+    const onRenameSession = vi.fn()
 
     render(
       <AppShell
@@ -53,6 +54,7 @@ describe('ui components', () => {
         title="构建 hesper MVP"
         onCreateSession={onCreateSession}
         onSelectSection={onSelectSection}
+        onRenameSession={onRenameSession}
         onWindowMinimize={onWindowMinimize}
         onWindowToggleMaximize={onWindowToggleMaximize}
         onWindowClose={onWindowClose}
@@ -68,6 +70,7 @@ describe('ui components', () => {
     expect(screen.getByLabelText('实体列表')).toHaveStyle({ boxSizing: 'border-box' })
     expect(screen.getByLabelText('主工作区')).toHaveStyle({ gridTemplateColumns: '204px 320px minmax(0, 1fr)' })
     const sessionRow = screen.getByRole('button', { name: '视频脚本生成' })
+    expect(sessionRow).toHaveStyle({ alignItems: 'center' })
     expect(sessionRow).toHaveTextContent('视频脚本生成')
     expect(sessionRow).not.toHaveTextContent('gpt-4o')
     expect(sessionRow).not.toHaveTextContent('C:/workspace')
@@ -80,6 +83,13 @@ describe('ui components', () => {
       const item = within(menu).getByRole('menuitem', { name: label })
       expect(item).toHaveStyle({ width: '100%', borderRadius: '0px', justifyContent: 'flex-start' })
     }
+
+    await user.click(within(menu).getByRole('menuitem', { name: '重命名' }))
+    const renameInput = await screen.findByLabelText('重命名会话标题')
+    expect(renameInput).toHaveValue('视频脚本生成')
+    await user.clear(renameInput)
+    await user.type(renameInput, '短标题{Enter}')
+    expect(onRenameSession).toHaveBeenCalledWith('session-list-1', '短标题')
 
     await user.click(screen.getByRole('button', { name: '最小化窗口' }))
     await user.click(screen.getByRole('button', { name: '最大化窗口' }))

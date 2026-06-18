@@ -14,7 +14,7 @@ export type AppShellProps = {
   onCreateSession?: () => void | Promise<void>
   onSelectSection?: (section: AppSection) => void
   onSelectSession?: (sessionId: string) => void
-  onRenameSession?: (sessionId: string) => void
+  onRenameSession?: (sessionId: string, title: string) => void
   onRegenerateSessionTitle?: (sessionId: string) => void
   onDeleteSession?: (sessionId: string) => void
   onWindowMinimize?: WindowControlAction

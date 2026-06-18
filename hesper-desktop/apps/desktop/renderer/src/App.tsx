@@ -340,26 +340,34 @@ function AppContent() {
   const activeModelId = activeSession ? resolveSessionModelId(activeSession.defaultModelId, sessionModelCatalog.preferredModelId, explicitModelSelectionSessionIdsRef.current.has(activeSession.id)) : sessionModelCatalog.preferredModelId
   const activeModelOptions = activeSession?.defaultModelId ? mergeModelOptions(sessionModelCatalog.options, [activeModelId, activeSession.defaultModelId]) : mergeModelOptions(sessionModelCatalog.options, [activeModelId])
 
-  const renameSession = async (sessionId: string) => {
+  const renameSession = async (sessionId: string, title: string) => {
     const session = stateRef.current.sessions.find((candidate) => candidate.id === sessionId)
-    if (!session) return
-
-    const nextTitle = window.prompt('重命名会话', session.title)?.trim()
-    if (!nextTitle || nextTitle === session.title) return
+    const nextTitle = title.trim()
+    if (!session || !nextTitle || nextTitle === session.title) return
 
     const updatedSession = await hesperApi.sessions.updateTitle({ id: session.id, title: nextTitle })
     dispatch({ type: 'session.updated', session: updatedSession })
+  }
+
+  const loadTitleSource = async (sessionId: string) => {
+    const loadedSource = latestTitleSource(stateRef.current.messagesBySession[sessionId] ?? [])
+    if (loadedSource) return loadedSource
+
+    const messages = await hesperApi.conversation.listMessages(sessionId)
+    dispatch({ type: 'history.loaded', sessionId, messages, runs: [], stepsByRun: {} })
+    return latestTitleSource(messages)
   }
 
   const regenerateSessionTitle = async (sessionId: string) => {
     const session = stateRef.current.sessions.find((candidate) => candidate.id === sessionId)
     if (!session) return
 
-    const source = latestTitleSource(stateRef.current.messagesBySession[sessionId] ?? [])
+    const source = await loadTitleSource(sessionId)
     if (!source) return
 
     const latestRunId = stateRef.current.latestRunIdBySession[sessionId]
-    const modelId = latestRunId ? runModelIdsRef.current[latestRunId] ?? session.defaultModelId ?? defaultFallbackModelId : session.defaultModelId ?? defaultFallbackModelId
+    const sessionModelId = resolveSessionModelId(session.defaultModelId, sessionModelCatalog.preferredModelId, explicitModelSelectionSessionIdsRef.current.has(session.id))
+    const modelId = latestRunId ? runModelIdsRef.current[latestRunId] ?? sessionModelId : sessionModelId
     const updatedSession = await hesperApi.sessions.generateTitle({
       id: session.id,
       modelId,
@@ -372,7 +380,6 @@ function AppContent() {
   const deleteSession = async (sessionId: string) => {
     const session = stateRef.current.sessions.find((candidate) => candidate.id === sessionId)
     if (!session) return
-    if (!window.confirm(`删除会话“${session.title}”？`)) return
 
     const updatedSession = await hesperApi.sessions.delete(session.id)
     dispatch({ type: 'session.updated', session: updatedSession })
@@ -394,8 +401,8 @@ function AppContent() {
         dispatch({ type: 'section.selected', section: 'sessions' })
         dispatch({ type: 'session.selected', sessionId })
       }}
-      onRenameSession={(sessionId) => {
-        void renameSession(sessionId)
+      onRenameSession={(sessionId, title) => {
+        void renameSession(sessionId, title)
       }}
       onRegenerateSessionTitle={(sessionId) => {
         void regenerateSessionTitle(sessionId)

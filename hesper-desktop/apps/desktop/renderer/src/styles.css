@@ -92,6 +92,7 @@ button {
   text-align: left;
   cursor: pointer;
   display: grid;
+  align-items: center;
   gap: 2px;
   transition: background 120ms ease;
 }

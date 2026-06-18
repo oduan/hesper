@@ -39,9 +39,9 @@ const { listSessions, createSession, updateTitle, deleteSession, generateTitle, 
     createdAt: '2026-06-10T03:00:00.000Z',
     updatedAt: '2026-06-10T03:00:12.000Z'
   })),
-  listMessages: vi.fn(async () => []),
-  listRuns: vi.fn(async () => []),
-  listSteps: vi.fn(async () => []),
+  listMessages: vi.fn(async (_sessionId?: string) => []),
+  listRuns: vi.fn(async (_sessionId?: string) => []),
+  listSteps: vi.fn(async (_runId?: string) => []),
   enqueue: vi.fn(async () => ({ runId: 'run-1' })),
   onEvent: vi.fn(() => () => undefined),
   listProviders: vi.fn(async () => []),
@@ -223,9 +223,9 @@ describe('renderer App', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('会话加载失败：IPC unavailable')
   })
 
-  it('handles session context-menu rename action', async () => {
+  it('handles session context-menu rename action inline without browser prompt', async () => {
     const user = userEvent.setup()
-    vi.spyOn(window, 'prompt').mockReturnValue('Renamed chat')
+    const promptSpy = vi.spyOn(window, 'prompt')
 
     listSessions.mockResolvedValueOnce([
       {
@@ -244,8 +244,87 @@ describe('renderer App', () => {
     row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 120, clientY: 160 }))
     await user.click(await screen.findByRole('menuitem', { name: '重命名' }))
 
+    const renameInput = await screen.findByLabelText('重命名会话标题')
+    expect(renameInput).toHaveValue('Existing chat')
+    await user.clear(renameInput)
+    await user.type(renameInput, 'Renamed chat{Enter}')
+
+    expect(promptSpy).not.toHaveBeenCalled()
     expect(updateTitle).toHaveBeenCalledWith({ id: 'session-1', title: 'Renamed chat' })
     expect(await screen.findAllByText('Renamed chat')).not.toHaveLength(0)
+  })
+
+  it('deletes a session from the context menu without confirmation', async () => {
+    const user = userEvent.setup()
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+
+    listSessions.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        title: 'Delete me',
+        status: 'active',
+        outputMode: 'markdown',
+        createdAt: '2026-06-10T03:00:00.000Z',
+        updatedAt: '2026-06-10T03:00:00.000Z'
+      }
+    ] as any)
+
+    render(<App />)
+
+    const row = (await screen.findAllByRole('button', { name: 'Delete me' }))[0]!
+    row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 120, clientY: 160 }))
+    await user.click(await screen.findByRole('menuitem', { name: '删除' }))
+
+    expect(confirmSpy).not.toHaveBeenCalled()
+    expect(deleteSession).toHaveBeenCalledWith('session-1')
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Delete me' })).not.toBeInTheDocument())
+  })
+
+  it('regenerates a context-menu session title from persisted history when history is not loaded', async () => {
+    const user = userEvent.setup()
+
+    listSessions.mockResolvedValueOnce([
+      {
+        id: 'session-active',
+        title: 'Active chat',
+        status: 'active',
+        defaultModelId: 'deepseek-active',
+        outputMode: 'markdown',
+        createdAt: '2026-06-10T03:00:00.000Z',
+        updatedAt: '2026-06-10T03:00:10.000Z'
+      },
+      {
+        id: 'session-2',
+        title: 'Dormant chat',
+        status: 'active',
+        defaultModelId: 'deepseek-chat',
+        outputMode: 'markdown',
+        createdAt: '2026-06-10T02:00:00.000Z',
+        updatedAt: '2026-06-10T02:00:00.000Z'
+      }
+    ] as any)
+    listMessages.mockImplementation(async (sessionId?: string) => sessionId === 'session-2'
+      ? [
+          { id: 'message-user-2', sessionId: 'session-2', role: 'user', content: '旧会话的问题', contentType: 'plain', createdAt: '2026-06-10T02:00:01.000Z' },
+          { id: 'message-assistant-2', sessionId: 'session-2', role: 'assistant', content: '旧会话的回答', contentType: 'markdown', createdAt: '2026-06-10T02:00:02.000Z' }
+        ] as any
+      : [] as any)
+
+    render(<App />)
+
+    const row = await screen.findByRole('button', { name: 'Dormant chat' })
+    row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 120, clientY: 160 }))
+    await user.click(await screen.findByRole('menuitem', { name: '重新生成标题' }))
+
+    await waitFor(() => {
+      expect(listMessages).toHaveBeenCalledWith('session-2')
+      expect(generateTitle).toHaveBeenCalledWith({
+        id: 'session-2',
+        modelId: 'deepseek-chat',
+        userPrompt: '旧会话的问题',
+        assistantResponse: '旧会话的回答'
+      })
+    })
   })
 
   it('generates a concise title after the first assistant turn completes', async () => {

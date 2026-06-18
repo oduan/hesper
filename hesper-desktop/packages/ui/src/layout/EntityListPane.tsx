@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import type { Session } from '@hesper/shared'
 import { darkTheme } from '../theme'
 import type { AppSection } from './ActivityRail'
@@ -9,7 +9,7 @@ export type EntityListPaneProps = {
   sessions: Session[]
   activeSessionId?: string
   onSelectSession?: (sessionId: string) => void
-  onRenameSession?: (sessionId: string) => void
+  onRenameSession?: (sessionId: string, title: string) => void
   onRegenerateSessionTitle?: (sessionId: string) => void
   onDeleteSession?: (sessionId: string) => void
 }
@@ -18,6 +18,11 @@ type SessionMenuState = {
   sessionId: string
   x: number
   y: number
+}
+
+type EditingSessionState = {
+  sessionId: string
+  title: string
 }
 
 type SessionMenuItem = {
@@ -44,6 +49,8 @@ export function EntityListPane({
 }: EntityListPaneProps) {
   const heading = title ?? (activeSection === 'sessions' ? '所有会话' : activeSection === 'settings' ? '设置' : '列表')
   const [sessionMenu, setSessionMenu] = useState<SessionMenuState>()
+  const [editingSession, setEditingSession] = useState<EditingSessionState>()
+  const renameInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!sessionMenu) return undefined
@@ -57,11 +64,35 @@ export function EntityListPane({
     }
   }, [sessionMenu])
 
+  useEffect(() => {
+    if (!editingSession) return
+    renameInputRef.current?.focus()
+    renameInputRef.current?.select()
+  }, [editingSession?.sessionId])
+
+  const startRenameSession = (sessionId: string) => {
+    const session = sessions.find((candidate) => candidate.id === sessionId)
+    if (!session) return
+    setEditingSession({ sessionId, title: session.title })
+  }
+
+  const cancelRenameSession = () => setEditingSession(undefined)
+
+  const commitRenameSession = () => {
+    if (!editingSession) return
+
+    const nextTitle = editingSession.title.trim()
+    const currentTitle = sessions.find((session) => session.id === editingSession.sessionId)?.title
+    setEditingSession(undefined)
+    if (!nextTitle || nextTitle === currentTitle) return
+    onRenameSession?.(editingSession.sessionId, nextTitle)
+  }
+
   const handleMenuAction = (action: typeof sessionMenuItems[number]['key'], sessionId: string) => {
     setSessionMenu(undefined)
     switch (action) {
       case 'rename':
-        onRenameSession?.(sessionId)
+        startRenameSession(sessionId)
         return
       case 'regenerate-title':
         onRegenerateSessionTitle?.(sessionId)
@@ -99,18 +130,50 @@ export function EntityListPane({
               const isActive = session.id === activeSessionId
               return (
                 <li key={session.id}>
-                  <button
-                    type="button"
-                    className={`hesper-list-row${isActive ? ' is-active' : ''}`}
-                    aria-current={isActive ? 'true' : undefined}
-                    onClick={() => onSelectSession?.(session.id)}
-                    onContextMenu={(event) => {
-                      event.preventDefault()
-                      setSessionMenu({ sessionId: session.id, x: event.clientX, y: event.clientY })
-                    }}
-                  >
-                    <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{session.title}</div>
-                  </button>
+                  {editingSession?.sessionId === session.id ? (
+                    <div
+                      className={`hesper-list-row${isActive ? ' is-active' : ''}`}
+                      style={sessionRowStyle}
+                      onContextMenu={(event) => {
+                        event.preventDefault()
+                        setSessionMenu({ sessionId: session.id, x: event.clientX, y: event.clientY })
+                      }}
+                    >
+                      <input
+                        ref={renameInputRef}
+                        aria-label="重命名会话标题"
+                        value={editingSession.title}
+                        onChange={(event) => setEditingSession({ sessionId: session.id, title: event.target.value })}
+                        onBlur={commitRenameSession}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault()
+                            commitRenameSession()
+                            return
+                          }
+                          if (event.key === 'Escape') {
+                            event.preventDefault()
+                            cancelRenameSession()
+                          }
+                        }}
+                        style={renameInputStyle}
+                      />
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className={`hesper-list-row${isActive ? ' is-active' : ''}`}
+                      style={sessionRowStyle}
+                      aria-current={isActive ? 'true' : undefined}
+                      onClick={() => onSelectSession?.(session.id)}
+                      onContextMenu={(event) => {
+                        event.preventDefault()
+                        setSessionMenu({ sessionId: session.id, x: event.clientX, y: event.clientY })
+                      }}
+                    >
+                      <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{session.title}</div>
+                    </button>
+                  )}
                 </li>
               )
             })}
@@ -161,6 +224,23 @@ export function EntityListPane({
       ) : null}
     </aside>
   )
+}
+
+const sessionRowStyle: CSSProperties = {
+  alignItems: 'center'
+}
+
+const renameInputStyle: CSSProperties = {
+  width: '100%',
+  minWidth: 0,
+  border: 0,
+  outline: '1px solid rgba(124, 108, 255, 0.55)',
+  borderRadius: 6,
+  background: 'rgba(255, 255, 255, 0.06)',
+  color: darkTheme.color.text,
+  font: 'inherit',
+  fontWeight: 600,
+  padding: '4px 6px'
 }
 
 const sessionMenuStyle: CSSProperties = {
