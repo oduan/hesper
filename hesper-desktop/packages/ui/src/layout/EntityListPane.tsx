@@ -118,10 +118,6 @@ export function EntityListPane({
     const isSelectedTarget = selectedTargets.includes(sessionId)
     const sessionIds = isSelectedTarget ? selectedTargets : [sessionId]
 
-    if (!isSelectedTarget) {
-      setSelectedSessionIds([sessionId])
-      setSelectionAnchorSessionId(sessionId)
-    }
     setSessionMenu({ sessionId, sessionIds, x, y })
   }
 

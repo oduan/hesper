@@ -81,6 +81,7 @@ describe('ui components', () => {
     expect(screen.getByLabelText('窗口标题栏')).toHaveClass('titlebar-drag')
 
     fireEvent.contextMenu(sessionRow)
+    expect(sessionRow).not.toHaveClass('is-selected')
     const menu = screen.getByRole('menu', { name: '会话操作' })
     expect(menu).toHaveStyle({ background: 'var(--hesper-color-surface-muted, #24283b)', borderRadius: '12px', padding: '4px 0' })
     expect(menu.querySelector('style')).toHaveTextContent('.hesper-session-menu-item:hover::after')
