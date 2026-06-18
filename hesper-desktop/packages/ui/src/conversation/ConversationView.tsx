@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type WheelEvent } from 'react'
-import type { Message, RunStep, Session } from '@hesper/shared'
+import type { AgentRun, Message, RunStep, Session } from '@hesper/shared'
 import { darkTheme } from '../theme'
 import { Composer, type ModelOptionGroup } from './Composer'
 import { MessageBubble } from './MessageBubble'
@@ -17,6 +17,7 @@ export type ConversationViewProps = {
   messages: Message[]
   steps: RunStep[]
   stepsByRun?: Record<string, RunStep[]>
+  runsById?: Record<string, AgentRun>
   streamingText: string
   streamingByRun?: Record<string, string>
   modelId: string
@@ -138,6 +139,7 @@ export function ConversationView({
   messages,
   steps,
   stepsByRun,
+  runsById,
   streamingText,
   streamingByRun,
   modelId,
@@ -173,6 +175,7 @@ export function ConversationView({
   ), [orderedMessages])
   const finalOutputRunIds = useMemo(() => new Set(finalOutputByRun.keys()), [finalOutputByRun])
   const latestUserMessageId = [...orderedMessages].reverse().find((message) => message.role === 'user')?.id
+  const fallbackStepsRun = orderedSteps[0]?.runId ? runsById?.[orderedSteps[0].runId] : undefined
   const getMessageSteps = (message: Message): RunStep[] => {
     if (message.role !== 'user') {
       return []
@@ -191,9 +194,13 @@ export function ConversationView({
 
     return streamingByRun?.[message.runId] ?? ''
   }
-  const getMessageRunEndedAt = (message: Message): string | undefined => (
-    message.runId ? finalOutputByRun.get(message.runId)?.createdAt : undefined
+  const getMessageRun = (message: Message): AgentRun | undefined => (
+    message.runId ? runsById?.[message.runId] : undefined
   )
+  const getMessageRunEndedAt = (message: Message): string | undefined => {
+    const run = getMessageRun(message)
+    return run?.endedAt ?? (message.runId ? finalOutputByRun.get(message.runId)?.createdAt : undefined)
+  }
   const hasAssistantOutputAfter = (message: Message): boolean => orderedMessages.some((candidate) => (
     candidate.role === 'assistant' && candidate.content.trim() && candidate.createdAt.localeCompare(message.createdAt) >= 0
   ))
@@ -262,9 +269,10 @@ export function ConversationView({
     messages: orderedMessages.map((message) => [message.id, message.role, message.content, message.runId, message.createdAt]),
     steps: orderedSteps.map((step) => [step.id, step.status, step.summary, step.title, step.createdAt]),
     stepsByRun: Object.entries(orderedStepsByRun).map(([runId, runSteps]) => [runId, runSteps.map((step) => [step.id, step.status, step.summary, step.title, step.createdAt])]),
+    runs: Object.entries(runsById ?? {}).map(([runId, run]) => [runId, run.status, run.startedAt, run.endedAt]),
     streamingText,
     streamingByRun: Object.entries(streamingByRun ?? {})
-  }), [orderedMessages, orderedSteps, orderedStepsByRun, streamingByRun, streamingText])
+  }), [orderedMessages, orderedSteps, orderedStepsByRun, runsById, streamingByRun, streamingText])
 
   const focusAnchor = (id: string) => {
     const element = anchorRefs.current[id]
@@ -489,7 +497,8 @@ export function ConversationView({
             <RunSteps
               steps={orderedSteps}
               autoExpanded
-              runStartedAt={orderedSteps[0]?.createdAt}
+              runStartedAt={fallbackStepsRun?.startedAt ?? orderedSteps[0]?.createdAt}
+              runEndedAt={fallbackStepsRun?.endedAt}
               getStepProps={(step) => {
                 const stepAnchorId = createStepAnchorId(step.id)
                 return {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import type { RunStep, RunStepStatus } from '@hesper/shared'
 import { darkTheme } from '../theme'
 import { MarkdownOutput } from './MarkdownOutput'
@@ -93,13 +93,6 @@ function useElapsedLabel(startedAt: string | undefined, endedAt: string | undefi
   const startMs = parseTimestamp(startedAt)
   const endMs = parseTimestamp(endedAt)
   const [nowMs, setNowMs] = useState(() => Date.now())
-  const latestElapsedMsRef = useRef(0)
-  const previousStartMsRef = useRef<number | undefined>(undefined)
-
-  if (previousStartMsRef.current !== startMs) {
-    previousStartMsRef.current = startMs
-    latestElapsedMsRef.current = 0
-  }
 
   useEffect(() => {
     if (startMs === undefined || endMs !== undefined) return
@@ -114,10 +107,41 @@ function useElapsedLabel(startedAt: string | undefined, endedAt: string | undefi
 
   if (startMs === undefined) return undefined
 
-  const elapsedMs = Math.max(0, (endMs ?? nowMs) - startMs)
-  const displayElapsedMs = Math.max(elapsedMs, latestElapsedMsRef.current)
-  latestElapsedMsRef.current = displayElapsedMs
-  return formatElapsedTime(displayElapsedMs)
+  return formatElapsedTime(Math.max(0, (endMs ?? nowMs) - startMs))
+}
+
+type ToolStepDetailPayload = {
+  kind?: unknown
+  input?: unknown
+  output?: unknown
+  isError?: unknown
+}
+
+function parseStructuredToolStepDetail(detail: string | undefined): ToolStepDetailPayload | undefined {
+  if (!detail?.trim()) return undefined
+  try {
+    const parsed = JSON.parse(detail) as ToolStepDetailPayload
+    if (parsed && typeof parsed === 'object' && parsed.kind === 'tool_call') {
+      return parsed
+    }
+  } catch {
+    return undefined
+  }
+  return undefined
+}
+
+function getToolStepDetailPayload(step: RunStep): ToolStepDetailPayload | undefined {
+  if (step.type !== 'tool_call') return undefined
+  return parseStructuredToolStepDetail(step.detail)
+}
+
+function formatJsonValue(value: unknown): string {
+  return JSON.stringify(value ?? {}, null, 2)
+}
+
+function formatOutputValue(value: unknown): string {
+  if (typeof value === 'string') return value
+  return formatJsonValue(value)
 }
 
 function createStepDisplayParts(step: RunStep): StepDisplayParts {
@@ -129,9 +153,10 @@ function createStepDisplayParts(step: RunStep): StepDisplayParts {
   }
 
   const primary = step.title
+  const shouldHideStructuredToolDetail = step.type === 'tool_call' && parseStructuredToolStepDetail(step.detail) !== undefined
   return {
     primary,
-    secondary: uniqueParts([step.summary, step.detail]).filter((part) => part !== primary)
+    secondary: uniqueParts([step.summary, shouldHideStructuredToolDetail ? undefined : step.detail]).filter((part) => part !== primary)
   }
 }
 
@@ -213,8 +238,43 @@ function createStepMarkdown(step: RunStep): string {
   return step.detail?.trim() || step.summary?.trim() || step.title
 }
 
+function ToolDetailBlock({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section aria-label={title} style={toolDetailBlockStyle}>
+      <h3 style={toolDetailTitleStyle}>{title}</h3>
+      {children}
+    </section>
+  )
+}
+
+function ToolStepDetails({ step }: { step: RunStep }) {
+  const payload = getToolStepDetailPayload(step) ?? { input: {} }
+  const hasOutput = Object.prototype.hasOwnProperty.call(payload, 'output')
+  const outputText = hasOutput ? formatOutputValue(payload.output) : undefined
+
+  return (
+    <div style={toolDetailGridStyle}>
+      <ToolDetailBlock title="Input">
+        <pre style={toolDetailPreStyle}>{formatJsonValue(payload.input)}</pre>
+      </ToolDetailBlock>
+      <ToolDetailBlock title="Output">
+        {hasOutput ? (
+          typeof payload.output === 'string' ? (
+            outputText ? <MarkdownOutput content={outputText} /> : <pre style={toolDetailPreStyle}>{outputText}</pre>
+          ) : (
+            <pre style={toolDetailPreStyle}>{outputText}</pre>
+          )
+        ) : (
+          <p style={toolDetailEmptyStyle}>{step.status === 'running' ? '等待工具返回…' : '暂无输出'}</p>
+        )}
+      </ToolDetailBlock>
+    </div>
+  )
+}
+
 function StepFullscreenDialog({ step, onClose }: { step: RunStep; onClose: () => void }) {
   const markdown = createStepMarkdown(step)
+  const toolDetailPayload = getToolStepDetailPayload(step)
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -253,7 +313,7 @@ function StepFullscreenDialog({ step, onClose }: { step: RunStep; onClose: () =>
           style={stepFullscreenScrollAreaStyle}
         >
           <article aria-label="步骤详情正文" style={stepFullscreenBodyStyle}>
-            <MarkdownOutput content={markdown} />
+            {toolDetailPayload ? <ToolStepDetails step={step} /> : <MarkdownOutput content={markdown} />}
           </article>
         </div>
       </div>
@@ -574,4 +634,47 @@ const stepFullscreenBodyStyle: CSSProperties = {
   background: 'transparent',
   borderStyle: 'none',
   color: darkTheme.color.text
+}
+
+const toolDetailGridStyle: CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+  gap: darkTheme.spacing.lg,
+  alignItems: 'start'
+}
+
+const toolDetailBlockStyle: CSSProperties = {
+  minWidth: 0,
+  display: 'grid',
+  gap: darkTheme.spacing.md,
+  border: `1px solid ${darkTheme.color.border}`,
+  borderRadius: darkTheme.radius.lg,
+  background: darkTheme.color.surfaceMuted,
+  padding: darkTheme.spacing.lg
+}
+
+const toolDetailTitleStyle: CSSProperties = {
+  margin: 0,
+  fontSize: darkTheme.typography.body,
+  lineHeight: 1.25,
+  color: darkTheme.color.text,
+  fontWeight: 800
+}
+
+const toolDetailPreStyle: CSSProperties = {
+  margin: 0,
+  minWidth: 0,
+  maxHeight: 'calc(100vh - 220px)',
+  overflow: 'auto',
+  whiteSpace: 'pre-wrap',
+  overflowWrap: 'anywhere',
+  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+  fontSize: darkTheme.typography.body,
+  lineHeight: 1.55,
+  color: darkTheme.color.text
+}
+
+const toolDetailEmptyStyle: CSSProperties = {
+  margin: 0,
+  color: darkTheme.color.textMuted
 }

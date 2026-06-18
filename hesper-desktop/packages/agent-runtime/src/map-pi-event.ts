@@ -20,6 +20,7 @@ type RunState = {
   toolCountsByKey: Map<string, number>
   pendingToolStepIdsByKey: Map<string, string[]>
   toolPurposeByStepId: Map<string, string>
+  toolInputByStepId: Map<string, unknown>
   thinkingByContentIndex: Map<number, ThinkingState>
 }
 
@@ -45,6 +46,7 @@ function getRunState(runId: string): RunState {
     toolCountsByKey: new Map(),
     pendingToolStepIdsByKey: new Map(),
     toolPurposeByStepId: new Map(),
+    toolInputByStepId: new Map(),
     thinkingByContentIndex: new Map()
   }
   runStates.set(runId, created)
@@ -53,6 +55,38 @@ function getRunState(runId: string): RunState {
 
 export function clearPiEventRunState(runId: string): void {
   runStates.delete(runId)
+}
+
+function safeStringifyJson(value: unknown): string {
+  try {
+    const seen = new WeakSet<object>()
+    return JSON.stringify(value, (_key, candidate) => {
+      if (candidate && typeof candidate === 'object') {
+        if (seen.has(candidate)) return '[Circular]'
+        seen.add(candidate)
+      }
+      return candidate
+    }) ?? 'null'
+  } catch {
+    return JSON.stringify(String(value))
+  }
+}
+
+type ToolStepDetailPayload = {
+  kind: 'tool_call'
+  input?: unknown
+  output?: unknown
+  isError?: boolean
+}
+
+function createToolStepDetail(input: unknown, output?: unknown, isError?: boolean): string {
+  const payload: ToolStepDetailPayload = {
+    kind: 'tool_call',
+    ...(input !== undefined ? { input } : {}),
+    ...(output !== undefined ? { output } : {}),
+    ...(isError !== undefined ? { isError } : {})
+  }
+  return safeStringifyJson(payload)
 }
 
 function createStep(runId: string, stepId: string, type: RunStepType, status: RunStepStatus, title: string, summary?: string, detail?: string, completedAt?: string): RunStep {
@@ -170,18 +204,23 @@ function createToolStepEvent(kind: StepEvent['type'], runId: string, event: PiEv
 
   if (kind === 'step.created') {
     const stepId = createToolStepId(runId, event, state, key)
-    const purpose = extractToolPurpose(event.args)
+    const input = event.args
+    const purpose = extractToolPurpose(input)
     if (purpose) state.toolPurposeByStepId.set(stepId, purpose)
+    if (input !== undefined) state.toolInputByStepId.set(stepId, input)
     queuePendingToolStepId(state, key, stepId)
     return {
       type: 'step.created',
-      step: createStep(runId, stepId, 'tool_call', 'running', title, purpose)
+      step: createStep(runId, stepId, 'tool_call', 'running', title, purpose, createToolStepDetail(input))
     }
   }
 
   const stepId = takePendingToolStepId(state, key, runId, event)
-  const purpose = extractToolPurpose(event.args) ?? state.toolPurposeByStepId.get(stepId)
+  const input = event.args !== undefined ? event.args : state.toolInputByStepId.get(stepId)
+  const purpose = extractToolPurpose(input) ?? state.toolPurposeByStepId.get(stepId)
   state.toolPurposeByStepId.delete(stepId)
+  state.toolInputByStepId.delete(stepId)
+  const output = event.result
   const isError = event.isError === true
   return {
     type: 'step.updated',
@@ -192,7 +231,7 @@ function createToolStepEvent(kind: StepEvent['type'], runId: string, event: PiEv
       isError ? 'failed' : 'succeeded',
       title,
       purpose,
-      undefined,
+      createToolStepDetail(input, output, isError),
       nowIso()
     )
   }

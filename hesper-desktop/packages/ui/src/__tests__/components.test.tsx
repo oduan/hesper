@@ -328,7 +328,7 @@ describe('ui components', () => {
 
     const collapsedToggle = within(stepsRegion).getByRole('button', { expanded: false })
     expect(collapsedToggle).toHaveAttribute('aria-expanded', 'false')
-    expect(collapsedToggle).toHaveTextContent('5秒')
+    expect(collapsedToggle).toHaveTextContent('2秒')
     expect(screen.queryAllByRole('listitem')).toHaveLength(0)
     expect(screen.getByText('最终输出')).toBeInTheDocument()
   })
@@ -625,7 +625,7 @@ describe('ui components', () => {
       />
     )
 
-    expect(screen.getByRole('button', { expanded: true })).toHaveTextContent('11秒')
+    expect(screen.getByRole('button', { expanded: true })).toHaveTextContent('2秒')
 
     rerender(
       <RunSteps
@@ -726,5 +726,43 @@ describe('ui components', () => {
     expect(within(item).getByText('工具：web_fetch-url')).toBeInTheDocument()
     expect(within(item).getByText('搜索 Hesper 是什么')).toHaveStyle({ color: 'var(--hesper-color-text-muted, #737aa2)' })
     expect(within(item).getByText('{"url":"https://example.com"}')).toHaveStyle({ color: 'var(--hesper-color-text-muted, #737aa2)' })
+  })
+
+  it('shows tool call fullscreen details as separate input and output blocks', async () => {
+    const user = userEvent.setup()
+    render(
+      <RunSteps
+        steps={[
+          {
+            id: 'step-tool-structured',
+            runId: 'run-1',
+            type: 'tool_call',
+            status: 'succeeded',
+            title: '工具：web_fetch-url',
+            summary: '搜索 Hesper 是什么',
+            detail: JSON.stringify({
+              kind: 'tool_call',
+              input: { url: 'https://example.com', purpose: '搜索 Hesper 是什么' },
+              output: { content: 'fetched html', details: { status: 200 } },
+              isError: false
+            }),
+            createdAt: now
+          }
+        ]}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { expanded: false }))
+    const item = screen.getByRole('listitem')
+    expect(item).not.toHaveTextContent('"kind"')
+    await user.click(within(item).getByRole('button', { name: /查看步骤详情/ }))
+
+    const dialog = screen.getByRole('dialog', { name: '步骤全屏查看' })
+    const inputBlock = within(dialog).getByLabelText('Input')
+    const outputBlock = within(dialog).getByLabelText('Output')
+    expect(inputBlock).toHaveTextContent('"url": "https://example.com"')
+    expect(inputBlock).toHaveTextContent('"purpose": "搜索 Hesper 是什么"')
+    expect(outputBlock).toHaveTextContent('"content": "fetched html"')
+    expect(outputBlock).toHaveTextContent('"status": 200')
   })
 })

@@ -582,8 +582,9 @@ describe('renderer App', () => {
       modelId: 'mock/hesper-fast',
       workspacePath: 'C:/workspace'
     }))
-    const enqueueInput = (enqueue as any).mock.calls[0]?.[0] as { messageId?: string } | undefined
+    const enqueueInput = (enqueue as any).mock.calls[0]?.[0] as { messageId?: string; messageCreatedAt?: string } | undefined
     expect(enqueueInput?.messageId).toEqual(expect.any(String))
+    expect(enqueueInput?.messageCreatedAt).toEqual(expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/))
     expect(await screen.findByText('hello agent')).toBeInTheDocument()
 
     runtimeListener?.({

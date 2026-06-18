@@ -120,7 +120,7 @@ describe('registerIpcHandlers', () => {
 
     await handles.get(ipcChannels.agentEventsSubscribe)?.({ sender })
     const session = (await handles.get(ipcChannels.sessionsCreate)?.({ sender }, { title: 'IPC created' })) as { id: string }
-    const enqueueResult = await handles.get(ipcChannels.agentEnqueue)?.({ sender }, { sessionId: session.id, prompt: 'Ping', modelId: 'mock/hesper-fast', messageId: 'message-client-1' }) as { runId: string }
+    const enqueueResult = await handles.get(ipcChannels.agentEnqueue)?.({ sender }, { sessionId: session.id, prompt: 'Ping', modelId: 'mock/hesper-fast', messageId: 'message-client-1', messageCreatedAt: '2026-06-10T03:00:01.000Z' }) as { runId: string }
     await container.agentRuntime.waitForIdle(session.id)
 
     expect(await persistence.messages.listBySession(session.id)).toEqual([
@@ -129,7 +129,8 @@ describe('registerIpcHandlers', () => {
         sessionId: session.id,
         role: 'user',
         content: 'Ping',
-        runId: enqueueResult.runId
+        runId: enqueueResult.runId,
+        createdAt: '2026-06-10T03:00:01.000Z'
       }),
       expect.objectContaining({
         sessionId: session.id,
@@ -190,7 +191,7 @@ describe('registerIpcHandlers', () => {
     registerIpcHandlers({ ipcMain, dialog, container, savePersistence, schedulePersistenceSave })
     const session = await container.sessionService.createSession({ title: 'Prompt assembly IPC', workspacePath: 'C:/workspace' })
 
-    await expect(handles.get(ipcChannels.agentEnqueue)?.({ sender: { id: 1 } }, { sessionId: session.id, prompt: 'Use assembled prompt', modelId: 'mock/hesper-fast', messageId: 'message-client-1' })).resolves.toEqual({ runId: 'run-assembled' })
+    await expect(handles.get(ipcChannels.agentEnqueue)?.({ sender: { id: 1 } }, { sessionId: session.id, prompt: 'Use assembled prompt', modelId: 'mock/hesper-fast', messageId: 'message-client-1', messageCreatedAt: '2026-06-10T03:00:02.000Z' })).resolves.toEqual({ runId: 'run-assembled' })
 
     expect(promptSpy).toHaveBeenCalledWith(expect.objectContaining({
       session: expect.objectContaining({
@@ -214,7 +215,8 @@ describe('registerIpcHandlers', () => {
       id: 'message-client-1',
       sessionId: session.id,
       content: 'Use assembled prompt',
-      runId: 'run-assembled'
+      runId: 'run-assembled',
+      now: '2026-06-10T03:00:02.000Z'
     }))
     expect(enqueueSpy.mock.invocationCallOrder[0]!).toBeLessThan(createUserMessageSpy.mock.invocationCallOrder[0]!)
   })

@@ -317,6 +317,65 @@ describe('ConversationView', () => {
     expect(secondPrompt.compareDocumentPosition(secondAnswer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
+  it('uses persisted run endedAt to restore completed elapsed timers after remounting', () => {
+    render(
+      <ConversationView
+        session={session}
+        messages={[
+          {
+            id: 'u-restored',
+            sessionId: 'session-1',
+            role: 'user',
+            content: 'restored prompt',
+            contentType: 'plain',
+            runId: 'run-restored',
+            createdAt: '2026-06-10T03:00:00.000Z'
+          },
+          {
+            id: 'a-restored',
+            sessionId: 'session-1',
+            role: 'assistant',
+            content: 'restored answer',
+            contentType: 'markdown',
+            runId: 'run-restored',
+            createdAt: '2026-06-10T03:00:00.000Z'
+          }
+        ]}
+        steps={[]}
+        stepsByRun={{
+          'run-restored': [
+            {
+              id: 'step-restored',
+              runId: 'run-restored',
+              type: 'thought',
+              status: 'succeeded',
+              title: 'Restored thought',
+              summary: 'Restored reasoning',
+              createdAt: '2026-06-10T03:00:01.000Z'
+            }
+          ]
+        }}
+        runsById={{
+          'run-restored': {
+            id: 'run-restored',
+            sessionId: 'session-1',
+            status: 'succeeded',
+            modelId: 'mock/hesper-fast',
+            retryCount: 0,
+            maxRetries: 2,
+            startedAt: '2026-06-10T03:00:00.000Z',
+            endedAt: '2026-06-10T03:00:05.000Z'
+          }
+        }}
+        streamingText=""
+        modelId="mock/hesper-fast"
+        onSend={() => undefined}
+      />
+    )
+
+    expect(within(screen.getByLabelText('步骤流')).getByRole('button', { expanded: false })).toHaveTextContent('5秒')
+  })
+
   it('closes navigation and fullscreen when close-panels command arrives', async () => {
     const user = userEvent.setup()
     const { rerender } = renderConversation()

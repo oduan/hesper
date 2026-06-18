@@ -8,6 +8,7 @@ export type AppState = {
   messagesBySession: Record<string, Message[]>
   stepsByRun: Record<string, RunStep[]>
   streamingByRun: Record<string, string>
+  runsById: Record<string, AgentRun>
   activeSection: AppSection
   runSessionIds: Record<string, string>
   latestRunIdBySession: Record<string, string>
@@ -30,6 +31,7 @@ export const initialAppState: AppState = {
   messagesBySession: {},
   stepsByRun: {},
   streamingByRun: {},
+  runsById: {},
   activeSection: 'sessions',
   runSessionIds: {},
   latestRunIdBySession: {}
@@ -135,8 +137,12 @@ function createRetryStep(event: Extract<AgentRuntimeEvent, { type: 'run.retrying
   }
 }
 
+function createTimestamp(): string {
+  return new Date().toISOString()
+}
+
 function createFailureStep(event: Extract<AgentRuntimeEvent, { type: 'run.failed' }>): RunStep {
-  const now = new Date().toISOString()
+  const now = createTimestamp()
   return {
     id: `failed-${event.runId}`,
     runId: event.runId,
@@ -193,9 +199,11 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       }
       const nextStepsByRun = { ...state.stepsByRun }
       const nextRunSessionIds = { ...state.runSessionIds }
+      const nextRunsById = { ...state.runsById }
 
       for (const run of action.runs) {
         nextRunSessionIds[run.id] = run.sessionId
+        nextRunsById[run.id] = run
         nextStepsByRun[run.id] = mergeManyByIdChronologically(action.stepsByRun[run.id] ?? [], nextStepsByRun[run.id] ?? [])
       }
 
@@ -215,6 +223,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         messagesBySession: nextMessagesBySession,
         stepsByRun: nextStepsByRun,
         runSessionIds: nextRunSessionIds,
+        runsById: nextRunsById,
         latestRunIdBySession: nextLatestRunIdBySession
       }
     }
@@ -265,6 +274,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             ...state,
             messagesBySession: nextMessagesBySession,
             runSessionIds: { ...state.runSessionIds, [event.run.id]: event.run.sessionId },
+            runsById: { ...state.runsById, [event.run.id]: event.run },
             latestRunIdBySession: { ...state.latestRunIdBySession, [event.run.sessionId]: event.run.id },
             stepsByRun: { ...state.stepsByRun, [event.run.id]: state.stepsByRun[event.run.id] ?? [] },
             streamingByRun: { ...state.streamingByRun, [event.run.id]: state.streamingByRun[event.run.id] ?? '' }
@@ -295,19 +305,27 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             delete nextStreamingByRun[event.message.runId]
           }
 
+          const currentRun = event.message.runId ? state.runsById[event.message.runId] : undefined
           return {
             ...state,
             messagesBySession: {
               ...state.messagesBySession,
               [event.message.sessionId]: mergeByIdChronologically(state.messagesBySession[event.message.sessionId] ?? [], event.message)
             },
+            runsById: currentRun && event.message.runId
+              ? { ...state.runsById, [event.message.runId]: { ...currentRun, status: 'succeeded', endedAt: event.message.createdAt } }
+              : state.runsById,
             streamingByRun: nextStreamingByRun
           }
         }
         case 'run.retrying': {
           const retryStep = createRetryStep(event)
+          const currentRun = state.runsById[event.runId]
           return {
             ...state,
+            runsById: currentRun
+              ? { ...state.runsById, [event.runId]: { ...currentRun, retryCount: event.retryCount } }
+              : state.runsById,
             stepsByRun: {
               ...state.stepsByRun,
               [event.runId]: mergeByIdChronologically(state.stepsByRun[event.runId] ?? [], retryStep)
@@ -317,8 +335,13 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         }
         case 'run.failed': {
           const failureStep = createFailureStep(event)
+          const currentRun = state.runsById[event.runId]
+          const endedAt = failureStep.completedAt ?? createTimestamp()
           return {
             ...state,
+            runsById: currentRun
+              ? { ...state.runsById, [event.runId]: { ...currentRun, status: 'failed', endedAt, error: event.error } }
+              : state.runsById,
             stepsByRun: {
               ...state.stepsByRun,
               [event.runId]: mergeByIdChronologically(state.stepsByRun[event.runId] ?? [], failureStep)
@@ -326,9 +349,28 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             streamingByRun: clearStreamingByRun(state.streamingByRun, event.runId)
           }
         }
-        case 'run.started':
-        case 'run.succeeded':
-          return state
+        case 'run.started': {
+          const currentRun = state.runsById[event.runId]
+          if (!currentRun) return state
+          return {
+            ...state,
+            runsById: {
+              ...state.runsById,
+              [event.runId]: { ...currentRun, status: 'running', startedAt: currentRun.startedAt ?? createTimestamp() }
+            }
+          }
+        }
+        case 'run.succeeded': {
+          const currentRun = state.runsById[event.runId]
+          if (!currentRun) return state
+          return {
+            ...state,
+            runsById: {
+              ...state.runsById,
+              [event.runId]: { ...currentRun, status: 'succeeded' }
+            }
+          }
+        }
       }
     }
     default:

@@ -149,7 +149,11 @@ describe('pi event mapping', () => {
         })
       })
     ])
-    expect((events[0] as Extract<(typeof events)[number], { type: 'step.created' }>).step.detail).toBeUndefined()
+    const detail = JSON.parse((events[0] as Extract<(typeof events)[number], { type: 'step.created' }>).step.detail!)
+    expect(detail).toEqual({
+      kind: 'tool_call',
+      input: { path: 'README.md', purpose: '读取 README 了解项目结构' }
+    })
   })
 
   it('keeps separate steps for multiple tool calls that do not provide tool call ids', () => {
@@ -260,9 +264,12 @@ describe('pi event mapping', () => {
       })
     ])
     const endStep = (endEvents[0] as Extract<(typeof endEvents)[number], { type: 'step.updated' }>).step
-    expect(endStep.detail).toBeUndefined()
-    expect(JSON.stringify(endStep)).not.toContain('done')
-    expect(JSON.stringify(endStep)).not.toContain('README.md')
+    expect(JSON.parse(endStep.detail!)).toEqual({
+      kind: 'tool_call',
+      input: { path: 'README.md', purpose: '读取 README 了解项目结构' },
+      output: { content: 'done' },
+      isError: false
+    })
     expect((startEvents[0] as Extract<(typeof startEvents)[number], { type: 'step.created' }>).step.id).toBe(
       endStep.id
     )

@@ -559,6 +559,7 @@ function AppContent() {
             messages={activeMessages}
             steps={activeSteps}
             stepsByRun={state.stepsByRun}
+            runsById={state.runsById}
             streamingText={activeStreamingText}
             streamingByRun={state.streamingByRun}
             modelId={activeModelId}
@@ -883,6 +884,7 @@ async function sendMessage({
       prompt: content,
       modelId,
       messageId: message.id,
+      messageCreatedAt: message.createdAt,
       ...(session.workspacePath ? { workspacePath: session.workspacePath } : {})
     })
     dispatch({ type: 'message.run-linked', sessionId: session.id, messageId: message.id, runId: result.runId })

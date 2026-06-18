@@ -434,8 +434,48 @@ describe('app-store reducer', () => {
       'run-restored-2': 'session-1',
       'run-live': 'session-1'
     })
+    expect(restoredState.runsById['run-restored-2']).toMatchObject({ id: 'run-restored-2', sessionId: 'session-1' })
     expect(restoredState.latestRunIdBySession['session-1']).toBe('run-live')
     expect(restoredState.streamingByRun['run-live']).toBe('streaming now')
+  })
+
+  it('records a recoverable turn end time when the assistant message completes', () => {
+    const runCreatedState = appReducer(initialAppState, {
+      type: 'agent.event',
+      event: {
+        type: 'run.created',
+        run: {
+          id: 'run-live-complete',
+          sessionId: 'session-1',
+          status: 'running',
+          modelId: 'mock/hesper-fast',
+          retryCount: 0,
+          maxRetries: 2,
+          startedAt: '2026-06-10T03:00:00.000Z'
+        }
+      }
+    })
+
+    const completedState = appReducer(runCreatedState, {
+      type: 'agent.event',
+      event: {
+        type: 'message.completed',
+        message: {
+          id: 'message-live-complete',
+          sessionId: 'session-1',
+          role: 'assistant',
+          content: 'done',
+          contentType: 'markdown',
+          runId: 'run-live-complete',
+          createdAt: '2026-06-10T03:00:07.000Z'
+        }
+      }
+    })
+
+    expect(completedState.runsById['run-live-complete']).toMatchObject({
+      status: 'succeeded',
+      endedAt: '2026-06-10T03:00:07.000Z'
+    })
   })
 
   it('clears the latest run pointer when a new user prompt is added optimistically', () => {

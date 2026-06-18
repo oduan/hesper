@@ -88,7 +88,8 @@ export const agentEnqueueInputSchema = z.object({
   workspacePath: z.string().optional(),
   enabledToolIds: z.array(nonEmptyStringSchema).optional(),
   parentRunId: nonEmptyStringSchema.optional(),
-  messageId: nonEmptyStringSchema.optional()
+  messageId: nonEmptyStringSchema.optional(),
+  messageCreatedAt: z.string().datetime().optional()
 })
 
 export const appFontSizeSchema = z.number().int().min(12).max(18)

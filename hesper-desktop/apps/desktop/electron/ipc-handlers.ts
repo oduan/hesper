@@ -229,14 +229,16 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
     },
     [ipcChannels.agentEnqueue]: async (_event, payload) => {
       const input = agentEnqueueInputSchema.parse(payload)
+      const { messageId, messageCreatedAt, ...runtimeInput } = input
       const runContext = await assembleRunContext(input.sessionId, input.workspacePath, input.enabledToolIds)
-      const run = await options.container.agentRuntime.enqueue(omitUndefined({ ...input, ...runContext }))
+      const run = await options.container.agentRuntime.enqueue(omitUndefined({ ...runtimeInput, ...runContext }))
       try {
         await options.container.conversationService.createUserMessage({
           sessionId: input.sessionId,
           content: input.prompt,
           runId: run.id,
-          ...(input.messageId ? { id: input.messageId } : {})
+          ...(messageId ? { id: messageId } : {}),
+          ...(messageCreatedAt ? { now: messageCreatedAt } : {})
         })
       } catch (error) {
         const normalizedError = toError(error)
