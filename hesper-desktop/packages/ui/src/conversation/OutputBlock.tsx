@@ -42,8 +42,8 @@ export const OutputBlock = memo(function OutputBlock({ content, contentType, clo
         style={{
           contain: 'paint',
           position: 'relative',
-          height: contentType === 'html' ? 260 : 'auto',
-          maxHeight: 340,
+          height: contentType === 'html' ? outputBlockHtmlHeight : 'auto',
+          maxHeight: outputBlockMaxHeight,
           overflow: 'hidden',
           borderRadius: darkTheme.radius.lg,
           border: 0,
@@ -77,7 +77,7 @@ export const OutputBlock = memo(function OutputBlock({ content, contentType, clo
           style={{
             boxSizing: 'border-box',
             height: contentType === 'html' ? '100%' : 'auto',
-            maxHeight: contentType === 'html' ? '100%' : 340,
+            maxHeight: contentType === 'html' ? '100%' : outputBlockMaxHeight,
             overflow: 'auto',
             overscrollBehavior: 'contain',
             overflowAnchor: 'none',
@@ -108,6 +108,9 @@ export const OutputBlock = memo(function OutputBlock({ content, contentType, clo
     </>
   )
 })
+
+const outputBlockHtmlHeight = 300
+const outputBlockMaxHeight = 380
 
 const outputBlockChromeCss = `
 .hesper-output-block [data-hesper-output-fullscreen-button="true"] {

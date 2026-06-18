@@ -368,7 +368,7 @@ describe('ui components', () => {
 
     const conversationScroller = screen.getByLabelText('消息列表')
     const outputScroller = screen.getByLabelText('输出内容滚动区')
-    expect(outputScroller).toHaveStyle({ maxHeight: '340px', boxSizing: 'border-box', overscrollBehavior: 'contain' })
+    expect(outputScroller).toHaveStyle({ maxHeight: '380px', boxSizing: 'border-box', overscrollBehavior: 'contain' })
 
     const regularWheel = new WheelEvent('wheel', { deltaY: 48, bubbles: true, cancelable: true })
     outputScroller.dispatchEvent(regularWheel)
@@ -536,7 +536,9 @@ describe('ui components', () => {
     expect(toggle).not.toHaveTextContent('Network Warning')
     expect(toggle).not.toHaveTextContent('最新步骤')
     expect(within(toggle).queryByLabelText(/步骤状态/)).not.toBeInTheDocument()
-    expect(toggle).toHaveStyle({ gridTemplateColumns: '16px 28px minmax(0, 1fr)' })
+    expect(toggle).toHaveStyle({ gridTemplateColumns: '18px 28px minmax(0, 1fr)', columnGap: '5px' })
+    expect(within(toggle).getByText('▸')).toHaveStyle({ fontSize: '16px' })
+    expect(within(toggle).getByText('3')).toHaveStyle({ borderRadius: '8px' })
     expect(within(toggle).getByText('Searching repo')).not.toHaveAttribute('title')
     expect(screen.queryByText('Generated deterministic mock response')).not.toBeInTheDocument()
 

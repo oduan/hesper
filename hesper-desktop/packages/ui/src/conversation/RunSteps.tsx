@@ -362,7 +362,7 @@ export function RunSteps({ steps, autoExpanded = false, runStartedAt, runEndedAt
         onClick={() => setExpanded((value: boolean) => !value)}
         style={{
           ...summaryButtonStyle,
-          gridTemplateColumns: elapsedLabel ? summaryRowColumnsWithTimer : rowColumns
+          gridTemplateColumns: elapsedLabel ? summaryRowColumnsWithTimer : summaryRowColumns
         }}
       >
         <span aria-hidden="true" style={chevronStyle}>{expanded ? '▾' : '▸'}</span>
@@ -430,14 +430,16 @@ const stepRowHoverCss = `
 `
 
 const rowColumns = '16px 28px minmax(0, 1fr)'
-const summaryRowColumnsWithTimer = '16px 28px auto minmax(0, 1fr)'
+const summaryRowColumns = '18px 28px minmax(0, 1fr)'
+const summaryRowColumnsWithTimer = '18px 28px auto minmax(0, 1fr)'
+const summaryControlGap = 5
 
 const summaryButtonStyle: CSSProperties = {
   width: '100%',
   display: 'grid',
-  gridTemplateColumns: rowColumns,
+  gridTemplateColumns: summaryRowColumns,
   alignItems: 'center',
-  columnGap: darkTheme.spacing.sm,
+  columnGap: summaryControlGap,
   border: 0,
   background: 'transparent',
   color: darkTheme.color.text,
@@ -448,6 +450,7 @@ const summaryButtonStyle: CSSProperties = {
 
 const chevronStyle: CSSProperties = {
   color: darkTheme.color.textMuted,
+  fontSize: 16,
   lineHeight: 1,
   justifySelf: 'center'
 }
@@ -459,7 +462,7 @@ const countBadgeStyle: CSSProperties = {
   alignItems: 'center',
   justifyContent: 'center',
   fontSize: darkTheme.typography.body,
-  borderRadius: darkTheme.radius.xl,
+  borderRadius: darkTheme.radius.sm,
   border: `1px solid ${darkTheme.color.border}`,
   color: darkTheme.color.textMuted,
   padding: '0 7px'
