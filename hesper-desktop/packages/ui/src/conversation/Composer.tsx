@@ -125,6 +125,8 @@ export function Composer({
 
 const textareaStyle = {
   width: '100%',
+  boxSizing: 'border-box',
+  display: 'block',
   resize: 'none',
   minHeight: 96,
   maxHeight: 210,
@@ -134,9 +136,11 @@ const textareaStyle = {
   outline: 0,
   background: 'transparent',
   color: darkTheme.color.text,
-  padding: 0,
-  font: 'inherit',
+  padding: '0 1px',
+  fontFamily: 'inherit',
   fontSize: 13,
+  fontWeight: 'inherit',
+  letterSpacing: 'inherit',
   lineHeight: 1.5
 } satisfies CSSProperties
 

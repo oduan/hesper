@@ -169,8 +169,13 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       const input = generateSessionTitleInputSchema.parse(payload)
       const result = await options.container.sessionTitleGenerator.generateTitle({
         usedModelId: input.modelId,
-        userPrompt: input.userPrompt
+        userPrompt: input.userPrompt,
+        ...(input.assistantOutput ? { assistantOutput: input.assistantOutput } : {})
       })
+      if (!result) {
+        return options.container.sessionService.getSession(input.id)
+      }
+
       const session = await options.container.sessionService.updateTitle(input.id, result.title)
       await savePersistence()
       return session

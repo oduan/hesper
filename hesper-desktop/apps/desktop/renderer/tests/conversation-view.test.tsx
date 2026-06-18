@@ -226,7 +226,7 @@ describe('ConversationView', () => {
 
 
 
-  it('renders reasoning steps under the user message that started each run', () => {
+  it('hides run steps until a tool call exists for the run', () => {
     render(
       <ConversationView
         session={session}
@@ -300,16 +300,15 @@ describe('ConversationView', () => {
     )
 
     const firstPrompt = screen.getByText('first prompt')
-    const firstReasoning = screen.getByText('First reasoning')
     const firstAnswer = screen.getByText('first answer')
     const secondPrompt = screen.getByText('second prompt')
-    const secondReasoning = screen.getByText('Second reasoning')
     const secondAnswer = screen.getByText('second answer')
 
-    expect(firstPrompt.compareDocumentPosition(firstReasoning) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(firstReasoning.compareDocumentPosition(firstAnswer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(secondPrompt.compareDocumentPosition(secondReasoning) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(secondReasoning.compareDocumentPosition(secondAnswer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.queryByText('First reasoning')).not.toBeInTheDocument()
+    expect(screen.queryByText('Second reasoning')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('步骤流')).not.toBeInTheDocument()
+    expect(firstPrompt.compareDocumentPosition(firstAnswer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(secondPrompt.compareDocumentPosition(secondAnswer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('closes navigation and fullscreen when close-panels command arrives', async () => {

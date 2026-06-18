@@ -31,9 +31,6 @@ export function ActivityRail({ activeSection, onCreateSession, onSelectSection }
         gap: darkTheme.spacing.md
       }}
     >
-      <div style={{ padding: `0 ${darkTheme.spacing.sm}`, fontSize: 14, fontWeight: 700, letterSpacing: '0.02em', color: darkTheme.color.text }}>
-        hesper
-      </div>
       <button
         type="button"
         className="hesper-nav-item hesper-nav-item-strong"

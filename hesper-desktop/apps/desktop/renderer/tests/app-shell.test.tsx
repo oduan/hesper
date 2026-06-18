@@ -119,7 +119,7 @@ describe('renderer App', () => {
 
     render(<App />)
 
-    expect((await screen.findAllByText('hesper')).length).toBeGreaterThan(0)
+    expect((await screen.findAllByText('Hesper')).length).toBeGreaterThan(0)
     expect(screen.getByText('所有会话')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '最小化窗口' }))
@@ -254,6 +254,49 @@ describe('renderer App', () => {
     expect(await screen.findAllByText('Renamed chat')).not.toHaveLength(0)
   })
 
+  it('keeps the submitted session title visible while rename persistence is pending', async () => {
+    const user = userEvent.setup()
+    let resolveRename!: (value: Awaited<ReturnType<typeof updateTitle>>) => void
+    updateTitle.mockImplementationOnce((input: { id: string; title: string }) => new Promise((resolve) => {
+      resolveRename = resolve
+    }) as ReturnType<typeof updateTitle>)
+
+    listSessions.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        title: 'Existing chat',
+        status: 'active',
+        outputMode: 'markdown',
+        createdAt: '2026-06-10T03:00:00.000Z',
+        updatedAt: '2026-06-10T03:00:00.000Z'
+      }
+    ] as any)
+
+    render(<App />)
+
+    const row = (await screen.findAllByRole('button', { name: 'Existing chat' }))[0]!
+    row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 120, clientY: 160 }))
+    await user.click(await screen.findByRole('menuitem', { name: '重命名' }))
+
+    const renameInput = await screen.findByLabelText('重命名会话标题')
+    await user.clear(renameInput)
+    await user.type(renameInput, 'Renamed chat{Enter}')
+
+    await waitFor(() => expect(updateTitle).toHaveBeenCalledWith({ id: 'session-1', title: 'Renamed chat' }))
+    expect(screen.queryByText('Existing chat')).not.toBeInTheDocument()
+    expect(screen.getAllByText('Renamed chat').length).toBeGreaterThan(0)
+
+    resolveRename({
+      id: 'session-1',
+      title: 'Renamed chat',
+      status: 'active',
+      outputMode: 'markdown',
+      createdAt: '2026-06-10T03:00:00.000Z',
+      updatedAt: '2026-06-10T03:00:12.000Z'
+    } as any)
+    await waitFor(() => expect(screen.getAllByText('Renamed chat').length).toBeGreaterThan(0))
+  })
+
   it('deletes a session from the context menu without confirmation', async () => {
     const user = userEvent.setup()
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
@@ -323,9 +366,63 @@ describe('renderer App', () => {
       expect(generateTitle).toHaveBeenCalledWith({
         id: 'session-2',
         modelId: 'deepseek-chat',
-        userPrompt: '最近一次用户输入'
+        userPrompt: '最近一次用户输入',
+        assistantOutput: '最近一次 Agent 回答'
       })
     })
+  })
+
+  it('shows a visible error when context-menu title regeneration fails', async () => {
+    const user = userEvent.setup()
+
+    listSessions.mockResolvedValueOnce([
+      {
+        id: 'session-2',
+        title: 'Dormant chat',
+        status: 'active',
+        defaultModelId: 'deepseek-chat',
+        outputMode: 'markdown',
+        createdAt: '2026-06-10T02:00:00.000Z',
+        updatedAt: '2026-06-10T02:00:00.000Z'
+      }
+    ] as any)
+    listMessages.mockResolvedValue([
+      { id: 'message-user-1', sessionId: 'session-2', role: 'user', content: '最近一次用户输入', contentType: 'plain', createdAt: '2026-06-10T02:05:01.000Z' }
+    ] as any)
+    generateTitle.mockRejectedValueOnce(new Error('Model provider needs an API key: deepseek'))
+
+    render(<App />)
+
+    const row = await screen.findByRole('button', { name: 'Dormant chat' })
+    row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 120, clientY: 160 }))
+    await user.click(await screen.findByRole('menuitem', { name: '重新生成标题' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('标题生成失败：Model provider needs an API key: deepseek')
+  })
+
+  it('shows a visible error when no user message can seed title regeneration', async () => {
+    const user = userEvent.setup()
+
+    listSessions.mockResolvedValueOnce([
+      {
+        id: 'session-empty',
+        title: 'Empty chat',
+        status: 'active',
+        outputMode: 'markdown',
+        createdAt: '2026-06-10T02:00:00.000Z',
+        updatedAt: '2026-06-10T02:00:00.000Z'
+      }
+    ] as any)
+    listMessages.mockResolvedValue([])
+
+    render(<App />)
+
+    const row = await screen.findByRole('button', { name: 'Empty chat' })
+    row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 120, clientY: 160 }))
+    await user.click(await screen.findByRole('menuitem', { name: '重新生成标题' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('标题生成失败：没有可用于生成标题的用户消息')
+    expect(generateTitle).not.toHaveBeenCalled()
   })
 
   it('generates a concise title after the first assistant turn completes', async () => {
@@ -391,7 +488,8 @@ describe('renderer App', () => {
       expect(generateTitle).toHaveBeenCalledWith({
         id: 'session-1',
         modelId: 'deepseek-chat',
-        userPrompt: '请规划一个发布会视频脚本'
+        userPrompt: '请规划一个发布会视频脚本',
+        assistantOutput: '可以，标题、分镜、旁白和镜头节奏可以这样安排。'
       })
     })
     expect(await screen.findAllByText('模型生成标题')).not.toHaveLength(0)

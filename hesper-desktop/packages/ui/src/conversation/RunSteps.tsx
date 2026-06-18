@@ -53,6 +53,14 @@ function uniqueParts(parts: Array<string | undefined>): string[] {
   })
 }
 
+function createToolIntent(step: RunStep): string {
+  return step.summary?.replace(/\s+/g, ' ').trim() || step.title
+}
+
+function firstToolCallStep(steps: RunStep[]): RunStep | undefined {
+  return steps.find((step) => step.type === 'tool_call')
+}
+
 function createStepDisplayParts(step: RunStep): StepDisplayParts {
   if (step.type === 'thought' && step.summary) {
     return {
@@ -73,33 +81,97 @@ function createStepText(step: RunStep): string {
   return [parts.primary, ...parts.secondary].join(' · ')
 }
 
-function StatusDot({ status }: { status: RunStepStatus }) {
+const runningDotScanOrder = [3, 2, 1, 4, 7, 8, 9, 6, 5]
+
+function RunningStatusIcon() {
+  return (
+    <span
+      aria-label={`步骤状态：${statusLabels.running}`}
+      title={statusLabels.running}
+      data-step-status-icon="running-nine-dot-sweep"
+      style={runningStatusIconStyle}
+    >
+      <style>{runningDotAnimationCss}</style>
+      {runningDotScanOrder.map((dot, index) => {
+        const row = Math.ceil(dot / 3)
+        const column = ((dot - 1) % 3) + 1
+        return (
+          <span
+            key={dot}
+            aria-hidden="true"
+            data-step-running-dot={dot}
+            style={{
+              ...runningDotStyle,
+              gridRow: row,
+              gridColumn: column,
+              animationDelay: `${index * 90}ms`
+            }}
+          />
+        )
+      })}
+    </span>
+  )
+}
+
+function CompletedStatusIcon({ status }: { status: 'succeeded' | 'failed' }) {
+  const isSucceeded = status === 'succeeded'
+  const color = getStatusColor(status)
   return (
     <span
       aria-label={`步骤状态：${statusLabels[status]}`}
       title={statusLabels[status]}
+      data-step-status-icon={isSucceeded ? 'success-check' : 'failed-cross'}
+      style={statusIconSlotStyle}
+    >
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" style={{ display: 'block', color }}>
+        <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.7" />
+        <path
+          d={isSucceeded ? 'M5.2 8.1 7.1 10 10.9 5.8' : 'M5.5 5.5 10.5 10.5M10.5 5.5 5.5 10.5'}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </span>
+  )
+}
+
+function PendingStatusIcon() {
+  return (
+    <span
+      aria-label={`步骤状态：${statusLabels.pending}`}
+      title={statusLabels.pending}
       style={{
-        width: 8,
-        height: 8,
-        borderRadius: '999px',
-        background: getStatusColor(status),
-        boxShadow: `0 0 0 3px ${getStatusColor(status)}22`,
-        alignSelf: 'center',
-        justifySelf: 'center'
+        ...pendingStatusIconStyle,
+        background: getStatusColor('pending'),
+        boxShadow: `0 0 0 3px ${getStatusColor('pending')}22`
       }}
     />
   )
 }
 
+function StatusDot({ status }: { status: RunStepStatus }) {
+  if (status === 'running') return <RunningStatusIcon />
+  if (status === 'succeeded' || status === 'failed') return <CompletedStatusIcon status={status} />
+  return <PendingStatusIcon />
+}
+
 export function RunSteps({ steps, autoExpanded = false, getStepProps }: RunStepsProps) {
   const [expanded, setExpanded] = useState(autoExpanded)
   const orderedSteps = useMemo(() => [...steps].sort(compareCreatedAt), [steps])
+  const firstTool = firstToolCallStep(orderedSteps)
 
   useEffect(() => {
     setExpanded(autoExpanded)
   }, [autoExpanded])
-  const latest = orderedSteps.at(-1)
-  const summary = latest ? createStepText(latest) : '暂无步骤'
+
+  if (!firstTool) {
+    return null
+  }
+
+  const summary = createToolIntent(firstTool)
 
   return (
     <section
@@ -154,6 +226,15 @@ export function RunSteps({ steps, autoExpanded = false, getStepProps }: RunSteps
   )
 }
 
+const runningDotAnimationCss = `
+@keyframes hesper-step-running-dot-sweep {
+  0%, 100% { opacity: 0.24; transform: scale(0.78); }
+  10% { opacity: 1; transform: scale(1.24); }
+  24% { opacity: 0.68; transform: scale(1.04); }
+  34% { opacity: 0.24; transform: scale(0.78); }
+}
+`
+
 const rowColumns = '16px 28px minmax(0, 1fr)'
 
 const summaryButtonStyle: CSSProperties = {
@@ -203,6 +284,42 @@ const listStyle: CSSProperties = {
   padding: 0,
   display: 'grid',
   gap: darkTheme.spacing.sm
+}
+
+const statusIconSlotStyle: CSSProperties = {
+  width: 18,
+  height: 18,
+  display: 'inline-grid',
+  placeItems: 'center',
+  alignSelf: 'center',
+  justifySelf: 'center'
+}
+
+const runningStatusIconStyle: CSSProperties = {
+  ...statusIconSlotStyle,
+  gridTemplateColumns: 'repeat(3, 4px)',
+  gridTemplateRows: 'repeat(3, 4px)',
+  gap: 2
+}
+
+const runningDotStyle: CSSProperties = {
+  width: 3.5,
+  height: 3.5,
+  borderRadius: 999,
+  background: darkTheme.color.accent,
+  opacity: 0.28,
+  animationName: 'hesper-step-running-dot-sweep',
+  animationDuration: '1260ms',
+  animationTimingFunction: 'linear',
+  animationIterationCount: 'infinite'
+}
+
+const pendingStatusIconStyle: CSSProperties = {
+  width: 8,
+  height: 8,
+  borderRadius: '999px',
+  alignSelf: 'center',
+  justifySelf: 'center'
 }
 
 const stepRowStyle: CSSProperties = {

@@ -6,6 +6,7 @@ import { parseLegacyModelId, type ModelRegistryReader, type ModelResolver } from
 export type SessionTitleGenerationInput = {
   usedModelId: string
   userPrompt: string
+  assistantOutput?: string
   signal?: AbortSignal
 }
 
@@ -17,7 +18,7 @@ export type SessionTitleGenerationResult = {
 export type CompleteSimple = (model: Model<Api>, context: Context, options?: SimpleStreamOptions) => Promise<AssistantMessage>
 
 export type SessionTitleGenerator = {
-  generateTitle(input: SessionTitleGenerationInput): Promise<SessionTitleGenerationResult>
+  generateTitle(input: SessionTitleGenerationInput): Promise<SessionTitleGenerationResult | undefined>
 }
 
 export type SessionTitleGeneratorOptions = {
@@ -66,13 +67,6 @@ function isGenericTitle(value: string): boolean {
   ].includes(normalized)
 }
 
-function isTooLongTitle(value: string): boolean {
-  if (/[^\x00-\x7F]/.test(value)) {
-    return value.replace(/\s+/g, '').length > 24
-  }
-  return value.split(/\s+/).filter(Boolean).length > 10
-}
-
 function parseJsonTitle(value: string): string | undefined {
   const trimmed = value.trim()
   const candidates = [
@@ -98,10 +92,39 @@ function parseJsonTitle(value: string): string | undefined {
 function validGeneratedTitle(candidate: string): string | undefined {
   const parsedTitle = parseJsonTitle(candidate)
   const stripped = parsedTitle ? stripTitleNoise(parsedTitle) : undefined
-  if (!stripped || isGenericTitle(stripped) || isTooLongTitle(stripped)) {
+  if (!stripped || isGenericTitle(stripped)) {
     return undefined
   }
   return stripped
+}
+
+type JsonRecord = Record<string, unknown>
+
+function isRecord(value: unknown): value is JsonRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function withJsonOutput(payload: unknown, model: Model<Api>): unknown {
+  if (!isRecord(payload)) return payload
+
+  if (model.api === 'openai-completions') {
+    return {
+      ...payload,
+      response_format: { type: 'json_object' }
+    }
+  }
+
+  if (model.api === 'openai-responses' || model.api === 'azure-openai-responses') {
+    return {
+      ...payload,
+      text: {
+        ...(isRecord(payload.text) ? payload.text : {}),
+        format: { type: 'json_object' }
+      }
+    }
+  }
+
+  return payload
 }
 
 function extractAssistantText(message: AssistantMessage): string {
@@ -136,29 +159,33 @@ async function resolveTitleModel(registry: ModelRegistryReader, usedModelId: str
   }
 
   const providerModels = await registry.listModels(providerId)
-  const firstEnabled = providerModels.find(isEnabled)
+  const titleModel = providerModels.find(isEnabled)
   return {
-    modelId: firstEnabled?.id ?? usedModel?.id ?? usedModelId,
+    modelId: titleModel?.id ?? usedModel?.id ?? usedModelId,
     providerId
   }
 }
 
-function createTitlePrompt(input: SessionTitleGenerationInput, previousInvalidTitle?: string): string {
+function createTitlePrompt(input: SessionTitleGenerationInput): string {
+  const assistantOutput = input.assistantOutput?.trim()
   return [
-    '请根据下面的用户输入生成一个短会话标题。',
+    '请根据下面的用户输入和 Agent 最终输出生成会话标题。',
     '',
     '要求：',
-    '1. 标题要反映用户正在做的具体事情，让人一眼看出这个对话用途。',
-    '2. 中文标题建议 6-18 个汉字；英文标题不超过 8 个词。',
-    '3. 不要输出“新会话”“新对话”“会话”“对话”“聊天”“总结”等泛化标题。',
-    '4. 只返回 JSON，不要 Markdown，不要代码块，不要额外解释。',
-    '5. JSON 格式必须是：{"title":"标题"}',
-    previousInvalidTitle ? `6. 上一次输出无效：${previousInvalidTitle}。请根据用户输入重新给出具体标题。` : undefined,
+    '1. 标题要反映用户正在做的具体事情和 Agent 最终输出中的实际结果，让人一眼看出这个对话用途。',
+    '2. 不要输出“新会话”“新对话”“会话”“对话”“聊天”“总结”等泛化标题。',
+    '3. 只返回 JSON，不要 Markdown，不要代码块，不要额外解释。',
+    '4. JSON 格式必须是：{"title":"标题"}',
+    '',
+    '输入示例：帮我修复登录按钮点击无响应的问题',
+    'Agent 最终输出示例：已定位为按钮事件被遮罩层拦截，并给出修复方案。',
+    'JSON 输出示例：{"title":"修复登录按钮无响应"}',
     '',
     `用户输入：${normalizeText(input.userPrompt, 1600)}`,
+    assistantOutput ? `Agent 最终输出：${normalizeText(assistantOutput, 4000)}` : undefined,
     '',
     '只返回 JSON：'
-  ].filter(Boolean).join('\n')
+  ].filter((line): line is string => line !== undefined).join('\n')
 }
 
 export function createSessionTitleGenerator(options: SessionTitleGeneratorOptions): SessionTitleGenerator {
@@ -169,33 +196,31 @@ export function createSessionTitleGenerator(options: SessionTitleGeneratorOption
       const titleModel = await resolveTitleModel(options.registry, input.usedModelId)
       const resolved = await options.modelResolver.resolve(titleModel)
       const apiKey = await resolved.getApiKey?.(resolved.model.provider) ?? await resolved.getApiKey?.(resolved.provider.id)
-      let previousInvalidTitle: string | undefined
+      const message = await complete(
+        resolved.model,
+        {
+          messages: [{ role: 'user', content: createTitlePrompt(input), timestamp: Date.now() }]
+        },
+        {
+          maxTokens: 512,
+          temperature: 0,
+          onPayload: (payload, model) => withJsonOutput(payload, model),
+          ...(apiKey ? { apiKey } : {}),
+          ...(input.signal ? { signal: input.signal } : {})
+        }
+      )
+      const text = extractAssistantText(message)
+      if (!text) return undefined
 
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        const message = await complete(
-          resolved.model,
-          {
-            messages: [{ role: 'user', content: createTitlePrompt(input, previousInvalidTitle), timestamp: Date.now() }]
-          },
-          {
-            maxTokens: 48,
-            temperature: 0,
-            reasoning: 'minimal',
-            ...(apiKey ? { apiKey } : {}),
-            ...(input.signal ? { signal: input.signal } : {})
-          }
-        )
-        previousInvalidTitle = extractAssistantText(message)
-        const title = validGeneratedTitle(previousInvalidTitle)
-        if (title) {
-          return {
-            title,
-            modelId: titleModel.modelId
-          }
+      const title = validGeneratedTitle(text)
+      if (title) {
+        return {
+          title,
+          modelId: titleModel.modelId
         }
       }
 
-      throw new Error(`Title generation returned invalid title: ${previousInvalidTitle || '(empty)'}`)
+      throw new Error(`Title generation returned invalid title: ${text}`)
     }
   }
 }

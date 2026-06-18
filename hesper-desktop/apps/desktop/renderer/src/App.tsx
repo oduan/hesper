@@ -102,6 +102,7 @@ function pruneRequestTokens(tokens: RequestTokensBySession, visibleSessionIds: s
 function AppContent() {
   const { state, dispatch } = useAppStore()
   const [loadError, setLoadError] = useState<string>()
+  const [titleGenerationError, setTitleGenerationError] = useState<string>()
   const [sendErrorsBySession, setSendErrorsBySession] = useState<Record<string, string>>({})
   const [pendingSettingsBySession, setPendingSettingsBySession] = useState<Record<string, SessionSettingsOverride>>({})
   const [shortcutCommand, setShortcutCommand] = useState<ConversationShortcutCommand>()
@@ -114,6 +115,8 @@ function AppContent() {
   const pendingTitlePromptsBySessionRef = useRef<Record<string, string>>({})
   const titleGeneratedRunIdsRef = useRef<Set<string>>(new Set())
   const stateRef = useRef(state)
+  const nextRenameRequestIdRef = useRef(0)
+  const latestRenameRequestIdBySessionRef = useRef<Record<string, number>>({})
   const nextSettingsRequestIdRef = useRef(0)
   const latestSettingsRequestIdRef = useRef<RequestTokensBySession>({})
 
@@ -198,7 +201,7 @@ function AppContent() {
         const messages = stateRef.current.messagesBySession[event.message.sessionId] ?? []
         const fallbackPrompt = pendingTitlePromptsBySessionRef.current[event.message.sessionId]
         const source = session && isDefaultSessionTitle(session.title)
-          ? firstUserTitleSource(messages) ?? (fallbackPrompt ? { userPrompt: fallbackPrompt } : undefined)
+          ? firstUserTitleSource(messages, event.message.content) ?? (fallbackPrompt ? { userPrompt: fallbackPrompt, assistantOutput: event.message.content } : undefined)
           : undefined
         const modelId = runModelIdsRef.current[event.message.runId] ?? session?.defaultModelId ?? defaultFallbackModelId
 
@@ -207,7 +210,8 @@ function AppContent() {
           void hesperApi.sessions.generateTitle({
             id: session.id,
             modelId,
-            userPrompt: source.userPrompt
+            userPrompt: source.userPrompt,
+            ...(source.assistantOutput ? { assistantOutput: source.assistantOutput } : {})
           }).then((updatedSession) => {
             dispatch({ type: 'session.updated', session: updatedSession })
           }).catch((error) => {
@@ -344,8 +348,35 @@ function AppContent() {
     const nextTitle = title.trim()
     if (!session || !nextTitle || nextTitle === session.title) return
 
-    const updatedSession = await hesperApi.sessions.updateTitle({ id: session.id, title: nextTitle })
-    dispatch({ type: 'session.updated', session: updatedSession })
+    const requestId = nextRenameRequestIdRef.current + 1
+    nextRenameRequestIdRef.current = requestId
+    latestRenameRequestIdBySessionRef.current = {
+      ...latestRenameRequestIdBySessionRef.current,
+      [session.id]: requestId
+    }
+
+    setTitleGenerationError(undefined)
+    const optimisticSession: Session = { ...session, title: nextTitle }
+    dispatch({ type: 'session.updated', session: optimisticSession })
+
+    try {
+      const updatedSession = await hesperApi.sessions.updateTitle({ id: session.id, title: nextTitle })
+      if (latestRenameRequestIdBySessionRef.current[session.id] !== requestId) return
+
+      const { [session.id]: _completedRequest, ...remainingRequests } = latestRenameRequestIdBySessionRef.current
+      latestRenameRequestIdBySessionRef.current = remainingRequests
+      dispatch({ type: 'session.updated', session: updatedSession })
+    } catch (error) {
+      if (latestRenameRequestIdBySessionRef.current[session.id] !== requestId) return
+
+      const { [session.id]: _failedRequest, ...remainingRequests } = latestRenameRequestIdBySessionRef.current
+      latestRenameRequestIdBySessionRef.current = remainingRequests
+      const currentSession = stateRef.current.sessions.find((candidate) => candidate.id === session.id)
+      if (currentSession?.title === nextTitle) {
+        dispatch({ type: 'session.updated', session })
+      }
+      setTitleGenerationError(`重命名失败：${error instanceof Error ? error.message : '未知错误'}`)
+    }
   }
 
   const loadTitleSource = async (sessionId: string) => {
@@ -361,18 +392,28 @@ function AppContent() {
     const session = stateRef.current.sessions.find((candidate) => candidate.id === sessionId)
     if (!session) return
 
-    const source = await loadTitleSource(sessionId)
-    if (!source) return
+    setTitleGenerationError(undefined)
 
-    const latestRunId = stateRef.current.latestRunIdBySession[sessionId]
-    const sessionModelId = resolveSessionModelId(session.defaultModelId, sessionModelCatalog.preferredModelId, explicitModelSelectionSessionIdsRef.current.has(session.id))
-    const modelId = latestRunId ? runModelIdsRef.current[latestRunId] ?? sessionModelId : sessionModelId
-    const updatedSession = await hesperApi.sessions.generateTitle({
-      id: session.id,
-      modelId,
-      userPrompt: source.userPrompt
-    })
-    dispatch({ type: 'session.updated', session: updatedSession })
+    try {
+      const source = await loadTitleSource(sessionId)
+      if (!source) {
+        setTitleGenerationError('标题生成失败：没有可用于生成标题的用户消息')
+        return
+      }
+
+      const latestRunId = stateRef.current.latestRunIdBySession[sessionId]
+      const sessionModelId = resolveSessionModelId(session.defaultModelId, sessionModelCatalog.preferredModelId, explicitModelSelectionSessionIdsRef.current.has(session.id))
+      const modelId = latestRunId ? runModelIdsRef.current[latestRunId] ?? sessionModelId : sessionModelId
+      const updatedSession = await hesperApi.sessions.generateTitle({
+        id: session.id,
+        modelId,
+        userPrompt: source.userPrompt,
+        ...(source.assistantOutput ? { assistantOutput: source.assistantOutput } : {})
+      })
+      dispatch({ type: 'session.updated', session: updatedSession })
+    } catch (error) {
+      setTitleGenerationError(`标题生成失败：${error instanceof Error ? error.message : '未知错误'}`)
+    }
   }
 
   const deleteSession = async (sessionId: string) => {
@@ -416,6 +457,11 @@ function AppContent() {
         state.activeSection === 'settings' ? <ProviderSettingsPanel onModelRegistryChanged={refreshSessionModelOptions} /> : <SectionPlaceholder section={state.activeSection} />
       ) : activeSession ? (
         <>
+          {titleGenerationError ? (
+            <p role="alert" style={{ margin: '0 0 12px', color: '#fca5a5', padding: '0 12px' }}>
+              {titleGenerationError}
+            </p>
+          ) : null}
           {activeHistoryError ? (
             <p role="alert" style={{ margin: '0 0 12px', color: '#fca5a5', padding: '0 12px' }}>
               历史加载失败：{activeHistoryError}
@@ -508,17 +554,33 @@ function isDefaultSessionTitle(title: string): boolean {
   return normalized === 'new chat' || normalized === '新建会话' || normalized === 'untitled' || normalized === '无标题'
 }
 
-function firstUserTitleSource(messages: Message[]): { userPrompt: string } | undefined {
+type TitleSource = {
+  userPrompt: string
+  assistantOutput?: string
+}
+
+function latestAssistantOutputAfter(messages: Message[], userMessage: Message): string | undefined {
+  const latestAssistant = [...messages]
+    .filter((message) => message.role === 'assistant' && message.content.trim() && message.createdAt.localeCompare(userMessage.createdAt) >= 0)
+    .sort((left, right) => {
+      const byCreatedAt = right.createdAt.localeCompare(left.createdAt)
+      return byCreatedAt === 0 ? right.id.localeCompare(left.id) : byCreatedAt
+    })[0]
+
+  return latestAssistant?.content.trim() || undefined
+}
+
+function firstUserTitleSource(messages: Message[], assistantOutput?: string): TitleSource | undefined {
   const userMessages = messages.filter((message) => message.role === 'user')
   if (userMessages.length !== 1) {
     return undefined
   }
 
   const userPrompt = userMessages[0]?.content.trim()
-  return userPrompt ? { userPrompt } : undefined
+  return userPrompt ? { userPrompt, ...(assistantOutput?.trim() ? { assistantOutput: assistantOutput.trim() } : {}) } : undefined
 }
 
-function latestTitleSource(messages: Message[]): { userPrompt: string } | undefined {
+function latestTitleSource(messages: Message[]): TitleSource | undefined {
   const latestUser = [...messages]
     .filter((message) => message.role === 'user' && message.content.trim())
     .sort((left, right) => {
@@ -526,8 +588,16 @@ function latestTitleSource(messages: Message[]): { userPrompt: string } | undefi
       return byCreatedAt === 0 ? right.id.localeCompare(left.id) : byCreatedAt
     })[0]
 
-  const userPrompt = latestUser?.content.trim()
-  return userPrompt ? { userPrompt } : undefined
+  if (!latestUser) return undefined
+
+  const userPrompt = latestUser.content.trim()
+  if (!userPrompt) return undefined
+
+  const assistantOutput = latestAssistantOutputAfter(messages, latestUser)
+  return {
+    userPrompt,
+    ...(assistantOutput ? { assistantOutput } : {})
+  }
 }
 
 function SectionPlaceholder({ section }: { section: AppSection }) {

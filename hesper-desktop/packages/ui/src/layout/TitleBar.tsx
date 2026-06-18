@@ -47,6 +47,7 @@ export function TitleBar({ title, platform = 'win32', onMinimize, onToggleMaximi
       }}
     >
       {isMac ? <div className="titlebar-no-drag" style={macControlsSlotStyle}>{controls}</div> : null}
+      <div style={brandStyle}>Hesper</div>
       <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.02em', pointerEvents: 'none' }}>{title}</div>
       {!isMac ? <div className="titlebar-no-drag" style={windowsControlsSlotStyle}>{controls}</div> : null}
     </header>
@@ -66,11 +67,55 @@ function WindowControls({ platform, onMinimize, onToggleMaximize, onClose }: Win
 
   return (
     <div style={{ display: 'flex', height: '100%' }}>
-      <button type="button" aria-label="最小化窗口" onClick={() => { void onMinimize?.() }} style={windowsControlStyle}>—</button>
-      <button type="button" aria-label="最大化窗口" onClick={() => { void onToggleMaximize?.() }} style={windowsControlStyle}>□</button>
-      <button type="button" aria-label="关闭窗口" onClick={() => { void onClose?.() }} style={{ ...windowsControlStyle, ...windowsCloseStyle }}>×</button>
+      <button type="button" aria-label="最小化窗口" onClick={() => { void onMinimize?.() }} style={windowsControlStyle}>
+        <MinimizeIcon />
+      </button>
+      <button type="button" aria-label="最大化窗口" onClick={() => { void onToggleMaximize?.() }} style={windowsControlStyle}>
+        <MaximizeIcon />
+      </button>
+      <button type="button" aria-label="关闭窗口" onClick={() => { void onClose?.() }} style={{ ...windowsControlStyle, ...windowsCloseStyle }}>
+        <CloseIcon />
+      </button>
     </div>
   )
+}
+
+function MinimizeIcon() {
+  return (
+    <svg aria-hidden="true" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+      <path d="M3.25 7h7.5" />
+    </svg>
+  )
+}
+
+function MaximizeIcon() {
+  return (
+    <svg aria-hidden="true" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round">
+      <rect x="3.5" y="3.5" width="7" height="7" rx="0.8" />
+    </svg>
+  )
+}
+
+function CloseIcon() {
+  return (
+    <svg aria-hidden="true" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+      <path d="M4 4l6 6M10 4l-6 6" />
+    </svg>
+  )
+}
+
+const brandStyle: CSSProperties = {
+  position: 'absolute',
+  left: 16,
+  top: 0,
+  height: '100%',
+  display: 'flex',
+  alignItems: 'center',
+  fontSize: 14,
+  fontWeight: 700,
+  letterSpacing: '0.02em',
+  color: darkTheme.color.text,
+  pointerEvents: 'none'
 }
 
 const windowsControlsSlotStyle: CSSProperties = {
@@ -97,9 +142,12 @@ const windowsControlStyle: CSSProperties = {
   background: 'transparent',
   color: darkTheme.color.textMuted,
   cursor: 'pointer',
-  fontSize: 13,
   lineHeight: 1,
-  outline: 0
+  outline: 0,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: 0
 }
 
 const windowsCloseStyle: CSSProperties = {

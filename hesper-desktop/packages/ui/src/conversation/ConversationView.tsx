@@ -95,6 +95,10 @@ function createStepNavigationKind(step: RunStep): NavigationItem['kind'] {
   return step.type === 'tool_call' || step.type === 'tool_result' ? 'tool' : 'assistant'
 }
 
+function hasToolCallStep(steps: RunStep[]): boolean {
+  return steps.some((step) => step.type === 'tool_call')
+}
+
 function createMessageAnchorId(messageId: string): string {
   return `message-${messageId}`
 }
@@ -200,12 +204,15 @@ export function ConversationView({
         label: trimLabel(message.content, message.role === 'user' ? '用户消息' : '助手输出')
       })
 
-      for (const step of getMessageSteps(message)) {
-        entries.push({
-          id: createStepAnchorId(step.id),
-          kind: createStepNavigationKind(step),
-          label: trimLabel(step.summary ?? step.title, step.title)
-        })
+      const messageSteps = getMessageSteps(message)
+      if (hasToolCallStep(messageSteps)) {
+        for (const step of messageSteps) {
+          entries.push({
+            id: createStepAnchorId(step.id),
+            kind: createStepNavigationKind(step),
+            label: trimLabel(step.summary ?? step.title, step.title)
+          })
+        }
       }
 
       const messageStreamingText = getMessageStreamingText(message)
@@ -218,7 +225,7 @@ export function ConversationView({
       }
     }
 
-    if (orderedMessages.length === 0) {
+    if (orderedMessages.length === 0 && hasToolCallStep(orderedSteps)) {
       for (const step of orderedSteps) {
         entries.push({
           id: createStepAnchorId(step.id),
@@ -428,7 +435,7 @@ export function ConversationView({
                 ) : (
                   <MessageBubble message={message} />
                 )}
-                {messageSteps.length > 0 ? (
+                {hasToolCallStep(messageSteps) ? (
                   <div style={{ marginTop: darkTheme.spacing.sm }}>
                     <RunSteps
                       steps={messageSteps}
@@ -467,7 +474,7 @@ export function ConversationView({
               </div>
             )
           })}
-          {orderedMessages.length === 0 && orderedSteps.length > 0 ? (
+          {orderedMessages.length === 0 && hasToolCallStep(orderedSteps) ? (
             <RunSteps
               steps={orderedSteps}
               autoExpanded

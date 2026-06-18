@@ -56,6 +56,34 @@ describe('desktop service container', () => {
 })
 
 describe('registerIpcHandlers', () => {
+  it('returns the original session without saving when title generation returns no title', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock' })
+    const savePersistence = vi.fn(async () => {})
+    const handles = new Map<string, (event: any, ...args: any[]) => Promise<unknown> | unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (event: any, ...args: any[]) => Promise<unknown> | unknown) => {
+        handles.set(channel, handler)
+      }),
+      removeHandler: vi.fn()
+    }
+    const dialog = {
+      showOpenDialog: vi.fn(async () => ({ canceled: true, filePaths: [] }))
+    }
+    const session = await container.sessionService.createSession({ title: 'Keep this title' })
+    vi.spyOn(container.sessionTitleGenerator, 'generateTitle').mockResolvedValueOnce(undefined as Awaited<ReturnType<typeof container.sessionTitleGenerator.generateTitle>>)
+
+    registerIpcHandlers({ ipcMain, dialog, container, savePersistence })
+
+    await expect(handles.get(ipcChannels.sessionsGenerateTitle)?.({ sender: { id: 1 } }, {
+      id: session.id,
+      modelId: 'mock/hesper-fast',
+      userPrompt: 'empty output'
+    })).resolves.toMatchObject({ id: session.id, title: 'Keep this title' })
+    await expect(container.sessionService.getSession(session.id)).resolves.toMatchObject({ title: 'Keep this title' })
+    expect(savePersistence).not.toHaveBeenCalled()
+  })
+
   it('registers typed handlers and forwards runtime events to the sender', async () => {
     const persistence = await createInMemoryPersistence()
     const container = createServiceContainer({ persistence, agentMode: 'mock' })

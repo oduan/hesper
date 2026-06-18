@@ -62,8 +62,9 @@ describe('ui components', () => {
     )
 
     const titleBar = screen.getByLabelText('窗口标题栏')
+    expect(titleBar).toHaveTextContent('Hesper')
     expect(titleBar).toHaveTextContent('构建 hesper MVP')
-    expect(titleBar).not.toHaveTextContent(/^hesper$/)
+    expect(screen.getByLabelText('功能栏')).not.toHaveTextContent('hesper')
     expect(screen.getByText('所有会话')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '所有会话' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByLabelText('功能栏')).toHaveStyle({ boxSizing: 'border-box' })
@@ -91,6 +92,13 @@ describe('ui components', () => {
     await user.type(renameInput, '短标题{Enter}')
     expect(onRenameSession).toHaveBeenCalledWith('session-list-1', '短标题')
 
+    const windowControlIcons = ['最小化窗口', '最大化窗口', '关闭窗口'].map((label) => screen.getByRole('button', { name: label }).querySelector('svg[aria-hidden="true"]'))
+    expect(windowControlIcons).toHaveLength(3)
+    for (const icon of windowControlIcons) {
+      expect(icon).toHaveAttribute('width', '14')
+      expect(icon).toHaveAttribute('height', '14')
+    }
+
     await user.click(screen.getByRole('button', { name: '最小化窗口' }))
     await user.click(screen.getByRole('button', { name: '最大化窗口' }))
     await user.click(screen.getByRole('button', { name: '关闭窗口' }))
@@ -115,6 +123,8 @@ describe('ui components', () => {
     expect(sendButton).toBeDisabled()
     expect(screen.getByLabelText('消息输入区')).toHaveStyle({ borderRadius: '20px' })
     expect(textarea).toHaveStyle({ borderRadius: '0' })
+    expect(textarea).toHaveStyle({ boxSizing: 'border-box', fontSize: '13px', lineHeight: '1.5', padding: '0px 1px' })
+    expect(textarea).not.toHaveStyle({ font: 'inherit' })
     expect(textarea).toHaveClass('hesper-theme-scrollbar')
     expect(screen.queryByText('模型')).not.toBeInTheDocument()
     expect(modelSelect).toHaveStyle({ background: 'transparent', borderRadius: '0', padding: '0' })
@@ -246,8 +256,11 @@ describe('ui components', () => {
 
     const { rerender } = render(renderConversation([userMessage]))
 
-    const toggle = screen.getByRole('button', { name: /调用 read_file/ })
+    const stepsRegion = screen.getByLabelText('步骤流')
+    const toggle = within(stepsRegion).getByRole('button', { expanded: true })
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(toggle).toHaveTextContent('读取 README 了解项目结构')
+    expect(toggle).not.toHaveTextContent('调用 read_file')
     expect(screen.getAllByRole('listitem')).toHaveLength(2)
 
     rerender(renderConversation([
@@ -263,7 +276,7 @@ describe('ui components', () => {
       } satisfies Message
     ]))
 
-    expect(screen.getByRole('button', { name: /调用 read_file/ })).toHaveAttribute('aria-expanded', 'false')
+    expect(within(stepsRegion).getByRole('button', { expanded: false })).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryAllByRole('listitem')).toHaveLength(0)
     expect(screen.getByText('最终输出')).toBeInTheDocument()
   })
@@ -405,7 +418,7 @@ describe('ui components', () => {
     expect(conversationScroller.scrollTop).toBe(0)
   })
 
-  it('renders fullscreen output below the titlebar with centered content and themed icon controls', async () => {
+  it('renders fullscreen output below the titlebar with unified background, centered content, and top-right controls', async () => {
     const user = userEvent.setup()
     const writeText = vi.fn()
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
@@ -414,12 +427,22 @@ describe('ui components', () => {
     render(<FullscreenOutput open content="copy me" contentType="markdown" onClose={onClose} />)
 
     const dialog = screen.getByRole('dialog', { name: '输出全屏查看' })
-    expect(dialog).toHaveStyle({ position: 'fixed', top: '36px', right: '0px', bottom: '0px', left: '0px', display: 'grid' })
-    expect(dialog).toHaveStyle({ placeItems: 'stretch center' })
-    expect(dialog).toHaveStyle({ background: 'rgba(9, 12, 20, 0.42)', backdropFilter: 'blur(18px) saturate(140%)' })
+    expect(dialog).toHaveStyle({ position: 'fixed', top: '36px', right: '0px', bottom: '0px', left: '0px', display: 'block' })
+    expect(dialog).toHaveStyle({ background: '#171a26' })
+    expect(dialog).not.toHaveStyle({ backdropFilter: 'blur(18px) saturate(140%)' })
+
     const contentShell = screen.getByLabelText('最大化输出内容')
-    expect(contentShell).toHaveStyle({ width: '100%', maxWidth: '1120px' })
-    expect(contentShell).toHaveStyle({ margin: '0 auto' })
+    expect(contentShell).toHaveStyle({ width: '100%', height: '100%', background: 'transparent', borderStyle: 'none' })
+    expect(contentShell).not.toHaveStyle({ maxWidth: '1120px' })
+    expect(contentShell).not.toHaveStyle({ boxShadow: '0 24px 80px rgba(0, 0, 0, 0.38)' })
+
+    const contentBody = screen.getByLabelText('最大化输出正文')
+    expect(contentBody).toHaveStyle({ maxWidth: '1120px', margin: '0 auto' })
+    expect(contentBody).toHaveStyle({ background: 'transparent', borderStyle: 'none' })
+
+    const actions = screen.getByLabelText('最大化输出操作')
+    expect(actions).toHaveStyle({ position: 'absolute', top: '16px', right: '16px' })
+    expect(within(dialog).queryByText('输出')).not.toBeInTheDocument()
 
     const copyButton = screen.getByRole('button', { name: '复制输出内容' })
     const closeButton = screen.getByRole('button', { name: '关闭全屏输出' })
@@ -449,10 +472,11 @@ describe('ui components', () => {
     const stepsRegion = screen.getByLabelText('步骤流')
     expect(stepsRegion).toHaveStyle({ borderStyle: 'none', background: 'transparent' })
 
-    const toggle = screen.getByRole('button', { name: /Network Warning/ })
+    const toggle = screen.getByRole('button', { name: /Searching repo/ })
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
     expect(toggle).toHaveTextContent('3')
-    expect(toggle).toHaveTextContent('Network Warning')
+    expect(toggle).toHaveTextContent('Searching repo')
+    expect(toggle).not.toHaveTextContent('Network Warning')
     expect(toggle).not.toHaveTextContent('最新步骤')
     expect(within(toggle).queryByLabelText(/步骤状态/)).not.toBeInTheDocument()
     expect(toggle).toHaveStyle({ gridTemplateColumns: '16px 28px minmax(0, 1fr)' })
@@ -463,20 +487,83 @@ describe('ui components', () => {
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByText('Generated deterministic mock response')).toBeInTheDocument()
     expect(screen.queryByText('Mock thinking')).not.toBeInTheDocument()
-    expect(screen.getByText('Searching repo')).toBeInTheDocument()
-    expect(screen.getAllByText('Network Warning')).toHaveLength(2)
-    expect(screen.getByLabelText('步骤状态：成功')).toBeInTheDocument()
-    expect(screen.getByLabelText('步骤状态：运行中')).toBeInTheDocument()
-    expect(screen.getByLabelText('步骤状态：失败')).toBeInTheDocument()
+    expect(screen.getAllByText('Network Warning')).toHaveLength(1)
+    const successStatus = screen.getByLabelText('步骤状态：成功')
+    const runningStatus = screen.getByLabelText('步骤状态：运行中')
+    const failedStatus = screen.getByLabelText('步骤状态：失败')
+    expect(successStatus).toHaveAttribute('data-step-status-icon', 'success-check')
+    expect(successStatus.querySelector('svg[aria-hidden="true"] circle')).toBeInTheDocument()
+    expect(successStatus.querySelector('svg[aria-hidden="true"] path')).toHaveAttribute('d', 'M5.2 8.1 7.1 10 10.9 5.8')
+    expect(runningStatus).toHaveAttribute('data-step-status-icon', 'running-nine-dot-sweep')
+    const runningDots = [...runningStatus.querySelectorAll('[data-step-running-dot]')]
+    expect(runningDots.map((dot) => dot.getAttribute('data-step-running-dot')).join('')).toBe('321478965')
+    expect(runningDots[0]).toHaveStyle({ animationDuration: '1260ms', animationDelay: '0ms' })
+    expect(runningDots.at(-1)).toHaveStyle({ animationDelay: '720ms' })
+    expect(runningStatus.querySelector('style')).toHaveTextContent('34%')
+    expect(failedStatus).toHaveAttribute('data-step-status-icon', 'failed-cross')
+    expect(failedStatus.querySelector('svg[aria-hidden="true"] circle')).toBeInTheDocument()
+    expect(failedStatus.querySelector('svg[aria-hidden="true"] path')).toHaveAttribute('d', 'M5.5 5.5 10.5 10.5M10.5 5.5 5.5 10.5')
 
     const items = screen.getAllByRole('listitem')
     expect(items).toHaveLength(3)
+    expect(within(items[1]!).getByText('Searching repo')).toBeInTheDocument()
     expect(items[0]).toHaveStyle({ gridTemplateColumns: '16px 28px minmax(0, 1fr)' })
     expect(within(items[0]!).getByText('Generated deterministic mock response')).toHaveStyle({ whiteSpace: 'nowrap' })
     expect(within(items[0]!).queryByText('思考 / 成功')).not.toBeInTheDocument()
   })
 
-  it('renders step title with muted summary and detail segments', async () => {
+  it('does not render the run steps block before the first tool call exists', () => {
+    render(
+      <RunSteps
+        autoExpanded
+        steps={[
+          { id: 'step-thought', runId: 'run-1', type: 'thought', status: 'running', title: '思考过程', summary: '正在判断下一步', createdAt: now }
+        ]}
+      />
+    )
+
+    expect(screen.queryByLabelText('步骤流')).not.toBeInTheDocument()
+  })
+
+  it('hides conversation run steps until the first tool call exists', () => {
+    const userMessage = {
+      id: 'message-user',
+      sessionId: 'session-1',
+      role: 'user',
+      content: '请读取 README',
+      contentType: 'markdown',
+      runId: 'run-1',
+      createdAt: now
+    } satisfies Message
+
+    const renderConversation = (runSteps: RunStep[]) => (
+      <ConversationView
+        session={baseSession}
+        messages={[userMessage]}
+        steps={[]}
+        stepsByRun={{ 'run-1': runSteps }}
+        streamingText=""
+        modelId="mock/hesper-fast"
+        onSend={() => undefined}
+      />
+    )
+
+    const { rerender } = render(renderConversation([
+      { id: 'step-thought', runId: 'run-1', type: 'thought', status: 'running', title: '思考过程', summary: '正在判断下一步', createdAt: now }
+    ]))
+
+    expect(screen.queryByLabelText('步骤流')).not.toBeInTheDocument()
+
+    rerender(renderConversation([
+      { id: 'step-thought', runId: 'run-1', type: 'thought', status: 'succeeded', title: '思考过程', summary: '正在判断下一步', createdAt: now },
+      { id: 'step-tool', runId: 'run-1', type: 'tool_call', status: 'running', title: '调用 read_file', summary: '读取 README 了解项目结构', createdAt: '2026-06-10T03:00:01.000Z' }
+    ]))
+
+    expect(screen.getByLabelText('步骤流')).toBeInTheDocument()
+    expect(screen.getByRole('button', { expanded: true })).toHaveTextContent('读取 README 了解项目结构')
+  })
+
+  it('renders tool call title with muted summary and detail segments', async () => {
     const user = userEvent.setup()
     render(
       <RunSteps
@@ -495,7 +582,11 @@ describe('ui components', () => {
       />
     )
 
-    await user.click(screen.getByRole('button', { name: /工具：web_fetch-url/ }))
+    const toggle = screen.getByRole('button', { expanded: false })
+    expect(toggle).toHaveTextContent('搜索 Hesper 是什么')
+    expect(toggle).not.toHaveTextContent('工具：web_fetch-url')
+
+    await user.click(toggle)
 
     const item = screen.getByRole('listitem')
     expect(within(item).getByText('工具：web_fetch-url')).toBeInTheDocument()
