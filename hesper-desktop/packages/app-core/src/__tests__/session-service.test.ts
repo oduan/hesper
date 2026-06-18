@@ -30,6 +30,7 @@ describe('createSessionService', () => {
     await persistence.sessions.save(session)
 
     const renamed = await service.updateTitle(session.id, 'Updated')
+    expect(renamed.updatedAt).toBe(session.updatedAt)
     expect(renamed).toMatchObject({
       title: 'Updated',
       workspacePath: session.workspacePath,
@@ -112,6 +113,7 @@ describe('createSessionService', () => {
     })
 
     const persisted = await service.getSession(session.id)
+    expect(persisted.updatedAt).toBe(archived.updatedAt)
     expect(persisted).toMatchObject({
       providerId: session.providerId,
       modelId: session.modelId,
@@ -202,6 +204,7 @@ describe('createSessionService', () => {
     const updated = await service.updateTitle(created.id, '   ')
 
     expect(updated.title).toBe('Untitled chat')
+    expect(updated.updatedAt).toBe(created.updatedAt)
   })
 
   it('lists sessions by visible order and excludes deleted sessions', async () => {

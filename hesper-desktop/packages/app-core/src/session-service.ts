@@ -71,7 +71,9 @@ export function createSessionService(persistence: Persistence): SessionService {
     },
     async updateTitle(id, title) {
       const session = await loadSession(persistence, id)
-      return saveSession(persistence, { ...session, title: normalizeSessionTitle(title, 'Untitled chat') } satisfies Session)
+      const updated: Session = { ...session, title: normalizeSessionTitle(title, 'Untitled chat') }
+      await persistence.sessions.save(updated)
+      return updated
     },
     async setWorkspacePath(id, workspacePath) {
       const session = await loadSession(persistence, id)
