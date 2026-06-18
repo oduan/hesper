@@ -288,6 +288,17 @@ describe('ui components', () => {
     expect(conversationScroller.scrollTop).toBe(132)
   })
 
+  it('opens fullscreen output when ctrl-left-clicking inside an output block', () => {
+    render(<OutputBlock content="final answer" contentType="markdown" />)
+
+    const outputScroller = screen.getByLabelText('输出内容滚动区')
+    fireEvent.click(outputScroller, { button: 0, ctrlKey: true })
+
+    const dialog = screen.getByRole('dialog', { name: '输出全屏查看' })
+    expect(dialog).toBeInTheDocument()
+    expect(within(dialog).getByText('final answer')).toBeInTheDocument()
+  })
+
   it('renders output blocks with CSP wrapped html, themed scrollbars and fullscreen dialog', async () => {
     const user = userEvent.setup()
     const html = '<img src="https://example.com/a.png"><style>body{color:red}</style><p>hello</p>'

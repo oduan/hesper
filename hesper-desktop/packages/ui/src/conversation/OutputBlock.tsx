@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type WheelEvent } from 'react'
+import { useEffect, useMemo, useState, type MouseEvent, type WheelEvent } from 'react'
 import type { MessageContentType } from '@hesper/shared'
 import { darkTheme } from '../theme'
 import { FullscreenOutput } from './FullscreenOutput'
@@ -36,10 +36,21 @@ export function OutputBlock({ content, contentType, closeFullscreenSignal = 0 }:
     event.currentTarget.scrollLeft += event.deltaX
   }
 
+  const handleOutputClickCapture = (event: MouseEvent<HTMLElement>) => {
+    if (!(event.ctrlKey || event.metaKey) || event.button !== 0) {
+      return
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
+    setIsFullscreen(true)
+  }
+
   return (
     <>
       <section
         className="hesper-output-block"
+        onClickCapture={handleOutputClickCapture}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         style={{
