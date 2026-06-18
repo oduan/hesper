@@ -1,9 +1,10 @@
-import { useMemo, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import type { RunStep, RunStepStatus } from '@hesper/shared'
 import { darkTheme } from '../theme'
 
 export type RunStepsProps = {
   steps: RunStep[]
+  autoExpanded?: boolean
   getStepProps?: (step: RunStep) => {
     id?: string
     tabIndex?: number
@@ -90,9 +91,13 @@ function StatusDot({ status }: { status: RunStepStatus }) {
   )
 }
 
-export function RunSteps({ steps, getStepProps }: RunStepsProps) {
-  const [expanded, setExpanded] = useState(false)
+export function RunSteps({ steps, autoExpanded = false, getStepProps }: RunStepsProps) {
+  const [expanded, setExpanded] = useState(autoExpanded)
   const orderedSteps = useMemo(() => [...steps].sort(compareCreatedAt), [steps])
+
+  useEffect(() => {
+    setExpanded(autoExpanded)
+  }, [autoExpanded])
   const latest = orderedSteps.at(-1)
   const summary = latest ? createStepText(latest) : '暂无步骤'
 

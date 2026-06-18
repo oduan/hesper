@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type WheelEvent } from 'react'
 import type { Message, RunStep, Session } from '@hesper/shared'
 import { darkTheme } from '../theme'
 import { Composer, type ModelOptionGroup } from './Composer'
@@ -70,6 +70,19 @@ function isNearScrollBottom(element: HTMLElement): boolean {
   return element.scrollHeight - element.scrollTop - element.clientHeight <= 24
 }
 
+function getElementTarget(target: EventTarget | null): Element | null {
+  return target instanceof Element ? target : null
+}
+
+function isInsideOutputScrollArea(target: EventTarget | null): boolean {
+  return Boolean(getElementTarget(target)?.closest('[data-hesper-output-scroll="true"]'))
+}
+
+function scrollElementByWheel(element: HTMLElement, event: WheelEvent): void {
+  element.scrollTop += event.deltaY
+  element.scrollLeft += event.deltaX
+}
+
 export function ConversationView({
   session,
   messages,
@@ -103,6 +116,11 @@ export function ConversationView({
       Object.entries(stepsByRun).map(([runId, runSteps]) => [runId, sortChronologically(runSteps)])
     )
   }, [stepsByRun])
+  const finalOutputRunIds = useMemo(() => new Set(
+    orderedMessages.flatMap((message) => (
+      message.role === 'assistant' && message.runId && message.content.trim() ? [message.runId] : []
+    ))
+  ), [orderedMessages])
   const latestUserMessageId = [...orderedMessages].reverse().find((message) => message.role === 'user')?.id
   const getMessageSteps = (message: Message): RunStep[] => {
     if (message.role !== 'user') {
@@ -203,7 +221,7 @@ export function ConversationView({
     setShowJumpToBottom(false)
   }
 
-  const handleMessagesScroll = () => {
+  const updateMessagesScrollState = () => {
     const element = messagesScrollRef.current
     if (!element) {
       return
@@ -214,6 +232,26 @@ export function ConversationView({
     if (atBottom) {
       setShowJumpToBottom(false)
     }
+  }
+
+  const handleMessagesScroll = () => {
+    updateMessagesScrollState()
+  }
+
+  const handleMessagesWheelCapture = (event: WheelEvent<HTMLDivElement>) => {
+    if (isInsideOutputScrollArea(event.target) && !event.ctrlKey) {
+      return
+    }
+
+    const element = messagesScrollRef.current
+    if (!element || (event.deltaX === 0 && event.deltaY === 0)) {
+      return
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
+    scrollElementByWheel(element, event)
+    updateMessagesScrollState()
   }
 
   useEffect(() => {
@@ -300,6 +338,7 @@ export function ConversationView({
             aria-label="消息列表"
             className="hesper-theme-scrollbar"
             onScroll={handleMessagesScroll}
+            onWheelCapture={handleMessagesWheelCapture}
             style={{
               height: '100%',
               minHeight: 0,
@@ -340,6 +379,7 @@ export function ConversationView({
                   <div style={{ marginTop: darkTheme.spacing.sm }}>
                     <RunSteps
                       steps={messageSteps}
+                      autoExpanded={message.role === 'user' && (!message.runId || !finalOutputRunIds.has(message.runId))}
                       getStepProps={(step) => {
                         const stepAnchorId = createStepAnchorId(step.id)
                         return {
@@ -377,6 +417,7 @@ export function ConversationView({
           {orderedMessages.length === 0 && orderedSteps.length > 0 ? (
             <RunSteps
               steps={orderedSteps}
+              autoExpanded
               getStepProps={(step) => {
                 const stepAnchorId = createStepAnchorId(step.id)
                 return {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type WheelEvent } from 'react'
 import type { MessageContentType } from '@hesper/shared'
 import { darkTheme } from '../theme'
 import { FullscreenOutput } from './FullscreenOutput'
@@ -24,6 +24,17 @@ export function OutputBlock({ content, contentType, closeFullscreenSignal = 0 }:
       setIsFullscreen(false)
     }
   }, [closeFullscreenSignal])
+
+  const handleOutputWheel = (event: WheelEvent<HTMLDivElement>) => {
+    if (event.ctrlKey || (event.deltaX === 0 && event.deltaY === 0)) {
+      return
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
+    event.currentTarget.scrollTop += event.deltaY
+    event.currentTarget.scrollLeft += event.deltaX
+  }
 
   return (
     <>
@@ -63,7 +74,13 @@ export function OutputBlock({ content, contentType, closeFullscreenSignal = 0 }:
         >
           ⤢
         </button>
-        <div className="hesper-theme-scrollbar" style={{ height: '100%', overflow: 'auto', padding: darkTheme.spacing.md }}>
+        <div
+          aria-label="输出内容滚动区"
+          className="hesper-theme-scrollbar"
+          data-hesper-output-scroll="true"
+          onWheel={handleOutputWheel}
+          style={{ height: '100%', overflow: 'auto', padding: darkTheme.spacing.md }}
+        >
           {contentType === 'html' ? (
             <iframe
               title="HTML 输出预览"

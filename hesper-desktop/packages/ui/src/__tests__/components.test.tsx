@@ -1,14 +1,25 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { Message, RunStep, Session } from '@hesper/shared'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppShell } from '../layout/AppShell'
 import { Composer } from '../conversation/Composer'
+import { ConversationView } from '../conversation/ConversationView'
 import { FullscreenOutput } from '../conversation/FullscreenOutput'
 import { OutputBlock } from '../conversation/OutputBlock'
 import { RunSteps } from '../conversation/RunSteps'
 
 const now = '2026-06-10T03:00:00.000Z'
+
+const baseSession = {
+  id: 'session-1',
+  title: '测试会话',
+  status: 'active',
+  outputMode: 'markdown',
+  createdAt: now,
+  updatedAt: now
+} satisfies Session
 
 afterEach(() => {
   cleanup()
@@ -170,6 +181,105 @@ describe('ui components', () => {
     expect(screen.getByRole('link', { name: 'Docs' })).toHaveAttribute('href', 'https://example.com/docs')
     expect(screen.queryByText('## Summary')).not.toBeInTheDocument()
     expect(screen.queryByText('| Name | Status |')).not.toBeInTheDocument()
+  })
+
+  it('auto-expands running steps and collapses them when final output appears', () => {
+    const userMessage = {
+      id: 'message-user',
+      sessionId: 'session-1',
+      role: 'user',
+      content: '请读取 README',
+      contentType: 'markdown',
+      runId: 'run-1',
+      createdAt: now
+    } satisfies Message
+    const runningSteps = [
+      { id: 'step-thought', runId: 'run-1', type: 'thought', status: 'succeeded', title: '思考过程', summary: '先确认目标', createdAt: now },
+      { id: 'step-tool', runId: 'run-1', type: 'tool_call', status: 'running', title: '调用 read_file', summary: '读取 README 了解项目结构', createdAt: '2026-06-10T03:00:01.000Z' }
+    ] satisfies RunStep[]
+
+    const renderConversation = (messages: Message[]) => (
+      <ConversationView
+        session={baseSession}
+        messages={messages}
+        steps={[]}
+        stepsByRun={{ 'run-1': runningSteps }}
+        streamingText=""
+        modelId="mock/hesper-fast"
+        onSend={() => undefined}
+      />
+    )
+
+    const { rerender } = render(renderConversation([userMessage]))
+
+    const toggle = screen.getByRole('button', { name: /调用 read_file/ })
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getAllByRole('listitem')).toHaveLength(2)
+
+    rerender(renderConversation([
+      userMessage,
+      {
+        id: 'message-assistant',
+        sessionId: 'session-1',
+        role: 'assistant',
+        content: '最终输出',
+        contentType: 'markdown',
+        runId: 'run-1',
+        createdAt: '2026-06-10T03:00:02.000Z'
+      } satisfies Message
+    ]))
+
+    expect(screen.getByRole('button', { name: /调用 read_file/ })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryAllByRole('listitem')).toHaveLength(0)
+    expect(screen.getByText('最终输出')).toBeInTheDocument()
+  })
+
+  it('routes wheel scrolling to output blocks unless Ctrl is held', () => {
+    const messages = [
+      {
+        id: 'message-user',
+        sessionId: 'session-1',
+        role: 'user',
+        content: '生成长输出',
+        contentType: 'markdown',
+        runId: 'run-1',
+        createdAt: now
+      },
+      {
+        id: 'message-assistant',
+        sessionId: 'session-1',
+        role: 'assistant',
+        content: Array.from({ length: 30 }, (_, index) => `第 ${index + 1} 行`).join('\n\n'),
+        contentType: 'markdown',
+        runId: 'run-1',
+        createdAt: '2026-06-10T03:00:01.000Z'
+      }
+    ] satisfies Message[]
+
+    render(
+      <ConversationView
+        session={baseSession}
+        messages={messages}
+        steps={[]}
+        streamingText=""
+        modelId="mock/hesper-fast"
+        onSend={() => undefined}
+      />
+    )
+
+    const conversationScroller = screen.getByLabelText('消息列表')
+    const outputScroller = screen.getByLabelText('输出内容滚动区')
+
+    fireEvent.wheel(outputScroller, { deltaY: 48 })
+    expect(outputScroller.scrollTop).toBe(48)
+    expect(conversationScroller.scrollTop).toBe(0)
+
+    fireEvent.wheel(outputScroller, { deltaY: 32, ctrlKey: true })
+    expect(outputScroller.scrollTop).toBe(48)
+    expect(conversationScroller.scrollTop).toBe(32)
+
+    fireEvent.wheel(conversationScroller, { deltaY: 20 })
+    expect(conversationScroller.scrollTop).toBe(52)
   })
 
   it('renders output blocks with CSP wrapped html, themed scrollbars and fullscreen dialog', async () => {
