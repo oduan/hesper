@@ -72,7 +72,7 @@ describe('ui components', () => {
 
   it('disables send button when composer is empty and keeps controls visually aligned', async () => {
     const user = userEvent.setup()
-    render(<Composer workspacePath="C:/dev/hesper" modelId="mock/hesper-fast" outputMode="markdown" onSend={() => undefined} />)
+    render(<Composer workspacePath="C:/dev/hesper" modelId="mock/hesper-fast" onSend={() => undefined} />)
     const textarea = screen.getByPlaceholderText(/输入消息/)
     const modelSelect = screen.getByRole('button', { name: '选择模型' })
     const sendButton = screen.getByRole('button', { name: '发送' })
@@ -103,7 +103,6 @@ describe('ui components', () => {
       <Composer
         workspacePath="C:/dev/hesper"
         modelId="deepseek-chat"
-        outputMode="markdown"
         modelOptions={['mock/hesper-fast', 'deepseek-chat', 'gpt-4o']}
         modelOptionGroups={[
           { id: 'mock', label: 'Mock', options: [{ value: 'mock/hesper-fast', label: 'Mock/mock/hesper-fast' }] },
@@ -141,7 +140,7 @@ describe('ui components', () => {
     const user = userEvent.setup()
     const onSend = vi.fn()
     const renderComposer = (sendSignal: number) => (
-      <Composer workspacePath="C:/dev/hesper" modelId="mock/hesper-fast" outputMode="markdown" onSend={onSend} sendSignal={sendSignal} />
+      <Composer workspacePath="C:/dev/hesper" modelId="mock/hesper-fast" onSend={onSend} sendSignal={sendSignal} />
     )
     const { rerender } = render(renderComposer(0))
     const textarea = screen.getByPlaceholderText(/输入消息/)

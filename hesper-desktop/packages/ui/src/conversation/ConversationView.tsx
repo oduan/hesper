@@ -6,7 +6,6 @@ import { MessageBubble } from './MessageBubble'
 import { OutputBlock } from './OutputBlock'
 import type { NavigationItem } from './RightNavigation'
 import { RunSteps } from './RunSteps'
-import { ThemedSelect } from './ThemedSelect'
 
 export type ConversationShortcutCommand =
   | { type: 'send'; nonce: number }
@@ -26,7 +25,6 @@ export type ConversationViewProps = {
   onSend: (content: string) => void
   onSelectWorkspace?: () => void
   onModelChange?: (modelId: string) => void
-  onOutputModeChange?: (outputMode: Session['outputMode']) => void
   shortcutCommand?: ConversationShortcutCommand
 }
 
@@ -148,7 +146,6 @@ export function ConversationView({
   onSend,
   onSelectWorkspace,
   onModelChange,
-  onOutputModeChange,
   shortcutCommand
 }: ConversationViewProps) {
   const [closeFullscreenSignal, setCloseFullscreenSignal] = useState(0)
@@ -386,16 +383,6 @@ export function ConversationView({
           }}
         >
           <h2 style={{ margin: 0, maxWidth: '65%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 15, lineHeight: 1.2, textAlign: 'center', fontWeight: 700 }}>{session.title}</h2>
-          <div style={outputModeLabelStyle}>
-            <ThemedSelect
-              ariaLabel="选择输出模式"
-              value={session.outputMode}
-              options={['markdown', 'html']}
-              onChange={(value) => onOutputModeChange?.(value as Session['outputMode'])}
-              minWidth={82}
-              maxWidth={112}
-            />
-          </div>
         </header>
         <div style={messagesAreaStyle}>
           <div
@@ -527,12 +514,10 @@ export function ConversationView({
         <Composer
           {...(session.workspacePath ? { workspacePath: session.workspacePath } : {})}
           modelId={modelId}
-          outputMode={session.outputMode}
           {...(modelOptions ? { modelOptions } : {})}
           {...(modelOptionGroups ? { modelOptionGroups } : {})}
           {...(onSelectWorkspace ? { onSelectWorkspace } : {})}
           {...(onModelChange ? { onModelChange } : {})}
-          {...(onOutputModeChange ? { onOutputModeChange } : {})}
           onSend={onSend}
           sendSignal={shortcutCommand?.type === 'send' ? shortcutCommand.nonce : 0}
         />
@@ -569,14 +554,4 @@ const jumpToBottomIconStyle = {
   width: 21,
   height: 21,
   display: 'block'
-} satisfies CSSProperties
-
-const outputModeLabelStyle = {
-  position: 'absolute',
-  right: 0,
-  display: 'flex',
-  alignItems: 'center',
-  gap: darkTheme.spacing.xs,
-  fontSize: 12,
-  whiteSpace: 'nowrap'
 } satisfies CSSProperties

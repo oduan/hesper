@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent } from 'react'
-import type { OutputMode } from '@hesper/shared'
 import { darkTheme } from '../theme'
 import { ThemedSelect, type ThemedSelectOptionGroup } from './ThemedSelect'
 
@@ -8,13 +7,11 @@ export type ModelOptionGroup = ThemedSelectOptionGroup
 export type ComposerProps = {
   workspacePath?: string
   modelId: string
-  outputMode: OutputMode
   modelOptions?: string[]
   modelOptionGroups?: ModelOptionGroup[]
   onSend: (content: string) => void
   onSelectWorkspace?: () => void
   onModelChange?: (modelId: string) => void
-  onOutputModeChange?: (outputMode: OutputMode) => void
   sendSignal?: number
 }
 
@@ -23,13 +20,11 @@ const defaultModelOptions = ['mock/hesper-fast', 'openai/gpt-4o', 'anthropic/cla
 export function Composer({
   workspacePath,
   modelId,
-  outputMode: _outputMode,
   modelOptions = defaultModelOptions,
   modelOptionGroups,
   onSend,
   onSelectWorkspace,
   onModelChange,
-  onOutputModeChange: _onOutputModeChange,
   sendSignal = 0
 }: ComposerProps) {
   const [value, setValue] = useState('')

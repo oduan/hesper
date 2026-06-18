@@ -98,7 +98,7 @@ describe('ConversationView', () => {
     expect(screen.getByPlaceholderText(/输入消息/)).toHaveValue('')
   })
 
-  it('renders top output selector and opens fullscreen output', async () => {
+  it('renders without the top output mode selector and opens fullscreen output', async () => {
     const user = userEvent.setup()
 
     render(
@@ -122,13 +122,9 @@ describe('ConversationView', () => {
     )
 
     expect(screen.queryByRole('button', { name: '打开导航' })).not.toBeInTheDocument()
-    const outputModeButton = screen.getByRole('button', { name: '选择输出模式' })
-    expect(outputModeButton).toHaveTextContent('markdown')
+    expect(screen.queryByRole('button', { name: '选择输出模式' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('listbox', { name: '选择输出模式选项' })).not.toBeInTheDocument()
     expect(screen.queryByText('输出')).not.toBeInTheDocument()
-
-    await user.click(outputModeButton)
-    expect(screen.getByRole('listbox', { name: '选择输出模式选项' })).toHaveStyle({ display: 'grid' })
-    await user.click(outputModeButton)
 
     await user.click(screen.getByRole('button', { name: '全屏查看输出' }))
     expect(screen.getByRole('dialog', { name: '输出全屏查看' })).toBeInTheDocument()

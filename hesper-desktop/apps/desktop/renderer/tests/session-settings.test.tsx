@@ -149,7 +149,7 @@ describe('session settings and restore flow', () => {
     expect(screen.getByRole('region', { name: 'Roles 即将支持 占位区域' })).toBeInTheDocument()
   })
 
-  it('persists workspace, model and output mode changes and refreshes session list details', async () => {
+  it('persists workspace and model changes, with output mode switching removed', async () => {
     const user = userEvent.setup()
     listSessions.mockResolvedValueOnce([createSession()] as any)
 
@@ -171,11 +171,8 @@ describe('session settings and restore flow', () => {
     expect(screen.getByRole('button', { name: '选择模型' })).toHaveTextContent('gpt-4o')
     expect(screen.getByRole('button', { name: /Current chat/ })).toHaveTextContent('gpt-4o')
 
-    await chooseThemedOption(user, '选择输出模式', 'html')
-    await waitFor(() => {
-      expect(setOutputMode).toHaveBeenCalledWith({ id: 'session-1', outputMode: 'html' })
-    })
-    expect(screen.getAllByText('html').length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: '选择输出模式' })).not.toBeInTheDocument()
+    expect(setOutputMode).not.toHaveBeenCalled()
   })
 
   it('uses the newly selected model immediately when the session update is still in flight', async () => {
@@ -306,29 +303,14 @@ describe('session settings and restore flow', () => {
     expect(enqueue).toHaveBeenLastCalledWith(expect.objectContaining({ workspacePath: 'E:/workspace-two' }))
   })
 
-  it('ignores stale output mode responses when two updates complete out of order', async () => {
-    const user = userEvent.setup()
-    const first = createDeferred<any>()
-    const second = createDeferred<any>()
+  it('does not expose output mode switching from the chat header', async () => {
     listSessions.mockResolvedValueOnce([createSession()] as any)
-    setOutputMode.mockImplementationOnce(() => first.promise)
-    setOutputMode.mockImplementationOnce(() => second.promise)
 
     render(<App />)
 
     await screen.findByRole('heading', { name: 'Current chat' })
-    await chooseThemedOption(user, '选择输出模式', 'html')
-    await chooseThemedOption(user, '选择输出模式', 'markdown')
-
-    second.resolve(createSession({ outputMode: 'markdown', updatedAt: '2026-06-10T03:07:02.000Z' }))
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: '选择输出模式' })).toHaveTextContent('markdown')
-    })
-
-    first.resolve(createSession({ outputMode: 'html', updatedAt: '2026-06-10T03:07:01.000Z' }))
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: '选择输出模式' })).toHaveTextContent('markdown')
-    })
+    expect(screen.queryByRole('button', { name: '选择输出模式' })).not.toBeInTheDocument()
+    expect(setOutputMode).not.toHaveBeenCalled()
   })
 
   it('reverts model pending state when the latest request fails', async () => {

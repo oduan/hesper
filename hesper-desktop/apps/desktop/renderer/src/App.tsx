@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react'
-import { createId, nowIso, type Message, type OutputMode, type RunStep, type Session } from '@hesper/shared'
+import { createId, nowIso, type Message, type RunStep, type Session } from '@hesper/shared'
 import { AppShell, ConversationView, type AppSection, type ConversationShortcutCommand } from '@hesper/ui'
 import { AppStoreProvider, useAppStore } from './app-store'
 import { hesperApi } from './ipc-client'
@@ -18,7 +18,6 @@ export function App() {
 type SessionSettingsOverride = {
   workspacePath?: string
   defaultModelId?: string
-  outputMode?: OutputMode
 }
 
 type SessionSettingsField = keyof SessionSettingsOverride
@@ -49,8 +48,7 @@ function applySessionSettingsOverride(session: Session, override?: SessionSettin
   return {
     ...session,
     ...(override.workspacePath !== undefined ? { workspacePath: override.workspacePath } : {}),
-    ...(override.defaultModelId !== undefined ? { defaultModelId: override.defaultModelId } : {}),
-    ...(override.outputMode !== undefined ? { outputMode: override.outputMode } : {})
+    ...(override.defaultModelId !== undefined ? { defaultModelId: override.defaultModelId } : {})
   }
 }
 
@@ -369,17 +367,6 @@ function AppContent() {
                 clearLatestRequest: clearLatestSettingsRequest
               })
             }}
-            onOutputModeChange={(outputMode) => {
-              void updateSessionOutputMode({
-                session: activeSession,
-                outputMode,
-                dispatch,
-                setPendingSettingsBySession,
-                createRequestToken: createSettingsRequestToken,
-                isLatestRequest: isLatestSettingsRequest,
-                clearLatestRequest: clearLatestSettingsRequest
-              })
-            }}
             onSend={(content) => {
               void sendMessage({
                 session: activeSession,
@@ -564,43 +551,6 @@ async function updateSessionModel({
     }
     setPendingSettingsBySession((current) => clearSessionOverrideFields(current, session.id, ['defaultModelId']))
     clearLatestRequest(session.id, 'defaultModelId', requestId)
-  }
-}
-
-async function updateSessionOutputMode({
-  session,
-  outputMode,
-  dispatch,
-  setPendingSettingsBySession,
-  createRequestToken,
-  isLatestRequest,
-  clearLatestRequest
-}: {
-  session: Pick<Session, 'id' | 'outputMode'>
-  outputMode: OutputMode
-  dispatch: ReturnType<typeof useAppStore>['dispatch']
-  setPendingSettingsBySession: Dispatch<SetStateAction<Record<string, SessionSettingsOverride>>>
-  createRequestToken: (sessionId: string, field: SessionSettingsField) => number
-  isLatestRequest: (sessionId: string, field: SessionSettingsField, requestId: number) => boolean
-  clearLatestRequest: (sessionId: string, field: SessionSettingsField, requestId: number) => void
-}) {
-  const requestId = createRequestToken(session.id, 'outputMode')
-  setPendingSettingsBySession((current) => mergeSessionOverride(current, session.id, { outputMode }))
-
-  try {
-    const updatedSession = await hesperApi.sessions.setOutputMode({ id: session.id, outputMode })
-    if (!isLatestRequest(session.id, 'outputMode', requestId)) {
-      return
-    }
-    dispatch({ type: 'session.updated', session: updatedSession })
-    setPendingSettingsBySession((current) => clearSessionOverrideFields(current, session.id, ['outputMode']))
-    clearLatestRequest(session.id, 'outputMode', requestId)
-  } catch {
-    if (!isLatestRequest(session.id, 'outputMode', requestId)) {
-      return
-    }
-    setPendingSettingsBySession((current) => clearSessionOverrideFields(current, session.id, ['outputMode']))
-    clearLatestRequest(session.id, 'outputMode', requestId)
   }
 }
 
