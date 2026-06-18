@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type MouseEvent, type WheelEvent } from 'react'
+import { memo, useEffect, useMemo, useState, type MouseEvent } from 'react'
 import type { MessageContentType } from '@hesper/shared'
 import { darkTheme } from '../theme'
 import { FullscreenOutput } from './FullscreenOutput'
@@ -11,9 +11,8 @@ export type OutputBlockProps = {
   closeFullscreenSignal?: number
 }
 
-export function OutputBlock({ content, contentType, closeFullscreenSignal = 0 }: OutputBlockProps) {
+export const OutputBlock = memo(function OutputBlock({ content, contentType, closeFullscreenSignal = 0 }: OutputBlockProps) {
   const [isFullscreen, setIsFullscreen] = useState(false)
-  const [isHovered, setIsHovered] = useState(false)
   const sandboxedDocument = useMemo(
     () => (contentType === 'html' ? createSandboxedHtmlDocument(content) : undefined),
     [content, contentType]
@@ -24,17 +23,6 @@ export function OutputBlock({ content, contentType, closeFullscreenSignal = 0 }:
       setIsFullscreen(false)
     }
   }, [closeFullscreenSignal])
-
-  const handleOutputWheel = (event: WheelEvent<HTMLDivElement>) => {
-    if (event.ctrlKey || (event.deltaX === 0 && event.deltaY === 0)) {
-      return
-    }
-
-    event.preventDefault()
-    event.stopPropagation()
-    event.currentTarget.scrollTop += event.deltaY
-    event.currentTarget.scrollLeft += event.deltaX
-  }
 
   const handleOutputClickCapture = (event: MouseEvent<HTMLElement>) => {
     if (!(event.ctrlKey || event.metaKey) || event.button !== 0) {
@@ -51,9 +39,8 @@ export function OutputBlock({ content, contentType, closeFullscreenSignal = 0 }:
       <section
         className="hesper-output-block"
         onClickCapture={handleOutputClickCapture}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
         style={{
+          contain: 'paint',
           position: 'relative',
           height: contentType === 'html' ? 260 : 'auto',
           maxHeight: 340,
@@ -63,12 +50,12 @@ export function OutputBlock({ content, contentType, closeFullscreenSignal = 0 }:
           background: darkTheme.color.surfaceMuted
         }}
       >
+        <style>{outputBlockChromeCss}</style>
         <button
           type="button"
           aria-label="全屏查看输出"
+          data-hesper-output-fullscreen-button="true"
           onClick={() => setIsFullscreen(true)}
-          onFocus={() => setIsHovered(true)}
-          onBlur={() => setIsHovered(false)}
           style={{
             position: 'absolute',
             top: darkTheme.spacing.sm,
@@ -78,9 +65,7 @@ export function OutputBlock({ content, contentType, closeFullscreenSignal = 0 }:
             border: 0,
             background: 'rgba(255, 255, 255, 0.055)',
             color: darkTheme.color.text,
-            cursor: 'pointer',
-            opacity: isHovered ? 1 : 0,
-            transition: 'opacity 120ms ease'
+            cursor: 'pointer'
           }}
         >
           ⤢
@@ -89,12 +74,14 @@ export function OutputBlock({ content, contentType, closeFullscreenSignal = 0 }:
           aria-label="输出内容滚动区"
           className="hesper-theme-scrollbar"
           data-hesper-output-scroll="true"
-          onWheel={handleOutputWheel}
           style={{
             boxSizing: 'border-box',
             height: contentType === 'html' ? '100%' : 'auto',
             maxHeight: contentType === 'html' ? '100%' : 340,
             overflow: 'auto',
+            overscrollBehavior: 'contain',
+            overflowAnchor: 'none',
+            willChange: 'scroll-position',
             padding: darkTheme.spacing.md
           }}
         >
@@ -108,7 +95,7 @@ export function OutputBlock({ content, contentType, closeFullscreenSignal = 0 }:
           ) : contentType === 'markdown' ? (
             <MarkdownOutput content={content} />
           ) : (
-            <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.55, fontSize: 13 }}>{content}</div>
+            <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.55, fontSize: darkTheme.typography.body }}>{content}</div>
           )}
         </div>
       </section>
@@ -120,4 +107,15 @@ export function OutputBlock({ content, contentType, closeFullscreenSignal = 0 }:
       />
     </>
   )
+})
+
+const outputBlockChromeCss = `
+.hesper-output-block [data-hesper-output-fullscreen-button="true"] {
+  opacity: 0;
+  transition: opacity 120ms ease;
 }
+.hesper-output-block:hover [data-hesper-output-fullscreen-button="true"],
+.hesper-output-block:focus-within [data-hesper-output-fullscreen-button="true"] {
+  opacity: 1;
+}
+`

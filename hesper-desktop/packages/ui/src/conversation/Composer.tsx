@@ -138,7 +138,7 @@ const textareaStyle = {
   color: darkTheme.color.text,
   padding: '0 1px',
   fontFamily: 'inherit',
-  fontSize: 13,
+  fontSize: darkTheme.typography.body,
   fontWeight: 'inherit',
   letterSpacing: 'inherit',
   lineHeight: 1.5
@@ -152,7 +152,7 @@ const controlButtonStyle = {
   color: darkTheme.color.textMuted,
   cursor: 'pointer',
   padding: `${darkTheme.spacing.xs} ${darkTheme.spacing.sm}`,
-  fontSize: 12,
+  fontSize: darkTheme.typography.body,
   maxWidth: '100%',
   overflow: 'hidden',
   textOverflow: 'ellipsis',
@@ -163,7 +163,7 @@ const modelControlStyle = {
   display: 'flex',
   alignItems: 'center',
   color: darkTheme.color.textMuted,
-  fontSize: 12
+  fontSize: darkTheme.typography.body
 } satisfies CSSProperties
 
 const sendButtonStyle = {

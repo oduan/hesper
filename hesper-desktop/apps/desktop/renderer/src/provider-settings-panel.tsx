@@ -320,7 +320,7 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
   return (
     <section aria-label="模型来源设置" style={settingsPanelStyle} onClick={() => setOpenMenuProviderId(undefined)}>
       <header style={settingsHeaderStyle}>
-        <h2 style={{ margin: 0, fontSize: 15, lineHeight: '24px', textAlign: 'center', fontWeight: 700 }}>AI</h2>
+        <h2 style={{ margin: 0, fontSize: bodyFontSize, lineHeight: '24px', textAlign: 'center', fontWeight: 700 }}>AI</h2>
       </header>
 
       <div style={feedbackRowStyle}>
@@ -458,7 +458,7 @@ function ConnectionDialog({
       <button type="button" aria-label="关闭 API 配置" onClick={onCancel} style={overlayCloseStyle}>×</button>
       <div style={overlayFormStyle}>
         <header style={{ textAlign: 'center', marginBottom: 24 }}>
-          <h2 style={{ margin: 0, fontSize: 18 }}>API 配置</h2>
+          <h2 style={{ margin: 0, fontSize: bodyFontSize }}>API 配置</h2>
           <p style={{ margin: '12px 0 0', color: mutedTextColor, lineHeight: 1.5 }}>
             Select a provider preset and enter the API key. Saved keys are not displayed; leave the key empty to keep it unchanged.
           </p>
@@ -536,6 +536,7 @@ function ConnectionDialog({
 }
 
 const mutedTextColor = '#969db8'
+const bodyFontSize = 14
 
 const settingsPanelStyle: CSSProperties = {
   height: '100%',
@@ -548,7 +549,7 @@ const settingsPanelStyle: CSSProperties = {
   background: 'transparent',
   padding: 0,
   overflow: 'hidden',
-  fontSize: 13
+  fontSize: bodyFontSize
 }
 
 const settingsHeaderStyle: CSSProperties = {
@@ -581,7 +582,7 @@ const sectionBlockStyle: CSSProperties = {
 
 const sectionTitleStyle: CSSProperties = {
   margin: 0,
-  fontSize: 17,
+  fontSize: bodyFontSize,
   lineHeight: 1.2
 }
 
@@ -639,7 +640,7 @@ const providerAvatarStyle: CSSProperties = {
   color: '#eef2ff',
   display: 'grid',
   placeItems: 'center',
-  fontSize: 12,
+  fontSize: bodyFontSize,
   fontWeight: 700
 }
 
@@ -663,7 +664,7 @@ const renameButtonStyle: CSSProperties = {
   display: 'inline-grid',
   placeItems: 'center',
   cursor: 'pointer',
-  fontSize: 12,
+  fontSize: bodyFontSize,
   lineHeight: 1
 }
 
@@ -677,7 +678,7 @@ const renameInputStyle: CSSProperties = {
   background: 'rgba(255, 255, 255, 0.08)',
   color: '#f8fafc',
   padding: '2px 6px',
-  fontSize: 13,
+  fontSize: bodyFontSize,
   fontWeight: 700
 }
 
@@ -729,7 +730,7 @@ const fieldStyle: CSSProperties = {
   flexDirection: 'column',
   gap: 7,
   color: '#cbd3ee',
-  fontSize: 12
+  fontSize: bodyFontSize
 }
 
 const inputStyle: CSSProperties = {

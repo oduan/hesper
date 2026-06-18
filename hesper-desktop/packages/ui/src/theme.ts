@@ -13,6 +13,7 @@ export type ThemeTokens = {
   }
   radius: { sm: string; md: string; lg: string; xl: string }
   spacing: { xs: string; sm: string; md: string; lg: string; xl: string }
+  typography: { body: number; tiny: number }
 }
 
 export const lightTheme: ThemeTokens = {
@@ -29,7 +30,8 @@ export const lightTheme: ThemeTokens = {
     warning: '#ac741b'
   },
   radius: { sm: '8px', md: '12px', lg: '16px', xl: '20px' },
-  spacing: { xs: '4px', sm: '8px', md: '12px', lg: '16px', xl: '24px' }
+  spacing: { xs: '4px', sm: '8px', md: '12px', lg: '16px', xl: '24px' },
+  typography: { body: 14, tiny: 9 }
 }
 
 export const darkTheme: ThemeTokens = {
@@ -46,5 +48,6 @@ export const darkTheme: ThemeTokens = {
     warning: '#d8b66b'
   },
   radius: lightTheme.radius,
-  spacing: lightTheme.spacing
+  spacing: lightTheme.spacing,
+  typography: lightTheme.typography
 }

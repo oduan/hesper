@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { Message, RunStep, Session } from '@hesper/shared'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -7,6 +7,7 @@ import { AppShell } from '../layout/AppShell'
 import { Composer } from '../conversation/Composer'
 import { ConversationView } from '../conversation/ConversationView'
 import { FullscreenOutput } from '../conversation/FullscreenOutput'
+import { MessageBubble } from '../conversation/MessageBubble'
 import { OutputBlock } from '../conversation/OutputBlock'
 import { RunSteps } from '../conversation/RunSteps'
 
@@ -23,6 +24,7 @@ const baseSession = {
 
 afterEach(() => {
   cleanup()
+  vi.useRealTimers()
 })
 
 describe('ui components', () => {
@@ -69,6 +71,7 @@ describe('ui components', () => {
     expect(screen.getByRole('button', { name: '所有会话' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByLabelText('功能栏')).toHaveStyle({ boxSizing: 'border-box' })
     expect(screen.getByLabelText('实体列表')).toHaveStyle({ boxSizing: 'border-box' })
+    expect(screen.getByLabelText('会话列表')).toHaveClass('hesper-theme-scrollbar')
     expect(screen.getByLabelText('主工作区')).toHaveStyle({ gridTemplateColumns: '204px 320px minmax(0, 1fr)' })
     const sessionRow = screen.getByRole('button', { name: '视频脚本生成' })
     expect(sessionRow).toHaveStyle({ alignItems: 'center' })
@@ -123,7 +126,7 @@ describe('ui components', () => {
     expect(sendButton).toBeDisabled()
     expect(screen.getByLabelText('消息输入区')).toHaveStyle({ borderRadius: '20px' })
     expect(textarea).toHaveStyle({ borderRadius: '0' })
-    expect(textarea).toHaveStyle({ boxSizing: 'border-box', fontSize: '13px', lineHeight: '1.5', padding: '0px 1px' })
+    expect(textarea).toHaveStyle({ boxSizing: 'border-box', fontSize: '14px', lineHeight: '1.5', padding: '0px 1px' })
     expect(textarea).not.toHaveStyle({ font: 'inherit' })
     expect(textarea).toHaveClass('hesper-theme-scrollbar')
     expect(screen.queryByText('模型')).not.toBeInTheDocument()
@@ -202,6 +205,49 @@ describe('ui components', () => {
     expect(onSend).toHaveBeenCalledTimes(1)
   })
 
+  it('renders a tiny local date-time stamp outside the user message background', () => {
+    render(
+      <MessageBubble
+        message={{
+          id: 'message-user-time',
+          sessionId: 'session-1',
+          role: 'user',
+          content: '这是一条用户输入',
+          contentType: 'plain',
+          createdAt: now
+        }}
+      />
+    )
+
+    const bubble = screen.getByLabelText('用户消息')
+    expect(bubble).toHaveStyle({ fontSize: '14px' })
+    const timestamp = screen.getByLabelText(/^发送时间：/)
+    expect(bubble).not.toContainElement(timestamp)
+    expect(timestamp.parentElement).toContainElement(bubble)
+    expect(timestamp.tagName).toBe('TIME')
+    expect(timestamp).toHaveAttribute('dateTime', now)
+    expect(timestamp).toHaveTextContent(/^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}$/)
+    expect(timestamp).toHaveStyle({ justifySelf: 'end', fontSize: '9px', lineHeight: '1' })
+  })
+
+  it('does not render a date-time stamp inside assistant message bubbles', () => {
+    render(
+      <MessageBubble
+        message={{
+          id: 'message-assistant-time',
+          sessionId: 'session-1',
+          role: 'assistant',
+          content: '助手输出',
+          contentType: 'plain',
+          createdAt: now
+        }}
+      />
+    )
+
+    expect(screen.getByLabelText('助手消息')).toHaveStyle({ fontSize: '14px' })
+    expect(screen.queryByLabelText(/^发送时间：/)).not.toBeInTheDocument()
+  })
+
   it('renders markdown output as formatted elements instead of raw text', () => {
     render(
       <OutputBlock
@@ -227,7 +273,8 @@ describe('ui components', () => {
     expect(screen.queryByText('| Name | Status |')).not.toBeInTheDocument()
   })
 
-  it('auto-expands running steps and collapses them when final output appears', () => {
+  it('auto-expands running steps, shows elapsed time before the first tool intent, and stops when final output appears', () => {
+    vi.useFakeTimers({ now: new Date('2026-06-10T03:00:05.000Z') })
     const userMessage = {
       id: 'message-user',
       sessionId: 'session-1',
@@ -259,6 +306,9 @@ describe('ui components', () => {
     const stepsRegion = screen.getByLabelText('步骤流')
     const toggle = within(stepsRegion).getByRole('button', { expanded: true })
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(toggle).toHaveTextContent('2')
+    expect(toggle).toHaveTextContent('5秒')
+    expect(toggle.textContent).toMatch(/2\s*5秒\s*读取 README 了解项目结构/)
     expect(toggle).toHaveTextContent('读取 README 了解项目结构')
     expect(toggle).not.toHaveTextContent('调用 read_file')
     expect(screen.getAllByRole('listitem')).toHaveLength(2)
@@ -276,7 +326,9 @@ describe('ui components', () => {
       } satisfies Message
     ]))
 
-    expect(within(stepsRegion).getByRole('button', { expanded: false })).toHaveAttribute('aria-expanded', 'false')
+    const collapsedToggle = within(stepsRegion).getByRole('button', { expanded: false })
+    expect(collapsedToggle).toHaveAttribute('aria-expanded', 'false')
+    expect(collapsedToggle).toHaveTextContent('5秒')
     expect(screen.queryAllByRole('listitem')).toHaveLength(0)
     expect(screen.getByText('最终输出')).toBeInTheDocument()
   })
@@ -316,12 +368,14 @@ describe('ui components', () => {
 
     const conversationScroller = screen.getByLabelText('消息列表')
     const outputScroller = screen.getByLabelText('输出内容滚动区')
-    expect(outputScroller).toHaveStyle({ maxHeight: '340px', boxSizing: 'border-box' })
+    expect(outputScroller).toHaveStyle({ maxHeight: '340px', boxSizing: 'border-box', overscrollBehavior: 'contain' })
 
-    fireEvent.wheel(outputScroller, { deltaY: 48 })
-    expect(outputScroller.scrollTop).toBe(48)
+    const regularWheel = new WheelEvent('wheel', { deltaY: 48, bubbles: true, cancelable: true })
+    outputScroller.dispatchEvent(regularWheel)
+    expect(regularWheel.defaultPrevented).toBe(false)
     expect(conversationScroller.scrollTop).toBe(0)
 
+    outputScroller.scrollTop = 48
     fireEvent.wheel(outputScroller, { deltaY: 32, ctrlKey: true })
     expect(outputScroller.scrollTop).toBe(48)
     expect(conversationScroller.scrollTop).toBe(32)
@@ -407,10 +461,13 @@ describe('ui components', () => {
     expect(dialog).toHaveStyle({ position: 'fixed', top: '36px', right: '0px', bottom: '0px', left: '0px', padding: '0px' })
 
     const fullscreenScroller = screen.getByLabelText('最大化输出滚动区')
-    fireEvent.wheel(fullscreenScroller, { deltaY: 72 })
-    expect(fullscreenScroller.scrollTop).toBe(72)
+    expect(fullscreenScroller).toHaveStyle({ overscrollBehavior: 'contain' })
+    const regularWheel = new WheelEvent('wheel', { deltaY: 72, bubbles: true, cancelable: true })
+    fullscreenScroller.dispatchEvent(regularWheel)
+    expect(regularWheel.defaultPrevented).toBe(false)
     expect(conversationScroller.scrollTop).toBe(0)
 
+    fullscreenScroller.scrollTop = 72
     const ctrlWheel = new WheelEvent('wheel', { deltaY: 28, ctrlKey: true, bubbles: true, cancelable: true })
     fullscreenScroller.dispatchEvent(ctrlWheel)
     expect(ctrlWheel.defaultPrevented).toBe(true)
@@ -463,7 +520,7 @@ describe('ui components', () => {
       <RunSteps
         steps={[
           { id: 'step-1', runId: 'run-1', type: 'thought', status: 'succeeded', title: 'Mock thinking', summary: 'Generated deterministic mock response', createdAt: now },
-          { id: 'step-2', runId: 'run-1', type: 'tool_call', status: 'running', title: 'Search Files', summary: 'Searching repo', createdAt: '2026-06-10T03:00:01.000Z' },
+          { id: 'step-2', runId: 'run-1', type: 'tool_call', status: 'running', title: 'Search Files', summary: 'Searching repo', detail: '## 工具结果\n\n- 第一项', createdAt: '2026-06-10T03:00:01.000Z' },
           { id: 'step-3', runId: 'run-1', type: 'warning', status: 'failed', title: 'Network Warning', createdAt: '2026-06-10T03:00:02.000Z' }
         ]}
       />
@@ -480,6 +537,7 @@ describe('ui components', () => {
     expect(toggle).not.toHaveTextContent('最新步骤')
     expect(within(toggle).queryByLabelText(/步骤状态/)).not.toBeInTheDocument()
     expect(toggle).toHaveStyle({ gridTemplateColumns: '16px 28px minmax(0, 1fr)' })
+    expect(within(toggle).getByText('Searching repo')).not.toHaveAttribute('title')
     expect(screen.queryByText('Generated deterministic mock response')).not.toBeInTheDocument()
 
     await user.click(toggle)
@@ -491,6 +549,9 @@ describe('ui components', () => {
     const successStatus = screen.getByLabelText('步骤状态：成功')
     const runningStatus = screen.getByLabelText('步骤状态：运行中')
     const failedStatus = screen.getByLabelText('步骤状态：失败')
+    expect(successStatus).not.toHaveAttribute('title')
+    expect(runningStatus).not.toHaveAttribute('title')
+    expect(failedStatus).not.toHaveAttribute('title')
     expect(successStatus).toHaveAttribute('data-step-status-icon', 'success-check')
     expect(successStatus.querySelector('svg[aria-hidden="true"] circle')).toBeInTheDocument()
     expect(successStatus.querySelector('svg[aria-hidden="true"] path')).toHaveAttribute('d', 'M5.2 8.1 7.1 10 10.9 5.8')
@@ -506,40 +567,107 @@ describe('ui components', () => {
 
     const items = screen.getAllByRole('listitem')
     expect(items).toHaveLength(3)
-    expect(within(items[1]!).getByText('Searching repo')).toBeInTheDocument()
-    expect(items[0]).toHaveStyle({ gridTemplateColumns: '16px 28px minmax(0, 1fr)' })
+    const stepButtons = items.map((item) => within(item).getByRole('button', { name: /查看步骤详情/ }))
+    expect(stepButtons[1]).toHaveTextContent('Searching repo')
+    expect(stepButtons[0]).toHaveStyle({ gridTemplateColumns: '16px 28px minmax(0, 1fr)' })
+    expect(stepsRegion.querySelector('style')).toHaveTextContent('[data-hesper-step-row-button]:hover [data-hesper-step-row-text]')
+    for (const item of items) {
+      expect(item.querySelector('[title]')).not.toBeInTheDocument()
+    }
     expect(within(items[0]!).getByText('Generated deterministic mock response')).toHaveStyle({ whiteSpace: 'nowrap' })
     expect(within(items[0]!).queryByText('思考 / 成功')).not.toBeInTheDocument()
+
+    await user.click(stepButtons[1]!)
+    const stepDialog = screen.getByRole('dialog', { name: '步骤全屏查看' })
+    expect(stepDialog).toHaveStyle({ position: 'fixed', top: '36px', right: '0px', bottom: '0px', left: '0px' })
+    expect(within(stepDialog).queryByRole('heading', { name: 'Search Files' })).not.toBeInTheDocument()
+    expect(within(stepDialog).queryByText('Searching repo')).not.toBeInTheDocument()
+    expect(within(stepDialog).getByRole('heading', { name: '工具结果' })).toBeInTheDocument()
+    expect(within(stepDialog).getByText('第一项').closest('li')).toBeInTheDocument()
+    expect(within(stepDialog).queryByRole('button', { name: '复制输出内容' })).not.toBeInTheDocument()
+    fireEvent.keyDown(stepDialog, { key: 'Escape', bubbles: true, cancelable: true })
+    expect(screen.queryByRole('dialog', { name: '步骤全屏查看' })).not.toBeInTheDocument()
   })
 
-  it('does not render the run steps block before the first tool call exists', () => {
-    render(
+  it('renders the run steps block before the first tool call with a continuously updating elapsed timer', () => {
+    vi.useFakeTimers({ now: new Date('2026-06-10T03:00:10.000Z') })
+    const { rerender } = render(
       <RunSteps
         autoExpanded
+        runStartedAt={now}
         steps={[
           { id: 'step-thought', runId: 'run-1', type: 'thought', status: 'running', title: '思考过程', summary: '正在判断下一步', createdAt: now }
         ]}
       />
     )
 
-    expect(screen.queryByLabelText('步骤流')).not.toBeInTheDocument()
+    const stepsRegion = screen.getByLabelText('步骤流')
+    const toggle = within(stepsRegion).getByRole('button', { expanded: true })
+    expect(toggle).toHaveTextContent('1')
+    expect(toggle).toHaveTextContent('10秒')
+    expect(toggle).not.toHaveTextContent('正在判断下一步')
+    expect(screen.getByRole('listitem')).toHaveTextContent('正在判断下一步')
+
+    act(() => {
+      vi.advanceTimersByTime(1000)
+    })
+
+    expect(toggle).toHaveTextContent('11秒')
+
+    rerender(
+      <RunSteps
+        autoExpanded
+        runStartedAt={now}
+        runEndedAt="2026-06-10T03:00:02.000Z"
+        steps={[
+          { id: 'step-thought', runId: 'run-1', type: 'thought', status: 'succeeded', title: '思考过程', summary: '正在判断下一步', createdAt: now }
+        ]}
+      />
+    )
+
+    expect(screen.getByRole('button', { expanded: true })).toHaveTextContent('11秒')
+
+    rerender(
+      <RunSteps
+        autoExpanded
+        runStartedAt="2026-06-10T02:59:06.000Z"
+        steps={[
+          { id: 'step-thought', runId: 'run-1', type: 'thought', status: 'running', title: '思考过程', summary: '正在判断下一步', createdAt: now }
+        ]}
+      />
+    )
+
+    expect(screen.getByRole('button', { expanded: true })).toHaveTextContent('1分05秒')
+
+    rerender(
+      <RunSteps
+        autoExpanded
+        runStartedAt="2026-06-10T01:59:10.000Z"
+        steps={[
+          { id: 'step-thought', runId: 'run-1', type: 'thought', status: 'running', title: '思考过程', summary: '正在判断下一步', createdAt: now }
+        ]}
+      />
+    )
+
+    expect(screen.getByRole('button', { expanded: true })).toHaveTextContent('1小时01分01秒')
   })
 
-  it('hides conversation run steps until the first tool call exists', () => {
+  it('shows conversation run steps immediately after user input and adds the first tool intent only after a tool call exists', () => {
+    vi.useFakeTimers({ now: new Date('2026-06-10T03:00:07.000Z') })
     const userMessage = {
       id: 'message-user',
       sessionId: 'session-1',
       role: 'user',
       content: '请读取 README',
       contentType: 'markdown',
-      runId: 'run-1',
       createdAt: now
     } satisfies Message
+    const linkedUserMessage = { ...userMessage, runId: 'run-1' } satisfies Message
 
-    const renderConversation = (runSteps: RunStep[]) => (
+    const renderConversation = (message: Message, runSteps: RunStep[]) => (
       <ConversationView
         session={baseSession}
-        messages={[userMessage]}
+        messages={[message]}
         steps={[]}
         stepsByRun={{ 'run-1': runSteps }}
         streamingText=""
@@ -548,19 +676,25 @@ describe('ui components', () => {
       />
     )
 
-    const { rerender } = render(renderConversation([
-      { id: 'step-thought', runId: 'run-1', type: 'thought', status: 'running', title: '思考过程', summary: '正在判断下一步', createdAt: now }
-    ]))
+    const { rerender } = render(renderConversation(userMessage, []))
 
-    expect(screen.queryByLabelText('步骤流')).not.toBeInTheDocument()
+    const initialStepsRegion = screen.getByLabelText('步骤流')
+    const initialToggle = within(initialStepsRegion).getByRole('button', { expanded: true })
+    expect(initialToggle).toHaveTextContent('0')
+    expect(initialToggle).toHaveTextContent('7秒')
+    expect(initialToggle).not.toHaveTextContent('读取 README 了解项目结构')
+    expect(screen.queryAllByRole('listitem')).toHaveLength(0)
 
-    rerender(renderConversation([
+    rerender(renderConversation(linkedUserMessage, [
       { id: 'step-thought', runId: 'run-1', type: 'thought', status: 'succeeded', title: '思考过程', summary: '正在判断下一步', createdAt: now },
       { id: 'step-tool', runId: 'run-1', type: 'tool_call', status: 'running', title: '调用 read_file', summary: '读取 README 了解项目结构', createdAt: '2026-06-10T03:00:01.000Z' }
     ]))
 
-    expect(screen.getByLabelText('步骤流')).toBeInTheDocument()
-    expect(screen.getByRole('button', { expanded: true })).toHaveTextContent('读取 README 了解项目结构')
+    const toolToggle = screen.getByRole('button', { expanded: true })
+    expect(toolToggle).toHaveTextContent('2')
+    expect(toolToggle).toHaveTextContent('7秒')
+    expect(toolToggle.textContent).toMatch(/2\s*7秒\s*读取 README 了解项目结构/)
+    expect(toolToggle).toHaveTextContent('读取 README 了解项目结构')
   })
 
   it('renders tool call title with muted summary and detail segments', async () => {

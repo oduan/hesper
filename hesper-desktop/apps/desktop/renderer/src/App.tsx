@@ -616,7 +616,7 @@ function SectionPlaceholder({ section }: { section: AppSection }) {
       }}
     >
       <div>
-        <h2 style={{ margin: '0 0 8px', fontSize: 20 }}>{getSectionTitle(section)}</h2>
+        <h2 style={{ margin: '0 0 8px', fontSize: 14 }}>{getSectionTitle(section)}</h2>
         <p style={{ margin: 0, opacity: 0.72 }}>该扩展点已预留，后续会接入真实数据和交互。</p>
       </div>
     </section>
@@ -643,7 +643,7 @@ function EmptyConversationState({
       }}
     >
       <div>
-        <h2 style={{ margin: '0 0 8px' }}>准备开始新的 hesper 会话</h2>
+        <h2 style={{ margin: '0 0 8px', fontSize: 14 }}>准备开始新的 hesper 会话</h2>
         <p style={{ margin: 0, opacity: 0.72 }}>当前还没有会话。先创建一个主界面会话壳，后续任务再接入完整交互。</p>
         {loadError ? (
           <p role="alert" style={{ margin: '12px 0 0', color: '#fca5a5' }}>

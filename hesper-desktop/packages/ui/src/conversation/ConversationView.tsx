@@ -95,10 +95,6 @@ function createStepNavigationKind(step: RunStep): NavigationItem['kind'] {
   return step.type === 'tool_call' || step.type === 'tool_result' ? 'tool' : 'assistant'
 }
 
-function hasToolCallStep(steps: RunStep[]): boolean {
-  return steps.some((step) => step.type === 'tool_call')
-}
-
 function createMessageAnchorId(messageId: string): string {
   return `message-${messageId}`
 }
@@ -170,11 +166,12 @@ export function ConversationView({
       Object.entries(stepsByRun).map(([runId, runSteps]) => [runId, sortChronologically(runSteps)])
     )
   }, [stepsByRun])
-  const finalOutputRunIds = useMemo(() => new Set(
+  const finalOutputByRun = useMemo(() => new Map(
     orderedMessages.flatMap((message) => (
-      message.role === 'assistant' && message.runId && message.content.trim() ? [message.runId] : []
+      message.role === 'assistant' && message.runId && message.content.trim() ? [[message.runId, message] as const] : []
     ))
   ), [orderedMessages])
+  const finalOutputRunIds = useMemo(() => new Set(finalOutputByRun.keys()), [finalOutputByRun])
   const latestUserMessageId = [...orderedMessages].reverse().find((message) => message.role === 'user')?.id
   const getMessageSteps = (message: Message): RunStep[] => {
     if (message.role !== 'user') {
@@ -194,6 +191,18 @@ export function ConversationView({
 
     return streamingByRun?.[message.runId] ?? ''
   }
+  const getMessageRunEndedAt = (message: Message): string | undefined => (
+    message.runId ? finalOutputByRun.get(message.runId)?.createdAt : undefined
+  )
+  const hasAssistantOutputAfter = (message: Message): boolean => orderedMessages.some((candidate) => (
+    candidate.role === 'assistant' && candidate.content.trim() && candidate.createdAt.localeCompare(message.createdAt) >= 0
+  ))
+  const shouldShowMessageRunSteps = (message: Message, messageSteps: RunStep[]): boolean => {
+    if (message.role !== 'user') return false
+    if (messageSteps.length > 0) return true
+    if (message.runId && !finalOutputRunIds.has(message.runId)) return true
+    return !message.runId && message.id === latestUserMessageId && !hasAssistantOutputAfter(message)
+  }
   const anchorOrder = useMemo<AnchorEntry[]>(() => {
     const entries: AnchorEntry[] = []
 
@@ -205,7 +214,7 @@ export function ConversationView({
       })
 
       const messageSteps = getMessageSteps(message)
-      if (hasToolCallStep(messageSteps)) {
+      if (shouldShowMessageRunSteps(message, messageSteps) && messageSteps.length > 0) {
         for (const step of messageSteps) {
           entries.push({
             id: createStepAnchorId(step.id),
@@ -225,7 +234,7 @@ export function ConversationView({
       }
     }
 
-    if (orderedMessages.length === 0 && hasToolCallStep(orderedSteps)) {
+    if (orderedMessages.length === 0 && orderedSteps.length > 0) {
       for (const step of orderedSteps) {
         entries.push({
           id: createStepAnchorId(step.id),
@@ -375,7 +384,7 @@ export function ConversationView({
   }, [contentSignature])
 
   return (
-    <div data-hesper-conversation-root="true" style={{ height: '100%', minHeight: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', fontSize: 13 }}>
+    <div data-hesper-conversation-root="true" style={{ height: '100%', minHeight: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', fontSize: darkTheme.typography.body }}>
       <section
         aria-label="会话详情"
         style={{ display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr) auto', gap: darkTheme.spacing.md, minWidth: 0, minHeight: 0 }}
@@ -389,7 +398,7 @@ export function ConversationView({
             justifyContent: 'center'
           }}
         >
-          <h2 style={{ margin: 0, maxWidth: '65%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 15, lineHeight: 1.2, textAlign: 'center', fontWeight: 700 }}>{session.title}</h2>
+          <h2 style={{ margin: 0, maxWidth: '65%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: darkTheme.typography.body, lineHeight: 1.2, textAlign: 'center', fontWeight: 700 }}>{session.title}</h2>
         </header>
         <div style={messagesAreaStyle}>
           <div
@@ -435,11 +444,13 @@ export function ConversationView({
                 ) : (
                   <MessageBubble message={message} />
                 )}
-                {hasToolCallStep(messageSteps) ? (
+                {shouldShowMessageRunSteps(message, messageSteps) ? (
                   <div style={{ marginTop: darkTheme.spacing.sm }}>
                     <RunSteps
                       steps={messageSteps}
                       autoExpanded={message.role === 'user' && (!message.runId || !finalOutputRunIds.has(message.runId))}
+                      runStartedAt={message.createdAt}
+                      runEndedAt={getMessageRunEndedAt(message)}
                       getStepProps={(step) => {
                         const stepAnchorId = createStepAnchorId(step.id)
                         return {
@@ -474,10 +485,11 @@ export function ConversationView({
               </div>
             )
           })}
-          {orderedMessages.length === 0 && hasToolCallStep(orderedSteps) ? (
+          {orderedMessages.length === 0 && orderedSteps.length > 0 ? (
             <RunSteps
               steps={orderedSteps}
               autoExpanded
+              runStartedAt={orderedSteps[0]?.createdAt}
               getStepProps={(step) => {
                 const stepAnchorId = createStepAnchorId(step.id)
                 return {

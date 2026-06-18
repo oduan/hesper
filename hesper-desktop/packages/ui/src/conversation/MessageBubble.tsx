@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import type { Message } from '@hesper/shared'
 import { darkTheme } from '../theme'
 
@@ -7,6 +8,7 @@ export type MessageBubbleProps = {
 
 export function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === 'user'
+  const timestamp = isUser ? formatMessageTimestamp(message.createdAt) : undefined
 
   return (
     <div
@@ -15,22 +17,66 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         justifyContent: isUser ? 'flex-end' : 'flex-start'
       }}
     >
-      <article
-        aria-label={isUser ? '用户消息' : '助手消息'}
-        style={{
-          maxWidth: '78%',
-          padding: `${darkTheme.spacing.sm} ${darkTheme.spacing.md}`,
-          borderRadius: darkTheme.radius.lg,
-          border: 0,
-          background: isUser ? 'rgba(255, 255, 255, 0.055)' : darkTheme.color.surfaceMuted,
-          color: darkTheme.color.text,
-          whiteSpace: 'pre-wrap',
-          lineHeight: 1.5,
-          fontSize: 13
-        }}
-      >
-        {message.content}
-      </article>
+      <div style={messageStackStyle(isUser)}>
+        <article
+          aria-label={isUser ? '用户消息' : '助手消息'}
+          style={{
+            maxWidth: '100%',
+            padding: `${darkTheme.spacing.sm} ${darkTheme.spacing.md}`,
+            borderRadius: darkTheme.radius.lg,
+            border: 0,
+            background: isUser ? 'rgba(255, 255, 255, 0.055)' : darkTheme.color.surfaceMuted,
+            color: darkTheme.color.text,
+            whiteSpace: 'pre-wrap',
+            overflowWrap: 'anywhere',
+            lineHeight: 1.5,
+            fontSize: darkTheme.typography.body
+          }}
+        >
+          {message.content}
+        </article>
+        {timestamp ? (
+          <time
+            dateTime={message.createdAt}
+            aria-label={`发送时间：${timestamp}`}
+            style={timestampStyle}
+          >
+            {timestamp}
+          </time>
+        ) : null}
+      </div>
     </div>
   )
 }
+
+function formatMessageTimestamp(value: string): string | undefined {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return undefined
+
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  return `${year}/${month}/${day} ${hours}:${minutes}`
+}
+
+function messageStackStyle(isUser: boolean): CSSProperties {
+  return {
+    maxWidth: '78%',
+    display: 'grid',
+    justifyItems: isUser ? 'end' : 'start',
+    gap: 3
+  }
+}
+
+const timestampStyle = {
+  justifySelf: 'end',
+  alignSelf: 'end',
+  fontSize: darkTheme.typography.tiny,
+  lineHeight: 1,
+  color: darkTheme.color.textMuted,
+  opacity: 0.72,
+  whiteSpace: 'nowrap',
+  userSelect: 'none'
+} satisfies CSSProperties

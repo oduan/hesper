@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, type CSSProperties, type WheelEvent } from 'react'
+import { useEffect, useMemo, type CSSProperties } from 'react'
 import type { MessageContentType } from '@hesper/shared'
 import { darkTheme } from '../theme'
 import { createSandboxedHtmlDocument } from './html-document'
@@ -12,7 +12,6 @@ export type FullscreenOutputProps = {
 }
 
 export function FullscreenOutput({ open, content, contentType, onClose }: FullscreenOutputProps) {
-  const scrollRef = useRef<HTMLDivElement | null>(null)
   const sandboxedDocument = useMemo(
     () => (contentType === 'html' ? createSandboxedHtmlDocument(content) : undefined),
     [content, contentType]
@@ -37,27 +36,12 @@ export function FullscreenOutput({ open, content, contentType, onClose }: Fullsc
     return null
   }
 
-  const handleWheelCapture = (event: WheelEvent<HTMLDivElement>) => {
-    if (event.deltaX === 0 && event.deltaY === 0) {
-      return
-    }
-
-    event.preventDefault()
-    event.stopPropagation()
-    event.nativeEvent.stopImmediatePropagation()
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop += event.deltaY
-      scrollRef.current.scrollLeft += event.deltaX
-    }
-  }
-
   return (
     <div
       role="dialog"
       aria-modal="true"
       aria-label="输出全屏查看"
       data-hesper-fullscreen-output="true"
-      onWheelCapture={handleWheelCapture}
       style={overlayStyle}
     >
       <div
@@ -78,7 +62,6 @@ export function FullscreenOutput({ open, content, contentType, onClose }: Fullsc
           </button>
         </div>
         <div
-          ref={scrollRef}
           aria-label="最大化输出滚动区"
           className="hesper-theme-scrollbar"
           data-hesper-fullscreen-output-scroll="true"
@@ -141,6 +124,9 @@ const scrollAreaStyle: CSSProperties = {
   height: '100%',
   minHeight: 0,
   overflow: 'auto',
+  overscrollBehavior: 'contain',
+  overflowAnchor: 'none',
+  willChange: 'scroll-position',
   boxSizing: 'border-box',
   padding: `${darkTheme.spacing.xl} ${darkTheme.spacing.lg}`
 }

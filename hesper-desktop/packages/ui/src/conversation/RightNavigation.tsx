@@ -63,7 +63,7 @@ export function RightNavigation({ open, items, onClose, onNavigate }: RightNavig
                 cursor: 'pointer'
               }}
             >
-              <div style={{ fontSize: 12, color: darkTheme.color.textMuted }}>{kindLabels[item.kind]}</div>
+              <div style={{ fontSize: darkTheme.typography.body, color: darkTheme.color.textMuted }}>{kindLabels[item.kind]}</div>
               <div>{item.label}</div>
             </button>
           </li>

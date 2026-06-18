@@ -109,6 +109,20 @@ function clearStreamingByRun(streamingByRun: Record<string, string>, runId: stri
   return next
 }
 
+function linkLatestPendingUserMessage(messages: Message[], runId: string): Message[] {
+  const pendingMessage = messages
+    .filter((message) => message.role === 'user' && !message.runId)
+    .sort((left, right) => compareCreatedAt(right, left))[0]
+
+  if (!pendingMessage) {
+    return messages
+  }
+
+  return sortByCreatedAt(messages.map((message) => (
+    message.id === pendingMessage.id ? { ...message, runId } : message
+  )))
+}
+
 function createRetryStep(event: Extract<AgentRuntimeEvent, { type: 'run.retrying' }>): RunStep {
   return {
     id: `retry-${event.runId}-${event.retryCount}`,
@@ -241,8 +255,15 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const { event } = action
       switch (event.type) {
         case 'run.created': {
+          const currentMessages = state.messagesBySession[event.run.sessionId] ?? []
+          const linkedMessages = linkLatestPendingUserMessage(currentMessages, event.run.id)
+          const nextMessagesBySession = linkedMessages === currentMessages
+            ? state.messagesBySession
+            : { ...state.messagesBySession, [event.run.sessionId]: linkedMessages }
+
           return {
             ...state,
+            messagesBySession: nextMessagesBySession,
             runSessionIds: { ...state.runSessionIds, [event.run.id]: event.run.sessionId },
             latestRunIdBySession: { ...state.latestRunIdBySession, [event.run.sessionId]: event.run.id },
             stepsByRun: { ...state.stepsByRun, [event.run.id]: state.stepsByRun[event.run.id] ?? [] },

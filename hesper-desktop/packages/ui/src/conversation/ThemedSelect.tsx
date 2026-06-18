@@ -172,7 +172,7 @@ const selectButtonStyle: CSSProperties = {
   justifyContent: 'flex-start',
   gap: darkTheme.spacing.xs,
   cursor: 'pointer',
-  fontSize: 12,
+  fontSize: darkTheme.typography.body,
   lineHeight: 1.2,
   textAlign: 'left'
 }
@@ -227,7 +227,7 @@ const selectGroupButtonStyle: CSSProperties = {
   gap: darkTheme.spacing.sm,
   textAlign: 'left',
   cursor: 'default',
-  fontSize: 12,
+  fontSize: darkTheme.typography.body,
   overflow: 'hidden',
   whiteSpace: 'nowrap'
 }
@@ -235,7 +235,7 @@ const selectGroupButtonStyle: CSSProperties = {
 const selectGroupArrowStyle: CSSProperties = {
   flex: '0 0 auto',
   color: darkTheme.color.textMuted,
-  fontSize: 12
+  fontSize: darkTheme.typography.body
 }
 
 const selectGroupOptionsStyle: CSSProperties = {
@@ -265,7 +265,7 @@ const selectOptionStyle: CSSProperties = {
   display: 'block',
   textAlign: 'left',
   cursor: 'pointer',
-  fontSize: 12,
+  fontSize: darkTheme.typography.body,
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap'

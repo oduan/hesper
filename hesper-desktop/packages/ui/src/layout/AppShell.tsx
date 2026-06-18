@@ -35,7 +35,7 @@ export function AppShell({ sessions, activeSection, title, platform, activeSessi
         display: 'grid',
         gridTemplateRows: '36px minmax(0, 1fr)',
         fontFamily: 'Inter, Segoe UI, sans-serif',
-        fontSize: 13
+        fontSize: darkTheme.typography.body
       }}
     >
       <TitleBar

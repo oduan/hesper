@@ -65,7 +65,7 @@ button {
   color: #c8cde0;
   padding: 7px 10px;
   text-align: left;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   cursor: pointer;
   transition: background 120ms ease, color 120ms ease;
@@ -94,6 +94,7 @@ button {
   display: grid;
   align-items: center;
   gap: 2px;
+  font-size: 14px;
   transition: background 120ms ease;
 }
 
@@ -114,6 +115,7 @@ button {
   cursor: pointer;
   display: grid;
   gap: 3px;
+  font-size: 14px;
   transition: background 120ms ease;
 }
 

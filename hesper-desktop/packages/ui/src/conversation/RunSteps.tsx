@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import type { RunStep, RunStepStatus } from '@hesper/shared'
 import { darkTheme } from '../theme'
+import { MarkdownOutput } from './MarkdownOutput'
 
 export type RunStepsProps = {
   steps: RunStep[]
   autoExpanded?: boolean
+  runStartedAt?: string | undefined
+  runEndedAt?: string | undefined
   getStepProps?: (step: RunStep) => {
     id?: string
     tabIndex?: number
@@ -57,8 +60,64 @@ function createToolIntent(step: RunStep): string {
   return step.summary?.replace(/\s+/g, ' ').trim() || step.title
 }
 
+function parseTimestamp(value: string | undefined): number | undefined {
+  if (!value) return undefined
+  const timestamp = Date.parse(value)
+  return Number.isFinite(timestamp) ? timestamp : undefined
+}
+
+function formatElapsedTime(milliseconds: number): string {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000))
+  const seconds = totalSeconds % 60
+  const totalMinutes = Math.floor(totalSeconds / 60)
+  const minutes = totalMinutes % 60
+  const hours = Math.floor(totalMinutes / 60)
+  const secondsText = String(seconds).padStart(2, '0')
+
+  if (hours > 0) {
+    return `${hours}小时${String(minutes).padStart(2, '0')}分${secondsText}秒`
+  }
+
+  if (totalMinutes > 0) {
+    return `${totalMinutes}分${secondsText}秒`
+  }
+
+  return `${seconds}秒`
+}
+
 function firstToolCallStep(steps: RunStep[]): RunStep | undefined {
   return steps.find((step) => step.type === 'tool_call')
+}
+
+function useElapsedLabel(startedAt: string | undefined, endedAt: string | undefined): string | undefined {
+  const startMs = parseTimestamp(startedAt)
+  const endMs = parseTimestamp(endedAt)
+  const [nowMs, setNowMs] = useState(() => Date.now())
+  const latestElapsedMsRef = useRef(0)
+  const previousStartMsRef = useRef<number | undefined>(undefined)
+
+  if (previousStartMsRef.current !== startMs) {
+    previousStartMsRef.current = startMs
+    latestElapsedMsRef.current = 0
+  }
+
+  useEffect(() => {
+    if (startMs === undefined || endMs !== undefined) return
+
+    setNowMs(Date.now())
+    const intervalId = window.setInterval(() => {
+      setNowMs(Date.now())
+    }, 1000)
+
+    return () => window.clearInterval(intervalId)
+  }, [startMs, endMs])
+
+  if (startMs === undefined) return undefined
+
+  const elapsedMs = Math.max(0, (endMs ?? nowMs) - startMs)
+  const displayElapsedMs = Math.max(elapsedMs, latestElapsedMsRef.current)
+  latestElapsedMsRef.current = displayElapsedMs
+  return formatElapsedTime(displayElapsedMs)
 }
 
 function createStepDisplayParts(step: RunStep): StepDisplayParts {
@@ -76,18 +135,12 @@ function createStepDisplayParts(step: RunStep): StepDisplayParts {
   }
 }
 
-function createStepText(step: RunStep): string {
-  const parts = createStepDisplayParts(step)
-  return [parts.primary, ...parts.secondary].join(' · ')
-}
-
 const runningDotScanOrder = [3, 2, 1, 4, 7, 8, 9, 6, 5]
 
 function RunningStatusIcon() {
   return (
     <span
       aria-label={`步骤状态：${statusLabels.running}`}
-      title={statusLabels.running}
       data-step-status-icon="running-nine-dot-sweep"
       style={runningStatusIconStyle}
     >
@@ -119,7 +172,6 @@ function CompletedStatusIcon({ status }: { status: 'succeeded' | 'failed' }) {
   return (
     <span
       aria-label={`步骤状态：${statusLabels[status]}`}
-      title={statusLabels[status]}
       data-step-status-icon={isSucceeded ? 'success-check' : 'failed-cross'}
       style={statusIconSlotStyle}
     >
@@ -142,7 +194,6 @@ function PendingStatusIcon() {
   return (
     <span
       aria-label={`步骤状态：${statusLabels.pending}`}
-      title={statusLabels.pending}
       style={{
         ...pendingStatusIconStyle,
         background: getStatusColor('pending'),
@@ -158,20 +209,80 @@ function StatusDot({ status }: { status: RunStepStatus }) {
   return <PendingStatusIcon />
 }
 
-export function RunSteps({ steps, autoExpanded = false, getStepProps }: RunStepsProps) {
+function createStepMarkdown(step: RunStep): string {
+  return step.detail?.trim() || step.summary?.trim() || step.title
+}
+
+function StepFullscreenDialog({ step, onClose }: { step: RunStep; onClose: () => void }) {
+  const markdown = createStepMarkdown(step)
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+      onClose()
+    }
+
+    window.addEventListener('keydown', handleKeyDown, { capture: true })
+    return () => window.removeEventListener('keydown', handleKeyDown, { capture: true })
+  }, [onClose])
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="步骤全屏查看"
+      data-hesper-fullscreen-output="true"
+      style={stepFullscreenOverlayStyle}
+    >
+      <div aria-label="步骤详情内容" style={stepFullscreenShellStyle}>
+        <div aria-label="步骤详情操作" style={stepFullscreenActionsStyle}>
+          <button type="button" aria-label="关闭步骤详情" onClick={onClose} style={stepFullscreenIconButtonStyle}>
+            <svg aria-hidden="true" viewBox="0 0 24 24" style={stepFullscreenIconStyle}>
+              <path d="M7 7l10 10M17 7 7 17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+        <div
+          aria-label="步骤详情滚动区"
+          className="hesper-theme-scrollbar"
+          data-hesper-fullscreen-output-scroll="true"
+          style={stepFullscreenScrollAreaStyle}
+        >
+          <article aria-label="步骤详情正文" style={stepFullscreenBodyStyle}>
+            <MarkdownOutput content={markdown} />
+          </article>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function RunSteps({ steps, autoExpanded = false, runStartedAt, runEndedAt, getStepProps }: RunStepsProps) {
   const [expanded, setExpanded] = useState(autoExpanded)
+  const [activeStep, setActiveStep] = useState<RunStep>()
   const orderedSteps = useMemo(() => [...steps].sort(compareCreatedAt), [steps])
   const firstTool = firstToolCallStep(orderedSteps)
+  const elapsedLabel = useElapsedLabel(runStartedAt, runEndedAt)
 
   useEffect(() => {
     setExpanded(autoExpanded)
   }, [autoExpanded])
 
-  if (!firstTool) {
+  useEffect(() => {
+    if (activeStep && !orderedSteps.some((step) => step.id === activeStep.id)) {
+      setActiveStep(undefined)
+    }
+  }, [activeStep, orderedSteps])
+
+  if (!firstTool && !runStartedAt) {
     return null
   }
 
-  const summary = createToolIntent(firstTool)
+  const summary = firstTool ? createToolIntent(firstTool) : undefined
 
   return (
     <section
@@ -184,44 +295,59 @@ export function RunSteps({ steps, autoExpanded = false, getStepProps }: RunSteps
         padding: darkTheme.spacing.md
       }}
     >
+      <style>{stepRowHoverCss}</style>
       <button
         type="button"
         aria-expanded={expanded}
         onClick={() => setExpanded((value: boolean) => !value)}
-        style={summaryButtonStyle}
+        style={{
+          ...summaryButtonStyle,
+          gridTemplateColumns: elapsedLabel ? summaryRowColumnsWithTimer : rowColumns
+        }}
       >
         <span aria-hidden="true" style={chevronStyle}>{expanded ? '▾' : '▸'}</span>
         <span style={countBadgeStyle}>{orderedSteps.length}</span>
-        <span style={summaryTextStyle} title={summary}>{summary}</span>
+        {elapsedLabel ? (
+          <span aria-label={`已执行 ${elapsedLabel}`} data-hesper-run-elapsed="true" style={elapsedTimeStyle}>{elapsedLabel}</span>
+        ) : null}
+        {summary ? <span style={summaryTextStyle}>{summary}</span> : null}
       </button>
       {expanded ? (
         <ul style={listStyle}>
           {orderedSteps.map((step) => {
             const stepProps = getStepProps?.(step)
-            const text = createStepText(step)
             const parts = createStepDisplayParts(step)
             return (
               <li
                 key={step.id}
                 {...stepProps}
-                style={stepRowStyle}
+                style={stepListItemStyle}
               >
-                <span aria-hidden="true" />
-                <StatusDot status={step.status} />
-                <span style={stepTextStyle} title={text}>
-                  <span style={primarySegmentStyle}>{parts.primary}</span>
-                  {parts.secondary.map((part) => (
-                    <span key={part}>
-                      <span aria-hidden="true" style={mutedSeparatorStyle}> · </span>
-                      <span style={mutedSegmentStyle}>{part}</span>
-                    </span>
-                  ))}
-                </span>
+                <button
+                  type="button"
+                  aria-label={`查看步骤详情：${parts.primary}`}
+                  data-hesper-step-row-button="true"
+                  onClick={() => setActiveStep(step)}
+                  style={stepRowButtonStyle}
+                >
+                  <span aria-hidden="true" />
+                  <StatusDot status={step.status} />
+                  <span data-hesper-step-row-text="true" style={stepTextStyle}>
+                    <span style={primarySegmentStyle}>{parts.primary}</span>
+                    {parts.secondary.map((part) => (
+                      <span key={part}>
+                        <span aria-hidden="true" style={mutedSeparatorStyle}> · </span>
+                        <span style={mutedSegmentStyle}>{part}</span>
+                      </span>
+                    ))}
+                  </span>
+                </button>
               </li>
             )
           })}
         </ul>
       ) : null}
+      {activeStep ? <StepFullscreenDialog step={activeStep} onClose={() => setActiveStep(undefined)} /> : null}
     </section>
   )
 }
@@ -235,7 +361,16 @@ const runningDotAnimationCss = `
 }
 `
 
+const stepRowHoverCss = `
+[data-hesper-step-row-button]:hover [data-hesper-step-row-text],
+[data-hesper-step-row-button]:focus-visible [data-hesper-step-row-text] {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+`
+
 const rowColumns = '16px 28px minmax(0, 1fr)'
+const summaryRowColumnsWithTimer = '16px 28px auto minmax(0, 1fr)'
 
 const summaryButtonStyle: CSSProperties = {
   width: '100%',
@@ -263,11 +398,17 @@ const countBadgeStyle: CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',
-  fontSize: 12,
+  fontSize: darkTheme.typography.body,
   borderRadius: darkTheme.radius.xl,
   border: `1px solid ${darkTheme.color.border}`,
   color: darkTheme.color.textMuted,
   padding: '0 7px'
+}
+
+const elapsedTimeStyle: CSSProperties = {
+  color: darkTheme.color.textMuted,
+  fontVariantNumeric: 'tabular-nums',
+  whiteSpace: 'nowrap'
 }
 
 const summaryTextStyle: CSSProperties = {
@@ -275,7 +416,7 @@ const summaryTextStyle: CSSProperties = {
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
-  fontSize: 12
+  fontSize: darkTheme.typography.body
 }
 
 const listStyle: CSSProperties = {
@@ -322,12 +463,24 @@ const pendingStatusIconStyle: CSSProperties = {
   justifySelf: 'center'
 }
 
-const stepRowStyle: CSSProperties = {
+const stepListItemStyle: CSSProperties = {
+  outline: 'none',
+  minWidth: 0
+}
+
+const stepRowButtonStyle: CSSProperties = {
+  width: '100%',
   display: 'grid',
   gridTemplateColumns: rowColumns,
   alignItems: 'center',
   columnGap: darkTheme.spacing.sm,
-  outline: 'none',
+  border: 0,
+  outline: 0,
+  background: 'transparent',
+  color: darkTheme.color.text,
+  padding: 0,
+  cursor: 'pointer',
+  textAlign: 'left',
   minWidth: 0
 }
 
@@ -336,7 +489,7 @@ const stepTextStyle: CSSProperties = {
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
-  fontSize: 13,
+  fontSize: darkTheme.typography.body,
   lineHeight: 1.35
 }
 
@@ -350,4 +503,75 @@ const mutedSeparatorStyle: CSSProperties = {
 
 const mutedSegmentStyle: CSSProperties = {
   color: darkTheme.color.textMuted
+}
+
+const stepFullscreenOverlayStyle: CSSProperties = {
+  position: 'fixed',
+  top: 36,
+  right: 0,
+  bottom: 0,
+  left: 0,
+  background: darkTheme.color.surface,
+  display: 'block',
+  padding: 0,
+  boxSizing: 'border-box',
+  zIndex: 1000
+}
+
+const stepFullscreenShellStyle: CSSProperties = {
+  position: 'relative',
+  width: '100%',
+  height: '100%',
+  minHeight: 0,
+  overflow: 'hidden',
+  background: 'transparent',
+  borderStyle: 'none'
+}
+
+const stepFullscreenActionsStyle: CSSProperties = {
+  position: 'absolute',
+  top: darkTheme.spacing.lg,
+  right: darkTheme.spacing.lg,
+  zIndex: 2,
+  display: 'flex'
+}
+
+const stepFullscreenIconButtonStyle: CSSProperties = {
+  width: 34,
+  height: 34,
+  border: 0,
+  outline: 0,
+  borderRadius: darkTheme.radius.md,
+  background: 'transparent',
+  color: darkTheme.color.text,
+  display: 'inline-grid',
+  placeItems: 'center',
+  cursor: 'pointer'
+}
+
+const stepFullscreenIconStyle: CSSProperties = {
+  width: 18,
+  height: 18,
+  display: 'block'
+}
+
+const stepFullscreenScrollAreaStyle: CSSProperties = {
+  width: '100%',
+  height: '100%',
+  minHeight: 0,
+  overflow: 'auto',
+  overscrollBehavior: 'contain',
+  overflowAnchor: 'none',
+  willChange: 'scroll-position',
+  boxSizing: 'border-box',
+  padding: `${darkTheme.spacing.xl} ${darkTheme.spacing.lg}`
+}
+
+const stepFullscreenBodyStyle: CSSProperties = {
+  maxWidth: 1120,
+  minHeight: '100%',
+  margin: '0 auto',
+  background: 'transparent',
+  borderStyle: 'none',
+  color: darkTheme.color.text
 }

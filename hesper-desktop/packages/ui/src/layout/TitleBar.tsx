@@ -48,7 +48,7 @@ export function TitleBar({ title, platform = 'win32', onMinimize, onToggleMaximi
     >
       {isMac ? <div className="titlebar-no-drag" style={macControlsSlotStyle}>{controls}</div> : null}
       <div style={brandStyle}>Hesper</div>
-      <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.02em', pointerEvents: 'none' }}>{title}</div>
+      <div style={{ fontSize: darkTheme.typography.body, fontWeight: 700, letterSpacing: '0.02em', pointerEvents: 'none' }}>{title}</div>
       {!isMac ? <div className="titlebar-no-drag" style={windowsControlsSlotStyle}>{controls}</div> : null}
     </header>
   )
@@ -111,7 +111,7 @@ const brandStyle: CSSProperties = {
   height: '100%',
   display: 'flex',
   alignItems: 'center',
-  fontSize: 14,
+  fontSize: darkTheme.typography.body,
   fontWeight: 700,
   letterSpacing: '0.02em',
   color: darkTheme.color.text,

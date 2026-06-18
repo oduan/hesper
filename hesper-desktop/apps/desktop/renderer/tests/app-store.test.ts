@@ -111,6 +111,40 @@ describe('app-store reducer', () => {
     })
   })
 
+  it('links the latest optimistic user message as soon as the run is created', () => {
+    const withOptimisticMessage = appReducer(initialAppState, {
+      type: 'message.optimistic',
+      message: {
+        id: 'message-user-pending',
+        sessionId: 'session-1',
+        role: 'user',
+        content: 'prompt while enqueue is pending',
+        contentType: 'plain',
+        createdAt: now
+      }
+    })
+
+    const runCreatedState = appReducer(withOptimisticMessage, {
+      type: 'agent.event',
+      event: {
+        type: 'run.created',
+        run: {
+          id: 'run-created-before-ipc-return',
+          sessionId: 'session-1',
+          status: 'running',
+          modelId: 'mock/hesper-fast',
+          retryCount: 0,
+          maxRetries: 2
+        }
+      }
+    })
+
+    expect(runCreatedState.messagesBySession['session-1']?.[0]).toMatchObject({
+      id: 'message-user-pending',
+      runId: 'run-created-before-ipc-return'
+    })
+  })
+
   it('aggregates message deltas and removes streaming state when message completes', () => {
     const runCreatedState = appReducer(initialAppState, {
       type: 'agent.event',

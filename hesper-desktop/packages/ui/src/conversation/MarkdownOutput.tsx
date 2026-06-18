@@ -1,4 +1,4 @@
-import { createElement, type CSSProperties, type ReactNode } from 'react'
+import { createElement, memo, useMemo, type CSSProperties, type ReactNode } from 'react'
 import { darkTheme } from '../theme'
 
 type MarkdownBlock =
@@ -282,21 +282,21 @@ function renderBlock(block: MarkdownBlock, index: number): ReactNode {
   }
 }
 
-export function MarkdownOutput({ content }: MarkdownOutputProps) {
-  const blocks = parseMarkdown(content)
+export const MarkdownOutput = memo(function MarkdownOutput({ content }: MarkdownOutputProps) {
+  const blocks = useMemo(() => parseMarkdown(content), [content])
   return <div style={rootStyle}>{blocks.map(renderBlock)}</div>
-}
+})
 
 const rootStyle: CSSProperties = {
   lineHeight: 1.6,
-  fontSize: 13,
+  fontSize: darkTheme.typography.body,
   color: darkTheme.color.text
 }
 
 function headingStyle(level: number): CSSProperties {
   return {
     margin: level <= 2 ? '0 0 10px' : '10px 0 8px',
-    fontSize: level === 1 ? 20 : level === 2 ? 17 : 15,
+    fontSize: darkTheme.typography.body,
     lineHeight: 1.3,
     fontWeight: 750
   }
@@ -323,7 +323,7 @@ const strongStyle: CSSProperties = {
 
 const inlineCodeStyle: CSSProperties = {
   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
-  fontSize: '0.92em',
+  fontSize: '1em',
   color: darkTheme.color.text,
   background: 'rgba(255, 255, 255, 0.07)',
   borderRadius: darkTheme.radius.sm,
@@ -338,7 +338,7 @@ const codeBlockStyle: CSSProperties = {
   background: darkTheme.color.surface,
   color: darkTheme.color.text,
   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
-  fontSize: 12,
+  fontSize: darkTheme.typography.body,
   lineHeight: 1.5,
   whiteSpace: 'pre-wrap'
 }
@@ -363,7 +363,7 @@ const tableWrapStyle: CSSProperties = {
 const tableStyle: CSSProperties = {
   width: '100%',
   borderCollapse: 'collapse',
-  fontSize: 13
+  fontSize: darkTheme.typography.body
 }
 
 const tableHeaderStyle: CSSProperties = {

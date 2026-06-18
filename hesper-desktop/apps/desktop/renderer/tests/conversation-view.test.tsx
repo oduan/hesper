@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ConversationView, type ConversationShortcutCommand } from '@hesper/ui'
@@ -224,9 +224,7 @@ describe('ConversationView', () => {
     expect(userMessage.compareDocumentPosition(assistantMessage) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
-
-
-  it('hides run steps until a tool call exists for the run', () => {
+  it('shows thought-only run steps as collapsed elapsed summaries without exposing reasoning text', () => {
     render(
       <ConversationView
         session={session}
@@ -306,7 +304,15 @@ describe('ConversationView', () => {
 
     expect(screen.queryByText('First reasoning')).not.toBeInTheDocument()
     expect(screen.queryByText('Second reasoning')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('步骤流')).not.toBeInTheDocument()
+    const stepRegions = screen.getAllByLabelText('步骤流')
+    expect(stepRegions).toHaveLength(2)
+    for (const region of stepRegions) {
+      const toggle = within(region).getByRole('button', { expanded: false })
+      expect(toggle).toHaveTextContent('1')
+      expect(toggle).toHaveTextContent('2秒')
+      expect(toggle).not.toHaveTextContent('First reasoning')
+      expect(toggle).not.toHaveTextContent('Second reasoning')
+    }
     expect(firstPrompt.compareDocumentPosition(firstAnswer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(secondPrompt.compareDocumentPosition(secondAnswer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
