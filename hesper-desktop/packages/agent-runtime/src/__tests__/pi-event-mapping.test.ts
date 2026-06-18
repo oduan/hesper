@@ -133,7 +133,7 @@ describe('pi event mapping', () => {
       type: 'tool_execution_start',
       toolCallId: 'tool-call-1',
       toolName: 'read_file',
-      args: { path: 'README.md' }
+      args: { path: 'README.md', purpose: '读取 README 了解项目结构' }
     })
 
     expect(events).toEqual([
@@ -144,10 +144,12 @@ describe('pi event mapping', () => {
           runId: 'run-tool-start',
           type: 'tool_call',
           status: 'running',
-          title: '工具：read_file'
+          title: '调用 read_file',
+          summary: '读取 README 了解项目结构'
         })
       })
     ])
+    expect((events[0] as Extract<(typeof events)[number], { type: 'step.created' }>).step.detail).toBeUndefined()
   })
 
   it('keeps separate steps for multiple tool calls that do not provide tool call ids', () => {
@@ -233,12 +235,13 @@ describe('pi event mapping', () => {
       type: 'tool_execution_start',
       toolCallId: 'tool-call-1',
       toolName: 'read_file',
-      args: { path: 'README.md' }
+      args: { path: 'README.md', purpose: '读取 README 了解项目结构' }
     })
     const endEvents = mapPiEventToHesperEvents('run-tool-end', {
       type: 'tool_execution_end',
       toolCallId: 'tool-call-1',
       toolName: 'read_file',
+      args: { path: 'README.md', purpose: '读取 README 了解项目结构' },
       result: { content: 'done' },
       isError: false
     })
@@ -251,12 +254,17 @@ describe('pi event mapping', () => {
           runId: 'run-tool-end',
           type: 'tool_call',
           status: 'succeeded',
-          title: '工具：read_file'
+          title: '调用 read_file',
+          summary: '读取 README 了解项目结构'
         })
       })
     ])
+    const endStep = (endEvents[0] as Extract<(typeof endEvents)[number], { type: 'step.updated' }>).step
+    expect(endStep.detail).toBeUndefined()
+    expect(JSON.stringify(endStep)).not.toContain('done')
+    expect(JSON.stringify(endStep)).not.toContain('README.md')
     expect((startEvents[0] as Extract<(typeof startEvents)[number], { type: 'step.created' }>).step.id).toBe(
-      (endEvents[0] as Extract<(typeof endEvents)[number], { type: 'step.updated' }>).step.id
+      endStep.id
     )
   })
 

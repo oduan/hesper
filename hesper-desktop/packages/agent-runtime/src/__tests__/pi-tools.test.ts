@@ -24,7 +24,14 @@ describe('createPiAgentTools', () => {
       name: 'filesystem_read-file',
       label: 'Read File',
       description: 'Read a file',
-      parameters: readTool.inputSchema
+      parameters: {
+        type: 'object',
+        required: ['path', 'purpose'],
+        properties: {
+          path: { type: 'string' },
+          purpose: expect.objectContaining({ type: 'string' })
+        }
+      }
     })
     expect(tool!.name).toMatch(/^[a-zA-Z0-9_-]+$/)
   })
@@ -38,7 +45,7 @@ describe('createPiAgentTools', () => {
       context: { runId: 'run-1', sessionId: 'session-1', workspacePath: 'C:/workspace', allowedToolIds: ['filesystem.read-file'] }
     })
 
-    const result = await tool!.execute('tool-call-1', { path: 'README.md' }, signal)
+    const result = await tool!.execute('tool-call-1', { path: 'README.md', purpose: '读取 README 了解项目结构' }, signal)
 
     expect(run).toHaveBeenCalledWith(readTool, { path: 'README.md' }, {
       runId: 'run-1',
