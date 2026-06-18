@@ -235,4 +235,31 @@ describe('ui components', () => {
     expect(within(items[0]!).getByText('Generated deterministic mock response')).toHaveStyle({ whiteSpace: 'nowrap' })
     expect(within(items[0]!).queryByText('思考 / 成功')).not.toBeInTheDocument()
   })
+
+  it('renders step title with muted summary and detail segments', async () => {
+    const user = userEvent.setup()
+    render(
+      <RunSteps
+        steps={[
+          {
+            id: 'step-tool',
+            runId: 'run-1',
+            type: 'tool_call',
+            status: 'running',
+            title: '工具：web_fetch-url',
+            summary: '搜索 Hesper 是什么',
+            detail: '{"url":"https://example.com"}',
+            createdAt: now
+          }
+        ]}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: /工具：web_fetch-url/ }))
+
+    const item = screen.getByRole('listitem')
+    expect(within(item).getByText('工具：web_fetch-url')).toBeInTheDocument()
+    expect(within(item).getByText('搜索 Hesper 是什么')).toHaveStyle({ color: '#969db8' })
+    expect(within(item).getByText('{"url":"https://example.com"}')).toHaveStyle({ color: '#969db8' })
+  })
 })

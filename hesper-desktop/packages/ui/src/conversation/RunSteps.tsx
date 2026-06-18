@@ -37,8 +37,39 @@ function getStatusColor(status: RunStepStatus): string {
   }
 }
 
+type StepDisplayParts = {
+  primary: string
+  secondary: string[]
+}
+
+function uniqueParts(parts: Array<string | undefined>): string[] {
+  const seen = new Set<string>()
+  return parts.flatMap((part) => {
+    const normalized = part?.replace(/\s+/g, ' ').trim()
+    if (!normalized || seen.has(normalized)) return []
+    seen.add(normalized)
+    return [normalized]
+  })
+}
+
+function createStepDisplayParts(step: RunStep): StepDisplayParts {
+  if (step.type === 'thought' && step.summary) {
+    return {
+      primary: step.summary,
+      secondary: uniqueParts([step.detail]).filter((part) => part !== step.summary)
+    }
+  }
+
+  const primary = step.title
+  return {
+    primary,
+    secondary: uniqueParts([step.summary, step.detail]).filter((part) => part !== primary)
+  }
+}
+
 function createStepText(step: RunStep): string {
-  return step.summary ?? step.title
+  const parts = createStepDisplayParts(step)
+  return [parts.primary, ...parts.secondary].join(' · ')
 }
 
 function StatusDot({ status }: { status: RunStepStatus }) {
@@ -92,6 +123,7 @@ export function RunSteps({ steps, getStepProps }: RunStepsProps) {
           {orderedSteps.map((step) => {
             const stepProps = getStepProps?.(step)
             const text = createStepText(step)
+            const parts = createStepDisplayParts(step)
             return (
               <li
                 key={step.id}
@@ -101,7 +133,13 @@ export function RunSteps({ steps, getStepProps }: RunStepsProps) {
                 <span aria-hidden="true" />
                 <StatusDot status={step.status} />
                 <span style={stepTextStyle} title={text}>
-                  {text}
+                  <span style={primarySegmentStyle}>{parts.primary}</span>
+                  {parts.secondary.map((part) => (
+                    <span key={part}>
+                      <span aria-hidden="true" style={mutedSeparatorStyle}> · </span>
+                      <span style={mutedSegmentStyle}>{part}</span>
+                    </span>
+                  ))}
                 </span>
               </li>
             )
@@ -179,4 +217,16 @@ const stepTextStyle: CSSProperties = {
   whiteSpace: 'nowrap',
   fontSize: 13,
   lineHeight: 1.35
+}
+
+const primarySegmentStyle: CSSProperties = {
+  whiteSpace: 'nowrap'
+}
+
+const mutedSeparatorStyle: CSSProperties = {
+  color: darkTheme.color.textMuted
+}
+
+const mutedSegmentStyle: CSSProperties = {
+  color: darkTheme.color.textMuted
 }

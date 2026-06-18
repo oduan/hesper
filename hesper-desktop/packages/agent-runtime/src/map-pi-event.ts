@@ -15,9 +15,15 @@ type ThinkingState = {
 }
 
 type RunState = {
-  turnCounter: number
-  activeTurnIds: string[]
+  commentaryCounter: number
   thinkingByContentIndex: Map<number, ThinkingState>
+}
+
+type TextPhase = 'commentary' | 'final_answer'
+
+type TextBlockInfo = {
+  text: string
+  phase: TextPhase | undefined
 }
 
 const runStates = new Map<string, RunState>()
@@ -29,7 +35,7 @@ function nowIso(): string {
 function getRunState(runId: string): RunState {
   const existing = runStates.get(runId)
   if (existing) return existing
-  const created: RunState = { turnCounter: 0, activeTurnIds: [], thinkingByContentIndex: new Map() }
+  const created: RunState = { commentaryCounter: 0, thinkingByContentIndex: new Map() }
   runStates.set(runId, created)
   return created
 }
@@ -61,26 +67,41 @@ function stringify(value: unknown): string | undefined {
   }
 }
 
-function extractTextFromContent(content: unknown): string {
-  if (typeof content === 'string') return content
-  if (!Array.isArray(content)) return ''
+function parseTextPhase(signature: unknown): TextPhase | undefined {
+  if (typeof signature !== 'string' || !signature.trim().startsWith('{')) return undefined
+  try {
+    const parsed = JSON.parse(signature) as { phase?: unknown }
+    return parsed.phase === 'commentary' || parsed.phase === 'final_answer' ? parsed.phase : undefined
+  } catch {
+    return undefined
+  }
+}
 
-  return content
-    .flatMap((item) => {
-      if (!item || typeof item !== 'object') return []
-      if ((item as { type?: string }).type === 'text' && typeof (item as { text?: unknown }).text === 'string') {
-        return [(item as { text: string }).text]
-      }
-      return []
-    })
-    .join('')
+function extractTextBlocks(content: unknown): TextBlockInfo[] {
+  if (typeof content === 'string') return [{ text: content, phase: undefined }]
+  if (!Array.isArray(content)) return []
+
+  return content.flatMap((item) => {
+    if (!item || typeof item !== 'object') return []
+    const record = item as { type?: string; text?: unknown; textSignature?: unknown }
+    if (record.type !== 'text' || typeof record.text !== 'string') return []
+    return [{ text: record.text, phase: parseTextPhase(record.textSignature) }]
+  })
+}
+
+function hasToolCallContent(content: unknown): boolean {
+  return Array.isArray(content) && content.some((item) => Boolean(item && typeof item === 'object' && (item as { type?: string }).type === 'toolCall'))
+}
+
+function normalizedFailureMessage(errorMessage: unknown): string | undefined {
+  if (typeof errorMessage !== 'string') return undefined
+  const normalized = errorMessage.replace(/\s+/g, ' ').trim()
+  return normalized || undefined
 }
 
 function formatFailureMessage(errorMessage: unknown): string | undefined {
-  if (typeof errorMessage !== 'string') return undefined
-  const normalized = errorMessage.replace(/\s+/g, ' ').trim()
-  if (!normalized) return undefined
-  return `运行失败：${normalized}`
+  const normalized = normalizedFailureMessage(errorMessage)
+  return normalized ? `运行失败：${normalized}` : undefined
 }
 
 function inferContentType(message: { content?: unknown }): MessageContentType {
@@ -94,7 +115,7 @@ function normalizeContext(context: string | MappingContext): MappingContext {
 
 function createToolStepEvent(kind: StepEvent['type'], runId: string, event: PiEventLike): StepEvent {
   const stepId = `step-${runId}-tool-${String(event.toolCallId ?? 'unknown')}`
-  const title = `Tool: ${String(event.toolName ?? 'unknown')}`
+  const title = `工具：${String(event.toolName ?? 'unknown')}`
   const argsText = stringify(event.args)
 
   if (kind === 'step.created') {
@@ -154,23 +175,21 @@ function createThinkingStepEvent(kind: StepEvent['type'], runId: string, event: 
   }
 }
 
-function createModelStepEvent(kind: StepEvent['type'], runId: string, summary?: string, status: RunStepStatus = 'succeeded'): StepEvent {
+function createCommentaryStepEvent(runId: string, text: string): StepEvent {
   const state = getRunState(runId)
-
-  if (kind === 'step.created') {
-    state.turnCounter += 1
-    const stepId = `step-${runId}-model-call-${state.turnCounter}`
-    state.activeTurnIds.push(stepId)
-    return {
-      type: 'step.created',
-      step: createStep(runId, stepId, 'model_call', 'running', 'Model turn', summary)
-    }
-  }
-
-  const stepId = state.activeTurnIds.shift() ?? `step-${runId}-model-call-${state.turnCounter + 1}`
+  state.commentaryCounter += 1
+  const stepId = `step-${runId}-commentary-${state.commentaryCounter}`
+  const normalized = text.replace(/\s+/g, ' ').trim()
   return {
-    type: 'step.updated',
-    step: createStep(runId, stepId, 'model_call', status, 'Model turn', summary, summary, nowIso())
+    type: 'step.created',
+    step: createStep(runId, stepId, 'thought', 'succeeded', '执行说明', normalized, normalized, nowIso())
+  }
+}
+
+function createModelFailureStepEvent(runId: string, errorMessage: string): StepEvent {
+  return {
+    type: 'step.created',
+    step: createStep(runId, `step-${runId}-model-failure`, 'warning', 'failed', '运行失败', errorMessage, errorMessage, nowIso())
   }
 }
 
@@ -180,19 +199,54 @@ function createMessageCompletedEvent(context: MappingContext, event: PiEventLike
   const message = event.message as { role?: string; content?: unknown; timestamp?: number; errorMessage?: unknown; stopReason?: unknown } | undefined
   if (!message || message.role !== 'assistant') return []
 
-  const content = formatFailureMessage(message.errorMessage) ?? extractTextFromContent(message.content)
-  return [{
-    type: 'message.completed',
-    message: {
-      id: `message-${context.runId}-assistant`,
-      sessionId: context.sessionId,
-      role: 'assistant',
-      content,
-      contentType: inferContentType(message),
-      runId: context.runId,
-      createdAt: typeof message.timestamp === 'number' ? new Date(message.timestamp).toISOString() : nowIso()
-    }
-  }]
+  const failureContent = formatFailureMessage(message.errorMessage)
+  if (failureContent) {
+    return [{
+      type: 'message.completed',
+      message: {
+        id: `message-${context.runId}-assistant`,
+        sessionId: context.sessionId,
+        role: 'assistant',
+        content: failureContent,
+        contentType: inferContentType(message),
+        runId: context.runId,
+        createdAt: typeof message.timestamp === 'number' ? new Date(message.timestamp).toISOString() : nowIso()
+      }
+    }]
+  }
+
+  const textBlocks = extractTextBlocks(message.content)
+  const hasToolCall = hasToolCallContent(message.content)
+  const commentary = textBlocks
+    .filter((block) => block.phase === 'commentary' || (hasToolCall && block.phase !== 'final_answer'))
+    .map((block) => block.text)
+    .join('')
+    .replace(/\s+/g, ' ')
+    .trim()
+  const finalContent = textBlocks
+    .filter((block) => block.phase !== 'commentary' && !(hasToolCall && block.phase !== 'final_answer'))
+    .map((block) => block.text)
+    .join('')
+
+  const events: AgentRuntimeEvent[] = []
+  if (commentary) {
+    events.push(createCommentaryStepEvent(context.runId, commentary))
+  }
+  if (finalContent) {
+    events.push({
+      type: 'message.completed',
+      message: {
+        id: `message-${context.runId}-assistant`,
+        sessionId: context.sessionId,
+        role: 'assistant',
+        content: finalContent,
+        contentType: inferContentType(message),
+        runId: context.runId,
+        createdAt: typeof message.timestamp === 'number' ? new Date(message.timestamp).toISOString() : nowIso()
+      }
+    })
+  }
+  return events
 }
 
 export function mapPiEventToHesperEvents(context: string | MappingContext, piEvent: AgentEvent | PiEventLike): AgentRuntimeEvent[] {
@@ -203,7 +257,7 @@ export function mapPiEventToHesperEvents(context: string | MappingContext, piEve
     case 'message_update': {
       const assistantMessageEvent = event.assistantMessageEvent as { type?: string; delta?: string } | undefined
       if (assistantMessageEvent?.type === 'text_delta') {
-        return [{ type: 'message.delta', runId: normalizedContext.runId, delta: assistantMessageEvent.delta ?? '' }]
+        return []
       }
       if (assistantMessageEvent?.type === 'thinking_start') {
         return [createThinkingStepEvent('step.created', normalizedContext.runId, event)].filter((candidate): candidate is StepEvent => Boolean(candidate))
@@ -220,11 +274,11 @@ export function mapPiEventToHesperEvents(context: string | MappingContext, piEve
     case 'tool_execution_end':
       return [createToolStepEvent('step.updated', normalizedContext.runId, event)]
     case 'turn_start':
-      return [createModelStepEvent('step.created', normalizedContext.runId)]
+      return []
     case 'turn_end': {
       const message = event.message as { errorMessage?: unknown; stopReason?: unknown } | undefined
-      const failureSummary = formatFailureMessage(message?.errorMessage)
-      return [createModelStepEvent('step.updated', normalizedContext.runId, failureSummary, failureSummary ? 'failed' : 'succeeded')]
+      const failureSummary = normalizedFailureMessage(message?.errorMessage)
+      return failureSummary ? [createModelFailureStepEvent(normalizedContext.runId, failureSummary)] : []
     }
     default:
       return []
