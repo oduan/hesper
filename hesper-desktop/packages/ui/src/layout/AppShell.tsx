@@ -18,8 +18,8 @@ export type AppShellProps = {
   onSelectSession?: (sessionId: string) => void
   onSelectSettingsCategory?: (category: 'ai' | 'appearance') => void
   onRenameSession?: (sessionId: string, title: string) => void
-  onRegenerateSessionTitle?: (sessionId: string) => void
-  onDeleteSession?: (sessionId: string) => void
+  onRegenerateSessionTitle?: (sessionId: string, sessionIds?: string[]) => void
+  onDeleteSession?: (sessionId: string, sessionIds?: string[]) => void
   onWindowMinimize?: WindowControlAction
   onWindowToggleMaximize?: WindowControlAction
   onWindowClose?: WindowControlAction

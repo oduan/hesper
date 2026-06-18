@@ -12,12 +12,13 @@ export type EntityListPaneProps = {
   onSelectSession?: (sessionId: string) => void
   onSelectSettingsCategory?: (category: 'ai' | 'appearance') => void
   onRenameSession?: (sessionId: string, title: string) => void
-  onRegenerateSessionTitle?: (sessionId: string) => void
-  onDeleteSession?: (sessionId: string) => void
+  onRegenerateSessionTitle?: (sessionId: string, sessionIds?: string[]) => void
+  onDeleteSession?: (sessionId: string, sessionIds?: string[]) => void
 }
 
 type SessionMenuState = {
   sessionId: string
+  sessionIds: string[]
   x: number
   y: number
 }
@@ -39,6 +40,10 @@ const sessionMenuItems: SessionMenuItem[] = [
   { key: 'delete', label: '删除', danger: true }
 ]
 
+function arraysEqual(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index])
+}
+
 export function EntityListPane({
   title,
   activeSection,
@@ -54,6 +59,8 @@ export function EntityListPane({
   const heading = title ?? (activeSection === 'sessions' ? '所有会话' : activeSection === 'settings' ? '设置' : '列表')
   const [sessionMenu, setSessionMenu] = useState<SessionMenuState>()
   const [editingSession, setEditingSession] = useState<EditingSessionState>()
+  const [selectedSessionIds, setSelectedSessionIds] = useState<string[]>([])
+  const [selectionAnchorSessionId, setSelectionAnchorSessionId] = useState<string>()
   const renameInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -74,6 +81,50 @@ export function EntityListPane({
     renameInputRef.current?.select()
   }, [editingSession?.sessionId])
 
+  useEffect(() => {
+    const sessionIdSet = new Set(sessions.map((session) => session.id))
+    setSelectedSessionIds((current) => {
+      const next = current.filter((sessionId) => sessionIdSet.has(sessionId))
+      return arraysEqual(current, next) ? current : next
+    })
+    setSelectionAnchorSessionId((current) => current && sessionIdSet.has(current) ? current : undefined)
+  }, [sessions])
+
+  const getSessionRange = (fromSessionId: string, toSessionId: string): string[] => {
+    const fromIndex = sessions.findIndex((session) => session.id === fromSessionId)
+    const toIndex = sessions.findIndex((session) => session.id === toSessionId)
+    if (fromIndex === -1 || toIndex === -1) return [toSessionId]
+
+    const start = Math.min(fromIndex, toIndex)
+    const end = Math.max(fromIndex, toIndex)
+    return sessions.slice(start, end + 1).map((session) => session.id)
+  }
+
+  const handleSessionClick = (sessionId: string, shiftKey: boolean) => {
+    if (shiftKey) {
+      const anchorSessionId = selectionAnchorSessionId ?? selectedSessionIds[0] ?? activeSessionId ?? sessionId
+      setSelectedSessionIds(getSessionRange(anchorSessionId, sessionId))
+      setSelectionAnchorSessionId(anchorSessionId)
+    } else {
+      setSelectedSessionIds([sessionId])
+      setSelectionAnchorSessionId(sessionId)
+    }
+    onSelectSession?.(sessionId)
+  }
+
+  const openSessionMenu = (sessionId: string, x: number, y: number) => {
+    const sessionIdSet = new Set(sessions.map((session) => session.id))
+    const selectedTargets = selectedSessionIds.filter((selectedSessionId) => sessionIdSet.has(selectedSessionId))
+    const isSelectedTarget = selectedTargets.includes(sessionId)
+    const sessionIds = isSelectedTarget ? selectedTargets : [sessionId]
+
+    if (!isSelectedTarget) {
+      setSelectedSessionIds([sessionId])
+      setSelectionAnchorSessionId(sessionId)
+    }
+    setSessionMenu({ sessionId, sessionIds, x, y })
+  }
+
   const startRenameSession = (sessionId: string) => {
     const session = sessions.find((candidate) => candidate.id === sessionId)
     if (!session) return
@@ -92,17 +143,17 @@ export function EntityListPane({
     onRenameSession?.(editingSession.sessionId, nextTitle)
   }
 
-  const handleMenuAction = (action: typeof sessionMenuItems[number]['key'], sessionId: string) => {
+  const handleMenuAction = (action: typeof sessionMenuItems[number]['key'], menuState: SessionMenuState) => {
     setSessionMenu(undefined)
     switch (action) {
       case 'rename':
-        startRenameSession(sessionId)
+        startRenameSession(menuState.sessionId)
         return
       case 'regenerate-title':
-        onRegenerateSessionTitle?.(sessionId)
+        onRegenerateSessionTitle?.(menuState.sessionId, menuState.sessionIds)
         return
       case 'delete':
-        onDeleteSession?.(sessionId)
+        onDeleteSession?.(menuState.sessionId, menuState.sessionIds)
         return
     }
   }
@@ -132,15 +183,18 @@ export function EntityListPane({
           <ul aria-label="会话列表" className="hesper-theme-scrollbar" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 2, overflow: 'auto', minHeight: 0 }}>
             {sessions.map((session) => {
               const isActive = session.id === activeSessionId
+              const isSelected = selectedSessionIds.includes(session.id)
+              const sessionRowClassName = `hesper-list-row${isActive ? ' is-active' : ''}${isSelected ? ' is-selected' : ''}`
               return (
                 <li key={session.id}>
                   {editingSession?.sessionId === session.id ? (
                     <div
-                      className={`hesper-list-row${isActive ? ' is-active' : ''}`}
+                      className={sessionRowClassName}
+                      data-selected={isSelected ? 'true' : undefined}
                       style={sessionRowStyle}
                       onContextMenu={(event) => {
                         event.preventDefault()
-                        setSessionMenu({ sessionId: session.id, x: event.clientX, y: event.clientY })
+                        openSessionMenu(session.id, event.clientX, event.clientY)
                       }}
                     >
                       <input
@@ -166,13 +220,15 @@ export function EntityListPane({
                   ) : (
                     <button
                       type="button"
-                      className={`hesper-list-row${isActive ? ' is-active' : ''}`}
+                      className={sessionRowClassName}
+                      data-selected={isSelected ? 'true' : undefined}
                       style={sessionRowStyle}
                       aria-current={isActive ? 'true' : undefined}
-                      onClick={() => onSelectSession?.(session.id)}
+                      aria-selected={isSelected ? 'true' : undefined}
+                      onClick={(event) => handleSessionClick(session.id, event.shiftKey)}
                       onContextMenu={(event) => {
                         event.preventDefault()
-                        setSessionMenu({ sessionId: session.id, x: event.clientX, y: event.clientY })
+                        openSessionMenu(session.id, event.clientX, event.clientY)
                       }}
                     >
                       <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{session.title}</div>
@@ -223,7 +279,7 @@ export function EntityListPane({
               key={item.key}
               type="button"
               role="menuitem"
-              onClick={() => handleMenuAction(item.key, sessionMenu.sessionId)}
+              onClick={() => handleMenuAction(item.key, sessionMenu)}
               style={{
                 ...sessionMenuItemStyle,
                 ...(item.danger ? { color: darkTheme.color.danger } : {})

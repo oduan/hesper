@@ -497,6 +497,25 @@ function AppContent() {
     dispatch({ type: 'session.updated', session: updatedSession })
   }
 
+  const normalizeSessionActionIds = (sessionId: string, sessionIds?: string[]): string[] => {
+    const requestedIds = sessionIds?.length ? sessionIds : [sessionId]
+    const requestedIdSet = new Set(requestedIds)
+    const orderedIds = stateRef.current.sessions.flatMap((session) => requestedIdSet.has(session.id) ? [session.id] : [])
+    return orderedIds.length > 0 ? orderedIds : [sessionId]
+  }
+
+  const regenerateSessionTitles = async (sessionId: string, sessionIds?: string[]) => {
+    for (const targetSessionId of normalizeSessionActionIds(sessionId, sessionIds)) {
+      await regenerateSessionTitle(targetSessionId)
+    }
+  }
+
+  const deleteSessions = async (sessionId: string, sessionIds?: string[]) => {
+    for (const targetSessionId of normalizeSessionActionIds(sessionId, sessionIds)) {
+      await deleteSession(targetSessionId)
+    }
+  }
+
   return (
     <AppShell
       sessions={effectiveSessions}
@@ -519,11 +538,11 @@ function AppContent() {
       onRenameSession={(sessionId, title) => {
         void renameSession(sessionId, title)
       }}
-      onRegenerateSessionTitle={(sessionId) => {
-        void regenerateSessionTitle(sessionId)
+      onRegenerateSessionTitle={(sessionId, sessionIds) => {
+        void regenerateSessionTitles(sessionId, sessionIds)
       }}
-      onDeleteSession={(sessionId) => {
-        void deleteSession(sessionId)
+      onDeleteSession={(sessionId, sessionIds) => {
+        void deleteSessions(sessionId, sessionIds)
       }}
       onWindowMinimize={() => hesperApi.window.minimize()}
       onWindowToggleMaximize={() => hesperApi.window.toggleMaximize()}

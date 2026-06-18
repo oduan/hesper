@@ -116,6 +116,65 @@ describe('ui components', () => {
     expect(onSelectSection).toHaveBeenCalledWith('tools')
   })
 
+  it('supports shift range selection for session context bulk actions while rename stays target-only', async () => {
+    const user = userEvent.setup()
+    const onSelectSession = vi.fn()
+    const onRegenerateSessionTitle = vi.fn()
+    const onDeleteSession = vi.fn()
+    const onRenameSession = vi.fn()
+    const sessions = ['会话一', '会话二', '会话三', '会话四'].map((title, index) => ({
+      id: `session-${index + 1}`,
+      title,
+      status: 'active' as const,
+      outputMode: 'markdown' as const,
+      createdAt: now,
+      updatedAt: now
+    }))
+
+    render(
+      <AppShell
+        sessions={sessions}
+        activeSection="sessions"
+        activeSessionId="session-1"
+        title="多选测试"
+        onSelectSession={onSelectSession}
+        onRegenerateSessionTitle={onRegenerateSessionTitle}
+        onDeleteSession={onDeleteSession}
+        onRenameSession={onRenameSession}
+      />
+    )
+
+    const firstRow = screen.getByRole('button', { name: '会话一' })
+    const secondRow = screen.getByRole('button', { name: '会话二' })
+    const thirdRow = screen.getByRole('button', { name: '会话三' })
+    const fourthRow = screen.getByRole('button', { name: '会话四' })
+
+    await user.click(firstRow)
+    fireEvent.click(thirdRow, { shiftKey: true })
+
+    expect(onSelectSession).toHaveBeenLastCalledWith('session-3')
+    expect(firstRow).toHaveClass('is-selected')
+    expect(secondRow).toHaveClass('is-selected')
+    expect(thirdRow).toHaveClass('is-selected')
+    expect(fourthRow).not.toHaveClass('is-selected')
+
+    fireEvent.contextMenu(thirdRow)
+    await user.click(within(screen.getByRole('menu', { name: '会话操作' })).getByRole('menuitem', { name: '重新生成标题' }))
+    expect(onRegenerateSessionTitle).toHaveBeenCalledWith('session-3', ['session-1', 'session-2', 'session-3'])
+
+    fireEvent.contextMenu(secondRow)
+    await user.click(within(screen.getByRole('menu', { name: '会话操作' })).getByRole('menuitem', { name: '删除' }))
+    expect(onDeleteSession).toHaveBeenCalledWith('session-2', ['session-1', 'session-2', 'session-3'])
+
+    fireEvent.contextMenu(secondRow)
+    await user.click(within(screen.getByRole('menu', { name: '会话操作' })).getByRole('menuitem', { name: '重命名' }))
+    const renameInput = await screen.findByLabelText('重命名会话标题')
+    expect(renameInput).toHaveValue('会话二')
+    await user.clear(renameInput)
+    await user.type(renameInput, '只改第二个{Enter}')
+    expect(onRenameSession).toHaveBeenCalledWith('session-2', '只改第二个')
+  })
+
   it('disables send button when composer is empty and keeps controls visually aligned', async () => {
     const user = userEvent.setup()
     render(<Composer workspacePath="C:/dev/hesper" modelId="mock/hesper-fast" onSend={() => undefined} />)

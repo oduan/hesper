@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, clearSessionSendError, pruneSessionSendErrors } from '../src/App'
@@ -373,6 +373,77 @@ describe('renderer App', () => {
     expect(confirmSpy).not.toHaveBeenCalled()
     expect(deleteSession).toHaveBeenCalledWith('session-1')
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Delete me' })).not.toBeInTheDocument())
+  })
+
+  it('deletes shift-selected sessions from the context menu without deleting unselected sessions', async () => {
+    const user = userEvent.setup()
+
+    listSessions.mockResolvedValueOnce([
+      { id: 'session-1', title: 'Chat one', status: 'active', outputMode: 'markdown', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:04.000Z' },
+      { id: 'session-2', title: 'Chat two', status: 'active', outputMode: 'markdown', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:03.000Z' },
+      { id: 'session-3', title: 'Chat three', status: 'active', outputMode: 'markdown', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:02.000Z' },
+      { id: 'session-4', title: 'Chat four', status: 'active', outputMode: 'markdown', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:01.000Z' }
+    ] as any)
+
+    render(<App />)
+
+    const firstRow = await screen.findByRole('button', { name: 'Chat one' })
+    const secondRow = await screen.findByRole('button', { name: 'Chat two' })
+    const thirdRow = await screen.findByRole('button', { name: 'Chat three' })
+    await user.click(firstRow)
+    fireEvent.click(thirdRow, { shiftKey: true })
+    fireEvent.contextMenu(secondRow)
+    await user.click(await screen.findByRole('menuitem', { name: '删除' }))
+
+    await waitFor(() => expect(deleteSession).toHaveBeenCalledTimes(3))
+    expect(deleteSession).toHaveBeenNthCalledWith(1, 'session-1')
+    expect(deleteSession).toHaveBeenNthCalledWith(2, 'session-2')
+    expect(deleteSession).toHaveBeenNthCalledWith(3, 'session-3')
+    expect(deleteSession).not.toHaveBeenCalledWith('session-4')
+  })
+
+  it('regenerates titles for shift-selected sessions from the context menu', async () => {
+    const user = userEvent.setup()
+
+    listSessions.mockResolvedValueOnce([
+      { id: 'session-1', title: 'Chat one', status: 'active', defaultModelId: 'model-one', outputMode: 'markdown', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:03.000Z' },
+      { id: 'session-2', title: 'Chat two', status: 'active', defaultModelId: 'model-two', outputMode: 'markdown', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:02.000Z' },
+      { id: 'session-3', title: 'Chat three', status: 'active', defaultModelId: 'model-three', outputMode: 'markdown', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:01.000Z' }
+    ] as any)
+    listMessages.mockImplementation(async (sessionId?: string) => [
+      { id: `message-${sessionId}-user`, sessionId, role: 'user', content: `Prompt ${sessionId}`, contentType: 'plain', createdAt: '2026-06-10T03:00:01.000Z' },
+      { id: `message-${sessionId}-assistant`, sessionId, role: 'assistant', content: `Output ${sessionId}`, contentType: 'markdown', createdAt: '2026-06-10T03:00:02.000Z' }
+    ] as any)
+
+    render(<App />)
+
+    const firstRow = await screen.findByRole('button', { name: 'Chat one' })
+    const secondRow = await screen.findByRole('button', { name: 'Chat two' })
+    const thirdRow = await screen.findByRole('button', { name: 'Chat three' })
+    await user.click(firstRow)
+    fireEvent.click(thirdRow, { shiftKey: true })
+    fireEvent.contextMenu(secondRow)
+    await user.click(await screen.findByRole('menuitem', { name: '重新生成标题' }))
+
+    await waitFor(() => expect(generateTitle).toHaveBeenCalledTimes(3))
+    expect(generateTitle).toHaveBeenNthCalledWith(1, {
+      id: 'session-1',
+      modelId: 'model-one',
+      userPrompt: 'Prompt session-1',
+      assistantOutput: 'Output session-1'
+    })
+    expect(generateTitle).toHaveBeenNthCalledWith(2, {
+      id: 'session-2',
+      modelId: 'model-two',
+      userPrompt: 'Prompt session-2',
+      assistantOutput: 'Output session-2'
+    })
+    expect(generateTitle).toHaveBeenNthCalledWith(3, {
+      id: 'session-3',
+      modelId: 'model-three',
+      userPrompt: 'Prompt session-3',
+      assistantOutput: 'Output session-3'
+    })
   })
 
   it('regenerates a context-menu session title from persisted history when history is not loaded', async () => {

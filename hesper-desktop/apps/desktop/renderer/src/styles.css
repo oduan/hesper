@@ -103,6 +103,14 @@ button {
   background: var(--hesper-color-hover, rgba(122, 162, 247, 0.12));
 }
 
+.hesper-list-row.is-selected {
+  background: var(--hesper-color-soft-control, rgba(122, 162, 247, 0.14));
+}
+
+.hesper-list-row.is-selected.is-active {
+  box-shadow: inset 0 0 0 1px var(--hesper-color-accent, #7aa2f7);
+}
+
 .hesper-settings-row {
   width: 100%;
   min-height: 58px;
