@@ -825,6 +825,7 @@ describe('ui components', () => {
     const dialog = screen.getByRole('dialog', { name: '步骤全屏查看' })
     const inputBlock = within(dialog).getByLabelText('Input')
     const outputBlock = within(dialog).getByLabelText('Output')
+    expect(inputBlock.parentElement).toHaveStyle({ gridTemplateColumns: 'minmax(0, 1fr)' })
     expect(inputBlock).toHaveTextContent('"url": "https://example.com"')
     expect(inputBlock).toHaveTextContent('"purpose": "搜索 Hesper 是什么"')
     expect(outputBlock).toHaveTextContent('"content": "fetched html"')

@@ -641,7 +641,7 @@ const stepFullscreenBodyStyle: CSSProperties = {
 
 const toolDetailGridStyle: CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+  gridTemplateColumns: 'minmax(0, 1fr)',
   gap: darkTheme.spacing.lg,
   alignItems: 'start'
 }
