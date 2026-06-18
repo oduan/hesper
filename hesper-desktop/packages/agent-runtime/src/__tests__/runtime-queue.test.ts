@@ -68,6 +68,7 @@ class RecordingAdapter implements AgentAdapter {
 class ControllableAdapter implements AgentAdapter {
   private releaseRun!: () => void
   private releaseRunning!: () => void
+  readonly inputs: AgentPromptInput[] = []
   readonly running = new Promise<void>((resolve) => {
     this.releaseRunning = resolve
   })
@@ -80,6 +81,7 @@ class ControllableAdapter implements AgentAdapter {
   }
 
   async run(input: AgentPromptInput, emit: (event: AgentRuntimeEvent) => void | Promise<void>): Promise<void> {
+    this.inputs.push(input)
     this.releaseRunning()
     await this.canFinish
     await emit({
@@ -304,6 +306,46 @@ describe('AgentRuntime queue', () => {
     expect(adapter.inputs.map((input) => [input.runId, input.systemPrompt, input.enabledToolIds])).toEqual([
       [run.id, 'system:retry', ['web.fetch-url']],
       [run.id, 'system:retry', ['web.fetch-url']]
+    ])
+  })
+
+  it('passes previous conversation messages to adapter and excludes the current run message', async () => {
+    const persistence = await createInMemoryPersistence()
+    await persistence.sessions.save({ ...session, id: 'session-history' })
+
+    const adapter = new ControllableAdapter()
+    const runtime = new AgentRuntime({ persistence, adapter })
+
+    const first = await runtime.enqueue({ sessionId: 'session-history', prompt: 'first question', modelId: 'mock/hesper-fast' })
+    await persistence.messages.save({
+      id: 'message-user-first',
+      sessionId: 'session-history',
+      role: 'user',
+      content: 'first question',
+      contentType: 'plain',
+      runId: first.id,
+      createdAt: '2026-06-10T05:00:00.000Z'
+    })
+
+    const second = await runtime.enqueue({ sessionId: 'session-history', prompt: 'second question', modelId: 'mock/hesper-fast' })
+    await persistence.messages.save({
+      id: 'message-user-second',
+      sessionId: 'session-history',
+      role: 'user',
+      content: 'second question',
+      contentType: 'plain',
+      runId: second.id,
+      createdAt: '2026-06-10T05:00:02.000Z'
+    })
+
+    adapter.finish()
+    await runtime.waitForIdle('session-history')
+
+    expect(adapter.inputs).toHaveLength(2)
+    expect(adapter.inputs[1]!.prompt).toBe('second question')
+    expect(adapter.inputs[1]!.historyMessages?.map((message) => [message.role, message.content, message.runId])).toEqual([
+      ['user', 'first question', first.id],
+      ['assistant', 'done:first question', first.id]
     ])
   })
 

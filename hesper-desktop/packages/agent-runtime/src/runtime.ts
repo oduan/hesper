@@ -47,6 +47,11 @@ function runIdFromEvent(event: AgentRuntimeEvent): string | undefined {
   return undefined
 }
 
+function compareMessages(left: Message, right: Message): number {
+  const byCreatedAt = left.createdAt.localeCompare(right.createdAt)
+  return byCreatedAt === 0 ? left.id.localeCompare(right.id) : byCreatedAt
+}
+
 export class AgentRuntime {
   private readonly persistence: Persistence
   private readonly adapter: AgentAdapter
@@ -255,6 +260,9 @@ export class AgentRuntime {
 
       let latestRun = current
       let attempt = latestRun.retryCount
+      const historyMessages = (await this.persistence.messages.listBySession(current.sessionId))
+        .filter((message) => message.runId !== current.id)
+        .sort(compareMessages)
 
       while (true) {
         if (await this.applyTerminationIfNeeded(latestRun.id)) {
@@ -272,6 +280,7 @@ export class AgentRuntime {
             ...(systemPrompt !== undefined ? { systemPrompt } : {}),
             ...(enabledToolIds !== undefined ? { enabledToolIds } : {}),
             ...(latestRun.workspacePath !== undefined ? { workspacePath: latestRun.workspacePath } : {}),
+            historyMessages,
             signal: controller.signal
           },
           async (event) => this.handleAdapterEvent(event)

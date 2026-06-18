@@ -1,6 +1,6 @@
 import type { Api, Model } from '@earendil-works/pi-ai'
 import { Agent } from '@earendil-works/pi-agent-core'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { PiCoreAgentAdapter } from '../pi-core-adapter'
 
 vi.mock('@earendil-works/pi-agent-core', () => {
@@ -31,7 +31,85 @@ function piModel(): Model<Api> {
   }
 }
 
+function resolverFor(modelOverrides: Partial<Model<Api>> = {}): ModelResolver {
+  return {
+    resolve: vi.fn(async () => ({
+      model: { ...piModel(), ...modelOverrides },
+      provider: {
+        id: 'openai',
+        name: 'OpenAI',
+        kind: 'openai' as const,
+        enabled: true,
+        createdAt: '2026-06-11T00:00:00.000Z',
+        updatedAt: '2026-06-11T00:00:00.000Z'
+      },
+      modelConfig: {
+        id: 'gpt-4o',
+        providerId: 'openai',
+        modelName: 'gpt-4o',
+        displayName: 'GPT-4o',
+        capabilities: ['streaming' as const],
+        enabled: true,
+        createdAt: '2026-06-11T00:00:00.000Z',
+        updatedAt: '2026-06-11T00:00:00.000Z'
+      }
+    }))
+  }
+}
+
 describe('PiCoreAgentAdapter', () => {
+  beforeEach(() => {
+    vi.mocked(Agent).mockClear()
+  })
+  it('passes previous Hesper messages into the pi core transcript', async () => {
+    const adapter = new PiCoreAgentAdapter({ modelResolver: resolverFor() })
+
+    await adapter.run({
+      runId: 'run-with-history',
+      sessionId: 'session-1',
+      prompt: 'what was my first question?',
+      modelId: 'gpt-4o',
+      historyMessages: [
+        {
+          id: 'message-user-1',
+          sessionId: 'session-1',
+          role: 'user',
+          content: 'first question',
+          contentType: 'plain',
+          runId: 'run-1',
+          createdAt: '2026-06-10T06:00:00.000Z'
+        },
+        {
+          id: 'message-assistant-1',
+          sessionId: 'session-1',
+          role: 'assistant',
+          content: 'first answer',
+          contentType: 'markdown',
+          runId: 'run-1',
+          createdAt: '2026-06-10T06:00:01.000Z'
+        }
+      ],
+      signal: new AbortController().signal
+    }, vi.fn())
+
+    expect(Agent).toHaveBeenCalledWith(expect.objectContaining({
+      initialState: expect.objectContaining({
+        messages: [
+          { role: 'user', content: 'first question', timestamp: Date.parse('2026-06-10T06:00:00.000Z') },
+          expect.objectContaining({
+            role: 'assistant',
+            content: [{ type: 'text', text: 'first answer' }],
+            api: 'openai-responses',
+            provider: 'openai',
+            model: 'gpt-4o',
+            stopReason: 'stop',
+            timestamp: Date.parse('2026-06-10T06:00:01.000Z')
+          })
+        ]
+      })
+    }))
+  })
+
   it('requests medium thinking for reasoning-capable real models', async () => {
     const resolver: ModelResolver = {
       resolve: vi.fn(async () => ({

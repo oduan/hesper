@@ -1,4 +1,4 @@
-import type { AgentRuntimeEvent, RunError } from '@hesper/shared'
+import type { AgentRuntimeEvent, Message, RunError } from '@hesper/shared'
 
 export type AgentPromptInput = {
   runId: string
@@ -8,6 +8,7 @@ export type AgentPromptInput = {
   systemPrompt?: string
   enabledToolIds?: string[]
   workspacePath?: string
+  historyMessages?: Message[]
   signal: AbortSignal
 }
 

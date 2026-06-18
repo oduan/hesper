@@ -1,10 +1,59 @@
 import { Agent, type AgentEvent, type AgentTool } from '@earendil-works/pi-agent-core'
-import type { AgentRuntimeEvent } from '@hesper/shared'
+import type { Api, Message as PiMessage, Model, Usage } from '@earendil-works/pi-ai'
+import type { AgentRuntimeEvent, Message as HesperMessage } from '@hesper/shared'
 import type { AgentAdapter, AgentPromptInput } from './adapters'
 import { mapPiEventToHesperEvents } from './map-pi-event'
 import { createStaticModelResolver, type ModelResolver } from './model-resolver'
 
 const DEFAULT_SYSTEM_PROMPT = 'You are hesper, a desktop coding assistant. Be concise, stable, and explicit about tool actions.'
+
+function emptyUsage(): Usage {
+  return {
+    input: 0,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    totalTokens: 0,
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }
+  }
+}
+
+function timestampFromIso(value: string): number {
+  const timestamp = Date.parse(value)
+  return Number.isFinite(timestamp) ? timestamp : Date.now()
+}
+
+function toPiHistoryMessage(message: HesperMessage, model: Model<Api>): PiMessage | undefined {
+  if (message.role === 'user') {
+    return {
+      role: 'user',
+      content: message.content,
+      timestamp: timestampFromIso(message.createdAt)
+    }
+  }
+
+  if (message.role === 'assistant') {
+    return {
+      role: 'assistant',
+      content: [{ type: 'text', text: message.content }],
+      api: model.api,
+      provider: model.provider,
+      model: model.id,
+      usage: emptyUsage(),
+      stopReason: 'stop',
+      timestamp: timestampFromIso(message.createdAt)
+    }
+  }
+
+  return undefined
+}
+
+function toPiHistoryMessages(messages: HesperMessage[] | undefined, model: Model<Api>): PiMessage[] {
+  return (messages ?? []).flatMap((message) => {
+    const converted = toPiHistoryMessage(message, model)
+    return converted ? [converted] : []
+  })
+}
 
 export type PiCoreAgentAdapterOptions = {
   tools?: AgentTool<any>[]
@@ -32,6 +81,7 @@ export class PiCoreAgentAdapter implements AgentAdapter {
     }
 
     const tools = this.options.createTools?.(input) ?? this.options.tools ?? []
+    const historyMessages = toPiHistoryMessages(input.historyMessages, resolved.model)
 
     const agent = new Agent({
       initialState: {
@@ -39,7 +89,7 @@ export class PiCoreAgentAdapter implements AgentAdapter {
         model: resolved.model,
         thinkingLevel: resolved.model.reasoning || resolved.modelConfig.capabilities.includes('reasoning') ? 'medium' : 'off',
         tools,
-        messages: []
+        messages: historyMessages
       },
       ...(resolved.getApiKey ? { getApiKey: resolved.getApiKey } : {}),
       toolExecution: 'parallel'
