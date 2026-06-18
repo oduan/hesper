@@ -209,6 +209,9 @@ describe('ui components', () => {
       />
     )
 
+    const stepsRegion = screen.getByLabelText('步骤流')
+    expect(stepsRegion).toHaveStyle({ borderStyle: 'none', background: 'transparent' })
+
     const toggle = screen.getByRole('button', { name: /Network Warning/ })
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
     expect(toggle).toHaveTextContent('3')

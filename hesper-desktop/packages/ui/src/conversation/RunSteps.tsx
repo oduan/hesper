@@ -102,9 +102,8 @@ export function RunSteps({ steps, getStepProps }: RunStepsProps) {
       style={{
         display: 'grid',
         gap: darkTheme.spacing.sm,
-        border: `1px solid ${darkTheme.color.border}`,
-        borderRadius: darkTheme.radius.lg,
-        background: darkTheme.color.surfaceMuted,
+        borderStyle: 'none',
+        background: 'transparent',
         padding: darkTheme.spacing.md
       }}
     >
