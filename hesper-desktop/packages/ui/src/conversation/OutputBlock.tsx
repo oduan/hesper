@@ -3,6 +3,7 @@ import type { MessageContentType } from '@hesper/shared'
 import { darkTheme } from '../theme'
 import { FullscreenOutput } from './FullscreenOutput'
 import { createSandboxedHtmlDocument } from './html-document'
+import { MarkdownOutput } from './MarkdownOutput'
 
 export type OutputBlockProps = {
   content: string
@@ -70,6 +71,8 @@ export function OutputBlock({ content, contentType, closeFullscreenSignal = 0 }:
               srcDoc={sandboxedDocument}
               style={{ width: '100%', height: '100%', minHeight: 200, border: 0, borderRadius: darkTheme.radius.md, background: '#fff' }}
             />
+          ) : contentType === 'markdown' ? (
+            <MarkdownOutput content={content} />
           ) : (
             <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.55, fontSize: 13 }}>{content}</div>
           )}

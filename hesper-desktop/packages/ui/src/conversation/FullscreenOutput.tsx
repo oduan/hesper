@@ -2,6 +2,7 @@ import { useEffect, useMemo, type CSSProperties } from 'react'
 import type { MessageContentType } from '@hesper/shared'
 import { darkTheme } from '../theme'
 import { createSandboxedHtmlDocument } from './html-document'
+import { MarkdownOutput } from './MarkdownOutput'
 
 export type FullscreenOutputProps = {
   open: boolean
@@ -70,6 +71,8 @@ export function FullscreenOutput({ open, content, contentType, onClose }: Fullsc
               srcDoc={sandboxedDocument}
               style={{ width: '100%', height: '100%', minHeight: 480, border: 0, background: '#fff' }}
             />
+          ) : contentType === 'markdown' ? (
+            <MarkdownOutput content={content} />
           ) : (
             <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{content}</div>
           )}
