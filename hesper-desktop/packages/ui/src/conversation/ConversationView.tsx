@@ -48,7 +48,22 @@ function ensureGlobalCtrlWheelListener() {
       return
     }
 
-    const root = getElementTarget(event.target)?.closest('[data-hesper-conversation-root="true"]')
+    const target = getElementTarget(event.target)
+    const fullscreenRoot = target?.closest('[data-hesper-fullscreen-output="true"]')
+    if (fullscreenRoot instanceof HTMLElement) {
+      const fullscreenScroller = fullscreenRoot.querySelector<HTMLElement>('[data-hesper-fullscreen-output-scroll="true"]')
+      if (!fullscreenScroller) {
+        return
+      }
+
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+      scrollElementByDelta(fullscreenScroller, event.deltaX, event.deltaY)
+      return
+    }
+
+    const root = target?.closest('[data-hesper-conversation-root="true"]')
     if (!(root instanceof HTMLElement)) {
       return
     }
@@ -109,6 +124,10 @@ function getElementTarget(target: EventTarget | null): Element | null {
 
 function isInsideOutputScrollArea(target: EventTarget | null): boolean {
   return Boolean(getElementTarget(target)?.closest('[data-hesper-output-scroll="true"]'))
+}
+
+function isInsideFullscreenOutput(target: EventTarget | null): boolean {
+  return Boolean(getElementTarget(target)?.closest('[data-hesper-fullscreen-output="true"]'))
 }
 
 function scrollElementByDelta(element: HTMLElement, deltaX: number, deltaY: number): void {
@@ -283,6 +302,10 @@ export function ConversationView({
   }
 
   const handleMessagesWheelCapture = (event: WheelEvent<HTMLDivElement>) => {
+    if (isInsideFullscreenOutput(event.target)) {
+      return
+    }
+
     if (isInsideOutputScrollArea(event.target) && !event.ctrlKey && !event.metaKey) {
       return
     }

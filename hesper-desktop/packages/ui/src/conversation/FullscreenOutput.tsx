@@ -1,4 +1,4 @@
-import { useEffect, useMemo, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, type CSSProperties, type WheelEvent } from 'react'
 import type { MessageContentType } from '@hesper/shared'
 import { darkTheme } from '../theme'
 import { createSandboxedHtmlDocument } from './html-document'
@@ -12,6 +12,7 @@ export type FullscreenOutputProps = {
 }
 
 export function FullscreenOutput({ open, content, contentType, onClose }: FullscreenOutputProps) {
+  const scrollRef = useRef<HTMLDivElement | null>(null)
   const sandboxedDocument = useMemo(
     () => (contentType === 'html' ? createSandboxedHtmlDocument(content) : undefined),
     [content, contentType]
@@ -36,11 +37,27 @@ export function FullscreenOutput({ open, content, contentType, onClose }: Fullsc
     return null
   }
 
+  const handleWheelCapture = (event: WheelEvent<HTMLDivElement>) => {
+    if (event.deltaX === 0 && event.deltaY === 0) {
+      return
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
+    event.nativeEvent.stopImmediatePropagation()
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop += event.deltaY
+      scrollRef.current.scrollLeft += event.deltaX
+    }
+  }
+
   return (
     <div
       role="dialog"
       aria-modal="true"
       aria-label="输出全屏查看"
+      data-hesper-fullscreen-output="true"
+      onWheelCapture={handleWheelCapture}
       style={overlayStyle}
     >
       <div
@@ -63,7 +80,13 @@ export function FullscreenOutput({ open, content, contentType, onClose }: Fullsc
             </button>
           </div>
         </div>
-        <div className="hesper-theme-scrollbar" style={{ minHeight: 0, overflow: 'auto', padding: darkTheme.spacing.lg }}>
+        <div
+          ref={scrollRef}
+          aria-label="最大化输出滚动区"
+          className="hesper-theme-scrollbar"
+          data-hesper-fullscreen-output-scroll="true"
+          style={{ minHeight: 0, overflow: 'auto', padding: darkTheme.spacing.lg }}
+        >
           {contentType === 'html' ? (
             <iframe
               title="HTML 输出"
@@ -91,7 +114,7 @@ const overlayStyle: CSSProperties = {
   background: 'rgba(0, 0, 0, 0.58)',
   display: 'grid',
   placeItems: 'stretch center',
-  padding: `${darkTheme.spacing.xl} max(${darkTheme.spacing.xl}, 6vw)`,
+  padding: 0,
   boxSizing: 'border-box',
   zIndex: 1000
 }

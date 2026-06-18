@@ -321,6 +321,56 @@ describe('ui components', () => {
     expect(fullscreenFrame.getAttribute('srcdoc')).toContain('img-src data:')
   })
 
+  it('prevents fullscreen output scrolling from leaking to the conversation underneath', async () => {
+    const user = userEvent.setup()
+    render(
+      <ConversationView
+        session={baseSession}
+        messages={[
+          {
+            id: 'message-user',
+            sessionId: 'session-1',
+            role: 'user',
+            content: '生成长输出',
+            contentType: 'markdown',
+            runId: 'run-1',
+            createdAt: now
+          },
+          {
+            id: 'message-assistant',
+            sessionId: 'session-1',
+            role: 'assistant',
+            content: Array.from({ length: 40 }, (_, index) => `第 ${index + 1} 行`).join('\n\n'),
+            contentType: 'markdown',
+            runId: 'run-1',
+            createdAt: '2026-06-10T03:00:01.000Z'
+          }
+        ]}
+        steps={[]}
+        streamingText=""
+        modelId="mock/hesper-fast"
+        onSend={() => undefined}
+      />
+    )
+
+    const conversationScroller = screen.getByLabelText('消息列表')
+    await user.click(screen.getByRole('button', { name: '全屏查看输出' }))
+
+    const dialog = screen.getByRole('dialog', { name: '输出全屏查看' })
+    expect(dialog).toHaveStyle({ position: 'fixed', top: '36px', right: '0px', bottom: '0px', left: '0px', padding: '0px' })
+
+    const fullscreenScroller = screen.getByLabelText('最大化输出滚动区')
+    fireEvent.wheel(fullscreenScroller, { deltaY: 72 })
+    expect(fullscreenScroller.scrollTop).toBe(72)
+    expect(conversationScroller.scrollTop).toBe(0)
+
+    const ctrlWheel = new WheelEvent('wheel', { deltaY: 28, ctrlKey: true, bubbles: true, cancelable: true })
+    fullscreenScroller.dispatchEvent(ctrlWheel)
+    expect(ctrlWheel.defaultPrevented).toBe(true)
+    expect(fullscreenScroller.scrollTop).toBe(100)
+    expect(conversationScroller.scrollTop).toBe(0)
+  })
+
   it('renders fullscreen output below the titlebar with centered content and themed icon controls', async () => {
     const user = userEvent.setup()
     const writeText = vi.fn()
