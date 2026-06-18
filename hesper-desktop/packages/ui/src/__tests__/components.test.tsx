@@ -382,6 +382,7 @@ describe('ui components', () => {
     const dialog = screen.getByRole('dialog', { name: '输出全屏查看' })
     expect(dialog).toHaveStyle({ position: 'fixed', top: '36px', right: '0px', bottom: '0px', left: '0px', display: 'grid' })
     expect(dialog).toHaveStyle({ placeItems: 'stretch center' })
+    expect(dialog).toHaveStyle({ background: 'rgba(9, 12, 20, 0.42)', backdropFilter: 'blur(18px) saturate(140%)' })
     const contentShell = screen.getByLabelText('最大化输出内容')
     expect(contentShell).toHaveStyle({ width: '100%', maxWidth: '1120px' })
     expect(contentShell).toHaveStyle({ margin: '0 auto' })
