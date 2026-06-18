@@ -269,6 +269,7 @@ describe('ui components', () => {
 
     const conversationScroller = screen.getByLabelText('消息列表')
     const outputScroller = screen.getByLabelText('输出内容滚动区')
+    expect(outputScroller).toHaveStyle({ maxHeight: '340px', boxSizing: 'border-box' })
 
     fireEvent.wheel(outputScroller, { deltaY: 48 })
     expect(outputScroller.scrollTop).toBe(48)

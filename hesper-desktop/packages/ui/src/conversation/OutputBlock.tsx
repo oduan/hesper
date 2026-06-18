@@ -79,7 +79,13 @@ export function OutputBlock({ content, contentType, closeFullscreenSignal = 0 }:
           className="hesper-theme-scrollbar"
           data-hesper-output-scroll="true"
           onWheel={handleOutputWheel}
-          style={{ height: '100%', overflow: 'auto', padding: darkTheme.spacing.md }}
+          style={{
+            boxSizing: 'border-box',
+            height: contentType === 'html' ? '100%' : 'auto',
+            maxHeight: contentType === 'html' ? '100%' : 340,
+            overflow: 'auto',
+            padding: darkTheme.spacing.md
+          }}
         >
           {contentType === 'html' ? (
             <iframe
