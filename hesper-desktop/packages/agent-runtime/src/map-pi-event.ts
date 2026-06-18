@@ -17,11 +17,13 @@ type ThinkingState = {
 type RunState = {
   commentaryCounter: number
   anonymousToolCounter: number
+  assistantMessageCounter: number
+  currentAssistantMessageOrdinal: number | undefined
   toolCountsByKey: Map<string, number>
   pendingToolStepIdsByKey: Map<string, string[]>
   toolPurposeByStepId: Map<string, string>
   toolInputByStepId: Map<string, unknown>
-  thinkingByContentIndex: Map<number, ThinkingState>
+  thinkingByBlockKey: Map<string, ThinkingState>
 }
 
 type TextPhase = 'commentary' | 'final_answer'
@@ -43,11 +45,13 @@ function getRunState(runId: string): RunState {
   const created: RunState = {
     commentaryCounter: 0,
     anonymousToolCounter: 0,
+    assistantMessageCounter: 0,
+    currentAssistantMessageOrdinal: undefined,
     toolCountsByKey: new Map(),
     pendingToolStepIdsByKey: new Map(),
     toolPurposeByStepId: new Map(),
     toolInputByStepId: new Map(),
-    thinkingByContentIndex: new Map()
+    thinkingByBlockKey: new Map()
   }
   runStates.set(runId, created)
   return created
@@ -185,6 +189,34 @@ function takePendingToolStepId(state: RunState, key: string, runId: string, even
   return `step-${runId}-tool-${toolCallId ?? 'unknown'}`
 }
 
+function beginAssistantMessage(runId: string, event: PiEventLike): void {
+  const message = event.message as { role?: unknown } | undefined
+  if (message?.role !== 'assistant') return
+
+  const state = getRunState(runId)
+  state.assistantMessageCounter += 1
+  state.currentAssistantMessageOrdinal = state.assistantMessageCounter
+}
+
+function endAssistantMessage(runId: string, event: PiEventLike): void {
+  const message = event.message as { role?: unknown } | undefined
+  if (message?.role !== 'assistant') return
+
+  const state = getRunState(runId)
+  state.currentAssistantMessageOrdinal = undefined
+}
+
+function assistantBlockKey(state: RunState, contentIndex: number): string {
+  return `${state.currentAssistantMessageOrdinal ?? 0}:${contentIndex}`
+}
+
+function createThinkingStepId(runId: string, state: RunState, contentIndex: number): string {
+  const ordinal = state.currentAssistantMessageOrdinal
+  return ordinal === undefined
+    ? `step-${runId}-thinking-${contentIndex}`
+    : `step-${runId}-thinking-${ordinal}-${contentIndex}`
+}
+
 function createToolStepId(runId: string, event: PiEventLike, state: RunState, key: string): string {
   const toolCallId = getToolCallId(event)
   if (!toolCallId) {
@@ -240,18 +272,19 @@ function createToolStepEvent(kind: StepEvent['type'], runId: string, event: PiEv
 function createThinkingStepEvent(kind: StepEvent['type'], runId: string, event: PiEventLike): StepEvent | undefined {
   const assistantMessageEvent = event.assistantMessageEvent as { contentIndex?: number; delta?: string; content?: string } | undefined
   const contentIndex = assistantMessageEvent?.contentIndex ?? 0
-  const stepId = `step-${runId}-thinking-${contentIndex}`
   const state = getRunState(runId)
+  const blockKey = assistantBlockKey(state, contentIndex)
+  const stepId = createThinkingStepId(runId, state, contentIndex)
 
   if (kind === 'step.created') {
-    state.thinkingByContentIndex.set(contentIndex, { stepId, text: '' })
+    state.thinkingByBlockKey.set(blockKey, { stepId, text: '' })
     return {
       type: 'step.created',
       step: createStep(runId, stepId, 'thought', 'running', '思考过程', '正在思考…')
     }
   }
 
-  const existing = state.thinkingByContentIndex.get(contentIndex) ?? { stepId, text: '' }
+  const existing = state.thinkingByBlockKey.get(blockKey) ?? { stepId, text: '' }
   const nextText = typeof assistantMessageEvent?.content === 'string'
     ? assistantMessageEvent.content
     : `${existing.text}${assistantMessageEvent?.delta ?? ''}`
@@ -259,9 +292,9 @@ function createThinkingStepEvent(kind: StepEvent['type'], runId: string, event: 
   const isDone = typeof assistantMessageEvent?.content === 'string'
 
   if (isDone) {
-    state.thinkingByContentIndex.delete(contentIndex)
+    state.thinkingByBlockKey.delete(blockKey)
   } else {
-    state.thinkingByContentIndex.set(contentIndex, { stepId: existing.stepId, text: nextText })
+    state.thinkingByBlockKey.set(blockKey, { stepId: existing.stepId, text: nextText })
   }
 
   return {
@@ -349,6 +382,9 @@ export function mapPiEventToHesperEvents(context: string | MappingContext, piEve
   const event = piEvent as PiEventLike
 
   switch (event.type) {
+    case 'message_start':
+      beginAssistantMessage(normalizedContext.runId, event)
+      return []
     case 'message_update': {
       const assistantMessageEvent = event.assistantMessageEvent as { type?: string; delta?: string } | undefined
       if (assistantMessageEvent?.type === 'text_delta') {
@@ -362,8 +398,11 @@ export function mapPiEventToHesperEvents(context: string | MappingContext, piEve
       }
       return []
     }
-    case 'message_end':
-      return createMessageCompletedEvent(normalizedContext, event)
+    case 'message_end': {
+      const events = createMessageCompletedEvent(normalizedContext, event)
+      endAssistantMessage(normalizedContext.runId, event)
+      return events
+    }
     case 'tool_execution_start':
       return [createToolStepEvent('step.created', normalizedContext.runId, event)]
     case 'tool_execution_end':

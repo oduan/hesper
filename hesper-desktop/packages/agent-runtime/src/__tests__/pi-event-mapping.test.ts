@@ -339,6 +339,52 @@ describe('pi event mapping', () => {
     ])
   })
 
+  it('keeps thinking steps from separate assistant messages when content indices reset', () => {
+    expect(mapPiEventToHesperEvents('run-multi-thinking', {
+      type: 'message_start',
+      message: { role: 'assistant', content: [] }
+    })).toEqual([])
+    const firstStart = mapPiEventToHesperEvents('run-multi-thinking', {
+      type: 'message_update',
+      assistantMessageEvent: { type: 'thinking_start', contentIndex: 0 }
+    })
+    const firstEnd = mapPiEventToHesperEvents('run-multi-thinking', {
+      type: 'message_update',
+      assistantMessageEvent: { type: 'thinking_end', contentIndex: 0, content: '第一轮决策。' }
+    })
+    mapPiEventToHesperEvents('run-multi-thinking', {
+      type: 'message_end',
+      message: { role: 'assistant', content: [{ type: 'thinking', thinking: '第一轮决策。' }] }
+    })
+
+    expect(mapPiEventToHesperEvents('run-multi-thinking', {
+      type: 'message_start',
+      message: { role: 'assistant', content: [] }
+    })).toEqual([])
+    const secondStart = mapPiEventToHesperEvents('run-multi-thinking', {
+      type: 'message_update',
+      assistantMessageEvent: { type: 'thinking_start', contentIndex: 0 }
+    })
+    const secondEnd = mapPiEventToHesperEvents('run-multi-thinking', {
+      type: 'message_update',
+      assistantMessageEvent: { type: 'thinking_end', contentIndex: 0, content: '第二轮决策。' }
+    })
+
+    const firstStepId = (firstStart[0] as Extract<(typeof firstStart)[number], { type: 'step.created' }>).step.id
+    const secondStepId = (secondStart[0] as Extract<(typeof secondStart)[number], { type: 'step.created' }>).step.id
+    expect(firstStepId).toBe('step-run-multi-thinking-thinking-1-0')
+    expect(secondStepId).toBe('step-run-multi-thinking-thinking-2-0')
+    expect(secondStepId).not.toBe(firstStepId)
+    expect((firstEnd[0] as Extract<(typeof firstEnd)[number], { type: 'step.updated' }>).step).toEqual(expect.objectContaining({
+      id: firstStepId,
+      summary: '第一轮决策。'
+    }))
+    expect((secondEnd[0] as Extract<(typeof secondEnd)[number], { type: 'step.updated' }>).step).toEqual(expect.objectContaining({
+      id: secondStepId,
+      summary: '第二轮决策。'
+    }))
+  })
+
   it('does not map normal turn lifecycle events to visible Model turn steps', () => {
     expect(mapPiEventToHesperEvents('run-turn-start', { type: 'turn_start' })).toEqual([])
     expect(mapPiEventToHesperEvents('run-turn-end', { type: 'turn_end' })).toEqual([])
