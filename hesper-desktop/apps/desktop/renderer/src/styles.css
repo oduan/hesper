@@ -85,6 +85,8 @@ button {
   width: 100%;
   min-height: 46px;
   border: 0;
+  outline: none;
+  box-shadow: none;
   border-radius: 10px;
   background: transparent;
   color: var(--hesper-color-text, #c0caf5);
@@ -98,6 +100,14 @@ button {
   transition: background 120ms ease;
 }
 
+.hesper-list-row:active,
+.hesper-list-row:focus,
+.hesper-list-row:focus-visible {
+  border: 0;
+  outline: none;
+  box-shadow: none;
+}
+
 .hesper-list-row:hover,
 .hesper-list-row.is-active {
   background: var(--hesper-color-hover, rgba(122, 162, 247, 0.12));
@@ -105,10 +115,6 @@ button {
 
 .hesper-list-row.is-selected {
   background: var(--hesper-color-soft-control, rgba(122, 162, 247, 0.14));
-}
-
-.hesper-list-row.is-selected.is-active {
-  box-shadow: inset 0 0 0 1px var(--hesper-color-accent, #7aa2f7);
 }
 
 .hesper-settings-row {
