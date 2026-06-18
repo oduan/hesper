@@ -274,7 +274,7 @@ export function EntityListPane({
           }}
           onClick={(event) => event.stopPropagation()}
         >
-          <style>{sessionMenuRippleCss}</style>
+          <style>{sessionMenuHoverCss}</style>
           {sessionMenuItems.map((item) => (
             <button
               key={item.key}
@@ -350,13 +350,7 @@ const sessionMenuItemStyle: CSSProperties = {
   textAlign: 'left'
 }
 
-const sessionMenuRippleCss = `
-@keyframes hesper-session-menu-ripple {
-  0% { opacity: 0.22; transform: translate(-50%, -50%) scale(0); }
-  72% { opacity: 0.14; }
-  100% { opacity: 0; transform: translate(-50%, -50%) scale(18); }
-}
-
+const sessionMenuHoverCss = `
 .hesper-session-menu-item::after {
   content: '';
   position: absolute;
@@ -364,22 +358,7 @@ const sessionMenuRippleCss = `
   z-index: 0;
   background: var(--hesper-color-hover, rgba(122, 162, 247, 0.12));
   opacity: 0;
-  transition: opacity 120ms ease;
-}
-
-.hesper-session-menu-item::before {
-  content: '';
-  position: absolute;
-  left: 18px;
-  top: 50%;
-  z-index: 1;
-  width: 18px;
-  height: 18px;
-  border-radius: 999px;
-  background: currentColor;
-  opacity: 0;
-  pointer-events: none;
-  transform: translate(-50%, -50%) scale(0);
+  transition: opacity 160ms ease;
 }
 
 .hesper-session-menu-item:hover::after,
@@ -387,13 +366,8 @@ const sessionMenuRippleCss = `
   opacity: 1;
 }
 
-.hesper-session-menu-item:hover::before,
-.hesper-session-menu-item:focus-visible::before {
-  animation: hesper-session-menu-ripple 520ms ease-out;
-}
-
 .hesper-session-menu-item > span {
   position: relative;
-  z-index: 2;
+  z-index: 1;
 }
 `
