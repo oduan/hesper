@@ -78,10 +78,10 @@ function ToolDetailSwitch({ enabled, pending, onToggle }: { enabled: boolean; pe
       onClick={onToggle}
       style={detailSwitchStyle(enabled, pending)}
     >
-      <span aria-hidden="true" style={detailSwitchTrackStyle(enabled)}>
-        <span style={detailSwitchKnobStyle(enabled)} />
+      <span aria-hidden="true" data-tool-toggle-track="true" style={detailSwitchTrackStyle(enabled)}>
+        <span data-tool-toggle-knob="true" style={detailSwitchKnobStyle(enabled)} />
       </span>
-      <span>{enabled ? '全局开启' : '全局关闭'}</span>
+      <span style={detailSwitchLabelStyle(enabled)}>{enabled ? '全局开启' : '全局关闭'}</span>
     </button>
   )
 }
@@ -217,19 +217,18 @@ const schemaBlockStyle: CSSProperties = {
   lineHeight: 1.5
 }
 
-function detailSwitchStyle(enabled: boolean, pending: boolean): CSSProperties {
+function detailSwitchStyle(_enabled: boolean, pending: boolean): CSSProperties {
   return {
-    minWidth: 112,
-    height: 36,
-    border: `1px solid ${enabled ? 'var(--hesper-color-accent, #7aa2f7)' : 'var(--hesper-color-border, #414868)'}`,
+    minHeight: 32,
+    border: 0,
     borderRadius: 999,
-    background: enabled ? 'var(--hesper-color-soft-control, rgba(122, 162, 247, 0.14))' : 'rgba(148, 163, 184, 0.12)',
-    color: enabled ? 'var(--hesper-color-accent, #7aa2f7)' : 'var(--hesper-color-text-muted, #9aa5ce)',
+    background: 'transparent',
+    color: 'var(--hesper-color-text, #c0caf5)',
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    padding: '0 12px',
+    gap: 10,
+    padding: 0,
     fontWeight: 800,
     cursor: pending ? 'progress' : 'pointer',
     opacity: pending ? 0.62 : 1
@@ -238,12 +237,14 @@ function detailSwitchStyle(enabled: boolean, pending: boolean): CSSProperties {
 
 function detailSwitchTrackStyle(enabled: boolean): CSSProperties {
   return {
-    width: 24,
-    height: 14,
-    borderRadius: 999,
-    background: enabled ? 'var(--hesper-color-accent, #7aa2f7)' : 'var(--hesper-color-border, #414868)',
     position: 'relative',
-    display: 'inline-block'
+    width: 46,
+    height: 24,
+    borderRadius: 999,
+    border: `1px solid ${enabled ? 'var(--hesper-color-accent, #7aa2f7)' : 'var(--hesper-color-border, #414868)'}`,
+    background: enabled ? 'var(--hesper-color-accent, #7aa2f7)' : 'var(--hesper-color-surface-muted, #24283b)',
+    boxShadow: enabled ? '0 0 0 3px var(--hesper-color-soft-control, rgba(122, 162, 247, 0.14))' : 'inset 0 0 0 1px rgba(148, 163, 184, 0.10)',
+    transition: 'background 160ms ease, border-color 160ms ease, box-shadow 160ms ease'
   }
 }
 
@@ -251,11 +252,20 @@ function detailSwitchKnobStyle(enabled: boolean): CSSProperties {
   return {
     position: 'absolute',
     top: 2,
-    left: enabled ? 12 : 2,
-    width: 10,
-    height: 10,
+    left: 2,
+    width: 18,
+    height: 18,
     borderRadius: 999,
-    background: 'var(--hesper-color-surface, #16161e)',
-    transition: 'left 120ms ease'
+    background: enabled ? 'var(--hesper-color-surface, #16161e)' : 'var(--hesper-color-text-muted, #737aa2)',
+    boxShadow: enabled ? '0 3px 10px rgba(0, 0, 0, 0.24)' : '0 2px 7px rgba(0, 0, 0, 0.18)',
+    transform: enabled ? 'translateX(22px)' : 'translateX(0)',
+    transition: 'transform 160ms ease, background 160ms ease, box-shadow 160ms ease'
+  }
+}
+
+function detailSwitchLabelStyle(enabled: boolean): CSSProperties {
+  return {
+    color: enabled ? 'var(--hesper-color-accent, #7aa2f7)' : 'var(--hesper-color-text-muted, #737aa2)',
+    whiteSpace: 'nowrap'
   }
 }

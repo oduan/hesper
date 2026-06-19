@@ -386,8 +386,9 @@ function ToolEnableSwitch({ enabled, pending, label, onToggle }: { enabled: bool
       }}
       style={toolToggleStyle(enabled, pending)}
     >
-      <span aria-hidden="true" style={toolToggleKnobStyle(enabled)} />
-      <span style={toolToggleTextStyle}>{enabled ? '开启' : '关闭'}</span>
+      <span aria-hidden="true" data-tool-toggle-track="true" style={toolToggleTrackStyle(enabled)}>
+        <span data-tool-toggle-knob="true" style={toolToggleKnobStyle(enabled)} />
+      </span>
     </button>
   )
 }
@@ -432,40 +433,49 @@ const toolDescriptionStyle: CSSProperties = {
   lineHeight: '16px'
 }
 
-function toolToggleStyle(enabled: boolean, pending: boolean): CSSProperties {
+function toolToggleStyle(_enabled: boolean, pending: boolean): CSSProperties {
   return {
-    width: 58,
-    height: 28,
+    width: 52,
+    height: 32,
     flex: '0 0 auto',
-    border: `1px solid ${enabled ? 'var(--hesper-color-accent, #7aa2f7)' : 'var(--hesper-color-border, #414868)'}`,
+    border: 0,
     borderRadius: 999,
-    background: enabled ? 'var(--hesper-color-soft-control, rgba(122, 162, 247, 0.14))' : 'rgba(148, 163, 184, 0.12)',
-    color: enabled ? 'var(--hesper-color-accent, #7aa2f7)' : 'var(--hesper-color-text-muted, #9aa5ce)',
-    display: 'grid',
-    gridTemplateColumns: '16px 1fr',
+    background: 'transparent',
+    display: 'inline-flex',
     alignItems: 'center',
-    gap: 4,
-    padding: '0 7px',
+    justifyContent: 'center',
+    padding: 0,
     opacity: pending ? 0.62 : 1,
-    cursor: pending ? 'progress' : 'pointer',
-    fontSize: 11,
-    fontWeight: 700
+    cursor: pending ? 'progress' : 'pointer'
+  }
+}
+
+function toolToggleTrackStyle(enabled: boolean): CSSProperties {
+  return {
+    position: 'relative',
+    width: 46,
+    height: 24,
+    borderRadius: 999,
+    border: `1px solid ${enabled ? 'var(--hesper-color-accent, #7aa2f7)' : 'var(--hesper-color-border, #414868)'}`,
+    background: enabled ? 'var(--hesper-color-accent, #7aa2f7)' : 'var(--hesper-color-surface-muted, #24283b)',
+    boxShadow: enabled ? '0 0 0 3px var(--hesper-color-soft-control, rgba(122, 162, 247, 0.14))' : 'inset 0 0 0 1px rgba(148, 163, 184, 0.10)',
+    transition: 'background 160ms ease, border-color 160ms ease, box-shadow 160ms ease'
   }
 }
 
 function toolToggleKnobStyle(enabled: boolean): CSSProperties {
   return {
-    width: 12,
-    height: 12,
+    position: 'absolute',
+    top: 2,
+    left: 2,
+    width: 18,
+    height: 18,
     borderRadius: 999,
-    background: enabled ? 'var(--hesper-color-accent, #7aa2f7)' : 'var(--hesper-color-text-muted, #9aa5ce)',
-    boxShadow: enabled ? '0 0 10px var(--hesper-color-accent, #7aa2f7)' : 'none'
+    background: enabled ? 'var(--hesper-color-surface, #16161e)' : 'var(--hesper-color-text-muted, #737aa2)',
+    boxShadow: enabled ? '0 3px 10px rgba(0, 0, 0, 0.24)' : '0 2px 7px rgba(0, 0, 0, 0.18)',
+    transform: enabled ? 'translateX(22px)' : 'translateX(0)',
+    transition: 'transform 160ms ease, background 160ms ease, box-shadow 160ms ease'
   }
-}
-
-const toolToggleTextStyle: CSSProperties = {
-  lineHeight: 1,
-  textAlign: 'center'
 }
 
 const sessionTitleRowStyle: CSSProperties = {

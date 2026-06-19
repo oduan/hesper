@@ -263,7 +263,11 @@ describe('renderer App', () => {
 
     await user.click(screen.getByText('Fetch URL').closest('[role="button"]') as HTMLElement)
     expect(screen.getByRole('region', { name: '工具详情' })).toHaveTextContent('Fetch URL')
-    await user.click(screen.getByRole('switch', { name: '工具全局开关' }))
+    const detailSwitch = screen.getByRole('switch', { name: '工具全局开关' })
+    expect(detailSwitch).toHaveAttribute('aria-checked', 'false')
+    expect(detailSwitch.querySelector('[data-tool-toggle-track="true"]')).toHaveStyle({ background: 'var(--hesper-color-surface-muted, #24283b)' })
+    expect(detailSwitch.querySelector('[data-tool-toggle-knob="true"]')).toHaveStyle({ transform: 'translateX(0)' })
+    await user.click(detailSwitch)
     expect(setToolEnabled).toHaveBeenCalledWith({ id: 'web.fetch-url', enabled: true })
   })
 

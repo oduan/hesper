@@ -166,9 +166,21 @@ describe('ui components', () => {
     expect(screen.getByText('Read File').closest('[role="button"]')).toHaveClass('is-active')
     expect(screen.getByText('Read a text file from the selected workspace.')).toBeInTheDocument()
 
+    const readSwitch = screen.getByRole('switch', { name: 'Read File 全局开关' })
+    const readTrack = readSwitch.querySelector('[data-tool-toggle-track="true"]') as HTMLElement
+    const readKnob = readSwitch.querySelector('[data-tool-toggle-knob="true"]') as HTMLElement
+    expect(readSwitch).toHaveAttribute('aria-checked', 'true')
+    expect(readTrack).toHaveStyle({ background: 'var(--hesper-color-accent, #7aa2f7)' })
+    expect(readKnob).toHaveStyle({ transform: 'translateX(22px)' })
+
     const writeRow = screen.getByText('Write File').closest('[role="button"]') as HTMLElement
     const writeSwitch = screen.getByRole('switch', { name: 'Write File 全局开关' })
+    const writeTrack = writeSwitch.querySelector('[data-tool-toggle-track="true"]') as HTMLElement
+    const writeKnob = writeSwitch.querySelector('[data-tool-toggle-knob="true"]') as HTMLElement
     expect(writeSwitch).toHaveAttribute('aria-checked', 'false')
+    expect(writeTrack).toHaveStyle({ background: 'var(--hesper-color-surface-muted, #24283b)' })
+    expect(writeKnob).toHaveStyle({ transform: 'translateX(0)' })
+    expect(writeKnob).toHaveStyle({ background: 'var(--hesper-color-text-muted, #737aa2)' })
 
     await user.click(writeRow)
     expect(onSelectTool).toHaveBeenCalledWith('filesystem.write-file')
