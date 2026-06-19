@@ -94,6 +94,7 @@ const sessionBaseSchema = z.object({
   maxSubagentDepth: z.number().int().nonnegative().optional(),
   maxSubagentsPerRun: z.number().int().nonnegative().optional(),
   outputMode: z.enum(['markdown', 'html']),
+  unreadCompletedAt: z.string().datetime().optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime()
 })

@@ -10,6 +10,7 @@ const ipcChannels = {
   sessionsSetWorkspace: 'sessions:setWorkspace',
   sessionsSetModel: 'sessions:setModel',
   sessionsSetOutputMode: 'sessions:setOutputMode',
+  sessionsMarkViewed: 'sessions:markViewed',
   conversationListMessages: 'conversation:listMessages',
   conversationListRuns: 'conversation:listRuns',
   conversationListSteps: 'conversation:listSteps',
@@ -68,7 +69,8 @@ const hesperApi = {
     delete: (id) => ipcRenderer.invoke(ipcChannels.sessionsDelete, id),
     setWorkspace: (input) => ipcRenderer.invoke(ipcChannels.sessionsSetWorkspace, input),
     setModel: (input) => ipcRenderer.invoke(ipcChannels.sessionsSetModel, input),
-    setOutputMode: (input) => ipcRenderer.invoke(ipcChannels.sessionsSetOutputMode, input)
+    setOutputMode: (input) => ipcRenderer.invoke(ipcChannels.sessionsSetOutputMode, input),
+    markViewed: (id) => ipcRenderer.invoke(ipcChannels.sessionsMarkViewed, id)
   },
   conversation: {
     listMessages: (sessionId) => ipcRenderer.invoke(ipcChannels.conversationListMessages, sessionId),

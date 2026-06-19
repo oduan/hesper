@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, clearSessionSendError, pruneSessionSendErrors } from '../src/App'
 
-const { listSessions, createSession, updateTitle, deleteSession, generateTitle, listMessages, listRuns, listSteps, enqueue, onEvent, getSettings, updateSettings, listProviders, listModels, minimizeWindow, toggleMaximizeWindow, closeWindow } = vi.hoisted(() => ({
+const { listSessions, createSession, updateTitle, deleteSession, generateTitle, markViewed, listMessages, listRuns, listSteps, enqueue, onEvent, getSettings, updateSettings, listProviders, listModels, minimizeWindow, toggleMaximizeWindow, closeWindow } = vi.hoisted(() => ({
   listSessions: vi.fn(async () => []),
   createSession: vi.fn(async () => ({
     id: 'session-1',
@@ -39,6 +39,14 @@ const { listSessions, createSession, updateTitle, deleteSession, generateTitle, 
     createdAt: '2026-06-10T03:00:00.000Z',
     updatedAt: '2026-06-10T03:00:12.000Z'
   })),
+  markViewed: vi.fn(async (id: string) => ({
+    id,
+    title: id === 'session-bg' ? '后台会话' : '当前会话',
+    status: 'active',
+    outputMode: 'markdown',
+    createdAt: '2026-06-10T03:00:00.000Z',
+    updatedAt: '2026-06-10T03:00:00.000Z'
+  })),
   listMessages: vi.fn(async (_sessionId?: string) => []),
   listRuns: vi.fn(async (_sessionId?: string) => []),
   listSteps: vi.fn(async (_runId?: string) => []),
@@ -65,7 +73,8 @@ vi.mock('../src/ipc-client', () => ({
       create: createSession,
       updateTitle,
       delete: deleteSession,
-      generateTitle
+      generateTitle,
+      markViewed
     },
     conversation: { listMessages, listRuns, listSteps },
     agent: { enqueue, onEvent },
@@ -102,6 +111,7 @@ describe('renderer App', () => {
     updateTitle.mockClear()
     deleteSession.mockClear()
     generateTitle.mockClear()
+    markViewed.mockClear()
     listMessages.mockReset()
     listRuns.mockReset()
     listSteps.mockReset()
@@ -122,6 +132,14 @@ describe('renderer App', () => {
     listModels.mockResolvedValue([])
     enqueue.mockResolvedValue({ runId: 'run-1' })
     onEvent.mockImplementation(() => () => undefined)
+    markViewed.mockImplementation(async (id: string) => ({
+      id,
+      title: id === 'session-bg' ? '后台会话' : '当前会话',
+      status: 'active',
+      outputMode: 'markdown',
+      createdAt: '2026-06-10T03:00:00.000Z',
+      updatedAt: '2026-06-10T03:00:00.000Z'
+    }))
     getSettings.mockResolvedValue({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', fontSize: 14 })
     updateSettings.mockImplementation(async (input) => ({
       defaultModelId: input.defaultModelId ?? 'mock/hesper-fast',
@@ -181,6 +199,79 @@ describe('renderer App', () => {
 
     expect(screen.getByRole('button', { name: '工具' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('region', { name: 'Tools 即将支持 占位区域' })).toBeInTheDocument()
+  })
+
+  it('shows unread completion icon for background runs until the session is viewed', async () => {
+    const user = userEvent.setup()
+    let agentListener: ((event: any) => void) | undefined
+    onEvent.mockImplementation(((listener: (event: any) => void) => {
+      agentListener = listener
+      return () => undefined
+    }) as any)
+    listSessions.mockResolvedValueOnce([
+      {
+        id: 'session-active',
+        title: '当前会话',
+        status: 'active',
+        outputMode: 'markdown',
+        createdAt: '2026-06-10T03:00:00.000Z',
+        updatedAt: '2026-06-10T03:05:00.000Z'
+      },
+      {
+        id: 'session-bg',
+        title: '后台会话',
+        status: 'active',
+        outputMode: 'markdown',
+        createdAt: '2026-06-10T03:00:00.000Z',
+        updatedAt: '2026-06-10T03:00:00.000Z'
+      }
+    ] as any)
+
+    render(<App />)
+
+    const backgroundRow = await screen.findByRole('button', { name: '后台会话' })
+    expect(backgroundRow.querySelector('[data-session-unread-icon="new-message"]')).not.toBeInTheDocument()
+    await act(async () => {
+      agentListener?.({
+        type: 'message.completed',
+        message: {
+          id: 'message-bg-assistant',
+          sessionId: 'session-bg',
+          role: 'assistant',
+          content: '后台结果',
+          contentType: 'markdown',
+          runId: 'run-bg',
+          createdAt: '2026-06-10T03:06:00.000Z'
+        }
+      } as any)
+    })
+
+    await waitFor(() => expect(backgroundRow.querySelector('[data-session-unread-icon="new-message"]')).toBeInTheDocument())
+    expect(markViewed).not.toHaveBeenCalledWith('session-bg')
+
+    await user.click(backgroundRow)
+    await waitFor(() => expect(markViewed).toHaveBeenCalledWith('session-bg'))
+    await waitFor(() => expect(backgroundRow.querySelector('[data-session-unread-icon="new-message"]')).not.toBeInTheDocument())
+  })
+
+  it('clears persisted unread state when the initially selected session is viewed', async () => {
+    listSessions.mockResolvedValueOnce([
+      {
+        id: 'session-active',
+        title: '当前会话',
+        status: 'active',
+        outputMode: 'markdown',
+        unreadCompletedAt: '2026-06-10T03:06:00.000Z',
+        createdAt: '2026-06-10T03:00:00.000Z',
+        updatedAt: '2026-06-10T03:05:00.000Z'
+      }
+    ] as any)
+
+    render(<App />)
+
+    await screen.findByRole('button', { name: '当前会话' })
+    await waitFor(() => expect(markViewed).toHaveBeenCalledWith('session-active'))
+    await waitFor(() => expect(screen.getByRole('button', { name: '当前会话' }).querySelector('[data-session-unread-icon="new-message"]')).not.toBeInTheDocument())
   })
 
   it('opens appearance settings and persists theme mode and global font size', async () => {

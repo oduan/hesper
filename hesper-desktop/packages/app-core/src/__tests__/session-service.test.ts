@@ -207,6 +207,33 @@ describe('createSessionService', () => {
     expect(updated.updatedAt).toBe(created.updatedAt)
   })
 
+  it('persists unread completion markers until a session is viewed without refreshing updatedAt', async () => {
+    const persistence = await createInMemoryPersistence()
+    const service = createSessionService(persistence)
+    const created = await service.createSession({ title: 'Unread', now })
+
+    const firstUnreadAt = '2026-06-10T05:01:00.000Z'
+    const olderUnreadAt = '2026-06-10T05:00:30.000Z'
+    const newerUnreadAt = '2026-06-10T05:02:00.000Z'
+    const marked = await service.markUnreadCompleted(created.id, firstUnreadAt)
+    expect(marked.unreadCompletedAt).toBe(firstUnreadAt)
+    expect(marked.updatedAt).toBe(created.updatedAt)
+
+    const olderIgnored = await service.markUnreadCompleted(created.id, olderUnreadAt)
+    expect(olderIgnored.unreadCompletedAt).toBe(firstUnreadAt)
+    expect(olderIgnored.updatedAt).toBe(created.updatedAt)
+
+    const newerMarked = await service.markUnreadCompleted(created.id, newerUnreadAt)
+    expect(newerMarked.unreadCompletedAt).toBe(newerUnreadAt)
+    expect(newerMarked.updatedAt).toBe(created.updatedAt)
+    expect((await service.getSession(created.id)).unreadCompletedAt).toBe(newerUnreadAt)
+
+    const viewed = await service.markViewed(created.id)
+    expect(viewed.unreadCompletedAt).toBeUndefined()
+    expect(viewed.updatedAt).toBe(created.updatedAt)
+    expect((await service.getSession(created.id)).unreadCompletedAt).toBeUndefined()
+  })
+
   it('lists sessions by visible order and excludes deleted sessions', async () => {
     const persistence = await createInMemoryPersistence()
     const service = createSessionService(persistence)

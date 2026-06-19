@@ -64,6 +64,7 @@ export type Session = {
   maxSubagentDepth?: number
   maxSubagentsPerRun?: number
   outputMode: OutputMode
+  unreadCompletedAt?: string
   createdAt: string
   updatedAt: string
 }

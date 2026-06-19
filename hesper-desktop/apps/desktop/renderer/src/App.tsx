@@ -110,6 +110,17 @@ function pruneRequestTokens(tokens: RequestTokensBySession, visibleSessionIds: s
   return Object.keys(next).length === Object.keys(tokens).length ? tokens : next
 }
 
+function clearSessionUnreadCompletion(session: Session): Session {
+  if (!session.unreadCompletedAt) return session
+  const { unreadCompletedAt: _unreadCompletedAt, ...viewed } = session
+  return viewed
+}
+
+function applySessionUnreadCompletion(session: Session, completedAt: string): Session {
+  if (session.unreadCompletedAt && session.unreadCompletedAt >= completedAt) return session
+  return { ...session, unreadCompletedAt: completedAt }
+}
+
 function AppContent() {
   const { state, dispatch } = useAppStore()
   const [loadError, setLoadError] = useState<string>()
@@ -135,10 +146,55 @@ function AppContent() {
   const nextSettingsRequestIdRef = useRef(0)
   const latestSettingsRequestIdRef = useRef<RequestTokensBySession>({})
   const latestAppSettingsRequestIdRef = useRef(0)
+  const activeSessionUnreadCompletedAt = state.activeSessionId
+    ? state.sessions.find((session) => session.id === state.activeSessionId)?.unreadCompletedAt
+    : undefined
+
+  const markSessionUnreadCompletedLocally = (sessionId: string, completedAt: string) => {
+    const session = stateRef.current.sessions.find((candidate) => candidate.id === sessionId)
+    if (!session) return
+    const updated = applySessionUnreadCompletion(session, completedAt)
+    if (updated !== session) {
+      dispatch({ type: 'session.updated', session: updated })
+    }
+  }
+
+  const markSessionViewed = async (sessionId: string, options: { force?: boolean } = {}) => {
+    const session = stateRef.current.sessions.find((candidate) => candidate.id === sessionId)
+    if (!options.force && !session?.unreadCompletedAt) return
+
+    if (session?.unreadCompletedAt) {
+      dispatch({ type: 'session.updated', session: clearSessionUnreadCompletion(session) })
+    }
+
+    try {
+      const updatedSession = await hesperApi.sessions.markViewed(sessionId)
+      dispatch({ type: 'session.updated', session: updatedSession })
+    } catch (error) {
+      if (session?.unreadCompletedAt) {
+        dispatch({ type: 'session.updated', session })
+      }
+      console.warn('Failed to mark session as viewed', error)
+    }
+  }
+
+  const handleSessionCompletionUnread = (sessionId: string, completedAt: string) => {
+    if (stateRef.current.activeSessionId === sessionId) {
+      void markSessionViewed(sessionId, { force: true })
+      return
+    }
+    markSessionUnreadCompletedLocally(sessionId, completedAt)
+  }
 
   useEffect(() => {
     stateRef.current = state
   }, [state])
+
+  useEffect(() => {
+    if (state.activeSessionId && activeSessionUnreadCompletedAt) {
+      void markSessionViewed(state.activeSessionId)
+    }
+  }, [state.activeSessionId, activeSessionUnreadCompletedAt])
 
   useEffect(() => {
     let cancelled = false
@@ -233,6 +289,17 @@ function AppContent() {
     return hesperApi.agent.onEvent((event) => {
       if (event.type === 'run.created') {
         runModelIdsRef.current[event.run.id] = event.run.modelId
+      }
+
+      if (event.type === 'message.completed' && event.message.role === 'assistant') {
+        handleSessionCompletionUnread(event.message.sessionId, event.message.createdAt)
+      }
+
+      if (event.type === 'run.failed') {
+        const run = stateRef.current.runsById[event.runId]
+        if (run) {
+          handleSessionCompletionUnread(run.sessionId, run.endedAt ?? new Date().toISOString())
+        }
       }
 
       if (event.type === 'message.completed' && event.message.role === 'assistant' && event.message.runId) {
@@ -541,6 +608,7 @@ function AppContent() {
       onSelectSession={(sessionId) => {
         dispatch({ type: 'section.selected', section: 'sessions' })
         dispatch({ type: 'session.selected', sessionId })
+        void markSessionViewed(sessionId)
       }}
       onRenameSession={(sessionId, title) => {
         void renameSession(sessionId, title)

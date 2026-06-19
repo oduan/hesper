@@ -31,7 +31,8 @@ const hesperApi: HesperDesktopApi = {
     delete: (id) => ipcRenderer.invoke(ipcChannels.sessionsDelete, id),
     setWorkspace: (input) => ipcRenderer.invoke(ipcChannels.sessionsSetWorkspace, input),
     setModel: (input) => ipcRenderer.invoke(ipcChannels.sessionsSetModel, input),
-    setOutputMode: (input) => ipcRenderer.invoke(ipcChannels.sessionsSetOutputMode, input)
+    setOutputMode: (input) => ipcRenderer.invoke(ipcChannels.sessionsSetOutputMode, input),
+    markViewed: (id) => ipcRenderer.invoke(ipcChannels.sessionsMarkViewed, id)
   },
   conversation: {
     listMessages: (sessionId) => ipcRenderer.invoke(ipcChannels.conversationListMessages, sessionId),

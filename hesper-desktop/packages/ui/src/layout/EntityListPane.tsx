@@ -42,6 +42,23 @@ const sessionMenuItems: SessionMenuItem[] = [
   { key: 'delete', label: '删除', danger: true }
 ]
 
+function NewMessageIcon() {
+  return (
+    <span aria-hidden="true" data-session-unread-icon="new-message" style={newMessageIconSlotStyle}>
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" style={{ display: 'block' }}>
+        <path
+          d="M3.2 3.8h9.6c.7 0 1.2.5 1.2 1.2v5.7c0 .7-.5 1.2-1.2 1.2H7.1l-3 2.1v-2.1h-.9c-.7 0-1.2-.5-1.2-1.2V5c0-.7.5-1.2 1.2-1.2Z"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.45"
+          strokeLinejoin="round"
+        />
+        <circle cx="11.9" cy="4.2" r="2.15" fill="var(--hesper-color-accent, #7aa2f7)" stroke="var(--hesper-color-surface, #16161e)" strokeWidth="1" />
+      </svg>
+    </span>
+  )
+}
+
 function arraysEqual(left: string[], right: string[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index])
 }
@@ -185,6 +202,7 @@ export function EntityListPane({
               const isActive = session.id === activeSessionId
               const isSelected = selectedSessionIds.includes(session.id)
               const isRunning = runningSessionIdSet.has(session.id)
+              const hasUnreadCompletion = Boolean(session.unreadCompletedAt)
               const sessionRowClassName = `hesper-list-row${isActive ? ' is-active' : ''}${isSelected ? ' is-selected' : ''}`
               return (
                 <li key={session.id}>
@@ -233,7 +251,7 @@ export function EntityListPane({
                       }}
                     >
                       <div style={sessionTitleRowStyle}>
-                        {isRunning ? <RunningStatusIcon ariaHidden /> : null}
+                        {isRunning ? <RunningStatusIcon ariaHidden /> : hasUnreadCompletion ? <NewMessageIcon /> : null}
                         <span style={sessionTitleTextStyle}>{session.title}</span>
                       </div>
                     </button>
@@ -323,6 +341,15 @@ const sessionTitleTextStyle: CSSProperties = {
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap'
+}
+
+const newMessageIconSlotStyle: CSSProperties = {
+  width: 18,
+  height: 18,
+  flex: '0 0 18px',
+  display: 'inline-grid',
+  placeItems: 'center',
+  color: 'var(--hesper-color-accent, #7aa2f7)'
 }
 
 const renameInputStyle: CSSProperties = {

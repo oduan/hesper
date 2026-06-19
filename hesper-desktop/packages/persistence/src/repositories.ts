@@ -214,6 +214,7 @@ function toSession(row: any): Session {
     maxSubagentDepth: optionalNumber(row.max_subagent_depth) ?? 1,
     maxSubagentsPerRun: optionalNumber(row.max_subagents_per_run) ?? 3,
     outputMode: row.output_mode,
+    unreadCompletedAt: row.unread_completed_at ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }) as Session
@@ -501,6 +502,7 @@ export function createRepositories(db: Database): Persistence {
           'max_subagent_depth',
           'max_subagents_per_run',
           'output_mode',
+          'unread_completed_at',
           'created_at',
           'updated_at',
           'sort_seq'
@@ -519,6 +521,7 @@ export function createRepositories(db: Database): Persistence {
           session.maxSubagentDepth,
           session.maxSubagentsPerRun,
           session.outputMode,
+          session.unreadCompletedAt,
           session.createdAt,
           session.updatedAt,
           nextSeq()

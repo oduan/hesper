@@ -11,6 +11,7 @@ export const ipcChannels = {
   sessionsSetWorkspace: 'sessions:setWorkspace',
   sessionsSetModel: 'sessions:setModel',
   sessionsSetOutputMode: 'sessions:setOutputMode',
+  sessionsMarkViewed: 'sessions:markViewed',
   conversationListMessages: 'conversation:listMessages',
   conversationListRuns: 'conversation:listRuns',
   conversationListSteps: 'conversation:listSteps',
@@ -221,6 +222,7 @@ export type HesperDesktopApi = {
     setWorkspace(input: SetSessionWorkspaceInput): Promise<SessionDto>
     setModel(input: SetSessionModelInput): Promise<SessionDto>
     setOutputMode(input: SetSessionOutputModeInput): Promise<SessionDto>
+    markViewed(id: string): Promise<SessionDto>
   }
   conversation: {
     listMessages(sessionId: string): Promise<MessageDto[]>

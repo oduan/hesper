@@ -95,9 +95,11 @@ VALUES ('legacy-run', 'legacy-session', NULL, 'queued', 'mock/hesper-fast', NULL
 describe('persistence repositories', () => {
   it('creates and lists sessions without deleted sessions', async () => {
     const db = await createInMemoryPersistence()
-    await db.sessions.save({ id: 'session-1', title: 'Build hesper', status: 'active', outputMode: 'markdown', createdAt: now, updatedAt: now })
+    await db.sessions.save({ id: 'session-1', title: 'Build hesper', status: 'active', outputMode: 'markdown', unreadCompletedAt: '2026-06-10T03:01:00.000Z', createdAt: now, updatedAt: now })
     await db.sessions.save({ id: 'session-2', title: 'Deleted session', status: 'deleted', outputMode: 'html', createdAt: now, updatedAt: now })
-    expect(await db.sessions.listVisible()).toHaveLength(1)
+    const visible = await db.sessions.listVisible()
+    expect(visible).toHaveLength(1)
+    expect(visible[0]!.unreadCompletedAt).toBe('2026-06-10T03:01:00.000Z')
   })
 
   it('persists runtime events across all event shapes', async () => {
@@ -316,6 +318,7 @@ describe('persistence repositories', () => {
         maxSubagentDepth: 1,
         maxSubagentsPerRun: 3
       })
+      expect(session?.unreadCompletedAt).toBeUndefined()
 
       await migrated.sessions.save({
         ...session!,

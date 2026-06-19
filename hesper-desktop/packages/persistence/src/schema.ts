@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   max_subagent_depth INTEGER,
   max_subagents_per_run INTEGER,
   output_mode TEXT NOT NULL,
+  unread_completed_at TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   sort_seq INTEGER NOT NULL
@@ -183,7 +184,8 @@ const migrationColumns: Record<string, string[]> = {
     'enabled_tool_ids_json TEXT',
     'allowed_subagent_role_ids_json TEXT',
     'max_subagent_depth INTEGER',
-    'max_subagents_per_run INTEGER'
+    'max_subagents_per_run INTEGER',
+    'unread_completed_at TEXT'
   ],
   agent_runs: [
     'subagent_invocation_id TEXT',

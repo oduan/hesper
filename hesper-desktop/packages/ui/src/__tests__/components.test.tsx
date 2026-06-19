@@ -162,6 +162,54 @@ describe('ui components', () => {
     expect(idleRow.querySelector('[data-step-status-icon="running-nine-dot-sweep"]')).not.toBeInTheDocument()
   })
 
+  it('shows a new message icon before unread completed session titles', () => {
+    render(
+      <AppShell
+        sessions={[
+          {
+            id: 'session-unread',
+            title: '未查看结果',
+            status: 'active',
+            outputMode: 'markdown',
+            unreadCompletedAt: '2026-06-10T03:02:00.000Z',
+            createdAt: now,
+            updatedAt: now
+          },
+          {
+            id: 'session-running-unread',
+            title: '运行优先',
+            status: 'active',
+            outputMode: 'markdown',
+            unreadCompletedAt: '2026-06-10T03:02:00.000Z',
+            createdAt: now,
+            updatedAt: now
+          },
+          {
+            id: 'session-read',
+            title: '已查看结果',
+            status: 'active',
+            outputMode: 'markdown',
+            createdAt: now,
+            updatedAt: now
+          }
+        ]}
+        activeSection="sessions"
+        activeSessionId="session-read"
+        runningSessionIds={['session-running-unread']}
+        title="未读结果测试"
+      />
+    )
+
+    const unreadRow = screen.getByRole('button', { name: '未查看结果' })
+    const runningUnreadRow = screen.getByRole('button', { name: '运行优先' })
+    const readRow = screen.getByRole('button', { name: '已查看结果' })
+    expect(unreadRow.querySelector('[data-session-unread-icon="new-message"]')).toBeInTheDocument()
+    expect(unreadRow.querySelector('[data-step-status-icon="running-nine-dot-sweep"]')).not.toBeInTheDocument()
+    expect(runningUnreadRow.querySelector('[data-step-status-icon="running-nine-dot-sweep"]')).toBeInTheDocument()
+    expect(runningUnreadRow.querySelector('[data-session-unread-icon="new-message"]')).not.toBeInTheDocument()
+    expect(readRow.querySelector('[data-session-unread-icon="new-message"]')).not.toBeInTheDocument()
+  })
+
   it('supports shift range selection for session context bulk actions while rename stays target-only', async () => {
     const user = userEvent.setup()
     const onSelectSession = vi.fn()

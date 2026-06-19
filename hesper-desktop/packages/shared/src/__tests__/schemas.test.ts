@@ -77,6 +77,7 @@ describe('shared schemas', () => {
       workspacePath: undefined,
       defaultModelId: undefined,
       providerId: undefined,
+      unreadCompletedAt: undefined,
       outputMode: 'markdown',
       createdAt: now,
       updatedAt: now
@@ -85,6 +86,21 @@ describe('shared schemas', () => {
     expect('workspacePath' in parsed).toBe(false)
     expect('defaultModelId' in parsed).toBe(false)
     expect('providerId' in parsed).toBe(false)
+    expect('unreadCompletedAt' in parsed).toBe(false)
+  })
+
+  it('validates session unread completion marker', () => {
+    const parsed = sessionSchema.parse({
+      id: 'session-unread',
+      title: 'Build hesper',
+      status: 'active',
+      outputMode: 'markdown',
+      unreadCompletedAt: now,
+      createdAt: now,
+      updatedAt: now
+    })
+
+    expect(parsed.unreadCompletedAt).toBe(now)
   })
 
   it('validates model providers without exposing raw API keys', () => {

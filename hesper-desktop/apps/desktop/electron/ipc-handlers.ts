@@ -53,6 +53,7 @@ const mutatingChannels = [
   ipcChannels.sessionsSetWorkspace,
   ipcChannels.sessionsSetModel,
   ipcChannels.sessionsSetOutputMode,
+  ipcChannels.sessionsMarkViewed,
   ipcChannels.agentEnqueue,
   ipcChannels.settingsUpdate,
   ipcChannels.credentialsSaveProviderApiKey,
@@ -83,21 +84,40 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
   const subscriptions = new Map<number, () => void>()
   const getWindowForEvent = options.getWindowForEvent ?? ((event: IpcMainInvokeEvent) => BrowserWindow.fromWebContents(event.sender) ?? undefined)
 
-  const detachRuntimePersistence = options.container.agentRuntime.subscribe(async () => {
-    schedulePersistenceSave()
-  })
-
-  const unsubscribeSender = (senderId: number) => {
-    subscriptions.get(senderId)?.()
-    subscriptions.delete(senderId)
-  }
-
   const validateEvent = (event: unknown) => {
     const parsed = agentRuntimeEventSchema.safeParse(event)
     if (!parsed.success) {
       throw parsed.error
     }
     return parsed.data
+  }
+
+  const markRuntimeCompletionUnread = async (runtimeEvent: unknown) => {
+    const event = validateEvent(runtimeEvent)
+    if (event.type === 'message.completed' && event.message.role === 'assistant') {
+      await options.container.sessionService.markUnreadCompleted(event.message.sessionId, event.message.createdAt)
+      return
+    }
+
+    if (event.type === 'run.failed') {
+      const run = await options.container.persistence.runs.get(event.runId)
+      if (run) {
+        await options.container.sessionService.markUnreadCompleted(run.sessionId, run.endedAt)
+      }
+    }
+  }
+
+  const detachRuntimePersistence = options.container.agentRuntime.subscribe(async (runtimeEvent) => {
+    try {
+      await markRuntimeCompletionUnread(runtimeEvent)
+    } finally {
+      schedulePersistenceSave()
+    }
+  })
+
+  const unsubscribeSender = (senderId: number) => {
+    subscriptions.get(senderId)?.()
+    subscriptions.delete(senderId)
   }
 
   const assembleRunContext = async (sessionId: string, workspacePath?: string, requestedEnabledToolIds?: string[]): Promise<{ systemPrompt: string; enabledToolIds: string[] }> => {
@@ -205,6 +225,12 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
     [ipcChannels.sessionsSetOutputMode]: async (_event, payload) => {
       const input = setSessionOutputModeInputSchema.parse(payload)
       const session = await options.container.sessionService.setOutputMode(input.id, input.outputMode)
+      await savePersistence()
+      return session
+    },
+    [ipcChannels.sessionsMarkViewed]: async (_event, payload) => {
+      const sessionId = sessionIdInputSchema.parse(payload)
+      const session = await options.container.sessionService.markViewed(sessionId)
       await savePersistence()
       return session
     },

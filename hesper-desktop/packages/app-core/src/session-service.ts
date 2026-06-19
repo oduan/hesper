@@ -19,6 +19,8 @@ export type SessionService = {
   getSession(id: string): Promise<Session>
   listSessions(): Promise<Session[]>
   updateTitle(id: string, title: string): Promise<Session>
+  markUnreadCompleted(id: string, completedAt?: string): Promise<Session>
+  markViewed(id: string): Promise<Session>
   setWorkspacePath(id: string, workspacePath?: string): Promise<Session>
   setDefaultModel(id: string, defaultModelId?: string): Promise<Session>
   setOutputMode(id: string, outputMode: OutputMode): Promise<Session>
@@ -72,6 +74,23 @@ export function createSessionService(persistence: Persistence): SessionService {
     async updateTitle(id, title) {
       const session = await loadSession(persistence, id)
       const updated: Session = { ...session, title: normalizeSessionTitle(title, 'Untitled chat') }
+      await persistence.sessions.save(updated)
+      return updated
+    },
+    async markUnreadCompleted(id, completedAt) {
+      const session = await loadSession(persistence, id)
+      const timestamp = completedAt ?? nowIso()
+      if (session.unreadCompletedAt && session.unreadCompletedAt >= timestamp) {
+        return session
+      }
+      const updated: Session = { ...session, unreadCompletedAt: timestamp }
+      await persistence.sessions.save(updated)
+      return updated
+    },
+    async markViewed(id) {
+      const session = await loadSession(persistence, id)
+      if (!session.unreadCompletedAt) return session
+      const { unreadCompletedAt: _unreadCompletedAt, ...updated } = session
       await persistence.sessions.save(updated)
       return updated
     },

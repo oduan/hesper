@@ -142,6 +142,12 @@ describe('registerIpcHandlers', () => {
       ipcEvents.agentEvent,
       expect.objectContaining({ type: 'run.created' })
     )
+    const unreadSession = await persistence.sessions.get(session.id)
+    expect(unreadSession?.unreadCompletedAt).toBeTruthy()
+    const viewedSession = await handles.get(ipcChannels.sessionsMarkViewed)?.({ sender }, session.id) as { id: string; unreadCompletedAt?: string }
+    expect(viewedSession.id).toBe(session.id)
+    expect(viewedSession.unreadCompletedAt).toBeUndefined()
+    expect((await persistence.sessions.get(session.id))?.unreadCompletedAt).toBeUndefined()
     expect(schedulePersistenceSave).toHaveBeenCalled()
     expect(savePersistence).toHaveBeenCalled()
 

@@ -86,7 +86,11 @@ export function createFallbackHesperApi(): HesperDesktopApi {
         replaceSession(input.id, (session) => updateMockSession(session, input.workspacePath ? { workspacePath: input.workspacePath } : {})),
       setModel: async (input: SetSessionModelInput) =>
         replaceSession(input.id, (session) => updateMockSession(session, input.defaultModelId ? { defaultModelId: input.defaultModelId } : {})),
-      setOutputMode: async (input: SetSessionOutputModeInput) => replaceSession(input.id, (session) => updateMockSession(session, { outputMode: input.outputMode }))
+      setOutputMode: async (input: SetSessionOutputModeInput) => replaceSession(input.id, (session) => updateMockSession(session, { outputMode: input.outputMode })),
+      markViewed: async (id: string) => replaceSession(id, (session) => {
+        const { unreadCompletedAt: _unreadCompletedAt, ...viewed } = session
+        return viewed
+      })
     },
     conversation: {
       listMessages: async (sessionId: string) => messagesBySession[sessionId] ?? [],
