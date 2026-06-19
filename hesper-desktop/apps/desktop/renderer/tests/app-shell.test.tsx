@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, clearSessionSendError, pruneSessionSendErrors } from '../src/App'
 
-const { listSessions, createSession, updateTitle, deleteSession, generateTitle, markViewed, listMessages, listRuns, listSteps, enqueue, onEvent, getSettings, updateSettings, listProviders, listModels, listTools, setToolEnabled, toolCredentialStatus, saveToolApiKey, deleteToolApiKey, minimizeWindow, toggleMaximizeWindow, closeWindow } = vi.hoisted(() => ({
+const { listSessions, createSession, updateTitle, deleteSession, generateTitle, markViewed, listRoles, createRole, updateRole, deleteRole, listMessages, listRuns, listSteps, enqueue, onEvent, getSettings, updateSettings, listProviders, listModels, listTools, setToolEnabled, toolCredentialStatus, saveToolApiKey, deleteToolApiKey, minimizeWindow, toggleMaximizeWindow, closeWindow } = vi.hoisted(() => ({
   listSessions: vi.fn(async () => []),
   createSession: vi.fn(async () => ({
     id: 'session-1',
@@ -47,6 +47,10 @@ const { listSessions, createSession, updateTitle, deleteSession, generateTitle, 
     createdAt: '2026-06-10T03:00:00.000Z',
     updatedAt: '2026-06-10T03:00:00.000Z'
   })),
+  listRoles: vi.fn(async () => []),
+  createRole: vi.fn(async (input) => ({ id: 'role-created', description: '', systemPrompt: '', defaultToolIds: [], ...input })),
+  updateRole: vi.fn(async (input) => ({ id: input.id, name: input.name ?? 'Role', description: input.description ?? '', systemPrompt: input.systemPrompt ?? '', defaultToolIds: input.defaultToolIds ?? [] })),
+  deleteRole: vi.fn(async (id: string) => ({ deleted: true as const, id })),
   listMessages: vi.fn(async (_sessionId?: string) => []),
   listRuns: vi.fn(async (_sessionId?: string) => []),
   listSteps: vi.fn(async (_runId?: string) => []),
@@ -146,6 +150,7 @@ vi.mock('../src/ipc-client', () => ({
     providers: { list: listProviders },
     models: { list: listModels },
     tools: { list: listTools, setEnabled: setToolEnabled, credentialStatus: toolCredentialStatus, saveApiKey: saveToolApiKey, deleteApiKey: deleteToolApiKey },
+    roles: { list: listRoles, create: createRole, update: updateRole, delete: deleteRole },
     window: {
       platform: 'win32',
       minimize: minimizeWindow,
@@ -176,6 +181,10 @@ describe('renderer App', () => {
     deleteSession.mockClear()
     generateTitle.mockClear()
     markViewed.mockClear()
+    listRoles.mockReset()
+    createRole.mockClear()
+    updateRole.mockClear()
+    deleteRole.mockClear()
     listMessages.mockReset()
     listRuns.mockReset()
     listSteps.mockReset()
@@ -194,6 +203,7 @@ describe('renderer App', () => {
     toggleMaximizeWindow.mockClear()
     closeWindow.mockClear()
     listSessions.mockResolvedValue([])
+    listRoles.mockResolvedValue([])
     listMessages.mockResolvedValue([])
     listRuns.mockResolvedValue([])
     listSteps.mockResolvedValue([])
@@ -345,6 +355,20 @@ describe('renderer App', () => {
     expect(detailSwitch.querySelector('[data-tool-toggle-knob="true"]')).toHaveStyle({ transform: 'translateX(0)' })
     await user.click(detailSwitch)
     expect(setToolEnabled).toHaveBeenCalledWith({ id: 'system.show-notification', enabled: true })
+  })
+
+  it('renders the roles management section instead of a placeholder', async () => {
+    listRoles.mockResolvedValueOnce([
+      { id: 'role-1', name: '运维助手', description: '执行命令', systemPrompt: '你是运维助手。', defaultToolIds: ['filesystem.read-file'] }
+    ] as any)
+
+    render(<App />)
+
+    await userEvent.click(screen.getByRole('button', { name: '角色' }))
+
+    expect(await screen.findByRole('button', { name: /运维助手/ })).toBeInTheDocument()
+    expect(screen.queryByText('Roles 即将支持')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('角色名称')).toHaveValue('运维助手')
   })
 
   it('manages API keys for credential-required tools from the tools detail panel', async () => {

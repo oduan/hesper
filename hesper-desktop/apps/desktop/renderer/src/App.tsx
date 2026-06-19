@@ -4,11 +4,12 @@ import { AppShell, ConversationView, type AppSection, type ConversationShortcutC
 import { AppStoreProvider, useAppStore } from './app-store'
 import { hesperApi } from './ipc-client'
 import { defaultFallbackModelId, fallbackSessionModelCatalog, loadAvailableModelCatalog, mergeModelOptions, type SessionModelCatalog } from './model-options'
-import type { AppSettings, ToolCredentialStatus, ToolDto, UpdateSettingsInput } from '../../electron/ipc-contract'
+import type { AppSettings, ManagedRoleDto, ToolCredentialStatus, ToolDto, UpdateSettingsInput } from '../../electron/ipc-contract'
 import { AppearanceSettingsPanel } from './appearance-settings-panel'
 import { ProviderSettingsPanel } from './provider-settings-panel'
 import { createShortcutHandler } from './shortcuts'
 import { ToolDetailsPanel } from './tool-details-panel'
+import { RolesPanel } from './roles-panel'
 
 export function App() {
   return (
@@ -144,6 +145,11 @@ function AppContent() {
   const [toolCredentialStatuses, setToolCredentialStatuses] = useState<Record<string, ToolCredentialStatus>>({})
   const [pendingToolCredentialIds, setPendingToolCredentialIds] = useState<Set<string>>(new Set())
   const [toolsError, setToolsError] = useState<string>()
+  const [roles, setRoles] = useState<ManagedRoleDto[]>([])
+  const [rolesError, setRolesError] = useState<string>()
+  const [activeRoleId, setActiveRoleId] = useState<string>()
+  const [creatingRole, setCreatingRole] = useState(false)
+  const [rolesPending, setRolesPending] = useState(false)
   const resolvedThemeMode = useResolvedThemeMode(appSettings.themeMode)
   const loadedHistorySessionIdsRef = useRef<Set<string>>(new Set())
   const loadingHistorySessionIdsRef = useRef<Set<string>>(new Set())
@@ -161,6 +167,7 @@ function AppContent() {
     ? state.sessions.find((session) => session.id === state.activeSessionId)?.unreadCompletedAt
     : undefined
   const activeTool = tools.find((tool) => tool.id === activeToolId) ?? tools[0]
+  const activeRole = creatingRole ? undefined : roles.find((role) => role.id === activeRoleId) ?? roles[0]
   const activeToolCredentialStatus = activeTool ? toolCredentialStatuses[activeTool.id] : undefined
   const pendingToolIdList = useMemo(() => [...pendingToolIds], [pendingToolIds])
 
@@ -262,6 +269,34 @@ function AppContent() {
       setActiveToolId(tools[0]!.id)
     }
   }, [activeToolId, tools])
+
+  useEffect(() => {
+    let cancelled = false
+
+    void hesperApi.roles.list().then((loadedRoles) => {
+      if (!cancelled) {
+        setRoles(loadedRoles)
+        setRolesError(undefined)
+      }
+    }).catch((error) => {
+      if (!cancelled) setRolesError(error instanceof Error ? error.message : '未知角色加载错误')
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (creatingRole) return
+    if (roles.length === 0) {
+      setActiveRoleId(undefined)
+      return
+    }
+    if (!activeRoleId || !roles.some((role) => role.id === activeRoleId)) {
+      setActiveRoleId(roles[0]!.id)
+    }
+  }, [activeRoleId, creatingRole, roles])
 
   useEffect(() => {
     const tool = activeTool
@@ -564,6 +599,59 @@ function AppContent() {
     }
   }
 
+  const refreshRoles = async () => {
+    const loadedRoles = await hesperApi.roles.list()
+    setRoles(loadedRoles)
+    return loadedRoles
+  }
+
+  const saveRole = async (role: ManagedRoleDto) => {
+    setRolesPending(true)
+    setRolesError(undefined)
+    try {
+      const savedRole = creatingRole
+        ? await hesperApi.roles.create({
+            name: role.name,
+            description: role.description,
+            systemPrompt: role.systemPrompt,
+            defaultToolIds: role.defaultToolIds
+          })
+        : await hesperApi.roles.update({
+            id: role.id,
+            name: role.name,
+            description: role.description,
+            systemPrompt: role.systemPrompt,
+            defaultToolIds: role.defaultToolIds
+          })
+      const loadedRoles = await refreshRoles()
+      const nextRoles = loadedRoles.some((candidate) => candidate.id === savedRole.id)
+        ? loadedRoles
+        : [savedRole, ...loadedRoles.filter((candidate) => candidate.id !== savedRole.id)]
+      setRoles(nextRoles)
+      setCreatingRole(false)
+      setActiveRoleId(savedRole.id)
+    } catch (error) {
+      setRolesError(error instanceof Error ? error.message : '未知角色保存错误')
+    } finally {
+      setRolesPending(false)
+    }
+  }
+
+  const deleteRole = async (roleId: string) => {
+    setRolesPending(true)
+    setRolesError(undefined)
+    try {
+      await hesperApi.roles.delete(roleId)
+      const loadedRoles = await refreshRoles()
+      setCreatingRole(false)
+      setActiveRoleId(loadedRoles[0]?.id)
+    } catch (error) {
+      setRolesError(error instanceof Error ? error.message : '未知角色删除错误')
+    } finally {
+      setRolesPending(false)
+    }
+  }
+
   const updateToolEnabled = async (toolId: string, enabled: boolean) => {
     setToolsError(undefined)
     setPendingToolIds((current) => new Set(current).add(toolId))
@@ -730,7 +818,9 @@ function AppContent() {
       runningSessionIds={runningSessionIds}
       tools={tools}
       pendingToolIds={pendingToolIdList}
+      roles={roles.map((role) => ({ id: role.id, name: role.name, description: role.description }))}
       {...(activeTool ? { activeToolId: activeTool.id } : {})}
+      {...(activeRoleId ? { activeRoleId } : {})}
       {...(state.activeSessionId ? { activeSessionId: state.activeSessionId } : {})}
       onCreateSession={async () => {
         dispatch({ type: 'section.selected', section: 'sessions' })
@@ -741,6 +831,14 @@ function AppContent() {
       onSelectTool={setActiveToolId}
       onToggleToolEnabled={(toolId, enabled) => {
         void updateToolEnabled(toolId, enabled)
+      }}
+      onSelectRole={(roleId) => {
+        setCreatingRole(false)
+        setActiveRoleId(roleId)
+      }}
+      onCreateRole={() => {
+        setCreatingRole(true)
+        setActiveRoleId(undefined)
       }}
       onSelectSession={(sessionId) => {
         dispatch({ type: 'section.selected', section: 'sessions' })
@@ -767,6 +865,25 @@ function AppContent() {
           ) : (
             <ProviderSettingsPanel onModelRegistryChanged={refreshSessionModelOptions} />
           )
+        ) : state.activeSection === 'roles' ? (
+          <RolesPanel
+            roles={roles}
+            {...(activeRole ? { selectedRole: activeRole } : {})}
+            creating={creatingRole}
+            tools={tools}
+            pending={rolesPending}
+            {...(rolesError ? { error: rolesError } : {})}
+            onCreateDraft={() => {
+              setCreatingRole(true)
+              setActiveRoleId(undefined)
+            }}
+            onCancelDraft={() => {
+              setCreatingRole(false)
+              setActiveRoleId(roles[0]?.id)
+            }}
+            onSave={(role) => { void saveRole(role) }}
+            onDelete={(roleId) => { void deleteRole(roleId) }}
+          />
         ) : state.activeSection === 'tools' ? (
           <ToolDetailsPanel
             {...(activeTool ? { tool: activeTool } : {})}
@@ -861,7 +978,7 @@ function AppContent() {
 const sectionTitles: Record<AppSection, string> = {
   sessions: '所有会话',
   skills: 'Skills 即将支持',
-  roles: 'Roles 即将支持',
+  roles: '角色',
   tools: '工具',
   settings: '设置'
 }
