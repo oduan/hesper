@@ -170,7 +170,7 @@ describe('ui components', () => {
     const readTrack = readSwitch.querySelector('[data-tool-toggle-track="true"]') as HTMLElement
     const readKnob = readSwitch.querySelector('[data-tool-toggle-knob="true"]') as HTMLElement
     expect(readSwitch).toHaveAttribute('aria-checked', 'true')
-    expect(readTrack).toHaveStyle({ background: 'var(--hesper-color-accent, #7aa2f7)' })
+    expect(readTrack).toHaveStyle({ background: 'var(--hesper-color-tool-toggle, #7aa2f7)' })
     expect(readKnob).toHaveStyle({ transform: 'translateX(22px)' })
 
     const writeRow = screen.getByText('Write File').closest('[role="button"]') as HTMLElement

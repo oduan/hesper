@@ -367,6 +367,8 @@ describe('renderer App', () => {
     const appRoot = screen.getByLabelText('主工作区').parentElement
     await waitFor(() => expect(appRoot?.style.getPropertyValue('--hesper-color-background')).toBe('#1a1b26'))
     expect(appRoot?.style.getPropertyValue('--hesper-color-accent')).toBe('#7aa2f7')
+    expect(appRoot?.style.getPropertyValue('--hesper-color-tool-toggle')).toBe('#7aa2f7')
+    expect(appRoot?.style.getPropertyValue('--hesper-color-tool-toggle-soft')).toBe('rgba(122, 162, 247, 0.14)')
     expect(appRoot?.style.getPropertyValue('--hesper-color-scrollbar-thumb')).toBe('rgba(192, 202, 245, 0.18)')
     expect(appRoot?.style.getPropertyValue('--hesper-color-scrollbar-thumb-hover')).toBe('rgba(192, 202, 245, 0.34)')
 
@@ -375,6 +377,8 @@ describe('renderer App', () => {
     await waitFor(() => expect(document.documentElement.dataset.theme).toBe('light'))
     expect(appRoot?.style.getPropertyValue('--hesper-color-background')).toBe('#dce0e8')
     expect(appRoot?.style.getPropertyValue('--hesper-color-accent')).toBe('#8839ef')
+    expect(appRoot?.style.getPropertyValue('--hesper-color-tool-toggle')).toBe('#40a02b')
+    expect(appRoot?.style.getPropertyValue('--hesper-color-tool-toggle-soft')).toBe('rgba(64, 160, 43, 0.14)')
     expect(appRoot?.style.getPropertyValue('--hesper-color-scrollbar-thumb')).toBe('rgba(76, 79, 105, 0.18)')
     expect(appRoot?.style.getPropertyValue('--hesper-color-scrollbar-thumb-hover')).toBe('rgba(76, 79, 105, 0.34)')
 

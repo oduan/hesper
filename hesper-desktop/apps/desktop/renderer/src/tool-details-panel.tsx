@@ -241,9 +241,9 @@ function detailSwitchTrackStyle(enabled: boolean): CSSProperties {
     width: 46,
     height: 24,
     borderRadius: 999,
-    border: `1px solid ${enabled ? 'var(--hesper-color-accent, #7aa2f7)' : 'var(--hesper-color-border, #414868)'}`,
-    background: enabled ? 'var(--hesper-color-accent, #7aa2f7)' : 'var(--hesper-color-surface-muted, #24283b)',
-    boxShadow: enabled ? '0 0 0 3px var(--hesper-color-soft-control, rgba(122, 162, 247, 0.14))' : 'inset 0 0 0 1px rgba(148, 163, 184, 0.10)',
+    border: `1px solid ${enabled ? 'var(--hesper-color-tool-toggle, #7aa2f7)' : 'var(--hesper-color-border, #414868)'}`,
+    background: enabled ? 'var(--hesper-color-tool-toggle, #7aa2f7)' : 'var(--hesper-color-surface-muted, #24283b)',
+    boxShadow: enabled ? '0 0 0 3px var(--hesper-color-tool-toggle-soft, rgba(122, 162, 247, 0.14))' : 'inset 0 0 0 1px rgba(148, 163, 184, 0.10)',
     transition: 'background 160ms ease, border-color 160ms ease, box-shadow 160ms ease'
   }
 }
@@ -265,7 +265,7 @@ function detailSwitchKnobStyle(enabled: boolean): CSSProperties {
 
 function detailSwitchLabelStyle(enabled: boolean): CSSProperties {
   return {
-    color: enabled ? 'var(--hesper-color-accent, #7aa2f7)' : 'var(--hesper-color-text-muted, #737aa2)',
+    color: enabled ? 'var(--hesper-color-tool-toggle, #7aa2f7)' : 'var(--hesper-color-text-muted, #737aa2)',
     whiteSpace: 'nowrap'
   }
 }

@@ -37,6 +37,8 @@ const lightPalette = {
   warning: '#df8e1d',
   hover: 'rgba(76, 79, 105, 0.10)',
   softControl: 'rgba(136, 57, 239, 0.12)',
+  toolToggle: '#40a02b',
+  toolToggleSoft: 'rgba(64, 160, 43, 0.14)',
   scrollbarThumb: 'rgba(76, 79, 105, 0.18)',
   scrollbarThumbHover: 'rgba(76, 79, 105, 0.34)'
 }
@@ -55,6 +57,8 @@ const darkPalette = {
   warning: '#e0af68',
   hover: 'rgba(122, 162, 247, 0.12)',
   softControl: 'rgba(122, 162, 247, 0.14)',
+  toolToggle: '#7aa2f7',
+  toolToggleSoft: 'rgba(122, 162, 247, 0.14)',
   scrollbarThumb: 'rgba(192, 202, 245, 0.18)',
   scrollbarThumbHover: 'rgba(192, 202, 245, 0.34)'
 }
@@ -72,6 +76,8 @@ const colorVariableNames: Record<keyof typeof darkPalette, string> = {
   warning: 'warning',
   hover: 'hover',
   softControl: 'soft-control',
+  toolToggle: 'tool-toggle',
+  toolToggleSoft: 'tool-toggle-soft',
   scrollbarThumb: 'scrollbar-thumb',
   scrollbarThumbHover: 'scrollbar-thumb-hover'
 }
@@ -135,6 +141,8 @@ export function createThemeVariables(mode: ThemeMode, fontSize: number): CSSProp
     '--hesper-color-warning': palette.warning,
     '--hesper-color-hover': palette.hover,
     '--hesper-color-soft-control': palette.softControl,
+    '--hesper-color-tool-toggle': palette.toolToggle,
+    '--hesper-color-tool-toggle-soft': palette.toolToggleSoft,
     '--hesper-color-scrollbar-thumb': palette.scrollbarThumb,
     '--hesper-color-scrollbar-thumb-hover': palette.scrollbarThumbHover
   } as CSSProperties
