@@ -163,6 +163,8 @@ function AppContent() {
   const nextSettingsRequestIdRef = useRef(0)
   const latestSettingsRequestIdRef = useRef<RequestTokensBySession>({})
   const latestAppSettingsRequestIdRef = useRef(0)
+  const nextRolesRequestIdRef = useRef(0)
+  const latestRolesRequestIdRef = useRef(0)
   const activeSessionUnreadCompletedAt = state.activeSessionId
     ? state.sessions.find((session) => session.id === state.activeSessionId)?.unreadCompletedAt
     : undefined
@@ -170,6 +172,33 @@ function AppContent() {
   const activeRole = creatingRole ? undefined : roles.find((role) => role.id === activeRoleId) ?? roles[0]
   const activeToolCredentialStatus = activeTool ? toolCredentialStatuses[activeTool.id] : undefined
   const pendingToolIdList = useMemo(() => [...pendingToolIds], [pendingToolIds])
+
+  const createRolesRequestId = () => {
+    nextRolesRequestIdRef.current += 1
+    latestRolesRequestIdRef.current = nextRolesRequestIdRef.current
+    return latestRolesRequestIdRef.current
+  }
+
+  const isLatestRolesRequest = (requestId: number) => latestRolesRequestIdRef.current === requestId
+
+  const loadRoles = async (options: { isCancelled?: () => boolean } = {}) => {
+    const requestId = createRolesRequestId()
+    try {
+      const loadedRoles = await hesperApi.roles.list()
+      const applied = !options.isCancelled?.() && isLatestRolesRequest(requestId)
+      if (applied) {
+        setRoles(loadedRoles)
+        setRolesError(undefined)
+      }
+      return { requestId, loadedRoles, applied }
+    } catch (error) {
+      const applied = !options.isCancelled?.() && isLatestRolesRequest(requestId)
+      if (applied) {
+        setRolesError(error instanceof Error ? error.message : '未知角色加载错误')
+      }
+      return { requestId, error, applied }
+    }
+  }
 
   const markSessionUnreadCompletedLocally = (sessionId: string, completedAt: string) => {
     const session = stateRef.current.sessions.find((candidate) => candidate.id === sessionId)
@@ -273,14 +302,7 @@ function AppContent() {
   useEffect(() => {
     let cancelled = false
 
-    void hesperApi.roles.list().then((loadedRoles) => {
-      if (!cancelled) {
-        setRoles(loadedRoles)
-        setRolesError(undefined)
-      }
-    }).catch((error) => {
-      if (!cancelled) setRolesError(error instanceof Error ? error.message : '未知角色加载错误')
-    })
+    void loadRoles({ isCancelled: () => cancelled })
 
     return () => {
       cancelled = true
@@ -599,12 +621,6 @@ function AppContent() {
     }
   }
 
-  const refreshRoles = async () => {
-    const loadedRoles = await hesperApi.roles.list()
-    setRoles(loadedRoles)
-    return loadedRoles
-  }
-
   const saveRole = async (role: ManagedRoleDto) => {
     setRolesPending(true)
     setRolesError(undefined)
@@ -623,7 +639,9 @@ function AppContent() {
             systemPrompt: role.systemPrompt,
             defaultToolIds: role.defaultToolIds
           })
-      const loadedRoles = await refreshRoles()
+      const result = await loadRoles()
+      if (!result.applied || 'error' in result) return
+      const loadedRoles = result.loadedRoles
       const nextRoles = loadedRoles.some((candidate) => candidate.id === savedRole.id)
         ? loadedRoles
         : [savedRole, ...loadedRoles.filter((candidate) => candidate.id !== savedRole.id)]
@@ -642,9 +660,10 @@ function AppContent() {
     setRolesError(undefined)
     try {
       await hesperApi.roles.delete(roleId)
-      const loadedRoles = await refreshRoles()
+      const result = await loadRoles()
+      if (!result.applied || 'error' in result) return
       setCreatingRole(false)
-      setActiveRoleId(loadedRoles[0]?.id)
+      setActiveRoleId(result.loadedRoles[0]?.id)
     } catch (error) {
       setRolesError(error instanceof Error ? error.message : '未知角色删除错误')
     } finally {
@@ -833,10 +852,14 @@ function AppContent() {
         void updateToolEnabled(toolId, enabled)
       }}
       onSelectRole={(roleId) => {
+        if (rolesPending) return
+        setRolesError(undefined)
         setCreatingRole(false)
         setActiveRoleId(roleId)
       }}
       onCreateRole={() => {
+        if (rolesPending) return
+        setRolesError(undefined)
         setCreatingRole(true)
         setActiveRoleId(undefined)
       }}
@@ -874,10 +897,14 @@ function AppContent() {
             pending={rolesPending}
             {...(rolesError ? { error: rolesError } : {})}
             onCreateDraft={() => {
+              if (rolesPending) return
+              setRolesError(undefined)
               setCreatingRole(true)
               setActiveRoleId(undefined)
             }}
             onCancelDraft={() => {
+              if (rolesPending) return
+              setRolesError(undefined)
               setCreatingRole(false)
               setActiveRoleId(roles[0]?.id)
             }}

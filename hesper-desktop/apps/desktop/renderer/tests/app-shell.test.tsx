@@ -5,6 +5,16 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, clearSessionSendError, pruneSessionSendErrors } from '../src/App'
 
+function createDeferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((nextResolve, nextReject) => {
+    resolve = nextResolve
+    reject = nextReject
+  })
+  return { promise, resolve, reject }
+}
+
 const { listSessions, createSession, updateTitle, deleteSession, generateTitle, markViewed, listRoles, createRole, updateRole, deleteRole, listMessages, listRuns, listSteps, enqueue, onEvent, getSettings, updateSettings, listProviders, listModels, listTools, setToolEnabled, toolCredentialStatus, saveToolApiKey, deleteToolApiKey, minimizeWindow, toggleMaximizeWindow, closeWindow } = vi.hoisted(() => ({
   listSessions: vi.fn(async () => []),
   createSession: vi.fn(async () => ({
@@ -369,6 +379,184 @@ describe('renderer App', () => {
     expect(await screen.findByRole('button', { name: /运维助手/ })).toBeInTheDocument()
     expect(screen.queryByText('Roles 即将支持')).not.toBeInTheDocument()
     expect(screen.getByLabelText('角色名称')).toHaveValue('运维助手')
+  })
+
+  it('creates a role from the roles management section and refreshes the list', async () => {
+    const user = userEvent.setup()
+    const createdRole = {
+      id: 'role-created',
+      name: '部署助手',
+      description: '协助部署',
+      systemPrompt: '你是部署助手。',
+      defaultToolIds: ['filesystem.read-file']
+    }
+    listRoles.mockResolvedValueOnce([]).mockResolvedValueOnce([createdRole] as any)
+    createRole.mockResolvedValueOnce(createdRole)
+
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: '角色' }))
+    await user.click(await screen.findByRole('button', { name: '创建第一个角色' }))
+    await user.type(screen.getByLabelText('角色名称'), '部署助手')
+    await user.type(screen.getByLabelText('角色简介'), '协助部署')
+    await user.type(screen.getByLabelText('完整提示词'), '你是部署助手。')
+    await user.click(screen.getByLabelText('Read File'))
+    await user.click(screen.getByRole('button', { name: '创建角色' }))
+
+    await waitFor(() => expect(createRole).toHaveBeenCalledWith({
+      name: '部署助手',
+      description: '协助部署',
+      systemPrompt: '你是部署助手。',
+      defaultToolIds: ['filesystem.read-file']
+    }))
+    expect(await screen.findByRole('button', { name: /部署助手/ })).toBeInTheDocument()
+    expect(screen.getByLabelText('角色名称')).toHaveValue('部署助手')
+  })
+
+  it('updates an existing role and keeps it active after refresh', async () => {
+    const user = userEvent.setup()
+    const existingRole = {
+      id: 'role-1',
+      name: '运维助手',
+      description: '执行命令',
+      systemPrompt: '你是运维助手。',
+      defaultToolIds: ['filesystem.read-file']
+    }
+    const updatedRole = {
+      ...existingRole,
+      name: '高级运维助手',
+      defaultToolIds: ['filesystem.read-file', 'web.fetch-url']
+    }
+    listRoles.mockResolvedValueOnce([existingRole] as any).mockResolvedValueOnce([updatedRole] as any)
+    updateRole.mockResolvedValueOnce(updatedRole)
+
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: '角色' }))
+    const nameInput = await screen.findByLabelText('角色名称')
+    await user.clear(nameInput)
+    await user.type(nameInput, '高级运维助手')
+    await user.click(screen.getByLabelText('Fetch URL'))
+    await user.click(screen.getByRole('button', { name: '保存修改' }))
+
+    await waitFor(() => expect(updateRole).toHaveBeenCalledWith({
+      id: 'role-1',
+      name: '高级运维助手',
+      description: '执行命令',
+      systemPrompt: '你是运维助手。',
+      defaultToolIds: ['filesystem.read-file', 'web.fetch-url']
+    }))
+    expect(await screen.findByRole('button', { name: /高级运维助手/ })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByLabelText('角色名称')).toHaveValue('高级运维助手')
+  })
+
+  it('deletes a role and selects the first remaining role after refresh', async () => {
+    const user = userEvent.setup()
+    const firstRole = {
+      id: 'role-1',
+      name: '运维助手',
+      description: '执行命令',
+      systemPrompt: '你是运维助手。',
+      defaultToolIds: []
+    }
+    const remainingRole = {
+      id: 'role-2',
+      name: '搜索专家',
+      description: '搜索资料',
+      systemPrompt: '你是搜索专家。',
+      defaultToolIds: ['web.fetch-url']
+    }
+    vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
+    listRoles.mockResolvedValueOnce([firstRole, remainingRole] as any).mockResolvedValueOnce([remainingRole] as any)
+
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: '角色' }))
+    expect(await screen.findByLabelText('角色名称')).toHaveValue('运维助手')
+    await user.click(screen.getByRole('button', { name: '删除角色' }))
+
+    await waitFor(() => expect(deleteRole).toHaveBeenCalledWith('role-1'))
+    expect(await screen.findByRole('button', { name: /搜索专家/ })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByLabelText('角色名称')).toHaveValue('搜索专家')
+  })
+
+  it('ignores role list selection and creation while a role mutation is pending', async () => {
+    const user = userEvent.setup()
+    const updateDeferred = createDeferred<any>()
+    const firstRole = {
+      id: 'role-1',
+      name: '运维助手',
+      description: '执行命令',
+      systemPrompt: '你是运维助手。',
+      defaultToolIds: []
+    }
+    const secondRole = {
+      id: 'role-2',
+      name: '搜索专家',
+      description: '搜索资料',
+      systemPrompt: '你是搜索专家。',
+      defaultToolIds: []
+    }
+    listRoles.mockResolvedValueOnce([firstRole, secondRole] as any).mockResolvedValueOnce([firstRole, secondRole] as any)
+    updateRole.mockReturnValueOnce(updateDeferred.promise)
+
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: '角色' }))
+    expect(await screen.findByLabelText('角色名称')).toHaveValue('运维助手')
+    await user.click(screen.getByRole('button', { name: '保存修改' }))
+    await waitFor(() => expect(updateRole).toHaveBeenCalled())
+
+    await user.click(screen.getByRole('button', { name: /搜索专家/ }))
+    await user.click(screen.getByRole('button', { name: '新建角色' }))
+
+    expect(screen.getByLabelText('角色名称')).toHaveValue('运维助手')
+    expect(screen.getByRole('button', { name: '保存修改' })).toBeInTheDocument()
+
+    await act(async () => {
+      updateDeferred.resolve(firstRole)
+    })
+    await waitFor(() => expect(screen.getByLabelText('角色名称')).toHaveValue('运维助手'))
+  })
+
+  it('does not let stale initial role loads overwrite a newer refresh', async () => {
+    const user = userEvent.setup()
+    const initialRoles = createDeferred<any[]>()
+    const staleRole = {
+      id: 'role-stale',
+      name: '旧角色',
+      description: '旧数据',
+      systemPrompt: '旧提示词',
+      defaultToolIds: []
+    }
+    const newRole = {
+      id: 'role-created',
+      name: '新角色',
+      description: '新数据',
+      systemPrompt: '新提示词',
+      defaultToolIds: []
+    }
+    listRoles.mockReturnValueOnce(initialRoles.promise as any).mockResolvedValueOnce([newRole] as any)
+    createRole.mockResolvedValueOnce(newRole)
+
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: '角色' }))
+    await user.click(await screen.findByRole('button', { name: '创建第一个角色' }))
+    await user.type(screen.getByLabelText('角色名称'), '新角色')
+    await user.type(screen.getByLabelText('角色简介'), '新数据')
+    await user.type(screen.getByLabelText('完整提示词'), '新提示词')
+    await user.click(screen.getByRole('button', { name: '创建角色' }))
+
+    expect(await screen.findByRole('button', { name: /新角色/ })).toBeInTheDocument()
+
+    await act(async () => {
+      initialRoles.resolve([staleRole])
+    })
+
+    expect(screen.queryByRole('button', { name: /旧角色/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /新角色/ })).toBeInTheDocument()
+    expect(screen.getByLabelText('角色名称')).toHaveValue('新角色')
   })
 
   it('manages API keys for credential-required tools from the tools detail panel', async () => {
