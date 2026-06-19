@@ -91,6 +91,7 @@ export type RoleRepository = {
   save(role: Role): Promise<void>
   get(id: string): Promise<Role | undefined>
   list(): Promise<Role[]>
+  delete(id: string): Promise<void>
 }
 
 export type ToolPermissionPolicyRepository = {
@@ -711,6 +712,9 @@ export function createRepositories(db: Database): Persistence {
       },
       async list() {
         return fetchAll('SELECT * FROM roles ORDER BY sort_seq ASC, id ASC').map(toRole)
+      },
+      async delete(id) {
+        db.run('DELETE FROM roles WHERE id = ?', [id])
       }
     },
     toolPermissionPolicies: {

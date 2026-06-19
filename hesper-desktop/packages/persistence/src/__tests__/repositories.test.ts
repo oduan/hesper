@@ -241,6 +241,29 @@ describe('persistence repositories', () => {
     expect(await db.toolPermissionPolicies.listByScope('worker-agent', 'reviewer')).toHaveLength(1)
   })
 
+  it('deletes roles by id', async () => {
+    const db = await createInMemoryPersistence()
+    await db.roles.save({
+      id: 'role-to-delete',
+      name: 'Temporary Role',
+      description: 'Will be deleted',
+      systemPrompt: 'Temporary prompt',
+      allowedSkillIds: [],
+      defaultSkillIds: [],
+      defaultToolIds: ['filesystem.read-file'],
+      canBeMainAgent: true,
+      canBeWorkerAgent: false,
+      canBeAssignedToWorkerAgent: false
+    })
+
+    await expect(db.roles.get('role-to-delete')).resolves.toMatchObject({ id: 'role-to-delete' })
+
+    await db.roles.delete('role-to-delete')
+
+    await expect(db.roles.get('role-to-delete')).resolves.toBeUndefined()
+    expect((await db.roles.list()).map((role) => role.id)).not.toContain('role-to-delete')
+  })
+
   it('round-trips session agent configuration defaults and Worker Agent invocations', async () => {
     const db = await createInMemoryPersistence()
     await db.sessions.save({
