@@ -557,7 +557,7 @@ describe('ui components', () => {
 
     const conversationScroller = screen.getByLabelText('消息列表') as HTMLElement
     const outputScroller = screen.getAllByLabelText('输出内容滚动区')[0] as HTMLElement
-    expect(outputScroller).toHaveStyle({ maxHeight: '380px', boxSizing: 'border-box', overscrollBehavior: 'contain' })
+    expect(outputScroller).toHaveStyle({ maxHeight: '570px', boxSizing: 'border-box', overscrollBehavior: 'contain' })
 
     const userAnchors = [...conversationScroller.querySelectorAll<HTMLElement>('[data-hesper-user-message-anchor="true"]')]
     expect(userAnchors).toHaveLength(3)
@@ -602,6 +602,7 @@ describe('ui components', () => {
     render(<OutputBlock content={html} contentType="html" />)
 
     const previewFrame = screen.getByTitle('HTML 输出预览')
+    expect(previewFrame.closest('.hesper-output-block')).toHaveStyle({ height: '450px', maxHeight: '570px' })
     expect(previewFrame).toHaveAttribute('sandbox', '')
     expect(previewFrame.closest('.hesper-theme-scrollbar')).toBeInTheDocument()
     expect(previewFrame.getAttribute('srcdoc')).toContain("default-src 'none'")

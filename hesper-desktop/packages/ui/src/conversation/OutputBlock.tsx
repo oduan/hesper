@@ -109,8 +109,8 @@ export const OutputBlock = memo(function OutputBlock({ content, contentType, clo
   )
 })
 
-const outputBlockHtmlHeight = 300
-const outputBlockMaxHeight = 380
+const outputBlockHtmlHeight = 450
+const outputBlockMaxHeight = 570
 
 const outputBlockChromeCss = `
 .hesper-output-block [data-hesper-output-fullscreen-button="true"] {
