@@ -146,7 +146,9 @@ describe('AgentRuntime queue', () => {
 
       const storedRun = await persistence.runs.get(run.id)
       const runtimeEvents = await persistence.events.listByRun(run.id)
+      const succeededEvent = runtimeEvents.find((event): event is Extract<AgentRuntimeEvent, { type: 'run.succeeded' }> => event.type === 'run.succeeded')
       expect(storedRun?.status).toBe('succeeded')
+      expect(succeededEvent?.endedAt).toBe(storedRun?.endedAt)
       expect(runtimeEvents.map((event) => event.type)).toContain('run.succeeded')
       expect(runtimeEvents.map((event) => event.type)).not.toContain('run.failed')
       expect(consoleError).toHaveBeenCalledWith('AgentRuntime listener failed', listenerError)
@@ -171,8 +173,10 @@ describe('AgentRuntime queue', () => {
 
     const storedRun = await persistence.runs.get(run.id)
     const runtimeEvents = await persistence.events.listByRun(run.id)
+    const failedEvent = runtimeEvents.find((event): event is Extract<AgentRuntimeEvent, { type: 'run.failed' }> => event.type === 'run.failed')
     expect(storedRun?.status).toBe('failed')
     expect(storedRun?.error?.message).toBe('message write failed')
+    expect(failedEvent?.endedAt).toBe(storedRun?.endedAt)
     expect(runtimeEvents.map((event) => event.type)).toContain('run.failed')
     expect(runtimeEvents.map((event) => event.type)).not.toContain('run.succeeded')
     expect(await persistence.messages.listBySession('session-compensated-run')).toEqual([])

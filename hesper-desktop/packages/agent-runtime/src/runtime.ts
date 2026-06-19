@@ -142,7 +142,7 @@ export class AgentRuntime {
 
     const failedRun = await this.persistFailedRun(existing, normalized)
     clearPiEventRunState(runId)
-    await this.emitAndPersist({ type: 'run.failed', runId, error: normalized })
+    await this.emitAndPersist({ type: 'run.failed', runId, error: normalized, ...(failedRun.endedAt ? { endedAt: failedRun.endedAt } : {}) })
 
     if (!this.isActiveRun(runId)) {
       this.terminatedRuns.delete(runId)
@@ -256,7 +256,7 @@ export class AgentRuntime {
     try {
       const current: AgentRun = { ...run, status: 'running', startedAt: run.startedAt ?? nowIso() }
       await this.persistence.runs.save(current)
-      await this.emitAndPersist({ type: 'run.started', runId: current.id })
+      await this.emitAndPersist({ type: 'run.started', runId: current.id, ...(current.startedAt ? { startedAt: current.startedAt } : {}) })
 
       let latestRun = current
       let attempt = latestRun.retryCount
@@ -300,7 +300,7 @@ export class AgentRuntime {
           return
         }
         clearPiEventRunState(latestRun.id)
-        await this.emitAndPersist({ type: 'run.succeeded', runId: latestRun.id })
+        await this.emitAndPersist({ type: 'run.succeeded', runId: latestRun.id, ...(latestRun.endedAt ? { endedAt: latestRun.endedAt } : {}) })
         return
       } catch (error) {
         const normalized = normalizeUnknownError(error)
@@ -334,7 +334,7 @@ export class AgentRuntime {
         } satisfies AgentRun
         await this.persistence.runs.save(latestRun)
         clearPiEventRunState(latestRun.id)
-        await this.emitAndPersist({ type: 'run.failed', runId: latestRun.id, error: normalized })
+        await this.emitAndPersist({ type: 'run.failed', runId: latestRun.id, error: normalized, ...(latestRun.endedAt ? { endedAt: latestRun.endedAt } : {}) })
         return
       }
     }

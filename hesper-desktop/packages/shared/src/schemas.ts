@@ -222,8 +222,9 @@ const runCreatedEventSchema = z.object({
 
 const runStartedEventSchema = z.object({
   type: z.literal('run.started'),
-  runId: z.string().min(1)
-})
+  runId: z.string().min(1),
+  startedAt: z.string().datetime().optional()
+}).transform(stripUndefined)
 
 const stepCreatedEventSchema = z.object({
   type: z.literal('step.created'),
@@ -256,15 +257,17 @@ const runRetryingEventSchema = z.object({
 const runFailedEventSchema = z.object({
   type: z.literal('run.failed'),
   runId: z.string().min(1),
-  error: runErrorSchema
-})
+  error: runErrorSchema,
+  endedAt: z.string().datetime().optional()
+}).transform(stripUndefined)
 
 const runSucceededEventSchema = z.object({
   type: z.literal('run.succeeded'),
-  runId: z.string().min(1)
-})
+  runId: z.string().min(1),
+  endedAt: z.string().datetime().optional()
+}).transform(stripUndefined)
 
-export const agentRuntimeEventSchema = z.discriminatedUnion('type', [
+export const agentRuntimeEventSchema = z.union([
   runCreatedEventSchema,
   runStartedEventSchema,
   stepCreatedEventSchema,

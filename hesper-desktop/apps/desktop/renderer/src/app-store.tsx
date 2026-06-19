@@ -142,7 +142,7 @@ function createTimestamp(): string {
 }
 
 function createFailureStep(event: Extract<AgentRuntimeEvent, { type: 'run.failed' }>): RunStep {
-  const now = createTimestamp()
+  const now = event.endedAt ?? createTimestamp()
   return {
     id: `failed-${event.runId}`,
     runId: event.runId,
@@ -305,16 +305,12 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             delete nextStreamingByRun[event.message.runId]
           }
 
-          const currentRun = event.message.runId ? state.runsById[event.message.runId] : undefined
           return {
             ...state,
             messagesBySession: {
               ...state.messagesBySession,
               [event.message.sessionId]: mergeByIdChronologically(state.messagesBySession[event.message.sessionId] ?? [], event.message)
             },
-            runsById: currentRun && event.message.runId
-              ? { ...state.runsById, [event.message.runId]: { ...currentRun, status: 'succeeded', endedAt: event.message.createdAt } }
-              : state.runsById,
             streamingByRun: nextStreamingByRun
           }
         }
@@ -336,11 +332,11 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         case 'run.failed': {
           const failureStep = createFailureStep(event)
           const currentRun = state.runsById[event.runId]
-          const endedAt = failureStep.completedAt ?? createTimestamp()
+          const endedAt = event.endedAt ?? failureStep.completedAt ?? currentRun?.endedAt
           return {
             ...state,
             runsById: currentRun
-              ? { ...state.runsById, [event.runId]: { ...currentRun, status: 'failed', endedAt, error: event.error } }
+              ? { ...state.runsById, [event.runId]: { ...currentRun, status: 'failed', ...(endedAt ? { endedAt } : {}), error: event.error } }
               : state.runsById,
             stepsByRun: {
               ...state.stepsByRun,
@@ -356,7 +352,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             ...state,
             runsById: {
               ...state.runsById,
-              [event.runId]: { ...currentRun, status: 'running', startedAt: currentRun.startedAt ?? createTimestamp() }
+              [event.runId]: { ...currentRun, status: 'running', startedAt: event.startedAt ?? currentRun.startedAt ?? createTimestamp() }
             }
           }
         }
@@ -367,7 +363,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             ...state,
             runsById: {
               ...state.runsById,
-              [event.runId]: { ...currentRun, status: 'succeeded' }
+              [event.runId]: { ...currentRun, status: 'succeeded', ...(event.endedAt ? { endedAt: event.endedAt } : currentRun.endedAt ? { endedAt: currentRun.endedAt } : {}) }
             }
           }
         }

@@ -202,6 +202,72 @@ describe('app-store reducer', () => {
     ])
   })
 
+  it('uses durable run.succeeded endedAt instead of assistant message timestamp for live timers', () => {
+    const userCreatedAt = '2026-06-10T03:00:00.000Z'
+    const durableEndedAt = '2026-06-10T03:00:05.000Z'
+
+    const withUserMessage = appReducer(initialAppState, {
+      type: 'message.optimistic',
+      message: {
+        id: 'message-user-timer',
+        sessionId: 'session-1',
+        role: 'user',
+        content: 'run timer regression',
+        contentType: 'plain',
+        createdAt: userCreatedAt
+      }
+    })
+
+    const runCreatedState = appReducer(withUserMessage, {
+      type: 'agent.event',
+      event: {
+        type: 'run.created',
+        run: {
+          id: 'run-timer',
+          sessionId: 'session-1',
+          status: 'running',
+          modelId: 'mock/hesper-fast',
+          retryCount: 0,
+          maxRetries: 2,
+          startedAt: userCreatedAt
+        }
+      }
+    })
+
+    const completedState = appReducer(runCreatedState, {
+      type: 'agent.event',
+      event: {
+        type: 'message.completed',
+        message: {
+          id: 'message-assistant-timer',
+          sessionId: 'session-1',
+          role: 'assistant',
+          content: 'final answer',
+          contentType: 'markdown',
+          runId: 'run-timer',
+          createdAt: userCreatedAt
+        }
+      }
+    })
+
+    expect(completedState.runsById['run-timer']).toMatchObject({
+      status: 'running',
+      startedAt: userCreatedAt
+    })
+    expect(completedState.runsById['run-timer']?.endedAt).toBeUndefined()
+
+    const succeededState = appReducer(completedState, {
+      type: 'agent.event',
+      event: { type: 'run.succeeded', runId: 'run-timer', endedAt: durableEndedAt }
+    })
+
+    expect(succeededState.runsById['run-timer']).toMatchObject({
+      status: 'succeeded',
+      startedAt: userCreatedAt,
+      endedAt: durableEndedAt
+    })
+  })
+
   it('clears streaming text when a run retries or fails', () => {
     const runCreatedState = appReducer(initialAppState, {
       type: 'agent.event',
@@ -439,7 +505,7 @@ describe('app-store reducer', () => {
     expect(restoredState.streamingByRun['run-live']).toBe('streaming now')
   })
 
-  it('records a recoverable turn end time when the assistant message completes', () => {
+  it('records a durable turn end time when the run succeeds', () => {
     const runCreatedState = appReducer(initialAppState, {
       type: 'agent.event',
       event: {
@@ -473,6 +539,21 @@ describe('app-store reducer', () => {
     })
 
     expect(completedState.runsById['run-live-complete']).toMatchObject({
+      status: 'running',
+      startedAt: '2026-06-10T03:00:00.000Z'
+    })
+    expect(completedState.runsById['run-live-complete']?.endedAt).toBeUndefined()
+
+    const succeededState = appReducer(completedState, {
+      type: 'agent.event',
+      event: {
+        type: 'run.succeeded',
+        runId: 'run-live-complete',
+        endedAt: '2026-06-10T03:00:07.000Z'
+      }
+    })
+
+    expect(succeededState.runsById['run-live-complete']).toMatchObject({
       status: 'succeeded',
       endedAt: '2026-06-10T03:00:07.000Z'
     })

@@ -47,10 +47,26 @@ describe('shared schemas', () => {
     const parsed = agentRuntimeEventSchema.parse({
       type: 'run.failed',
       runId: 'run-1',
-      error: { code: 'tool_error', message: 'boom', retryable: false }
+      error: { code: 'tool_error', message: 'boom', retryable: false },
+      endedAt: now
     })
 
     expect(parsed.type).toBe('run.failed')
+    expect(parsed).toMatchObject({ endedAt: now })
+  })
+
+  it('parses run lifecycle timestamps', () => {
+    expect(agentRuntimeEventSchema.parse({
+      type: 'run.started',
+      runId: 'run-1',
+      startedAt: now
+    })).toMatchObject({ type: 'run.started', startedAt: now })
+
+    expect(agentRuntimeEventSchema.parse({
+      type: 'run.succeeded',
+      runId: 'run-1',
+      endedAt: now
+    })).toMatchObject({ type: 'run.succeeded', endedAt: now })
   })
 
   it('parses run.created events', () => {

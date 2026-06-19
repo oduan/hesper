@@ -239,7 +239,9 @@ export function ConversationView({
   )
   const getMessageRunEndedAt = (message: Message): string | undefined => {
     const run = getMessageRun(message)
-    return run?.endedAt ?? (message.runId ? finalOutputByRun.get(message.runId)?.createdAt : undefined)
+    if (run?.endedAt) return run.endedAt
+    if (run?.status === 'running') return undefined
+    return message.runId ? finalOutputByRun.get(message.runId)?.createdAt : undefined
   }
   const hasAssistantOutputAfter = (message: Message): boolean => orderedMessages.some((candidate) => (
     candidate.role === 'assistant' && candidate.content.trim() && candidate.createdAt.localeCompare(message.createdAt) >= 0

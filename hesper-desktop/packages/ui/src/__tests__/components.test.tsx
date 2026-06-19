@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import type { Message, RunStep, Session } from '@hesper/shared'
+import type { AgentRun, Message, RunStep, Session } from '@hesper/shared'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppShell } from '../layout/AppShell'
 import { Composer } from '../conversation/Composer'
@@ -540,6 +540,73 @@ describe('ui components', () => {
     expect(collapsedToggle).toHaveTextContent('2秒')
     expect(screen.queryAllByRole('listitem')).toHaveLength(0)
     expect(screen.getByText('最终输出')).toBeInTheDocument()
+  })
+
+  it('does not collapse live elapsed time to zero before durable run success arrives', () => {
+    vi.useFakeTimers({ now: new Date('2026-06-10T03:00:05.000Z') })
+    const messages = [
+      {
+        id: 'message-user-live-timer',
+        sessionId: 'session-1',
+        role: 'user',
+        content: '测试计时器',
+        contentType: 'markdown',
+        runId: 'run-live-timer',
+        createdAt: now
+      },
+      {
+        id: 'message-assistant-live-timer',
+        sessionId: 'session-1',
+        role: 'assistant',
+        content: '最终输出',
+        contentType: 'markdown',
+        runId: 'run-live-timer',
+        createdAt: now
+      }
+    ] satisfies Message[]
+    const steps = [
+      { id: 'step-live-timer-tool', runId: 'run-live-timer', type: 'tool_call', status: 'succeeded', title: '调用工具', summary: '读取上下文', createdAt: now }
+    ] satisfies RunStep[]
+    const runningRun = {
+      id: 'run-live-timer',
+      sessionId: 'session-1',
+      status: 'running',
+      modelId: 'mock/hesper-fast',
+      retryCount: 0,
+      maxRetries: 2,
+      startedAt: now
+    } satisfies AgentRun
+
+    const { rerender } = render(
+      <ConversationView
+        session={baseSession}
+        messages={messages}
+        steps={[]}
+        stepsByRun={{ 'run-live-timer': steps }}
+        runsById={{ 'run-live-timer': runningRun }}
+        streamingText=""
+        modelId="mock/hesper-fast"
+        onSend={() => undefined}
+      />
+    )
+
+    expect(screen.getByLabelText('步骤流')).toHaveTextContent('5秒')
+    expect(screen.getByLabelText('步骤流')).not.toHaveTextContent('0秒')
+
+    rerender(
+      <ConversationView
+        session={baseSession}
+        messages={messages}
+        steps={[]}
+        stepsByRun={{ 'run-live-timer': steps }}
+        runsById={{ 'run-live-timer': { ...runningRun, status: 'succeeded', endedAt: '2026-06-10T03:00:07.000Z' } }}
+        streamingText=""
+        modelId="mock/hesper-fast"
+        onSend={() => undefined}
+      />
+    )
+
+    expect(screen.getByLabelText('步骤流')).toHaveTextContent('7秒')
   })
 
   it('routes wheel scrolling to output blocks and uses Ctrl wheel to jump between user inputs', () => {

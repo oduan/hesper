@@ -335,7 +335,7 @@ function AppContent() {
       if (event.type === 'run.failed') {
         const run = stateRef.current.runsById[event.runId]
         if (run) {
-          handleSessionCompletionUnread(run.sessionId, run.endedAt ?? new Date().toISOString())
+          handleSessionCompletionUnread(run.sessionId, event.endedAt ?? run.endedAt ?? new Date().toISOString())
         }
       }
 
