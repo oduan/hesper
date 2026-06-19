@@ -290,7 +290,10 @@ describe('ui components', () => {
     expect(sendButton.querySelector('svg[aria-hidden="true"]')).toBeInTheDocument()
 
     await user.click(modelSelect)
-    expect(screen.getByRole('listbox', { name: '选择模型选项' })).toHaveStyle({ display: 'grid' })
+    const modelListbox = screen.getByRole('listbox', { name: '选择模型选项' })
+    expect(modelListbox).toHaveStyle({ display: 'grid' })
+    expect(modelListbox.querySelector('style')).toHaveTextContent('.hesper-themed-select-option:hover')
+    expect(within(modelListbox).getByRole('option', { name: 'mock/hesper-fast' })).toHaveClass('hesper-themed-select-option')
 
     await user.type(textarea, 'hello')
     expect(sendButton).toBeEnabled()
@@ -319,8 +322,10 @@ describe('ui components', () => {
     expect(modelSelect).toHaveTextContent('DeepSeek/deepseek-chat')
 
     await user.click(modelSelect)
-    expect(screen.getByRole('listbox', { name: '选择模型选项' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '连接 DeepSeek' })).toBeInTheDocument()
+    const groupedListbox = screen.getByRole('listbox', { name: '选择模型选项' })
+    expect(groupedListbox).toBeInTheDocument()
+    expect(groupedListbox.querySelector('style')).toHaveTextContent('.hesper-themed-select-group-button:hover')
+    expect(screen.getByRole('button', { name: '连接 DeepSeek' })).toHaveClass('hesper-themed-select-group-button')
     expect(screen.queryByRole('option', { name: 'DeepSeek/deepseek-chat' })).not.toBeInTheDocument()
 
     await user.hover(screen.getByRole('button', { name: '连接 OpenAI' }))

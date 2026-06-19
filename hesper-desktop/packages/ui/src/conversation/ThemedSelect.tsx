@@ -97,12 +97,14 @@ export function ThemedSelect({
             ...(menuPlacement === 'top' ? { bottom: 'calc(100% + 6px)' } : { top: 'calc(100% + 6px)' })
           }}
         >
+          <style>{themedSelectHoverCss}</style>
           {hasGroups ? optionGroups?.map((group) => {
             const expanded = expandedGroupId === group.id
             return (
               <div key={group.id} role="group" aria-label={group.label} style={selectGroupStyle}>
                 <button
                   type="button"
+                  className="hesper-themed-select-group-button"
                   aria-label={`连接 ${group.label}`}
                   onMouseEnter={() => setExpandedGroupId(group.id)}
                   onFocus={() => setExpandedGroupId(group.id)}
@@ -118,6 +120,7 @@ export function ThemedSelect({
                         key={option.value}
                         type="button"
                         role="option"
+                        className="hesper-themed-select-option"
                         aria-selected={option.value === value}
                         onClick={() => handleSelect(option.value)}
                         style={{
@@ -138,6 +141,7 @@ export function ThemedSelect({
               key={option}
               type="button"
               role="option"
+              className="hesper-themed-select-option"
               aria-selected={option === value}
               onClick={() => handleSelect(option)}
               style={{
@@ -153,6 +157,21 @@ export function ThemedSelect({
     </div>
   )
 }
+
+const themedSelectHoverCss = `
+.hesper-themed-select-option,
+.hesper-themed-select-group-button {
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.hesper-themed-select-option:hover,
+.hesper-themed-select-option:focus-visible,
+.hesper-themed-select-group-button:hover,
+.hesper-themed-select-group-button:focus-visible {
+  background: var(--hesper-color-hover, rgba(122, 162, 247, 0.12)) !important;
+  color: var(--hesper-color-text, #c0caf5) !important;
+}
+`
 
 const selectWrapStyle: CSSProperties = {
   position: 'relative',
