@@ -1,10 +1,6 @@
 import type { ToolDefinition } from '@hesper/shared'
 import { execFile } from 'node:child_process'
-import { lookup } from 'node:dns/promises'
 import { lstat, mkdir, open, readdir, realpath, rm, stat, unlink, writeFile } from 'node:fs/promises'
-import { request as httpRequest } from 'node:http'
-import { request as httpsRequest } from 'node:https'
-import { isIP } from 'node:net'
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import { promisify } from 'node:util'
 import type { ToolExecutionContext, ToolExecutionResult, ToolExecutor } from './tool-runner'
@@ -16,15 +12,10 @@ export type GitStatusOptions = {
   signal?: AbortSignal
 }
 
-export type RequestHttpUrl = (url: URL, addresses: string[], signal: AbortSignal, timeoutMs: number, maxFetchBytes: number) => Promise<FetchResult>
-
 export type BuiltinToolExecutorOptions = {
   maxReadBytes?: number
-  maxFetchBytes?: number
   gitTimeoutMs?: number
   fetchTimeoutMs?: number
-  requestHttp?: RequestHttpUrl
-  resolveHostname?: (hostname: string) => Promise<string[]>
   runGitStatus?: (workspacePath: string, options: GitStatusOptions) => Promise<string>
   readToolApiKey?: (toolId: string) => Promise<string | undefined>
   fetch?: typeof fetch
@@ -32,23 +23,13 @@ export type BuiltinToolExecutorOptions = {
   now?: () => string
 }
 
-type LimitedTextResult = {
-  text: string
-  bytesRead: number
-  truncated: boolean
-}
-
-type FetchResult = LimitedTextResult & {
-  status: number
-  contentType?: string | undefined
-}
-
 const defaultMaxReadBytes = 256 * 1024
-const defaultMaxFetchBytes = 256 * 1024
 const defaultGitTimeoutMs = 10_000
 const defaultCommandTimeoutMs = 30_000
 const defaultFetchTimeoutMs = 15_000
+const defaultTinyFishFetchPerUrlTimeoutMs = 45_000
 const defaultSearchMaxFileBytes = 256 * 1024
+const tinyFishFetchEndpoint = 'https://api.fetch.tinyfish.ai'
 const tinyFishSearchEndpoint = 'https://api.search.tinyfish.ai'
 
 function argsObject(args: unknown): Record<string, unknown> {
@@ -724,247 +705,21 @@ function createChildSignal(parent: AbortSignal | undefined, timeoutMs: number): 
   }
 }
 
-function isPrivateIpv4(address: string): boolean {
-  const parts = address.split('.').map((part) => Number(part))
-  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return true
-  const [first, second] = parts as [number, number, number, number]
-  return first === 0 || first === 10 || first === 127 || first >= 224 || (first === 169 && second === 254) || (first === 172 && second >= 16 && second <= 31) || (first === 192 && second === 168) || (first === 100 && second >= 64 && second <= 127)
-}
 
-function ipv4Bytes(address: string): number[] | undefined {
-  if (isIP(address) !== 4) return undefined
-  const bytes = address.split('.').map((part) => Number.parseInt(part, 10))
-  return bytes.length === 4 && bytes.every((byte) => Number.isInteger(byte) && byte >= 0 && byte <= 255) ? bytes : undefined
-}
-
-function parseIpv6Hextets(address: string): number[] | undefined {
-  const normalized = address.toLowerCase().split('%')[0] ?? ''
-  if (isIP(normalized) !== 6) return undefined
-
-  const parseSegment = (segment: string): number[] | undefined => {
-    if (!segment) return []
-    const parts = segment.split(':')
-    const hextets: number[] = []
-    for (const [index, part] of parts.entries()) {
-      if (!part) return undefined
-      if (part.includes('.')) {
-        if (index !== parts.length - 1) return undefined
-        const bytes = ipv4Bytes(part)
-        if (!bytes) return undefined
-        const [b0, b1, b2, b3] = bytes as [number, number, number, number]
-        hextets.push((b0 << 8) | b1, (b2 << 8) | b3)
-        continue
-      }
-      if (!/^[0-9a-f]{1,4}$/.test(part)) return undefined
-      hextets.push(Number.parseInt(part, 16))
-    }
-    return hextets
+function enumStringArg(args: unknown, key: string, fallback: string, allowed: readonly string[]): string {
+  const value = optionalStringArg(args, key, fallback) ?? fallback
+  if (!allowed.includes(value)) {
+    throw new Error(`Tool argument ${key} must be one of: ${allowed.join(', ')}`)
   }
-
-  const doubleColonParts = normalized.split('::')
-  if (doubleColonParts.length > 2) return undefined
-  const head = parseSegment(doubleColonParts[0] ?? '')
-  const tail = parseSegment(doubleColonParts[1] ?? '')
-  if (!head || !tail) return undefined
-
-  if (doubleColonParts.length === 2) {
-    const missing = 8 - head.length - tail.length
-    return missing >= 1 ? [...head, ...Array.from({ length: missing }, () => 0), ...tail] : undefined
-  }
-
-  return head.length === 8 ? head : undefined
-}
-
-function ipv4FromMappedIpv6(address: string): string | undefined {
-  const hextets = parseIpv6Hextets(address)
-  if (!hextets || hextets.length !== 8) return undefined
-  const isMapped = hextets.slice(0, 5).every((part) => part === 0) && hextets[5] === 0xffff
-  if (!isMapped) return undefined
-  const value = (hextets[6] ?? 0) * 0x10000 + (hextets[7] ?? 0)
-  return [
-    (value >>> 24) & 0xff,
-    (value >>> 16) & 0xff,
-    (value >>> 8) & 0xff,
-    value & 0xff
-  ].join('.')
-}
-
-function isPrivateIpv6(address: string): boolean {
-  const mappedIpv4 = ipv4FromMappedIpv6(address)
-  if (mappedIpv4) return isPrivateIpv4(mappedIpv4)
-  const hextets = parseIpv6Hextets(address)
-  if (!hextets) return true
-  const [h0, h1, h2, h3, h4, h5, h6, h7] = hextets as [number, number, number, number, number, number, number, number]
-  const allButLastZero = [h0, h1, h2, h3, h4, h5, h6].every((part) => part === 0)
-  const ipv4CompatiblePrivate = [h0, h1, h2, h3, h4, h5].every((part) => part === 0) && isPrivateIpv4([
-    (h6 >>> 8) & 0xff,
-    h6 & 0xff,
-    (h7 >>> 8) & 0xff,
-    h7 & 0xff
-  ].join('.'))
-  return hextets.every((part) => part === 0) || (allButLastZero && h7 === 1) || ipv4CompatiblePrivate || (h0 & 0xffc0) === 0xfe80 || (h0 & 0xfe00) === 0xfc00 || (h0 & 0xff00) === 0xff00
-}
-
-function isPrivateAddress(address: string): boolean {
-  const kind = isIP(address)
-  if (kind === 4) return isPrivateIpv4(address)
-  if (kind === 6) return isPrivateIpv6(address)
-  return true
-}
-
-async function defaultResolveHostname(hostname: string): Promise<string[]> {
-  const records = await lookup(hostname, { all: true, verbatim: true })
-  return records.map((record) => record.address)
-}
-
-async function resolveHostnameWithTimeout(hostname: string, resolveHostname: (hostname: string) => Promise<string[]>, signal: AbortSignal): Promise<string[]> {
-  if (signal.aborted) throw new Error('URL resolution timed out or was aborted')
-  return Promise.race([
-    resolveHostname(hostname),
-    new Promise<never>((_resolve, reject) => {
-      signal.addEventListener('abort', () => reject(new Error('URL resolution timed out or was aborted')), { once: true })
-    })
-  ])
-}
-
-async function resolvePublicHttpTarget(url: URL, resolveHostname: (hostname: string) => Promise<string[]>, signal: AbortSignal): Promise<string[]> {
-  const hostname = url.hostname.toLowerCase()
-  if (hostname === 'localhost' || hostname.endsWith('.localhost')) {
-    throw new Error('Localhost URLs are not allowed')
-  }
-
-  const addresses = isIP(hostname) ? [hostname] : await resolveHostnameWithTimeout(hostname, resolveHostname, signal)
-  if (addresses.length === 0 || addresses.some(isPrivateAddress)) {
-    throw new Error('Private network URLs are not allowed')
-  }
-  return addresses
-}
-
-function mergeChunks(chunks: Uint8Array[], bytesRead: number, maxBytes: number): LimitedTextResult {
-  const merged = new Uint8Array(bytesRead)
-  let offset = 0
-  for (const chunk of chunks) {
-    merged.set(chunk, offset)
-    offset += chunk.byteLength
-  }
-
-  return {
-    text: new TextDecoder().decode(merged.slice(0, maxBytes)),
-    bytesRead,
-    truncated: bytesRead > maxBytes
-  }
-}
-
-function headerString(value: string | string[] | number | undefined): string | undefined {
-  if (Array.isArray(value)) return value.join(', ')
-  if (typeof value === 'number') return String(value)
   return value
 }
 
-function fetchPinnedHttpUrl(url: URL, addresses: string[], signal: AbortSignal, timeoutMs: number, maxFetchBytes: number): Promise<FetchResult> {
-  const address = addresses[0]
-  if (!address) throw new Error('No public address resolved for URL')
-
-  return new Promise((resolvePromise, rejectPromise) => {
-    let settled = false
-    const settleResolve = (result: FetchResult) => {
-      if (settled) return
-      settled = true
-      resolvePromise(result)
-    }
-    const settleReject = (error: unknown) => {
-      if (settled) return
-      settled = true
-      rejectPromise(error)
-    }
-
-    const requestImpl = url.protocol === 'https:' ? httpsRequest : httpRequest
-    const request = requestImpl({
-      protocol: url.protocol,
-      hostname: address,
-      port: url.port ? Number(url.port) : url.protocol === 'https:' ? 443 : 80,
-      method: 'GET',
-      path: `${url.pathname}${url.search}`,
-      headers: { Host: url.host, 'User-Agent': 'hesper/0.1' },
-      servername: url.hostname,
-      timeout: timeoutMs
-    }, (response) => {
-      const status = response.statusCode ?? 0
-      const contentType = headerString(response.headers['content-type'])
-      if (status >= 300 && status < 400) {
-        response.resume()
-        settleReject(new Error('HTTP redirects are not allowed for web.fetch-url'))
-        return
-      }
-
-      const chunks: Uint8Array[] = []
-      let bytesRead = 0
-      const resolveLimited = () => {
-        settleResolve({ ...mergeChunks(chunks, bytesRead, maxFetchBytes), status, contentType })
-        response.destroy()
-        request.destroy()
-      }
-      response.on('data', (chunk: Buffer) => {
-        if (settled || bytesRead > maxFetchBytes) return
-        const remaining = maxFetchBytes + 1 - bytesRead
-        if (chunk.byteLength > remaining) {
-          chunks.push(chunk.subarray(0, remaining))
-          bytesRead += remaining
-          resolveLimited()
-          return
-        }
-        chunks.push(chunk)
-        bytesRead += chunk.byteLength
-        if (bytesRead > maxFetchBytes) resolveLimited()
-      })
-      response.on('end', () => settleResolve({ ...mergeChunks(chunks, bytesRead, maxFetchBytes), status, contentType }))
-      response.on('error', (error) => {
-        if (bytesRead > maxFetchBytes) {
-          settleResolve({ ...mergeChunks(chunks, bytesRead, maxFetchBytes), status, contentType })
-          return
-        }
-        settleReject(error)
-      })
-    })
-
-    const abort = () => request.destroy(new Error('web.fetch-url was aborted'))
-    signal.addEventListener('abort', abort, { once: true })
-    request.on('timeout', () => request.destroy(new Error('web.fetch-url timed out')))
-    request.on('error', (error) => {
-      signal.removeEventListener('abort', abort)
-      settleReject(error)
-    })
-    request.on('close', () => signal.removeEventListener('abort', abort))
-    request.end()
-  })
-}
-
-async function fetchUrl(tool: ToolDefinition, args: unknown, context: ToolExecutionContext, requestHttp: RequestHttpUrl, resolveHostname: (hostname: string) => Promise<string[]>, maxFetchBytes: number, timeoutMs: number, now: () => string): Promise<ToolExecutionResult> {
-  const rawUrl = stringArg(args, 'url')
-  const parsed = new URL(rawUrl)
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    throw new Error('Only http and https URLs are allowed')
+async function readRequiredToolApiKey(tool: ToolDefinition, readToolApiKey: ((toolId: string) => Promise<string | undefined>) | undefined): Promise<string> {
+  const apiKey = (await readToolApiKey?.(tool.id))?.trim()
+  if (!apiKey) {
+    throw new Error('TinyFish API key is required. Save an API key in Tools settings before enabling or using this tool.')
   }
-
-  const childSignal = createChildSignal(context.signal, timeoutMs)
-  try {
-    const addresses = await resolvePublicHttpTarget(parsed, resolveHostname, childSignal.signal)
-    const fetched = await requestHttp(parsed, addresses, childSignal.signal, timeoutMs, maxFetchBytes)
-    return {
-      content: fetched.text,
-      details: {
-        toolId: tool.id,
-        url: parsed.toString(),
-        status: fetched.status,
-        contentType: fetched.contentType,
-        bytesRead: fetched.bytesRead,
-        truncated: fetched.truncated,
-        fetchedAt: now()
-      }
-    }
-  } finally {
-    childSignal.dispose()
-  }
+  return apiKey
 }
 
 function redactSecret(value: string, secret: string): string {
@@ -979,11 +734,98 @@ async function responseText(response: Response): Promise<string> {
   }
 }
 
-async function tinyFishSearch(tool: ToolDefinition, args: unknown, context: ToolExecutionContext, fetchImpl: typeof fetch, readToolApiKey: ((toolId: string) => Promise<string | undefined>) | undefined, timeoutMs: number, now: () => string): Promise<ToolExecutionResult> {
-  const apiKey = (await readToolApiKey?.(tool.id))?.trim()
-  if (!apiKey) {
-    throw new Error('TinyFish API key is required. Save an API key in Tools settings before enabling or using this tool.')
+function parseJsonResponse(text: string, label: string): unknown {
+  try {
+    return JSON.parse(text) as unknown
+  } catch {
+    throw new Error(`${label} returned a non-JSON response`)
   }
+}
+
+function responseRecord(payload: unknown): Record<string, unknown> {
+  return payload && typeof payload === 'object' && !Array.isArray(payload) ? payload as Record<string, unknown> : {}
+}
+
+function tinyFishContentText(value: unknown): string {
+  if (typeof value === 'string') return value
+  return jsonContent(value ?? {})
+}
+
+async function tinyFishFetchUrl(tool: ToolDefinition, args: unknown, context: ToolExecutionContext, fetchImpl: typeof fetch, readToolApiKey: ((toolId: string) => Promise<string | undefined>) | undefined, now: () => string): Promise<ToolExecutionResult> {
+  const rawUrl = stringArg(args, 'url')
+  const parsed = new URL(rawUrl)
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('Only http and https URLs are allowed')
+  }
+
+  const apiKey = await readRequiredToolApiKey(tool, readToolApiKey)
+  const format = enumStringArg(args, 'format', 'markdown', ['markdown', 'html', 'json'])
+  const links = booleanArg(args, 'links')
+  const imageLinks = booleanArg(args, 'imageLinks')
+  const perUrlTimeoutMs = numberArg(args, 'perUrlTimeoutMs', defaultTinyFishFetchPerUrlTimeoutMs, { min: 1, max: 110_000, integer: true })
+  const ttlValue = argsObject(args).ttl
+  const body: Record<string, unknown> = {
+    urls: [parsed.toString()],
+    format,
+    links,
+    image_links: imageLinks,
+    per_url_timeout_ms: perUrlTimeoutMs
+  }
+  if (ttlValue !== undefined) {
+    body.ttl = numberArg(args, 'ttl', 0, { min: 0, integer: true })
+  }
+
+  const clientTimeoutMs = Math.min(perUrlTimeoutMs + 40_000, 150_000)
+  const childSignal = createChildSignal(context.signal, clientTimeoutMs)
+  try {
+    const response = await fetchImpl(tinyFishFetchEndpoint, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'X-API-Key': apiKey },
+      body: JSON.stringify(body),
+      signal: childSignal.signal
+    })
+    const text = await responseText(response)
+    if (!response.ok) {
+      throw new Error(`TinyFish Fetch API returned HTTP ${response.status}: ${redactSecret(text || response.statusText, apiKey)}`)
+    }
+
+    const payload = responseRecord(parseJsonResponse(text, 'TinyFish Fetch API'))
+    const results = Array.isArray(payload.results) ? payload.results : []
+    const errors = Array.isArray(payload.errors) ? payload.errors : []
+    const firstResult = responseRecord(results[0])
+    if (!results.length) {
+      throw new Error(`TinyFish Fetch API did not return extracted content: ${redactSecret(jsonContent({ errors }), apiKey)}`)
+    }
+
+    const extractedText = tinyFishContentText(firstResult.text)
+    const fetchedAt = now()
+    return {
+      content: extractedText,
+      details: {
+        toolId: tool.id,
+        endpoint: tinyFishFetchEndpoint,
+        url: firstResult.url ?? parsed.toString(),
+        finalUrl: firstResult.final_url,
+        title: firstResult.title,
+        description: firstResult.description,
+        language: firstResult.language,
+        author: firstResult.author,
+        publishedDate: firstResult.published_date,
+        format: firstResult.format ?? format,
+        links: firstResult.links,
+        imageLinks: firstResult.image_links,
+        latencyMs: firstResult.latency_ms,
+        errors,
+        fetchedAt
+      }
+    }
+  } finally {
+    childSignal.dispose()
+  }
+}
+
+async function tinyFishSearch(tool: ToolDefinition, args: unknown, context: ToolExecutionContext, fetchImpl: typeof fetch, readToolApiKey: ((toolId: string) => Promise<string | undefined>) | undefined, timeoutMs: number, now: () => string): Promise<ToolExecutionResult> {
+  const apiKey = await readRequiredToolApiKey(tool, readToolApiKey)
 
   const query = stringArg(args, 'query')
   const url = new URL(tinyFishSearchEndpoint)
@@ -1008,14 +850,7 @@ async function tinyFishSearch(tool: ToolDefinition, args: unknown, context: Tool
       throw new Error(`TinyFish Search API returned HTTP ${response.status}: ${redactSecret(text || response.statusText, apiKey)}`)
     }
 
-    let payload: unknown
-    try {
-      payload = JSON.parse(text) as unknown
-    } catch {
-      throw new Error('TinyFish Search API returned a non-JSON response')
-    }
-
-    const record = payload && typeof payload === 'object' ? payload as Record<string, unknown> : {}
+    const record = responseRecord(parseJsonResponse(text, 'TinyFish Search API'))
     const rawResults = Array.isArray(record.results) ? record.results : []
     const results = rawResults.slice(0, limit)
     const output = {
@@ -1060,12 +895,9 @@ function workerAgentNotImplemented(tool: ToolDefinition): ToolExecutionResult {
 
 export function createBuiltinToolExecutor(options: BuiltinToolExecutorOptions = {}): ToolExecutor {
   const maxReadBytes = options.maxReadBytes ?? defaultMaxReadBytes
-  const maxFetchBytes = options.maxFetchBytes ?? defaultMaxFetchBytes
   const gitTimeoutMs = options.gitTimeoutMs ?? defaultGitTimeoutMs
   const fetchTimeoutMs = options.fetchTimeoutMs ?? defaultFetchTimeoutMs
   const runGitStatus = options.runGitStatus ?? defaultRunGitStatus
-  const resolveHostname = options.resolveHostname ?? defaultResolveHostname
-  const requestHttp = options.requestHttp ?? fetchPinnedHttpUrl
   const fetchImpl = options.fetch ?? globalThis.fetch
   const now = options.now ?? (() => new Date().toISOString())
 
@@ -1091,7 +923,7 @@ export function createBuiltinToolExecutor(options: BuiltinToolExecutorOptions = 
         case 'git.run':
           return gitRun(tool, args, context, gitTimeoutMs)
         case 'web.fetch-url':
-          return fetchUrl(tool, args, context, requestHttp, resolveHostname, maxFetchBytes, fetchTimeoutMs, now)
+          return tinyFishFetchUrl(tool, args, context, fetchImpl, options.readToolApiKey, now)
         case 'web.search':
           return tinyFishSearch(tool, args, context, fetchImpl, options.readToolApiKey, fetchTimeoutMs, now)
         case 'system.execute-command':

@@ -73,24 +73,36 @@ const { listSessions, createSession, updateTitle, deleteSession, generateTitle, 
     {
       id: 'web.fetch-url',
       name: 'Fetch URL',
-      description: 'Fetch and extract text from a URL.',
+      description: 'Fetch and extract clean page content with the TinyFish Fetch API.',
       category: 'web',
-      inputSchema: { type: 'object', required: ['url'], properties: { url: { type: 'string' } } },
+      requiresApiKey: true,
+      hasApiKey: false,
+      inputSchema: { type: 'object', required: ['url'], properties: { url: { type: 'string' }, format: { type: 'string' }, links: { type: 'boolean' }, imageLinks: { type: 'boolean' }, ttl: { type: 'number' }, perUrlTimeoutMs: { type: 'number' } } },
+      enabled: false
+    },
+    {
+      id: 'system.show-notification',
+      name: 'Show Notification',
+      description: 'Show a desktop notification.',
+      category: 'system',
+      inputSchema: { type: 'object', required: ['message'], properties: { message: { type: 'string' } } },
       enabled: false
     }
   ]),
   setToolEnabled: vi.fn(async (input: { id: string; enabled: boolean }) => ({
     id: input.id,
-    name: input.id === 'web.fetch-url' ? 'Fetch URL' : input.id === 'web.search' ? 'Web Search' : 'Read File',
-    description: input.id === 'web.fetch-url' ? 'Fetch and extract text from a URL.' : input.id === 'web.search' ? 'Search the web with TinyFish.' : 'Read a text file from the selected workspace.',
-    category: input.id.startsWith('web.') ? 'web' : 'filesystem',
+    name: input.id === 'web.fetch-url' ? 'Fetch URL' : input.id === 'web.search' ? 'Web Search' : input.id === 'system.show-notification' ? 'Show Notification' : 'Read File',
+    description: input.id === 'web.fetch-url' ? 'Fetch and extract clean page content with the TinyFish Fetch API.' : input.id === 'web.search' ? 'Search the web with TinyFish.' : input.id === 'system.show-notification' ? 'Show a desktop notification.' : 'Read a text file from the selected workspace.',
+    category: input.id.startsWith('web.') ? 'web' : input.id.startsWith('system.') ? 'system' : 'filesystem',
     inputSchema: input.id === 'web.fetch-url'
       ? { type: 'object', required: ['url'], properties: { url: { type: 'string' } } }
       : input.id === 'web.search'
         ? { type: 'object', required: ['query'], properties: { query: { type: 'string' } } }
-        : { type: 'object', required: ['path'], properties: { path: { type: 'string' } } },
-    requiresApiKey: input.id === 'web.search' ? true : undefined,
-    hasApiKey: input.id === 'web.search' ? input.enabled : undefined,
+        : input.id === 'system.show-notification'
+          ? { type: 'object', required: ['message'], properties: { message: { type: 'string' } } }
+          : { type: 'object', required: ['path'], properties: { path: { type: 'string' } } },
+    requiresApiKey: input.id === 'web.search' || input.id === 'web.fetch-url' ? true : undefined,
+    hasApiKey: input.id === 'web.search' || input.id === 'web.fetch-url' ? input.enabled : undefined,
     enabled: input.enabled
   })),
   toolCredentialStatus: vi.fn(async (input: { toolId: string }) => ({
@@ -199,24 +211,36 @@ describe('renderer App', () => {
       {
         id: 'web.fetch-url',
         name: 'Fetch URL',
-        description: 'Fetch and extract text from a URL.',
+        description: 'Fetch and extract clean page content with the TinyFish Fetch API.',
         category: 'web',
-        inputSchema: { type: 'object', required: ['url'], properties: { url: { type: 'string' } } },
+        requiresApiKey: true,
+        hasApiKey: false,
+        inputSchema: { type: 'object', required: ['url'], properties: { url: { type: 'string' }, format: { type: 'string' }, links: { type: 'boolean' }, imageLinks: { type: 'boolean' }, ttl: { type: 'number' }, perUrlTimeoutMs: { type: 'number' } } },
+        enabled: false
+      },
+      {
+        id: 'system.show-notification',
+        name: 'Show Notification',
+        description: 'Show a desktop notification.',
+        category: 'system',
+        inputSchema: { type: 'object', required: ['message'], properties: { message: { type: 'string' } } },
         enabled: false
       }
     ])
     setToolEnabled.mockImplementation(async (input: { id: string; enabled: boolean }) => ({
       id: input.id,
-      name: input.id === 'web.fetch-url' ? 'Fetch URL' : input.id === 'web.search' ? 'Web Search' : 'Read File',
-      description: input.id === 'web.fetch-url' ? 'Fetch and extract text from a URL.' : input.id === 'web.search' ? 'Search the web with TinyFish.' : 'Read a text file from the selected workspace.',
-      category: input.id.startsWith('web.') ? 'web' : 'filesystem',
+      name: input.id === 'web.fetch-url' ? 'Fetch URL' : input.id === 'web.search' ? 'Web Search' : input.id === 'system.show-notification' ? 'Show Notification' : 'Read File',
+      description: input.id === 'web.fetch-url' ? 'Fetch and extract clean page content with the TinyFish Fetch API.' : input.id === 'web.search' ? 'Search the web with TinyFish.' : input.id === 'system.show-notification' ? 'Show a desktop notification.' : 'Read a text file from the selected workspace.',
+      category: input.id.startsWith('web.') ? 'web' : input.id.startsWith('system.') ? 'system' : 'filesystem',
       inputSchema: input.id === 'web.fetch-url'
         ? { type: 'object', required: ['url'], properties: { url: { type: 'string' } } }
         : input.id === 'web.search'
           ? { type: 'object', required: ['query'], properties: { query: { type: 'string' } } }
-          : { type: 'object', required: ['path'], properties: { path: { type: 'string' } } },
-      requiresApiKey: input.id === 'web.search' ? true : undefined,
-      hasApiKey: input.id === 'web.search' ? input.enabled : undefined,
+          : input.id === 'system.show-notification'
+            ? { type: 'object', required: ['message'], properties: { message: { type: 'string' } } }
+            : { type: 'object', required: ['path'], properties: { path: { type: 'string' } } },
+      requiresApiKey: input.id === 'web.search' || input.id === 'web.fetch-url' ? true : undefined,
+      hasApiKey: input.id === 'web.search' || input.id === 'web.fetch-url' ? input.enabled : undefined,
       enabled: input.enabled
     }))
     toolCredentialStatus.mockImplementation(async (input: { toolId: string }) => ({
@@ -310,9 +334,9 @@ describe('renderer App', () => {
     expect(screen.getAllByText('Read File')).not.toHaveLength(0)
     expect(screen.getByRole('region', { name: '工具详情' })).toHaveTextContent('Read File')
 
-    await user.click(screen.getByText('Fetch URL').closest('[role="button"]') as HTMLElement)
+    await user.click(screen.getByText('Show Notification').closest('[role="button"]') as HTMLElement)
     const detailsRegion = screen.getByRole('region', { name: '工具详情' })
-    expect(detailsRegion).toHaveTextContent('Fetch URL')
+    expect(detailsRegion).toHaveTextContent('Show Notification')
     expect(detailsRegion).toHaveTextContent('关闭')
     expect(screen.queryByText(/当前工具已全局关闭/)).not.toBeInTheDocument()
     const detailSwitch = screen.getByRole('switch', { name: '工具全局开关' })
@@ -320,7 +344,7 @@ describe('renderer App', () => {
     expect(detailSwitch.querySelector('[data-tool-toggle-track="true"]')).toHaveStyle({ background: 'var(--hesper-color-surface-muted, #24283b)' })
     expect(detailSwitch.querySelector('[data-tool-toggle-knob="true"]')).toHaveStyle({ transform: 'translateX(0)' })
     await user.click(detailSwitch)
-    expect(setToolEnabled).toHaveBeenCalledWith({ id: 'web.fetch-url', enabled: true })
+    expect(setToolEnabled).toHaveBeenCalledWith({ id: 'system.show-notification', enabled: true })
   })
 
   it('manages API keys for credential-required tools from the tools detail panel', async () => {

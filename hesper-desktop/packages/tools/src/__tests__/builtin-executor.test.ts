@@ -247,103 +247,89 @@ describe('createBuiltinToolExecutor', () => {
     expect(result.details).toMatchObject({ toolId: 'system.execute-command', workspacePath: root, exitCode: 0, platform: process.platform })
   })
 
-  it('fetches http urls through an injectable pinned request implementation', async () => {
-    const requestHttp = vi.fn(async () => ({ text: 'Example page', status: 200, contentType: 'text/plain', bytesRead: 12, truncated: false }))
-    const executor = createBuiltinToolExecutor({ requestHttp, resolveHostname: async () => ['93.184.216.34'], now: () => timestamp })
+  it('fetches URLs through TinyFish Fetch with a stored tool API key', async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      results: [
+        {
+          url: 'https://example.com/',
+          final_url: 'https://example.com/article',
+          title: 'Example Article',
+          description: 'An example page',
+          language: 'en',
+          text: '# Example Article\n\nExtracted page content.',
+          format: 'markdown',
+          links: ['https://example.com/about'],
+          image_links: ['https://example.com/image.png'],
+          latency_ms: 123
+        }
+      ],
+      errors: []
+    }), { status: 200, headers: { 'content-type': 'application/json' } }))
+    const readToolApiKey = vi.fn(async () => 'tinyfish-key')
+    const executor = createBuiltinToolExecutor({ fetch: fetchImpl as unknown as typeof fetch, readToolApiKey, now: () => timestamp })
 
-    const result = await executor.execute(tool('web.fetch-url'), { url: 'https://example.com' }, {
+    const result = await executor.execute(tool('web.fetch-url'), {
+      url: 'https://example.com',
+      format: 'markdown',
+      links: true,
+      imageLinks: true,
+      ttl: 0,
+      perUrlTimeoutMs: 30_000
+    }, {
       runId: 'run-1',
       sessionId: 'session-1',
       allowedToolIds: ['web.fetch-url']
     })
 
-    expect(requestHttp).toHaveBeenCalledWith(new URL('https://example.com/'), ['93.184.216.34'], expect.any(AbortSignal), 15_000, 256 * 1024)
-    expect(result.content).toBe('Example page')
-    expect(result.details).toMatchObject({ url: 'https://example.com/', status: 200, contentType: 'text/plain', fetchedAt: timestamp })
-  })
-
-  it('blocks private network web urls before fetching', async () => {
-    const requestHttp = vi.fn(async () => ({ text: 'should not fetch', status: 200, bytesRead: 16, truncated: false }))
-    const executor = createBuiltinToolExecutor({ requestHttp, resolveHostname: async () => ['127.0.0.1'] })
-
-    await expect(executor.execute(tool('web.fetch-url'), { url: 'https://private.example' }, {
-      runId: 'run-1',
-      sessionId: 'session-1',
-      allowedToolIds: ['web.fetch-url']
-    })).rejects.toThrow('Private network URLs are not allowed')
-    expect(requestHttp).not.toHaveBeenCalled()
-  })
-
-  it('blocks IPv6-mapped private addresses before fetching', async () => {
-    const requestHttp = vi.fn(async () => ({ text: 'should not fetch', status: 200, bytesRead: 16, truncated: false }))
-    const executor = createBuiltinToolExecutor({ requestHttp, resolveHostname: async () => ['::ffff:172.16.0.1'] })
-
-    await expect(executor.execute(tool('web.fetch-url'), { url: 'https://mapped-private.example' }, {
-      runId: 'run-1',
-      sessionId: 'session-1',
-      allowedToolIds: ['web.fetch-url']
-    })).rejects.toThrow('Private network URLs are not allowed')
-    expect(requestHttp).not.toHaveBeenCalled()
-  })
-
-  it('blocks hex IPv6-mapped private addresses before fetching', async () => {
-    const requestHttp = vi.fn(async () => ({ text: 'should not fetch', status: 200, bytesRead: 16, truncated: false }))
-    const executor = createBuiltinToolExecutor({ requestHttp, resolveHostname: async () => ['::ffff:7f00:1'] })
-
-    await expect(executor.execute(tool('web.fetch-url'), { url: 'https://mapped-private-hex.example' }, {
-      runId: 'run-1',
-      sessionId: 'session-1',
-      allowedToolIds: ['web.fetch-url']
-    })).rejects.toThrow('Private network URLs are not allowed')
-    expect(requestHttp).not.toHaveBeenCalled()
-  })
-
-  it('blocks IPv6 link-local addresses before fetching', async () => {
-    const requestHttp = vi.fn(async () => ({ text: 'should not fetch', status: 200, bytesRead: 16, truncated: false }))
-    const executor = createBuiltinToolExecutor({ requestHttp, resolveHostname: async () => ['fe81::1'] })
-
-    await expect(executor.execute(tool('web.fetch-url'), { url: 'https://link-local.example' }, {
-      runId: 'run-1',
-      sessionId: 'session-1',
-      allowedToolIds: ['web.fetch-url']
-    })).rejects.toThrow('Private network URLs are not allowed')
-    expect(requestHttp).not.toHaveBeenCalled()
-  })
-
-  it('blocks expanded IPv6 loopback and mapped private addresses before fetching', async () => {
-    const requestHttp = vi.fn(async () => ({ text: 'should not fetch', status: 200, bytesRead: 16, truncated: false }))
-    const executor = createBuiltinToolExecutor({
-      requestHttp,
-      resolveHostname: async (hostname) => hostname.includes('loopback') ? ['0:0:0:0:0:0:0:1'] : ['0:0:0:0:0:ffff:7f00:1']
+    expect(readToolApiKey).toHaveBeenCalledWith('web.fetch-url')
+    expect(fetchImpl).toHaveBeenCalledWith('https://api.fetch.tinyfish.ai', expect.objectContaining({
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'X-API-Key': 'tinyfish-key' },
+      body: JSON.stringify({
+        urls: ['https://example.com/'],
+        format: 'markdown',
+        links: true,
+        image_links: true,
+        per_url_timeout_ms: 30_000,
+        ttl: 0
+      })
+    }))
+    expect(result.content).toBe('# Example Article\n\nExtracted page content.')
+    expect(result.details).toMatchObject({
+      toolId: 'web.fetch-url',
+      endpoint: 'https://api.fetch.tinyfish.ai',
+      url: 'https://example.com/',
+      finalUrl: 'https://example.com/article',
+      title: 'Example Article',
+      format: 'markdown',
+      links: ['https://example.com/about'],
+      imageLinks: ['https://example.com/image.png'],
+      latencyMs: 123,
+      fetchedAt: timestamp
     })
-
-    await expect(executor.execute(tool('web.fetch-url'), { url: 'https://expanded-loopback.example' }, {
-      runId: 'run-1',
-      sessionId: 'session-1',
-      allowedToolIds: ['web.fetch-url']
-    })).rejects.toThrow('Private network URLs are not allowed')
-    await expect(executor.execute(tool('web.fetch-url'), { url: 'https://expanded-mapped.example' }, {
-      runId: 'run-1',
-      sessionId: 'session-1',
-      allowedToolIds: ['web.fetch-url']
-    })).rejects.toThrow('Private network URLs are not allowed')
-    expect(requestHttp).not.toHaveBeenCalled()
   })
 
-  it('times out hostname resolution before fetching', async () => {
-    const requestHttp = vi.fn(async () => ({ text: 'should not fetch', status: 200, bytesRead: 16, truncated: false }))
-    const executor = createBuiltinToolExecutor({
-      requestHttp,
-      fetchTimeoutMs: 1,
-      resolveHostname: async () => new Promise<string[]>(() => {})
-    })
+  it('requires a TinyFish API key before URL fetch can run', async () => {
+    const fetchImpl = vi.fn()
+    const executor = createBuiltinToolExecutor({ fetch: fetchImpl as unknown as typeof fetch, readToolApiKey: async () => undefined })
 
-    await expect(executor.execute(tool('web.fetch-url'), { url: 'https://slow-dns.example' }, {
+    await expect(executor.execute(tool('web.fetch-url'), { url: 'https://example.com' }, {
       runId: 'run-1',
       sessionId: 'session-1',
       allowedToolIds: ['web.fetch-url']
-    })).rejects.toThrow('URL resolution timed out or was aborted')
-    expect(requestHttp).not.toHaveBeenCalled()
+    })).rejects.toThrow('TinyFish API key is required')
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
+  it('redacts TinyFish Fetch API keys from upstream errors', async () => {
+    const fetchImpl = vi.fn(async () => new Response('bad tinyfish-key error', { status: 401, statusText: 'Unauthorized' }))
+    const executor = createBuiltinToolExecutor({ fetch: fetchImpl as unknown as typeof fetch, readToolApiKey: async () => 'tinyfish-key' })
+
+    await expect(executor.execute(tool('web.fetch-url'), { url: 'https://example.com' }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['web.fetch-url']
+    })).rejects.toThrow('bad [redacted] error')
   })
 
   it('blocks non-http web urls', async () => {

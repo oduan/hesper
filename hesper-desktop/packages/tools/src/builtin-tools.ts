@@ -159,14 +159,20 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
     {
       id: 'web.fetch-url',
       name: 'Fetch URL',
-      description: 'Fetch and extract text from a URL.',
+      description: 'Fetch and extract clean page content with the TinyFish Fetch API. Requires a TinyFish API key saved in Tools settings; the key is never exposed to the agent prompt.',
       category: 'web',
       icon: '🌐',
+      requiresApiKey: true,
       inputSchema: {
         type: 'object',
         required: ['url'],
         properties: {
-          url: { type: 'string' }
+          url: { type: 'string', description: 'HTTP or HTTPS URL to fetch and extract.' },
+          format: { type: 'string', description: 'Output format for extracted content: markdown, html, or json. Defaults to markdown.' },
+          links: { type: 'boolean', description: 'When true, include extracted page links in the result metadata. Defaults to false.' },
+          imageLinks: { type: 'boolean', description: 'When true, include extracted image links in the result metadata. Defaults to false.' },
+          ttl: { type: 'number', description: 'Cache freshness tolerance in seconds. Set 0 for a live fetch. Omit to accept any cached entry.' },
+          perUrlTimeoutMs: { type: 'number', description: 'TinyFish per-URL timeout in milliseconds. Defaults to 45000, maximum 110000.' }
         }
       }
     },

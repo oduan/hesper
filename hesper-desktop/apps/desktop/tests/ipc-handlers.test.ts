@@ -199,7 +199,7 @@ describe('registerIpcHandlers', () => {
 
     await expect(handles.get(ipcChannels.agentEnqueue)?.({ sender: { id: 1 } }, { sessionId: session.id, prompt: 'Use assembled prompt', modelId: 'mock/hesper-fast', messageId: 'message-client-1', messageCreatedAt: '2026-06-10T03:00:02.000Z' })).resolves.toEqual({ runId: 'run-assembled' })
 
-    const expectedDefaultEnabledTools = ['filesystem.read-file', 'filesystem.write-file', 'filesystem.delete-file', 'filesystem.delete-directory', 'filesystem.list-directory', 'filesystem.find', 'filesystem.search', 'git.status', 'git.run', 'web.fetch-url', 'system.execute-command', 'system.show-notification']
+    const expectedDefaultEnabledTools = ['filesystem.read-file', 'filesystem.write-file', 'filesystem.delete-file', 'filesystem.delete-directory', 'filesystem.list-directory', 'filesystem.find', 'filesystem.search', 'git.status', 'git.run', 'system.execute-command', 'system.show-notification']
     expect(promptSpy).toHaveBeenCalledWith(expect.objectContaining({
       session: expect.objectContaining({
         id: session.id,
@@ -291,12 +291,12 @@ describe('registerIpcHandlers', () => {
     const promptSpy = vi.spyOn(container.promptAssemblyService, 'assembleMainPrompt')
     const enqueueSpy = vi.spyOn(container.agentRuntime, 'enqueue').mockResolvedValueOnce({ id: 'run-global-filter' } as Awaited<ReturnType<typeof container.agentRuntime.enqueue>>)
 
-    await container.toolSettingsService.setToolEnabled('web.fetch-url', false)
+    await container.toolSettingsService.setToolEnabled('system.show-notification', false)
     registerIpcHandlers({ ipcMain, dialog, container })
     const session = await container.sessionService.createSession({ title: 'Global tools', workspacePath: 'C:/workspace' })
 
     await expect(handles.get(ipcChannels.toolsList)?.({ sender: { id: 1 } })).resolves.toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'web.fetch-url', enabled: false })
+      expect.objectContaining({ id: 'system.show-notification', enabled: false })
     ]))
 
     await expect(handles.get(ipcChannels.agentEnqueue)?.(
@@ -304,7 +304,7 @@ describe('registerIpcHandlers', () => {
       { sessionId: session.id, prompt: 'Do not expose disabled web fetch', modelId: 'mock/hesper-fast' }
     )).resolves.toEqual({ runId: 'run-global-filter' })
 
-    const expectedEnabledTools = ['filesystem.read-file', 'filesystem.write-file', 'filesystem.delete-file', 'filesystem.delete-directory', 'filesystem.list-directory', 'filesystem.find', 'filesystem.search', 'git.status', 'git.run', 'system.execute-command', 'system.show-notification']
+    const expectedEnabledTools = ['filesystem.read-file', 'filesystem.write-file', 'filesystem.delete-file', 'filesystem.delete-directory', 'filesystem.list-directory', 'filesystem.find', 'filesystem.search', 'git.status', 'git.run', 'system.execute-command']
     expect(promptSpy).toHaveBeenLastCalledWith(expect.objectContaining({
       session: expect.objectContaining({ enabledToolIds: expectedEnabledTools })
     }))
@@ -312,9 +312,9 @@ describe('registerIpcHandlers', () => {
       enabledToolIds: expectedEnabledTools
     }))
 
-    const updatedTool = await handles.get(ipcChannels.toolsSetEnabled)?.({ sender: { id: 1 } }, { id: 'web.fetch-url', enabled: true })
-    expect(updatedTool).toMatchObject({ id: 'web.fetch-url', enabled: true })
-    expect(await container.toolSettingsService.isToolEnabled('web.fetch-url')).toBe(true)
+    const updatedTool = await handles.get(ipcChannels.toolsSetEnabled)?.({ sender: { id: 1 } }, { id: 'system.show-notification', enabled: true })
+    expect(updatedTool).toMatchObject({ id: 'system.show-notification', enabled: true })
+    expect(await container.toolSettingsService.isToolEnabled('system.show-notification')).toBe(true)
   })
 
   it('does not persist a user message when runtime enqueue fails', async () => {

@@ -17,6 +17,7 @@ const tools: ToolDefinition[] = [
     name: 'Fetch URL',
     description: 'Fetch and extract text from a URL.',
     category: 'web',
+    requiresApiKey: true,
     inputSchema: { type: 'object', required: ['url'], properties: { url: { type: 'string' } } }
   },
   {
@@ -49,14 +50,14 @@ describe('createToolSettingsService', () => {
 
     await expect(service.listTools()).resolves.toEqual([
       expect.objectContaining({ id: 'filesystem.read-file', enabled: true }),
-      expect.objectContaining({ id: 'web.fetch-url', enabled: true }),
+      expect.objectContaining({ id: 'web.fetch-url', enabled: false, hasApiKey: false }),
       expect.objectContaining({ id: 'web.search', enabled: false, hasApiKey: false })
     ])
   })
 
   it('persists global disabled state through tool permission policies', async () => {
     const persistence = await createInMemoryPersistence()
-    const service = createToolSettingsService({ persistence, tools, now: () => new Date('2026-06-10T03:00:00.000Z') })
+    const service = createToolSettingsService({ persistence, tools, credentialVaultService: credentialVault(true), now: () => new Date('2026-06-10T03:00:00.000Z') })
 
     await expect(service.setToolEnabled('web.fetch-url', false)).resolves.toMatchObject({ id: 'web.fetch-url', enabled: false })
     await expect(service.isToolEnabled('web.fetch-url')).resolves.toBe(false)
@@ -65,11 +66,11 @@ describe('createToolSettingsService', () => {
     const storedPolicy = await persistence.toolPermissionPolicies.get('global-tool:web.fetch-url')
     expect(storedPolicy).toMatchObject({ toolId: 'web.fetch-url', scope: 'global', mode: 'deny' })
 
-    const reloaded = createToolSettingsService({ persistence, tools })
+    const reloaded = createToolSettingsService({ persistence, tools, credentialVaultService: credentialVault(true) })
     await expect(reloaded.listTools()).resolves.toEqual([
       expect.objectContaining({ id: 'filesystem.read-file', enabled: true }),
       expect.objectContaining({ id: 'web.fetch-url', enabled: false }),
-      expect.objectContaining({ id: 'web.search', enabled: false })
+      expect.objectContaining({ id: 'web.search', enabled: true, hasApiKey: true })
     ])
 
     await reloaded.setToolEnabled('web.fetch-url', true)
@@ -80,14 +81,18 @@ describe('createToolSettingsService', () => {
     const persistence = await createInMemoryPersistence()
     const serviceWithoutKey = createToolSettingsService({ persistence, tools, credentialVaultService: credentialVault(false) })
 
+    await expect(serviceWithoutKey.getTool('web.fetch-url')).resolves.toMatchObject({ id: 'web.fetch-url', enabled: false, hasApiKey: false })
     await expect(serviceWithoutKey.getTool('web.search')).resolves.toMatchObject({ id: 'web.search', enabled: false, hasApiKey: false })
+    await expect(serviceWithoutKey.isToolEnabled('web.fetch-url')).resolves.toBe(false)
     await expect(serviceWithoutKey.isToolEnabled('web.search')).resolves.toBe(false)
-    await expect(serviceWithoutKey.filterEnabledToolIds(['filesystem.read-file', 'web.search'])).resolves.toEqual(['filesystem.read-file'])
+    await expect(serviceWithoutKey.filterEnabledToolIds(['filesystem.read-file', 'web.fetch-url', 'web.search'])).resolves.toEqual(['filesystem.read-file'])
+    await expect(serviceWithoutKey.setToolEnabled('web.fetch-url', true)).rejects.toThrow('API key is required')
     await expect(serviceWithoutKey.setToolEnabled('web.search', true)).rejects.toThrow('API key is required')
 
     const serviceWithKey = createToolSettingsService({ persistence, tools, credentialVaultService: credentialVault(true) })
+    await expect(serviceWithKey.getTool('web.fetch-url')).resolves.toMatchObject({ id: 'web.fetch-url', enabled: true, hasApiKey: true })
     await expect(serviceWithKey.getTool('web.search')).resolves.toMatchObject({ id: 'web.search', enabled: true, hasApiKey: true })
-    await expect(serviceWithKey.filterEnabledToolIds(['filesystem.read-file', 'web.search'])).resolves.toEqual(['filesystem.read-file', 'web.search'])
+    await expect(serviceWithKey.filterEnabledToolIds(['filesystem.read-file', 'web.fetch-url', 'web.search'])).resolves.toEqual(['filesystem.read-file', 'web.fetch-url', 'web.search'])
   })
 
   it('rejects unknown builtin tool ids', async () => {

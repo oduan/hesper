@@ -82,11 +82,17 @@ describe('builtin tools', () => {
 
     expect(tools.find((tool) => tool.id === 'web.fetch-url')).toMatchObject({
       category: 'web',
+      requiresApiKey: true,
       inputSchema: {
         type: 'object',
         required: ['url'],
         properties: {
-          url: { type: 'string' }
+          url: expect.objectContaining({ type: 'string' }),
+          format: expect.objectContaining({ type: 'string' }),
+          links: expect.objectContaining({ type: 'boolean' }),
+          imageLinks: expect.objectContaining({ type: 'boolean' }),
+          ttl: expect.objectContaining({ type: 'number' }),
+          perUrlTimeoutMs: expect.objectContaining({ type: 'number' })
         }
       }
     })
