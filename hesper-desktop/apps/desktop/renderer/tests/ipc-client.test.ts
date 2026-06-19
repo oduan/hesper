@@ -42,7 +42,14 @@ describe('ipc-client fallback', () => {
     expect(await api.roles.list()).toEqual([created])
 
     const updated = await api.roles.update({ id: created.id, name: 'Updated Fallback Role' })
-    expect(updated).toMatchObject({ id: created.id, name: 'Updated Fallback Role', description: 'Created locally' })
+    expect(updated).toMatchObject({
+      id: created.id,
+      name: 'Updated Fallback Role',
+      description: 'Created locally',
+      systemPrompt: 'Fallback prompt',
+      defaultToolIds: ['filesystem.read-file']
+    })
+    expect(await api.roles.list()).toEqual([updated])
 
     await expect(api.roles.delete(created.id)).resolves.toEqual({ deleted: true, id: created.id })
     expect(await api.roles.list()).toEqual([])
@@ -73,17 +80,83 @@ describe('ipc-client fallback', () => {
     })).rejects.toThrowError('Unknown tool id: missing.tool')
   })
 
-  it('returns copied role default tool ids in fallback mode', async () => {
+  it('rejects invalid role updates in fallback mode', async () => {
+    const api = createHesperApi({ allowFallback: true })
+    const created = await api.roles.create({
+      name: 'Fallback Role',
+      description: 'Created locally',
+      systemPrompt: 'Fallback prompt',
+      defaultToolIds: ['filesystem.read-file']
+    })
+
+    await expect(api.roles.update({ id: created.id, name: '   ' })).rejects.toThrowError('Role name is required')
+    await expect(api.roles.update({
+      id: created.id,
+      defaultToolIds: ['missing.tool']
+    })).rejects.toThrowError('Unknown tool id: missing.tool')
+    expect(await api.roles.list()).toEqual([created])
+  })
+
+  it('rejects missing roles in fallback mode', async () => {
     const api = createHesperApi({ allowFallback: true })
 
+    await expect(api.roles.update({ id: 'role-missing', name: 'Updated Role' })).rejects.toThrowError('Role not found: role-missing')
+    await expect(api.roles.delete('role-missing')).rejects.toThrowError('Role not found: role-missing')
+  })
+
+  it('copies role default tool ids from create inputs in fallback mode', async () => {
+    const api = createHesperApi({ allowFallback: true })
+    const defaultToolIds = ['filesystem.read-file']
+
+    await api.roles.create({ name: 'Fallback Role', defaultToolIds })
+    defaultToolIds.push('filesystem.write-file')
+
+    expect(await api.roles.list()).toEqual([
+      expect.objectContaining({ defaultToolIds: ['filesystem.read-file'] })
+    ])
+  })
+
+  it('returns copied roles from list in fallback mode', async () => {
+    const api = createHesperApi({ allowFallback: true })
     const created = await api.roles.create({
       name: 'Fallback Role',
       defaultToolIds: ['filesystem.read-file']
     })
-    created.defaultToolIds.push('filesystem.write-file')
+
+    const listed = await api.roles.list()
+    const listedRole = listed[0]
+    expect(listedRole).toBeDefined()
+    if (!listedRole) {
+      throw new Error('Expected fallback role to be listed')
+    }
+    listedRole.name = 'Mutated Role'
+    listedRole.defaultToolIds.push('filesystem.write-file')
+    listed.push({ ...listedRole, id: 'role-injected', name: 'Injected Role' })
 
     expect(await api.roles.list()).toEqual([
-      expect.objectContaining({ defaultToolIds: ['filesystem.read-file'] })
+      expect.objectContaining({
+        id: created.id,
+        name: 'Fallback Role',
+        defaultToolIds: ['filesystem.read-file']
+      })
+    ])
+  })
+
+  it('returns copied role default tool ids from update in fallback mode', async () => {
+    const api = createHesperApi({ allowFallback: true })
+    const created = await api.roles.create({
+      name: 'Fallback Role',
+      defaultToolIds: ['filesystem.read-file']
+    })
+
+    const updated = await api.roles.update({
+      id: created.id,
+      defaultToolIds: ['filesystem.write-file']
+    })
+    updated.defaultToolIds.push('filesystem.read-file')
+
+    expect(await api.roles.list()).toEqual([
+      expect.objectContaining({ defaultToolIds: ['filesystem.write-file'] })
     ])
   })
 
