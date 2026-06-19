@@ -72,7 +72,7 @@ describe('ui components', () => {
     expect(screen.getByLabelText('功能栏')).toHaveStyle({ boxSizing: 'border-box' })
     expect(screen.getByLabelText('实体列表')).toHaveStyle({ boxSizing: 'border-box' })
     expect(screen.getByLabelText('会话列表')).toHaveClass('hesper-theme-scrollbar')
-    expect(screen.getByLabelText('主工作区')).toHaveStyle({ gridTemplateColumns: '204px 320px minmax(0, 1fr)' })
+    expect(screen.getByLabelText('主工作区')).toHaveStyle({ gridTemplateColumns: '204px 427px minmax(0, 1fr)' })
     const sessionRow = screen.getByRole('button', { name: '视频脚本生成' })
     expect(sessionRow).toHaveStyle({ alignItems: 'center' })
     expect(sessionRow).toHaveTextContent('视频脚本生成')

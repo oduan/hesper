@@ -64,7 +64,7 @@ export function AppShell({ sessions, activeSection, title, platform, activeSessi
         style={{
           minHeight: 0,
           display: 'grid',
-          gridTemplateColumns: '204px 320px minmax(0, 1fr)',
+          gridTemplateColumns: '204px 427px minmax(0, 1fr)',
           gap: darkTheme.spacing.sm,
           overflow: 'hidden',
           padding: `0 ${darkTheme.spacing.sm} ${darkTheme.spacing.sm} 0`
