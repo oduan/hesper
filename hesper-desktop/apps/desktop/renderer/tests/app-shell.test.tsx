@@ -559,6 +559,36 @@ describe('renderer App', () => {
     expect(screen.getByLabelText('角色名称')).toHaveValue('新角色')
   })
 
+  it('keeps role mutation errors visible when an older initial load resolves later', async () => {
+    const user = userEvent.setup()
+    const initialRoles = createDeferred<any[]>()
+    const staleRole = {
+      id: 'role-stale',
+      name: '旧角色',
+      description: '旧数据',
+      systemPrompt: '旧提示词',
+      defaultToolIds: []
+    }
+    listRoles.mockReturnValueOnce(initialRoles.promise as any)
+    createRole.mockRejectedValueOnce(new Error('create failed'))
+
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: '角色' }))
+    await user.click(await screen.findByRole('button', { name: '创建第一个角色' }))
+    await user.type(screen.getByLabelText('角色名称'), '失败角色')
+    await user.click(screen.getByRole('button', { name: '创建角色' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('create failed')
+
+    await act(async () => {
+      initialRoles.resolve([staleRole])
+    })
+
+    expect(screen.getByRole('alert')).toHaveTextContent('create failed')
+    expect(screen.queryByRole('button', { name: /旧角色/ })).not.toBeInTheDocument()
+  })
+
   it('manages API keys for credential-required tools from the tools detail panel', async () => {
     const user = userEvent.setup()
     const toolsWithoutKey = [

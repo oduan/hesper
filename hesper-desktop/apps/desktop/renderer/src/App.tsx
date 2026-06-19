@@ -179,6 +179,11 @@ function AppContent() {
     return latestRolesRequestIdRef.current
   }
 
+  const invalidateRolesRequests = () => {
+    nextRolesRequestIdRef.current += 1
+    latestRolesRequestIdRef.current = nextRolesRequestIdRef.current
+  }
+
   const isLatestRolesRequest = (requestId: number) => latestRolesRequestIdRef.current === requestId
 
   const loadRoles = async (options: { isCancelled?: () => boolean } = {}) => {
@@ -623,6 +628,7 @@ function AppContent() {
 
   const saveRole = async (role: ManagedRoleDto) => {
     setRolesPending(true)
+    invalidateRolesRequests()
     setRolesError(undefined)
     try {
       const savedRole = creatingRole
@@ -657,6 +663,7 @@ function AppContent() {
 
   const deleteRole = async (roleId: string) => {
     setRolesPending(true)
+    invalidateRolesRequests()
     setRolesError(undefined)
     try {
       await hesperApi.roles.delete(roleId)
