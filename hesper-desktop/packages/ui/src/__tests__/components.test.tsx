@@ -99,12 +99,19 @@ describe('ui components', () => {
     await user.type(renameInput, '短标题{Enter}')
     expect(onRenameSession).toHaveBeenCalledWith('session-list-1', '短标题')
 
-    const windowControlIcons = ['最小化窗口', '最大化窗口', '关闭窗口'].map((label) => screen.getByRole('button', { name: label }).querySelector('svg[aria-hidden="true"]'))
+    const windowControlButtons = ['最小化窗口', '最大化窗口', '关闭窗口'].map((label) => screen.getByRole('button', { name: label }))
+    const windowControlIcons = windowControlButtons.map((button) => button.querySelector('svg[aria-hidden="true"]'))
     expect(windowControlIcons).toHaveLength(3)
     for (const icon of windowControlIcons) {
       expect(icon).toHaveAttribute('width', '14')
       expect(icon).toHaveAttribute('height', '14')
     }
+    expect(windowControlButtons.map((button) => button.style.color)).toEqual([
+      'var(--hesper-color-text-muted, #737aa2)',
+      'var(--hesper-color-text-muted, #737aa2)',
+      'var(--hesper-color-text-muted, #737aa2)'
+    ])
+    expect(windowControlButtons[2]).not.toHaveStyle({ color: '#f3f4f6' })
 
     await user.click(screen.getByRole('button', { name: '最小化窗口' }))
     await user.click(screen.getByRole('button', { name: '最大化窗口' }))

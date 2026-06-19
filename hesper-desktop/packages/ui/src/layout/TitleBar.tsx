@@ -73,7 +73,7 @@ function WindowControls({ platform, onMinimize, onToggleMaximize, onClose }: Win
       <button type="button" aria-label="最大化窗口" onClick={() => { void onToggleMaximize?.() }} style={windowsControlStyle}>
         <MaximizeIcon />
       </button>
-      <button type="button" aria-label="关闭窗口" onClick={() => { void onClose?.() }} style={{ ...windowsControlStyle, ...windowsCloseStyle }}>
+      <button type="button" aria-label="关闭窗口" onClick={() => { void onClose?.() }} style={windowsControlStyle}>
         <CloseIcon />
       </button>
     </div>
@@ -148,10 +148,6 @@ const windowsControlStyle: CSSProperties = {
   alignItems: 'center',
   justifyContent: 'center',
   padding: 0
-}
-
-const windowsCloseStyle: CSSProperties = {
-  color: '#f3f4f6'
 }
 
 const macControlStyle: CSSProperties = {
