@@ -27,7 +27,10 @@ import {
   setSessionOutputModeInputSchema,
   setSessionWorkspaceInputSchema,
   setToolEnabledInputSchema,
+  saveToolApiKeyInputSchema,
   subscribeAgentEventsResultSchema,
+  toolCredentialInputSchema,
+  toolCredentialStatusSchema,
   toolDtoSchema,
   unsubscribeAgentEventsResultSchema,
   updateSessionTitleInputSchema,
@@ -64,7 +67,9 @@ const mutatingChannels = [
   ipcChannels.providersDisable,
   ipcChannels.providersDelete,
   ipcChannels.modelsSave,
-  ipcChannels.toolsSetEnabled
+  ipcChannels.toolsSetEnabled,
+  ipcChannels.toolsSaveApiKey,
+  ipcChannels.toolsDeleteApiKey
 ] as const
 
 type StripUndefined<T extends Record<string, unknown>> = {
@@ -123,8 +128,9 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
     subscriptions.delete(senderId)
   }
 
-  const assembleRunContext = async (sessionId: string, workspacePath?: string, requestedEnabledToolIds?: string[]): Promise<{ systemPrompt: string; enabledToolIds: string[] }> => {
+  const assembleRunContext = async (sessionId: string, workspacePath?: string, requestedEnabledToolIds?: string[]): Promise<{ systemPrompt: string; enabledToolIds: string[]; workspacePath?: string }> => {
     const session = await options.container.sessionService.getSession(sessionId)
+    const resolvedWorkspacePath = workspacePath ?? session.workspacePath
     const roles = options.container.roleService.listRoles()
     const role = options.container.roleService.getRole(session.roleId ?? 'main-agent')
     const assignableWorkerAgentRoles = roles.filter((candidate) => candidate.canBeAssignedToWorkerAgent ?? candidate.canBeWorkerAgent)
@@ -134,7 +140,7 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
     const enabledToolIds = await options.container.toolSettingsService.filterEnabledToolIds(enabledToolIdsBeforeGlobalFilter)
     const sessionForPrompt = {
       ...session,
-      ...(workspacePath !== undefined ? { workspacePath } : {}),
+      ...(resolvedWorkspacePath !== undefined ? { workspacePath: resolvedWorkspacePath } : {}),
       enabledSkillIds: session.enabledSkillIds?.length ? session.enabledSkillIds : role?.defaultSkillIds ?? role?.allowedSkillIds ?? [],
       enabledToolIds,
       allowedWorkerAgentRoleIds: session.allowedWorkerAgentRoleIds?.length ? session.allowedWorkerAgentRoleIds : assignableWorkerAgentRoles.map((candidate) => candidate.id),
@@ -150,7 +156,7 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       assignableWorkerAgentRoles
     })
 
-    return { systemPrompt: prompt.systemPrompt, enabledToolIds: sessionForPrompt.enabledToolIds }
+    return omitUndefined({ systemPrompt: prompt.systemPrompt, enabledToolIds: sessionForPrompt.enabledToolIds, workspacePath: resolvedWorkspacePath })
   }
 
   const subscribeSender = (event: IpcMainInvokeEvent) => {
@@ -299,6 +305,20 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       const tool = await options.container.toolSettingsService.setToolEnabled(input.id, input.enabled)
       await savePersistence()
       return toolDtoSchema.parse(tool)
+    },
+    [ipcChannels.toolsCredentialStatus]: async (_event, payload) => {
+      const status = await options.container.credentialVaultService.getToolApiKeyStatus(toolCredentialInputSchema.parse(payload))
+      return toolCredentialStatusSchema.parse(status)
+    },
+    [ipcChannels.toolsSaveApiKey]: async (_event, payload) => {
+      const status = await options.container.credentialVaultService.saveToolApiKey(saveToolApiKeyInputSchema.parse(payload))
+      await savePersistence()
+      return toolCredentialStatusSchema.parse(status)
+    },
+    [ipcChannels.toolsDeleteApiKey]: async (_event, payload) => {
+      const status = await options.container.credentialVaultService.deleteToolApiKey(toolCredentialInputSchema.parse(payload))
+      await savePersistence()
+      return toolCredentialStatusSchema.parse(status)
     },
     [ipcChannels.credentialsProviderStatus]: async (_event, payload) => {
       const status = await options.container.credentialVaultService.getProviderApiKeyStatus(providerCredentialInputSchema.parse(payload))

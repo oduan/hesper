@@ -24,7 +24,7 @@ export type RuntimeEventRecord = AgentRuntimeEvent
 
 export type CredentialRecord = {
   id: string
-  kind: 'provider-api-key'
+  kind: 'provider-api-key' | 'tool-api-key'
   subjectId: string
   encryptedValueBase64: string
   createdAt: string

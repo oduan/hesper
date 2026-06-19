@@ -8,6 +8,7 @@ const readTool: ToolDefinition = {
   name: 'Read File',
   description: 'Read a file',
   category: 'filesystem',
+  icon: '📖',
   inputSchema: { type: 'object', required: ['path'], properties: { path: { type: 'string' } } }
 }
 
@@ -56,7 +57,7 @@ describe('createPiAgentTools', () => {
     })
     expect(result).toEqual({
       content: [{ type: 'text', text: 'file content' }],
-      details: { toolId: 'filesystem.read-file', toolCallId: 'tool-call-1', result: { bytes: 12 } }
+      details: { toolId: 'filesystem.read-file', toolCallId: 'tool-call-1', toolIcon: '📖', result: { bytes: 12 } }
     })
   })
 
@@ -72,7 +73,12 @@ describe('createPiAgentTools', () => {
 
     await expect(tool!.execute('tool-call-1', { path: 'README.md' })).rejects.toMatchObject({
       message: 'Tool blocked by permission policy',
-      details: { code: 'permission_denied' }
+      details: {
+        toolId: 'filesystem.read-file',
+        toolCallId: 'tool-call-1',
+        toolIcon: '📖',
+        result: { code: 'permission_denied' }
+      }
     })
   })
 })

@@ -78,14 +78,30 @@ function safeStringifyJson(value: unknown): string {
 
 type ToolStepDetailPayload = {
   kind: 'tool_call'
+  toolId?: string
+  toolIcon?: string
   input?: unknown
   output?: unknown
   isError?: boolean
 }
 
+function recordValue(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined
+}
+
+function extractToolResultMetadata(output: unknown): { toolId?: string; toolIcon?: string } {
+  const details = recordValue(recordValue(output)?.details)
+  return {
+    ...(typeof details?.toolId === 'string' ? { toolId: details.toolId } : {}),
+    ...(typeof details?.toolIcon === 'string' ? { toolIcon: details.toolIcon } : {})
+  }
+}
+
 function createToolStepDetail(input: unknown, output?: unknown, isError?: boolean): string {
+  const metadata = extractToolResultMetadata(output)
   const payload: ToolStepDetailPayload = {
     kind: 'tool_call',
+    ...metadata,
     ...(input !== undefined ? { input } : {}),
     ...(output !== undefined ? { output } : {}),
     ...(isError !== undefined ? { isError } : {})

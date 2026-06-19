@@ -275,6 +275,33 @@ describe('pi event mapping', () => {
     )
   })
 
+  it('copies real tool id and icon from tool result details into structured step detail', () => {
+    mapPiEventToHesperEvents('run-tool-metadata', {
+      type: 'tool_execution_start',
+      toolCallId: 'tool-call-icon',
+      toolName: 'filesystem_read-file',
+      args: { path: 'README.md', purpose: '读取 README' }
+    })
+    const endEvents = mapPiEventToHesperEvents('run-tool-metadata', {
+      type: 'tool_execution_end',
+      toolCallId: 'tool-call-icon',
+      toolName: 'filesystem_read-file',
+      result: {
+        content: [{ type: 'text', text: 'done' }],
+        details: { toolId: 'filesystem.read-file', toolCallId: 'tool-call-icon', toolIcon: '📖' }
+      },
+      isError: false
+    })
+
+    const detail = JSON.parse((endEvents[0] as Extract<(typeof endEvents)[number], { type: 'step.updated' }>).step.detail!)
+    expect(detail).toMatchObject({
+      kind: 'tool_call',
+      toolId: 'filesystem.read-file',
+      toolIcon: '📖',
+      isError: false
+    })
+  })
+
   it('maps assistant thinking deltas to a live thought step', () => {
     const startEvents = mapPiEventToHesperEvents('run-thinking', {
       type: 'message_update',

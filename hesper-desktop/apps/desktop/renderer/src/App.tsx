@@ -4,7 +4,7 @@ import { AppShell, ConversationView, type AppSection, type ConversationShortcutC
 import { AppStoreProvider, useAppStore } from './app-store'
 import { hesperApi } from './ipc-client'
 import { defaultFallbackModelId, fallbackSessionModelCatalog, loadAvailableModelCatalog, mergeModelOptions, type SessionModelCatalog } from './model-options'
-import type { AppSettings, ToolDto, UpdateSettingsInput } from '../../electron/ipc-contract'
+import type { AppSettings, ToolCredentialStatus, ToolDto, UpdateSettingsInput } from '../../electron/ipc-contract'
 import { AppearanceSettingsPanel } from './appearance-settings-panel'
 import { ProviderSettingsPanel } from './provider-settings-panel'
 import { createShortcutHandler } from './shortcuts'
@@ -141,6 +141,8 @@ function AppContent() {
   const [tools, setTools] = useState<ToolDto[]>([])
   const [activeToolId, setActiveToolId] = useState<string>()
   const [pendingToolIds, setPendingToolIds] = useState<Set<string>>(new Set())
+  const [toolCredentialStatuses, setToolCredentialStatuses] = useState<Record<string, ToolCredentialStatus>>({})
+  const [pendingToolCredentialIds, setPendingToolCredentialIds] = useState<Set<string>>(new Set())
   const [toolsError, setToolsError] = useState<string>()
   const resolvedThemeMode = useResolvedThemeMode(appSettings.themeMode)
   const loadedHistorySessionIdsRef = useRef<Set<string>>(new Set())
@@ -159,6 +161,7 @@ function AppContent() {
     ? state.sessions.find((session) => session.id === state.activeSessionId)?.unreadCompletedAt
     : undefined
   const activeTool = tools.find((tool) => tool.id === activeToolId) ?? tools[0]
+  const activeToolCredentialStatus = activeTool ? toolCredentialStatuses[activeTool.id] : undefined
   const pendingToolIdList = useMemo(() => [...pendingToolIds], [pendingToolIds])
 
   const markSessionUnreadCompletedLocally = (sessionId: string, completedAt: string) => {
@@ -259,6 +262,34 @@ function AppContent() {
       setActiveToolId(tools[0]!.id)
     }
   }, [activeToolId, tools])
+
+  useEffect(() => {
+    const tool = activeTool
+    if (!tool?.requiresApiKey) return undefined
+    let cancelled = false
+    setPendingToolCredentialIds((current) => new Set(current).add(tool.id))
+    void hesperApi.tools.credentialStatus({ toolId: tool.id }).then((status) => {
+      if (!cancelled) {
+        setToolCredentialStatuses((current) => ({ ...current, [tool.id]: status }))
+      }
+    }).catch((error) => {
+      if (!cancelled) {
+        setToolsError(error instanceof Error ? error.message : '未知工具凭据状态错误')
+      }
+    }).finally(() => {
+      if (!cancelled) {
+        setPendingToolCredentialIds((current) => {
+          const next = new Set(current)
+          next.delete(tool.id)
+          return next
+        })
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeTool])
 
   useEffect(() => {
     let cancelled = false
@@ -550,6 +581,44 @@ function AppContent() {
     }
   }
 
+  const saveToolApiKey = async (toolId: string, apiKey: string) => {
+    setToolsError(undefined)
+    setPendingToolCredentialIds((current) => new Set(current).add(toolId))
+    try {
+      const status = await hesperApi.tools.saveApiKey({ toolId, apiKey })
+      const loadedTools = await hesperApi.tools.list()
+      setToolCredentialStatuses((current) => ({ ...current, [toolId]: status }))
+      setTools(loadedTools)
+    } catch (error) {
+      setToolsError(error instanceof Error ? error.message : '未知工具 API key 保存错误')
+    } finally {
+      setPendingToolCredentialIds((current) => {
+        const next = new Set(current)
+        next.delete(toolId)
+        return next
+      })
+    }
+  }
+
+  const deleteToolApiKey = async (toolId: string) => {
+    setToolsError(undefined)
+    setPendingToolCredentialIds((current) => new Set(current).add(toolId))
+    try {
+      const status = await hesperApi.tools.deleteApiKey({ toolId })
+      const loadedTools = await hesperApi.tools.list()
+      setToolCredentialStatuses((current) => ({ ...current, [toolId]: status }))
+      setTools(loadedTools)
+    } catch (error) {
+      setToolsError(error instanceof Error ? error.message : '未知工具 API key 删除错误')
+    } finally {
+      setPendingToolCredentialIds((current) => {
+        const next = new Set(current)
+        next.delete(toolId)
+        return next
+      })
+    }
+  }
+
   const renameSession = async (sessionId: string, title: string) => {
     const session = stateRef.current.sessions.find((candidate) => candidate.id === sessionId)
     const nextTitle = title.trim()
@@ -702,9 +771,17 @@ function AppContent() {
           <ToolDetailsPanel
             {...(activeTool ? { tool: activeTool } : {})}
             pending={activeTool ? pendingToolIds.has(activeTool.id) : false}
+            credentialPending={activeTool ? pendingToolCredentialIds.has(activeTool.id) : false}
+            {...(activeToolCredentialStatus ? { credentialStatus: activeToolCredentialStatus } : {})}
             {...(toolsError ? { error: toolsError } : {})}
             onToggle={(enabled) => {
               if (activeTool) void updateToolEnabled(activeTool.id, enabled)
+            }}
+            onSaveApiKey={(apiKey) => {
+              if (activeTool) void saveToolApiKey(activeTool.id, apiKey)
+            }}
+            onDeleteApiKey={() => {
+              if (activeTool) void deleteToolApiKey(activeTool.id)
             }}
           />
         ) : <SectionPlaceholder section={state.activeSection} />

@@ -113,6 +113,8 @@ function useElapsedLabel(startedAt: string | undefined, endedAt: string | undefi
 
 type ToolStepDetailPayload = {
   kind?: unknown
+  toolId?: unknown
+  toolIcon?: unknown
   input?: unknown
   output?: unknown
   isError?: unknown
@@ -185,6 +187,18 @@ function CompletedStatusIcon({ status }: { status: 'succeeded' | 'failed' }) {
   )
 }
 
+function ToolSuccessIcon({ icon }: { icon: string }) {
+  return (
+    <span
+      aria-label="步骤状态：成功"
+      data-step-status-icon="tool-success-icon"
+      style={toolSuccessIconSlotStyle}
+    >
+      <span aria-hidden="true" style={toolSuccessIconTextStyle}>{icon}</span>
+    </span>
+  )
+}
+
 function PendingStatusIcon() {
   return (
     <span
@@ -198,9 +212,15 @@ function PendingStatusIcon() {
   )
 }
 
-function StatusDot({ status }: { status: RunStepStatus }) {
-  if (status === 'running') return <RunningStatusIcon ariaLabel={`步骤状态：${statusLabels.running}`} />
-  if (status === 'succeeded' || status === 'failed') return <CompletedStatusIcon status={status} />
+function StatusDot({ step }: { step: RunStep }) {
+  if (step.status === 'running') return <RunningStatusIcon ariaLabel={`步骤状态：${statusLabels.running}`} />
+  if (step.status === 'failed') return <CompletedStatusIcon status="failed" />
+  if (step.status === 'succeeded') {
+    const payload = getToolStepDetailPayload(step)
+    const toolIcon = typeof payload?.toolIcon === 'string' ? payload.toolIcon : undefined
+    if (step.type === 'tool_call' && toolIcon) return <ToolSuccessIcon icon={toolIcon} />
+    return <CompletedStatusIcon status="succeeded" />
+  }
   return <PendingStatusIcon />
 }
 
@@ -361,7 +381,7 @@ export function RunSteps({ steps, autoExpanded = false, runStartedAt, runEndedAt
                   style={stepRowButtonStyle}
                 >
                   <span aria-hidden="true" />
-                  <StatusDot status={step.status} />
+                  <StatusDot step={step} />
                   <span data-hesper-step-row-text="true" style={stepTextStyle}>
                     <span style={primarySegmentStyle}>{parts.primary}</span>
                     {parts.secondary.map((part) => (
@@ -458,6 +478,18 @@ const statusIconSlotStyle: CSSProperties = {
   placeItems: 'center',
   alignSelf: 'center',
   justifySelf: 'center'
+}
+
+const toolSuccessIconSlotStyle: CSSProperties = {
+  ...statusIconSlotStyle,
+  fontSize: 15,
+  lineHeight: 1,
+  filter: 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.20))'
+}
+
+const toolSuccessIconTextStyle: CSSProperties = {
+  display: 'block',
+  transform: 'translateY(-0.5px)'
 }
 
 const pendingStatusIconStyle: CSSProperties = {

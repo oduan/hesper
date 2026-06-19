@@ -2,10 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { createBuiltinToolDefinitions } from '../builtin-tools'
 
 describe('builtin tools', () => {
-  it('contains exactly five builtin tools', () => {
+  it('contains the builtin tool set without exposing legacy worker execution', () => {
     const tools = createBuiltinToolDefinitions()
-    expect(tools).toHaveLength(5)
+    expect(tools).toHaveLength(13)
     expect(tools.map((tool) => tool.id)).not.toContain('agent.spawn-worker-agent')
+    expect(tools.every((tool) => typeof tool.icon === 'string' && tool.icon.length > 0)).toBe(true)
   })
 
   it('uses stable ids', () => {
@@ -14,8 +15,16 @@ describe('builtin tools', () => {
       expect.arrayContaining([
         'filesystem.read-file',
         'filesystem.write-file',
+        'filesystem.delete-file',
+        'filesystem.delete-directory',
+        'filesystem.list-directory',
+        'filesystem.find',
+        'filesystem.search',
         'git.status',
+        'git.run',
         'web.fetch-url',
+        'web.search',
+        'system.execute-command',
         'system.show-notification'
       ])
     )
@@ -26,6 +35,9 @@ describe('builtin tools', () => {
     const tools = createBuiltinToolDefinitions()
     const readFile = tools.find((tool) => tool.id === 'filesystem.read-file')
     const writeFile = tools.find((tool) => tool.id === 'filesystem.write-file')
+    const listDirectory = tools.find((tool) => tool.id === 'filesystem.list-directory')
+    const find = tools.find((tool) => tool.id === 'filesystem.find')
+    const search = tools.find((tool) => tool.id === 'filesystem.search')
 
     expect(readFile).toMatchObject({
       category: 'filesystem',
@@ -49,6 +61,10 @@ describe('builtin tools', () => {
         }
       }
     })
+
+    expect(listDirectory).toMatchObject({ category: 'filesystem', inputSchema: { type: 'object' } })
+    expect(find).toMatchObject({ category: 'filesystem', inputSchema: { type: 'object', required: ['pattern'] } })
+    expect(search).toMatchObject({ category: 'filesystem', inputSchema: { type: 'object', required: ['condition'] } })
   })
 
   it('defines non-filesystem tools with key schema fields', () => {
@@ -57,6 +73,11 @@ describe('builtin tools', () => {
     expect(tools.find((tool) => tool.id === 'git.status')).toMatchObject({
       category: 'git',
       inputSchema: { type: 'object', properties: {} }
+    })
+
+    expect(tools.find((tool) => tool.id === 'git.run')).toMatchObject({
+      category: 'git',
+      inputSchema: { type: 'object', required: ['args'] }
     })
 
     expect(tools.find((tool) => tool.id === 'web.fetch-url')).toMatchObject({
@@ -68,6 +89,12 @@ describe('builtin tools', () => {
           url: { type: 'string' }
         }
       }
+    })
+
+    expect(tools.find((tool) => tool.id === 'web.search')).toMatchObject({
+      category: 'web',
+      requiresApiKey: true,
+      inputSchema: { type: 'object', required: ['query'] }
     })
 
     expect(tools.find((tool) => tool.id === 'agent.spawn-worker-agent')).toBeUndefined()

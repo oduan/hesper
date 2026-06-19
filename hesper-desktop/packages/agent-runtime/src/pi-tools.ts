@@ -51,6 +51,7 @@ function toPiToolResult(tool: ToolDefinition, toolCallId: string, result: Awaite
     details: {
       toolId: tool.id,
       toolCallId,
+      ...(tool.icon !== undefined ? { toolIcon: tool.icon } : {}),
       ...(result.details !== undefined ? { result: result.details } : {})
     },
     ...(result.terminate !== undefined ? { terminate: result.terminate } : {})
@@ -71,7 +72,12 @@ export function createPiAgentTools(input: PiToolAdapterInput): AgentTool<any>[] 
 
       if (result.isError) {
         const error = new Error(result.content) as Error & { details?: unknown }
-        error.details = result.details
+        error.details = {
+          toolId: tool.id,
+          toolCallId,
+          ...(tool.icon !== undefined ? { toolIcon: tool.icon } : {}),
+          ...(result.details !== undefined ? { result: result.details } : {})
+        }
         throw error
       }
 

@@ -29,6 +29,25 @@ describe('createCredentialVaultService', () => {
     expect(Buffer.from(exportDatabaseBytes(persistence)).toString('latin1')).not.toContain('sk-test-secret')
   })
 
+  it('round-trips tool API keys through encrypted persistence records', async () => {
+    const persistence = await createInMemoryPersistence()
+    const vault = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => '2026-06-10T03:00:00.000Z' })
+
+    const status = await vault.saveToolApiKey({ toolId: 'web.search', apiKey: 'tinyfish-secret' })
+
+    expect(status).toEqual({
+      toolId: 'web.search',
+      apiKeyRef: 'tool:web.search:api-key',
+      hasApiKey: true,
+      encryptionAvailable: true,
+      updatedAt: '2026-06-10T03:00:00.000Z'
+    })
+    expect(await vault.getToolApiKeyStatus({ toolId: 'web.search' })).toMatchObject({ hasApiKey: true })
+    expect(await vault.readToolApiKey('web.search')).toBe('tinyfish-secret')
+    expect(JSON.stringify(await persistence.credentialRecords.list())).not.toContain('tinyfish-secret')
+    await expect(vault.deleteToolApiKey({ toolId: 'web.search' })).resolves.toMatchObject({ hasApiKey: false })
+  })
+
   it('never exposes the decrypted value through status or delete results', async () => {
     const persistence = await createInMemoryPersistence()
     const vault = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => '2026-06-10T03:00:00.000Z' })

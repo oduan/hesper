@@ -82,6 +82,7 @@ export class AgentRuntime {
       const state = this.getSessionState(input.sessionId)
       const shouldStartImmediately = !state.running
       const timestamp = nowIso()
+      const workspacePath = input.workspacePath ?? session.workspacePath
       const run: AgentRun = {
         id: createId('run'),
         sessionId: input.sessionId,
@@ -89,7 +90,7 @@ export class AgentRuntime {
         modelId: input.modelId,
         retryCount: 0,
         maxRetries: this.retryPolicy.maxRetries,
-        ...(input.workspacePath !== undefined ? { workspacePath: input.workspacePath } : {}),
+        ...(workspacePath !== undefined ? { workspacePath } : {}),
         ...(input.parentRunId !== undefined ? { parentRunId: input.parentRunId } : {}),
         ...(shouldStartImmediately ? { startedAt: timestamp } : {})
       }

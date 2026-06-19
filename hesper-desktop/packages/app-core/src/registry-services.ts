@@ -38,7 +38,21 @@ export function createDefaultRoleService(): RoleService {
       id: 'main-agent',
       name: 'Main Agent',
       allowedSkillIds: ['builtin:notes', 'builtin:files', 'builtin:web'],
-      defaultToolIds: ['filesystem.read-file', 'filesystem.write-file', 'git.status', 'web.fetch-url', 'system.show-notification'],
+      defaultToolIds: [
+        'filesystem.read-file',
+        'filesystem.write-file',
+        'filesystem.delete-file',
+        'filesystem.delete-directory',
+        'filesystem.list-directory',
+        'filesystem.find',
+        'filesystem.search',
+        'git.status',
+        'git.run',
+        'web.fetch-url',
+        'web.search',
+        'system.execute-command',
+        'system.show-notification'
+      ],
       canBeMainAgent: true,
       canBeWorkerAgent: false
     },
@@ -46,7 +60,7 @@ export function createDefaultRoleService(): RoleService {
       id: 'worker-agent',
       name: 'Worker Agent',
       allowedSkillIds: ['builtin:notes'],
-      defaultToolIds: ['filesystem.read-file', 'git.status', 'web.fetch-url'],
+      defaultToolIds: ['filesystem.read-file', 'filesystem.list-directory', 'filesystem.find', 'filesystem.search', 'git.status', 'web.fetch-url', 'web.search'],
       canBeMainAgent: false,
       canBeWorkerAgent: true
     }

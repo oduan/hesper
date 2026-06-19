@@ -1,4 +1,4 @@
-import { agentRunSchema, agentRuntimeEventSchema, messageSchema, modelConfigSchema, modelProviderConfigSchema, runStepSchema, sessionSchema, toolDefinitionSchema } from '@hesper/shared'
+import { agentRunSchema, agentRuntimeEventSchema, messageSchema, modelConfigSchema, modelProviderConfigSchema, runStepSchema, sessionSchema, toolDefinitionBaseSchema } from '@hesper/shared'
 import { z } from 'zod'
 
 export const ipcChannels = {
@@ -33,6 +33,9 @@ export const ipcChannels = {
   modelsSave: 'models:save',
   toolsList: 'tools:list',
   toolsSetEnabled: 'tools:setEnabled',
+  toolsCredentialStatus: 'tools:credentialStatus',
+  toolsSaveApiKey: 'tools:saveApiKey',
+  toolsDeleteApiKey: 'tools:deleteApiKey',
   windowMinimize: 'window:minimize',
   windowToggleMaximize: 'window:toggleMaximize',
   windowClose: 'window:close'
@@ -171,13 +174,42 @@ export const saveModelInputSchema = z.object({
   enabled: z.boolean().optional()
 }).strict()
 
-export const toolDtoSchema = toolDefinitionSchema.extend({
-  enabled: z.boolean()
-})
+export const toolDtoSchema = toolDefinitionBaseSchema.extend({
+  enabled: z.boolean(),
+  hasApiKey: z.boolean().optional()
+}).transform((value) => ({
+  id: value.id,
+  name: value.name,
+  description: value.description,
+  inputSchema: value.inputSchema,
+  category: value.category,
+  enabled: value.enabled,
+  ...(value.icon !== undefined ? { icon: value.icon } : {}),
+  ...(value.requiresApiKey !== undefined ? { requiresApiKey: value.requiresApiKey } : {}),
+  ...(value.hasApiKey !== undefined ? { hasApiKey: value.hasApiKey } : {})
+}))
 
 export const setToolEnabledInputSchema = z.object({
   id: nonEmptyStringSchema,
   enabled: z.boolean()
+}).strict()
+
+export const toolCredentialInputSchema = z.object({
+  toolId: nonEmptyStringSchema
+}).strict()
+
+export const saveToolApiKeyInputSchema = z.object({
+  toolId: nonEmptyStringSchema,
+  apiKey: z.string().min(1)
+}).strict()
+
+export const toolCredentialStatusSchema = z.object({
+  toolId: nonEmptyStringSchema,
+  apiKeyRef: nonEmptyStringSchema,
+  hasApiKey: z.boolean(),
+  encryptionAvailable: z.boolean(),
+  warning: z.string().optional(),
+  updatedAt: z.string().datetime().optional()
 }).strict()
 
 export const providerConnectionTestResultSchema = z.object({
@@ -215,6 +247,9 @@ export type ListModelsInput = z.infer<typeof listModelsInputSchema>
 export type SaveModelInput = z.infer<typeof saveModelInputSchema>
 export type ToolDto = z.infer<typeof toolDtoSchema>
 export type SetToolEnabledInput = z.infer<typeof setToolEnabledInputSchema>
+export type ToolCredentialInput = z.infer<typeof toolCredentialInputSchema>
+export type SaveToolApiKeyInput = z.infer<typeof saveToolApiKeyInputSchema>
+export type ToolCredentialStatus = z.infer<typeof toolCredentialStatusSchema>
 export type ProviderConnectionTestResult = z.infer<typeof providerConnectionTestResultSchema>
 export type AgentEvent = z.infer<typeof agentRuntimeEventSchema>
 export type SessionDto = z.infer<typeof sessionSchema>
@@ -273,6 +308,9 @@ export type HesperDesktopApi = {
   tools: {
     list(): Promise<ToolDto[]>
     setEnabled(input: SetToolEnabledInput): Promise<ToolDto>
+    credentialStatus(input: ToolCredentialInput): Promise<ToolCredentialStatus>
+    saveApiKey(input: SaveToolApiKeyInput): Promise<ToolCredentialStatus>
+    deleteApiKey(input: ToolCredentialInput): Promise<ToolCredentialStatus>
   }
   window: {
     platform: NodeJS.Platform

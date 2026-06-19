@@ -35,12 +35,12 @@ export function createServiceContainer(options: ServiceContainerOptions) {
   const skillService = createDefaultSkillService()
   const toolDefinitions = createBuiltinToolDefinitions()
   const toolCatalogService = createToolCatalogService(toolDefinitions)
-  const toolSettingsService = createToolSettingsService({ persistence: options.persistence, tools: toolDefinitions })
   const promptAssemblyService = createPromptAssemblyService()
   const credentialVaultService = createCredentialVaultService({
     persistence: options.persistence,
     ...(options.credentialCodec ? { codec: options.credentialCodec } : {})
   })
+  const toolSettingsService = createToolSettingsService({ persistence: options.persistence, tools: toolDefinitions, credentialVaultService })
   const modelProviderService = createModelProviderService({
     persistence: options.persistence,
     credentialVaultService,
@@ -68,6 +68,7 @@ export function createServiceContainer(options: ServiceContainerOptions) {
       }
     },
     executor: createBuiltinToolExecutor({
+      readToolApiKey: (toolId) => credentialVaultService.readToolApiKey(toolId),
       showNotification: (message) => {
         if (!Notification.isSupported()) {
           throw new Error('Desktop notifications are not supported on this system')

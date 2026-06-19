@@ -29,46 +29,19 @@ const defaultSettings: AppSettings = {
 }
 
 const fallbackBuiltinTools: ToolDto[] = [
-  {
-    id: 'filesystem.read-file',
-    name: 'Read File',
-    description: 'Read a text file from the selected workspace.',
-    category: 'filesystem',
-    inputSchema: { type: 'object', required: ['path'], properties: { path: { type: 'string' } } },
-    enabled: true
-  },
-  {
-    id: 'filesystem.write-file',
-    name: 'Write File',
-    description: 'Write a text file in the selected workspace.',
-    category: 'filesystem',
-    inputSchema: { type: 'object', required: ['path', 'content'], properties: { path: { type: 'string' }, content: { type: 'string' } } },
-    enabled: true
-  },
-  {
-    id: 'git.status',
-    name: 'Git Status',
-    description: 'Read git working tree status.',
-    category: 'git',
-    inputSchema: { type: 'object', properties: {} },
-    enabled: true
-  },
-  {
-    id: 'web.fetch-url',
-    name: 'Fetch URL',
-    description: 'Fetch and extract text from a URL.',
-    category: 'web',
-    inputSchema: { type: 'object', required: ['url'], properties: { url: { type: 'string' } } },
-    enabled: true
-  },
-  {
-    id: 'system.show-notification',
-    name: 'Show Notification',
-    description: 'Show a desktop notification.',
-    category: 'system',
-    inputSchema: { type: 'object', required: ['message'], properties: { message: { type: 'string' } } },
-    enabled: true
-  }
+  { id: 'filesystem.read-file', name: 'Read File', description: 'Read a text file from the selected workspace.', category: 'filesystem', icon: '📖', inputSchema: { type: 'object', required: ['path'], properties: { path: { type: 'string' } } }, enabled: true },
+  { id: 'filesystem.write-file', name: 'Write File', description: 'Write a text file in the selected workspace.', category: 'filesystem', icon: '✍️', inputSchema: { type: 'object', required: ['path', 'content'], properties: { path: { type: 'string' }, content: { type: 'string' } } }, enabled: true },
+  { id: 'filesystem.delete-file', name: 'Delete File', description: 'Delete a file inside the selected workspace.', category: 'filesystem', icon: '🗑️', inputSchema: { type: 'object', required: ['path'], properties: { path: { type: 'string' } } }, enabled: true },
+  { id: 'filesystem.delete-directory', name: 'Delete Directory', description: 'Delete a directory inside the selected workspace.', category: 'filesystem', icon: '🧹', inputSchema: { type: 'object', required: ['path'], properties: { path: { type: 'string' }, recursive: { type: 'boolean' } } }, enabled: true },
+  { id: 'filesystem.list-directory', name: 'List Directory', description: 'List direct child files and directories under a workspace-relative directory.', category: 'filesystem', icon: '📂', inputSchema: { type: 'object', properties: { path: { type: 'string' } } }, enabled: true },
+  { id: 'filesystem.find', name: 'Find Files', description: 'Recursively find file or directory names using a regular expression.', category: 'filesystem', icon: '🔎', inputSchema: { type: 'object', required: ['pattern'], properties: { path: { type: 'string' }, pattern: { type: 'string' } } }, enabled: true },
+  { id: 'filesystem.search', name: 'Search Files', description: 'Search files using composable name/content conditions.', category: 'filesystem', icon: '🔍', inputSchema: { type: 'object', required: ['condition'], properties: { path: { type: 'string' }, condition: { type: 'object' } } }, enabled: true },
+  { id: 'git.status', name: 'Git Status', description: 'Read git working tree status.', category: 'git', icon: '🌿', inputSchema: { type: 'object', properties: {} }, enabled: true },
+  { id: 'git.run', name: 'Git Command', description: 'Run git in the selected workspace. Pass only arguments after git.', category: 'git', icon: '🌿', inputSchema: { type: 'object', required: ['args'], properties: { args: { type: 'array', items: { type: 'string' } } } }, enabled: true },
+  { id: 'web.fetch-url', name: 'Fetch URL', description: 'Fetch and extract text from a URL.', category: 'web', icon: '🌐', inputSchema: { type: 'object', required: ['url'], properties: { url: { type: 'string' } } }, enabled: true },
+  { id: 'web.search', name: 'Web Search', description: 'Search the web with TinyFish Search API. Requires a saved TinyFish API key.', category: 'web', icon: '🌐', requiresApiKey: true, hasApiKey: false, inputSchema: { type: 'object', required: ['query'], properties: { query: { type: 'string' } } }, enabled: false },
+  { id: 'system.execute-command', name: 'Execute Command', description: 'Execute one complete shell command from the selected workspace.', category: 'system', icon: '🖥️', inputSchema: { type: 'object', required: ['command'], properties: { command: { type: 'string' } } }, enabled: true },
+  { id: 'system.show-notification', name: 'Show Notification', description: 'Show a desktop notification.', category: 'system', icon: '🔔', inputSchema: { type: 'object', required: ['message'], properties: { message: { type: 'string' } } }, enabled: true }
 ]
 
 function withDefined<T extends object>(value: T): T {
@@ -258,9 +231,42 @@ export function createFallbackHesperApi(): HesperDesktopApi {
         if (!existing) {
           throw new Error(`Unknown builtin tool: ${input.id}`)
         }
+        if (existing.requiresApiKey && !existing.hasApiKey && input.enabled) {
+          throw new Error(`API key is required before enabling tool: ${input.id}`)
+        }
         const updated = { ...existing, enabled: input.enabled }
         tools = tools.map((tool) => tool.id === input.id ? updated : tool)
         return { ...updated }
+      },
+      credentialStatus: async (input) => {
+        const tool = tools.find((candidate) => candidate.id === input.toolId)
+        return {
+          toolId: input.toolId,
+          apiKeyRef: `tool:${input.toolId}:api-key`,
+          hasApiKey: tool?.hasApiKey === true,
+          encryptionAvailable: false,
+          warning: 'Secure credential storage is unavailable in renderer fallback mode.'
+        }
+      },
+      saveApiKey: async (input) => {
+        tools = tools.map((tool) => tool.id === input.toolId ? { ...tool, hasApiKey: true, enabled: true } : tool)
+        return {
+          toolId: input.toolId,
+          apiKeyRef: `tool:${input.toolId}:api-key`,
+          hasApiKey: true,
+          encryptionAvailable: false,
+          warning: 'Secure credential storage is unavailable in renderer fallback mode.'
+        }
+      },
+      deleteApiKey: async (input) => {
+        tools = tools.map((tool) => tool.id === input.toolId ? { ...tool, hasApiKey: false, enabled: false } : tool)
+        return {
+          toolId: input.toolId,
+          apiKeyRef: `tool:${input.toolId}:api-key`,
+          hasApiKey: false,
+          encryptionAvailable: false,
+          warning: 'Secure credential storage is unavailable in renderer fallback mode.'
+        }
       }
     },
     window: {

@@ -177,13 +177,17 @@ const roleBaseSchema = z.object({
 
 export const roleSchema = roleBaseSchema.transform(stripUndefined)
 
-export const toolDefinitionSchema = z.object({
+export const toolDefinitionBaseSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   description: z.string().min(1),
   inputSchema: z.unknown(),
-  category: z.enum(['filesystem', 'git', 'web', 'agent', 'system'])
-}) satisfies z.ZodType<ToolDefinition>
+  category: z.enum(['filesystem', 'git', 'web', 'agent', 'system']),
+  icon: z.string().min(1).optional(),
+  requiresApiKey: z.boolean().optional()
+})
+
+export const toolDefinitionSchema = toolDefinitionBaseSchema.transform(stripUndefined) satisfies z.ZodType<ToolDefinition>
 
 const toolPermissionPolicyBaseSchema = z.object({
   id: z.string().min(1),

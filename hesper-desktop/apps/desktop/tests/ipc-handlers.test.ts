@@ -199,11 +199,12 @@ describe('registerIpcHandlers', () => {
 
     await expect(handles.get(ipcChannels.agentEnqueue)?.({ sender: { id: 1 } }, { sessionId: session.id, prompt: 'Use assembled prompt', modelId: 'mock/hesper-fast', messageId: 'message-client-1', messageCreatedAt: '2026-06-10T03:00:02.000Z' })).resolves.toEqual({ runId: 'run-assembled' })
 
+    const expectedDefaultEnabledTools = ['filesystem.read-file', 'filesystem.write-file', 'filesystem.delete-file', 'filesystem.delete-directory', 'filesystem.list-directory', 'filesystem.find', 'filesystem.search', 'git.status', 'git.run', 'web.fetch-url', 'system.execute-command', 'system.show-notification']
     expect(promptSpy).toHaveBeenCalledWith(expect.objectContaining({
       session: expect.objectContaining({
         id: session.id,
         workspacePath: 'C:/workspace',
-        enabledToolIds: ['filesystem.read-file', 'filesystem.write-file', 'git.status', 'web.fetch-url', 'system.show-notification']
+        enabledToolIds: expectedDefaultEnabledTools
       }),
       role: expect.objectContaining({ id: 'main-agent' }),
       skills: expect.any(Array),
@@ -215,7 +216,8 @@ describe('registerIpcHandlers', () => {
       prompt: 'Use assembled prompt',
       modelId: 'mock/hesper-fast',
       systemPrompt: 'assembled system prompt',
-      enabledToolIds: ['filesystem.read-file', 'filesystem.write-file', 'git.status', 'web.fetch-url', 'system.show-notification']
+      enabledToolIds: expectedDefaultEnabledTools,
+      workspacePath: 'C:/workspace'
     }))
     expect(createUserMessageSpy).toHaveBeenCalledWith(expect.objectContaining({
       id: 'message-client-1',
@@ -302,7 +304,7 @@ describe('registerIpcHandlers', () => {
       { sessionId: session.id, prompt: 'Do not expose disabled web fetch', modelId: 'mock/hesper-fast' }
     )).resolves.toEqual({ runId: 'run-global-filter' })
 
-    const expectedEnabledTools = ['filesystem.read-file', 'filesystem.write-file', 'git.status', 'system.show-notification']
+    const expectedEnabledTools = ['filesystem.read-file', 'filesystem.write-file', 'filesystem.delete-file', 'filesystem.delete-directory', 'filesystem.list-directory', 'filesystem.find', 'filesystem.search', 'git.status', 'git.run', 'system.execute-command', 'system.show-notification']
     expect(promptSpy).toHaveBeenLastCalledWith(expect.objectContaining({
       session: expect.objectContaining({ enabledToolIds: expectedEnabledTools })
     }))
@@ -548,6 +550,47 @@ describe('registerIpcHandlers', () => {
     const deleted = await handles.get(ipcChannels.credentialsDeleteProviderApiKey)?.({ sender: { id: 1 } }, { providerId: 'provider-deepseek' })
     expect(deleted).toMatchObject({ hasApiKey: false })
     expect(JSON.stringify(deleted)).not.toContain('sk-super-secret')
+  })
+
+  it('stores tool API keys through tools IPC and updates API-key tool availability', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock', credentialCodec: createMockCredentialCodec() })
+    const savePersistence = vi.fn(async () => {})
+    const handles = new Map<string, (event: any, ...args: any[]) => Promise<unknown> | unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (event: any, ...args: any[]) => Promise<unknown> | unknown) => {
+        handles.set(channel, handler)
+      }),
+      removeHandler: vi.fn()
+    }
+    const dialog = {
+      showOpenDialog: vi.fn(async () => ({ canceled: false, filePaths: ['C:/workspace'] }))
+    }
+
+    registerIpcHandlers({ ipcMain, dialog, container, savePersistence })
+
+    await expect(handles.get(ipcChannels.toolsList)?.({ sender: { id: 1 } })).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'web.search', enabled: false, hasApiKey: false })
+    ]))
+    await expect(handles.get(ipcChannels.toolsSetEnabled)?.({ sender: { id: 1 } }, { id: 'web.search', enabled: true })).rejects.toThrow('API key is required')
+
+    const saved = await handles.get(ipcChannels.toolsSaveApiKey)?.({ sender: { id: 1 } }, { toolId: 'web.search', apiKey: 'tinyfish-secret' })
+    expect(saved).toMatchObject({ toolId: 'web.search', apiKeyRef: 'tool:web.search:api-key', hasApiKey: true, encryptionAvailable: true })
+    expect(JSON.stringify(saved)).not.toContain('tinyfish-secret')
+    expect(await container.credentialVaultService.readToolApiKey('web.search')).toBe('tinyfish-secret')
+
+    const enabled = await handles.get(ipcChannels.toolsSetEnabled)?.({ sender: { id: 1 } }, { id: 'web.search', enabled: true })
+    expect(enabled).toMatchObject({ id: 'web.search', enabled: true, hasApiKey: true })
+
+    const status = await handles.get(ipcChannels.toolsCredentialStatus)?.({ sender: { id: 1 } }, { toolId: 'web.search' })
+    expect(status).toMatchObject({ hasApiKey: true })
+
+    const deleted = await handles.get(ipcChannels.toolsDeleteApiKey)?.({ sender: { id: 1 } }, { toolId: 'web.search' })
+    expect(deleted).toMatchObject({ hasApiKey: false })
+    await expect(handles.get(ipcChannels.toolsList)?.({ sender: { id: 1 } })).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'web.search', enabled: false, hasApiKey: false })
+    ]))
+    expect(savePersistence).toHaveBeenCalled()
   })
 
   it('rejects unknown credential IPC fields at the boundary', async () => {

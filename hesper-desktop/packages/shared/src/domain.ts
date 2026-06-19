@@ -141,6 +141,8 @@ export type ToolDefinition = {
   description: string
   inputSchema: unknown
   category: 'filesystem' | 'git' | 'web' | 'agent' | 'system'
+  icon?: string
+  requiresApiKey?: boolean
 }
 
 export type ToolPermissionPolicy = {

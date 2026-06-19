@@ -1,5 +1,5 @@
 import type { ToolDefinition } from '@hesper/shared'
-import { mkdir, mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
@@ -106,6 +106,85 @@ describe('createBuiltinToolExecutor', () => {
     })).rejects.toThrow('outside the selected workspace')
   })
 
+  it('deletes files and directories inside the selected workspace', async () => {
+    const root = await workspace()
+    await writeFile(join(root, 'old.txt'), 'delete me', 'utf8')
+    await mkdir(join(root, 'old-dir', 'nested'), { recursive: true })
+    await writeFile(join(root, 'old-dir', 'nested', 'child.txt'), 'delete me too', 'utf8')
+    const executor = createBuiltinToolExecutor()
+
+    await expect(executor.execute(tool('filesystem.delete-file'), { path: 'old.txt' }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.delete-file']
+    })).resolves.toMatchObject({ details: expect.objectContaining({ toolId: 'filesystem.delete-file' }) })
+    await expect(readFile(join(root, 'old.txt'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+
+    await expect(executor.execute(tool('filesystem.delete-directory'), { path: 'old-dir', recursive: true }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.delete-directory']
+    })).resolves.toMatchObject({ details: expect.objectContaining({ recursive: true }) })
+    await expect(stat(join(root, 'old-dir'))).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('refuses to delete the selected workspace root directory', async () => {
+    const root = await workspace()
+    const executor = createBuiltinToolExecutor()
+
+    await expect(executor.execute(tool('filesystem.delete-directory'), { path: '.', recursive: true }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.delete-directory']
+    })).rejects.toThrow('Refusing to delete')
+  })
+
+  it('lists, finds, and searches workspace files with metadata and line context', async () => {
+    const root = await workspace()
+    await mkdir(join(root, 'src'), { recursive: true })
+    await writeFile(join(root, 'README.md'), 'alpha\nbeta needle\ngamma\ndelta\n', 'utf8')
+    await writeFile(join(root, 'src', 'app.ts'), 'one\ntwo needle\nthree\nfour\n', 'utf8')
+    const executor = createBuiltinToolExecutor()
+
+    const listed = await executor.execute(tool('filesystem.list-directory'), { path: '.', includeSize: true, includeModifiedAt: true }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.list-directory']
+    })
+    expect(JSON.parse(listed.content)).toMatchObject({
+      path: '.',
+      entries: expect.arrayContaining([
+        expect.objectContaining({ name: 'README.md', type: 'file', size: expect.any(Number), modifiedAt: expect.any(String) }),
+        expect.objectContaining({ name: 'src', type: 'directory', size: 0 })
+      ])
+    })
+
+    const found = await executor.execute(tool('filesystem.find'), { pattern: 'readme', includeSize: true }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.find']
+    })
+    expect(JSON.parse(found.content)).toMatchObject({ matches: [expect.objectContaining({ path: 'README.md', type: 'file', size: expect.any(Number) })] })
+
+    const searched = await executor.execute(tool('filesystem.search'), { condition: { all: [{ nameGlob: '*.ts' }, { contentContains: 'needle' }] } }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.search']
+    })
+    expect(JSON.parse(searched.content)).toMatchObject({
+      results: [expect.objectContaining({
+        path: 'src/app.ts',
+        matches: [expect.objectContaining({ lineNumber: 2, line: 'two needle', before: [{ lineNumber: 1, line: 'one' }], after: expect.arrayContaining([expect.objectContaining({ lineNumber: 3, line: 'three' })]) })]
+      })]
+    })
+  })
+
   it('runs git status through an injectable command runner', async () => {
     const root = await workspace()
     const runGitStatus = vi.fn(async () => '## main\n M README.md\n')
@@ -121,6 +200,51 @@ describe('createBuiltinToolExecutor', () => {
     expect(runGitStatus).toHaveBeenCalledWith(root, expect.objectContaining({ timeoutMs: 10_000 }))
     expect(result.content).toBe('## main\n M README.md\n')
     expect(result.details).toMatchObject({ workspacePath: root })
+  })
+
+  it('runs git arguments from the selected workspace and rejects repo-escaping arguments', async () => {
+    const root = await workspace()
+    const executor = createBuiltinToolExecutor()
+
+    const result = await executor.execute(tool('git.run'), { args: ['--version'] }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['git.run']
+    })
+    expect(result.details).toMatchObject({ toolId: 'git.run', workspacePath: root, args: ['--version'], exitCode: 0 })
+    expect(result.content).toContain('git')
+
+    await expect(executor.execute(tool('git.run'), { args: ['git', 'status'] }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['git.run']
+    })).rejects.toThrow('do not include the git command')
+
+    await expect(executor.execute(tool('git.run'), { args: ['--work-tree=..', 'status'] }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['git.run']
+    })).rejects.toThrow('not allowed')
+  })
+
+  it('executes a platform shell command from the selected workspace', async () => {
+    const root = await workspace()
+    const executor = createBuiltinToolExecutor()
+    const command = process.platform === 'win32' ? 'Write-Output hello' : 'printf hello'
+
+    const result = await executor.execute(tool('system.execute-command'), { command }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['system.execute-command']
+    })
+
+    expect(result.isError).toBe(false)
+    expect(result.content).toContain('hello')
+    expect(result.details).toMatchObject({ toolId: 'system.execute-command', workspacePath: root, exitCode: 0, platform: process.platform })
   })
 
   it('fetches http urls through an injectable pinned request implementation', async () => {
@@ -230,6 +354,44 @@ describe('createBuiltinToolExecutor', () => {
       sessionId: 'session-1',
       allowedToolIds: ['web.fetch-url']
     })).rejects.toThrow('Only http and https URLs are allowed')
+  })
+
+  it('searches the web through TinyFish with a stored tool API key', async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      query: 'web automation',
+      results: [
+        { position: 1, title: 'TinyFish', snippet: 'Automate websites', url: 'https://tinyfish.ai' },
+        { position: 2, title: 'Example', snippet: 'Second result', url: 'https://example.com' }
+      ],
+      total_results: 2,
+      page: 0
+    }), { status: 200, headers: { 'content-type': 'application/json' } }))
+    const readToolApiKey = vi.fn(async () => 'tinyfish-key')
+    const executor = createBuiltinToolExecutor({ fetch: fetchImpl as unknown as typeof fetch, readToolApiKey, now: () => timestamp })
+
+    const result = await executor.execute(tool('web.search'), { query: 'web automation', limit: 1, location: 'US', language: 'en' }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['web.search']
+    })
+
+    expect(readToolApiKey).toHaveBeenCalledWith('web.search')
+    expect(fetchImpl).toHaveBeenCalledWith(expect.objectContaining({ href: expect.stringContaining('https://api.search.tinyfish.ai/?query=web+automation') }), expect.objectContaining({
+      method: 'GET',
+      headers: { 'X-API-Key': 'tinyfish-key' }
+    }))
+    expect(JSON.parse(result.content)).toMatchObject({ query: 'web automation', results: [expect.objectContaining({ title: 'TinyFish' })], totalResults: 2, fetchedAt: timestamp })
+    expect(result.details).toMatchObject({ toolId: 'web.search', endpoint: 'https://api.search.tinyfish.ai', resultCount: 1 })
+  })
+
+  it('requires a TinyFish API key before web search can run', async () => {
+    const executor = createBuiltinToolExecutor({ readToolApiKey: async () => undefined })
+
+    await expect(executor.execute(tool('web.search'), { query: 'web automation' }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['web.search']
+    })).rejects.toThrow('TinyFish API key is required')
   })
 
   it('returns a controlled error when notifications are not available', async () => {

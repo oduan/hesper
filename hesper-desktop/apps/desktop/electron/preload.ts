@@ -82,7 +82,10 @@ const hesperApi: HesperDesktopApi = {
   },
   tools: {
     list: () => ipcRenderer.invoke(ipcChannels.toolsList),
-    setEnabled: (input) => ipcRenderer.invoke(ipcChannels.toolsSetEnabled, input)
+    setEnabled: (input) => ipcRenderer.invoke(ipcChannels.toolsSetEnabled, input),
+    credentialStatus: (input) => ipcRenderer.invoke(ipcChannels.toolsCredentialStatus, input),
+    saveApiKey: (input) => ipcRenderer.invoke(ipcChannels.toolsSaveApiKey, input),
+    deleteApiKey: (input) => ipcRenderer.invoke(ipcChannels.toolsDeleteApiKey, input)
   },
   window: {
     platform: process.platform,

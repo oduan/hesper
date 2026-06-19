@@ -964,6 +964,49 @@ describe('ui components', () => {
     expect(screen.queryByRole('dialog', { name: '步骤全屏查看' })).not.toBeInTheDocument()
   })
 
+  it('uses tool icons for successful tool-call steps while preserving failure fallback', () => {
+    render(
+      <RunSteps
+        autoExpanded
+        steps={[
+          {
+            id: 'step-tool-success',
+            runId: 'run-icons',
+            type: 'tool_call',
+            status: 'succeeded',
+            title: '调用 Read File',
+            detail: JSON.stringify({ kind: 'tool_call', toolId: 'filesystem.read-file', toolIcon: '📖', input: { path: 'README.md' }, output: 'ok' }),
+            createdAt: now
+          },
+          {
+            id: 'step-tool-failed',
+            runId: 'run-icons',
+            type: 'tool_call',
+            status: 'failed',
+            title: '调用 Read File',
+            detail: JSON.stringify({ kind: 'tool_call', toolId: 'filesystem.read-file', toolIcon: '📖', input: { path: 'README.md' }, output: 'boom', isError: true }),
+            createdAt: '2026-06-10T03:00:01.000Z'
+          },
+          {
+            id: 'step-tool-no-icon',
+            runId: 'run-icons',
+            type: 'tool_call',
+            status: 'succeeded',
+            title: '调用 Unknown',
+            detail: JSON.stringify({ kind: 'tool_call', toolId: 'unknown.tool', input: {}, output: 'ok' }),
+            createdAt: '2026-06-10T03:00:02.000Z'
+          }
+        ]}
+      />
+    )
+
+    const statusIcons = screen.getAllByLabelText('步骤状态：成功')
+    expect(statusIcons[0]).toHaveAttribute('data-step-status-icon', 'tool-success-icon')
+    expect(statusIcons[0]).toHaveTextContent('📖')
+    expect(statusIcons[1]).toHaveAttribute('data-step-status-icon', 'success-check')
+    expect(screen.getByLabelText('步骤状态：失败')).toHaveAttribute('data-step-status-icon', 'failed-cross')
+  })
+
   it('renders the run steps block before the first tool call with a continuously updating elapsed timer', () => {
     vi.useFakeTimers({ now: new Date('2026-06-10T03:00:10.000Z') })
     const { rerender } = render(

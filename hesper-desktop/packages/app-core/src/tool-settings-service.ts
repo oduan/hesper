@@ -1,8 +1,10 @@
 import type { Persistence } from '@hesper/persistence'
 import type { ToolDefinition, ToolPermissionPolicy } from '@hesper/shared'
+import type { CredentialVaultService } from './credential-vault-service'
 
 export type ToolCatalogEntry = ToolDefinition & {
   enabled: boolean
+  hasApiKey?: boolean
 }
 
 export type ToolSettingsService = {
@@ -16,6 +18,7 @@ export type ToolSettingsService = {
 type ToolSettingsServiceOptions = {
   persistence: Persistence
   tools: ToolDefinition[]
+  credentialVaultService?: CredentialVaultService
   now?: () => Date
 }
 
@@ -42,10 +45,21 @@ export function createToolSettingsService(options: ToolSettingsServiceOptions): 
     return byToolId
   }
 
-  const withEnabledState = (policyByToolId: Map<string, ToolPermissionPolicy>, tool: ToolDefinition): ToolCatalogEntry => ({
-    ...tool,
-    enabled: globalPolicyEnabled(policyByToolId.get(tool.id))
-  })
+  const apiKeyStateFor = async (tool: ToolDefinition): Promise<{ hasApiKey?: boolean; credentialSatisfied: boolean }> => {
+    if (!tool.requiresApiKey) return { credentialSatisfied: true }
+    const status = await options.credentialVaultService?.getToolApiKeyStatus({ toolId: tool.id })
+    const hasApiKey = status?.hasApiKey === true
+    return { hasApiKey, credentialSatisfied: hasApiKey }
+  }
+
+  const withEnabledState = async (policyByToolId: Map<string, ToolPermissionPolicy>, tool: ToolDefinition): Promise<ToolCatalogEntry> => {
+    const apiKeyState = await apiKeyStateFor(tool)
+    return {
+      ...tool,
+      enabled: globalPolicyEnabled(policyByToolId.get(tool.id)) && apiKeyState.credentialSatisfied,
+      ...(apiKeyState.hasApiKey !== undefined ? { hasApiKey: apiKeyState.hasApiKey } : {})
+    }
+  }
 
   const queueUpdate = async <T>(task: () => Promise<T>): Promise<T> => {
     const result = updateChain.then(task, task)
@@ -56,16 +70,15 @@ export function createToolSettingsService(options: ToolSettingsServiceOptions): 
   return {
     async listTools() {
       const policyByToolId = await loadGlobalPoliciesByToolId()
-      return tools.map((tool) => withEnabledState(policyByToolId, tool))
+      return Promise.all(tools.map((tool) => withEnabledState(policyByToolId, tool)))
     },
     async getTool(id) {
       const tool = toolsById.get(id)
       if (!tool) return undefined
       const policy = await options.persistence.toolPermissionPolicies.get(globalToolPolicyId(id))
-      return {
-        ...tool,
-        enabled: globalPolicyEnabled(policy)
-      }
+      const policyByToolId = new Map<string, ToolPermissionPolicy>()
+      if (policy) policyByToolId.set(id, policy)
+      return withEnabledState(policyByToolId, tool)
     },
     async setToolEnabled(id, enabled) {
       const tool = toolsById.get(id)
@@ -74,6 +87,11 @@ export function createToolSettingsService(options: ToolSettingsServiceOptions): 
       }
 
       return queueUpdate(async () => {
+        const apiKeyState = await apiKeyStateFor(tool)
+        if (enabled && !apiKeyState.credentialSatisfied) {
+          throw new Error(`API key is required before enabling tool: ${id}`)
+        }
+
         const existing = await options.persistence.toolPermissionPolicies.get(globalToolPolicyId(id))
         const timestamp = now().toISOString()
         await options.persistence.toolPermissionPolicies.save({
@@ -84,18 +102,30 @@ export function createToolSettingsService(options: ToolSettingsServiceOptions): 
           createdAt: existing?.createdAt ?? timestamp,
           updatedAt: timestamp
         })
-        return { ...tool, enabled }
+        return {
+          ...tool,
+          enabled,
+          ...(apiKeyState.hasApiKey !== undefined ? { hasApiKey: apiKeyState.hasApiKey } : {})
+        }
       })
     },
     async isToolEnabled(id) {
       const tool = toolsById.get(id)
       if (!tool) return false
       const policy = await options.persistence.toolPermissionPolicies.get(globalToolPolicyId(id))
-      return globalPolicyEnabled(policy)
+      return globalPolicyEnabled(policy) && (await apiKeyStateFor(tool)).credentialSatisfied
     },
     async filterEnabledToolIds(ids) {
       const policyByToolId = await loadGlobalPoliciesByToolId()
-      return ids.filter((id) => toolsById.has(id) && globalPolicyEnabled(policyByToolId.get(id)))
+      const enabledIds: string[] = []
+      for (const id of ids) {
+        const tool = toolsById.get(id)
+        if (!tool) continue
+        if (!globalPolicyEnabled(policyByToolId.get(id))) continue
+        if (!(await apiKeyStateFor(tool)).credentialSatisfied) continue
+        enabledIds.push(id)
+      }
+      return enabledIds
     }
   }
 }

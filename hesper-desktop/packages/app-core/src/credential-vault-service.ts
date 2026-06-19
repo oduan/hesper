@@ -16,8 +16,22 @@ export type ProviderCredentialStatus = {
   updatedAt?: string
 }
 
+export type ToolCredentialStatus = {
+  toolId: string
+  apiKeyRef: string
+  hasApiKey: boolean
+  encryptionAvailable: boolean
+  warning?: string
+  updatedAt?: string
+}
+
 export type SaveProviderApiKeyInput = {
   providerId: string
+  apiKey: string
+}
+
+export type SaveToolApiKeyInput = {
+  toolId: string
   apiKey: string
 }
 
@@ -25,15 +39,27 @@ export type ProviderCredentialInput = {
   providerId: string
 }
 
+export type ToolCredentialInput = {
+  toolId: string
+}
+
 export type CredentialVaultService = {
   getProviderApiKeyStatus(input: ProviderCredentialInput): Promise<ProviderCredentialStatus>
   saveProviderApiKey(input: SaveProviderApiKeyInput): Promise<ProviderCredentialStatus>
   deleteProviderApiKey(input: ProviderCredentialInput): Promise<ProviderCredentialStatus>
   readProviderApiKey(providerId: string): Promise<string | undefined>
+  getToolApiKeyStatus(input: ToolCredentialInput): Promise<ToolCredentialStatus>
+  saveToolApiKey(input: SaveToolApiKeyInput): Promise<ToolCredentialStatus>
+  deleteToolApiKey(input: ToolCredentialInput): Promise<ToolCredentialStatus>
+  readToolApiKey(toolId: string): Promise<string | undefined>
 }
 
 export function providerApiKeyRef(providerId: string): string {
   return `provider:${providerId}:api-key`
+}
+
+export function toolApiKeyRef(toolId: string): string {
+  return `tool:${toolId}:api-key`
 }
 
 export function createUnavailableCredentialCodec(): CredentialVaultCodec {
@@ -64,6 +90,10 @@ function assertProviderId(providerId: string): void {
   if (!providerId.trim()) throw new Error('providerId is required')
 }
 
+function assertToolId(toolId: string): void {
+  if (!toolId.trim()) throw new Error('toolId is required')
+}
+
 function assertApiKey(apiKey: string): void {
   if (!apiKey.trim()) throw new Error('apiKey is required')
 }
@@ -76,13 +106,10 @@ export function createCredentialVaultService(options: {
   const codec = options.codec ?? createUnavailableCredentialCodec()
   const now = options.now ?? nowIso
 
-  const statusFor = async (providerId: string): Promise<ProviderCredentialStatus> => {
-    assertProviderId(providerId)
-    const apiKeyRef = providerApiKeyRef(providerId)
+  const credentialStatus = async (apiKeyRef: string) => {
     const record = await options.persistence.credentialRecords.get(apiKeyRef)
     const encryptionAvailable = codec.isEncryptionAvailable()
     return {
-      providerId,
       apiKeyRef,
       hasApiKey: Boolean(record),
       encryptionAvailable,
@@ -91,44 +118,78 @@ export function createCredentialVaultService(options: {
     }
   }
 
+  const providerStatusFor = async (providerId: string): Promise<ProviderCredentialStatus> => {
+    assertProviderId(providerId)
+    return { providerId, ...await credentialStatus(providerApiKeyRef(providerId)) }
+  }
+
+  const toolStatusFor = async (toolId: string): Promise<ToolCredentialStatus> => {
+    assertToolId(toolId)
+    return { toolId, ...await credentialStatus(toolApiKeyRef(toolId)) }
+  }
+
+  const saveApiKey = async (kind: 'provider-api-key' | 'tool-api-key', subjectId: string, apiKeyRef: string, apiKey: string): Promise<void> => {
+    assertApiKey(apiKey)
+    if (!codec.isEncryptionAvailable()) {
+      throw new Error(unavailableWarning())
+    }
+
+    const existing = await options.persistence.credentialRecords.get(apiKeyRef)
+    const timestamp = now()
+    const encryptedValueBase64 = encodeBase64(codec.encryptString(apiKey))
+    await options.persistence.credentialRecords.save({
+      id: apiKeyRef,
+      kind,
+      subjectId,
+      encryptedValueBase64,
+      createdAt: existing?.createdAt ?? timestamp,
+      updatedAt: timestamp
+    })
+  }
+
+  const readApiKey = async (apiKeyRef: string): Promise<string | undefined> => {
+    const record = await options.persistence.credentialRecords.get(apiKeyRef)
+    if (!record) return undefined
+    if (!codec.isEncryptionAvailable()) {
+      throw new Error('Secure credential storage is unavailable; cannot decrypt API key')
+    }
+    return codec.decryptString(decodeBase64(record.encryptedValueBase64))
+  }
+
   return {
     async getProviderApiKeyStatus(input) {
-      return statusFor(input.providerId)
+      return providerStatusFor(input.providerId)
     },
     async saveProviderApiKey(input) {
       assertProviderId(input.providerId)
-      assertApiKey(input.apiKey)
-      if (!codec.isEncryptionAvailable()) {
-        throw new Error(unavailableWarning())
-      }
-
-      const apiKeyRef = providerApiKeyRef(input.providerId)
-      const existing = await options.persistence.credentialRecords.get(apiKeyRef)
-      const timestamp = now()
-      const encryptedValueBase64 = encodeBase64(codec.encryptString(input.apiKey))
-      await options.persistence.credentialRecords.save({
-        id: apiKeyRef,
-        kind: 'provider-api-key',
-        subjectId: input.providerId,
-        encryptedValueBase64,
-        createdAt: existing?.createdAt ?? timestamp,
-        updatedAt: timestamp
-      })
-      return statusFor(input.providerId)
+      await saveApiKey('provider-api-key', input.providerId, providerApiKeyRef(input.providerId), input.apiKey)
+      return providerStatusFor(input.providerId)
     },
     async deleteProviderApiKey(input) {
       assertProviderId(input.providerId)
       await options.persistence.credentialRecords.delete(providerApiKeyRef(input.providerId))
-      return statusFor(input.providerId)
+      return providerStatusFor(input.providerId)
     },
     async readProviderApiKey(providerId) {
       assertProviderId(providerId)
-      const record = await options.persistence.credentialRecords.get(providerApiKeyRef(providerId))
-      if (!record) return undefined
-      if (!codec.isEncryptionAvailable()) {
-        throw new Error('Secure credential storage is unavailable; cannot decrypt provider API key')
-      }
-      return codec.decryptString(decodeBase64(record.encryptedValueBase64))
+      return readApiKey(providerApiKeyRef(providerId))
+    },
+    async getToolApiKeyStatus(input) {
+      return toolStatusFor(input.toolId)
+    },
+    async saveToolApiKey(input) {
+      assertToolId(input.toolId)
+      await saveApiKey('tool-api-key', input.toolId, toolApiKeyRef(input.toolId), input.apiKey)
+      return toolStatusFor(input.toolId)
+    },
+    async deleteToolApiKey(input) {
+      assertToolId(input.toolId)
+      await options.persistence.credentialRecords.delete(toolApiKeyRef(input.toolId))
+      return toolStatusFor(input.toolId)
+    },
+    async readToolApiKey(toolId) {
+      assertToolId(toolId)
+      return readApiKey(toolApiKeyRef(toolId))
     }
   }
 }

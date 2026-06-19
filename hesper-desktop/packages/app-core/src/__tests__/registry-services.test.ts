@@ -11,9 +11,26 @@ describe('registry services', () => {
     expect(roles.find((role) => role.id === 'main-agent')?.defaultToolIds).toEqual([
       'filesystem.read-file',
       'filesystem.write-file',
+      'filesystem.delete-file',
+      'filesystem.delete-directory',
+      'filesystem.list-directory',
+      'filesystem.find',
+      'filesystem.search',
+      'git.status',
+      'git.run',
+      'web.fetch-url',
+      'web.search',
+      'system.execute-command',
+      'system.show-notification'
+    ])
+    expect(roles.find((role) => role.id === 'worker-agent')?.defaultToolIds).toEqual([
+      'filesystem.read-file',
+      'filesystem.list-directory',
+      'filesystem.find',
+      'filesystem.search',
       'git.status',
       'web.fetch-url',
-      'system.show-notification'
+      'web.search'
     ])
     expect(roles.find((role) => role.id === 'main-agent')?.defaultToolIds).not.toContain('agent.spawn-worker-agent')
     expect(skills.map((skill) => skill.id)).toEqual([

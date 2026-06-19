@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, clearSessionSendError, pruneSessionSendErrors } from '../src/App'
 
-const { listSessions, createSession, updateTitle, deleteSession, generateTitle, markViewed, listMessages, listRuns, listSteps, enqueue, onEvent, getSettings, updateSettings, listProviders, listModels, listTools, setToolEnabled, minimizeWindow, toggleMaximizeWindow, closeWindow } = vi.hoisted(() => ({
+const { listSessions, createSession, updateTitle, deleteSession, generateTitle, markViewed, listMessages, listRuns, listSteps, enqueue, onEvent, getSettings, updateSettings, listProviders, listModels, listTools, setToolEnabled, toolCredentialStatus, saveToolApiKey, deleteToolApiKey, minimizeWindow, toggleMaximizeWindow, closeWindow } = vi.hoisted(() => ({
   listSessions: vi.fn(async () => []),
   createSession: vi.fn(async () => ({
     id: 'session-1',
@@ -81,13 +81,36 @@ const { listSessions, createSession, updateTitle, deleteSession, generateTitle, 
   ]),
   setToolEnabled: vi.fn(async (input: { id: string; enabled: boolean }) => ({
     id: input.id,
-    name: input.id === 'web.fetch-url' ? 'Fetch URL' : 'Read File',
-    description: input.id === 'web.fetch-url' ? 'Fetch and extract text from a URL.' : 'Read a text file from the selected workspace.',
-    category: input.id === 'web.fetch-url' ? 'web' : 'filesystem',
+    name: input.id === 'web.fetch-url' ? 'Fetch URL' : input.id === 'web.search' ? 'Web Search' : 'Read File',
+    description: input.id === 'web.fetch-url' ? 'Fetch and extract text from a URL.' : input.id === 'web.search' ? 'Search the web with TinyFish.' : 'Read a text file from the selected workspace.',
+    category: input.id.startsWith('web.') ? 'web' : 'filesystem',
     inputSchema: input.id === 'web.fetch-url'
       ? { type: 'object', required: ['url'], properties: { url: { type: 'string' } } }
-      : { type: 'object', required: ['path'], properties: { path: { type: 'string' } } },
+      : input.id === 'web.search'
+        ? { type: 'object', required: ['query'], properties: { query: { type: 'string' } } }
+        : { type: 'object', required: ['path'], properties: { path: { type: 'string' } } },
+    requiresApiKey: input.id === 'web.search' ? true : undefined,
+    hasApiKey: input.id === 'web.search' ? input.enabled : undefined,
     enabled: input.enabled
+  })),
+  toolCredentialStatus: vi.fn(async (input: { toolId: string }) => ({
+    toolId: input.toolId,
+    apiKeyRef: `tool:${input.toolId}:api-key`,
+    hasApiKey: false,
+    encryptionAvailable: true
+  })),
+  saveToolApiKey: vi.fn(async (input: { toolId: string; apiKey: string }) => ({
+    toolId: input.toolId,
+    apiKeyRef: `tool:${input.toolId}:api-key`,
+    hasApiKey: true,
+    encryptionAvailable: true,
+    updatedAt: '2026-06-10T03:00:00.000Z'
+  })),
+  deleteToolApiKey: vi.fn(async (input: { toolId: string }) => ({
+    toolId: input.toolId,
+    apiKeyRef: `tool:${input.toolId}:api-key`,
+    hasApiKey: false,
+    encryptionAvailable: true
   })),
   minimizeWindow: vi.fn(async () => ({ minimized: true })),
   toggleMaximizeWindow: vi.fn(async () => ({ isMaximized: true })),
@@ -110,7 +133,7 @@ vi.mock('../src/ipc-client', () => ({
     settings: { get: getSettings, update: updateSettings },
     providers: { list: listProviders },
     models: { list: listModels },
-    tools: { list: listTools, setEnabled: setToolEnabled },
+    tools: { list: listTools, setEnabled: setToolEnabled, credentialStatus: toolCredentialStatus, saveApiKey: saveToolApiKey, deleteApiKey: deleteToolApiKey },
     window: {
       platform: 'win32',
       minimize: minimizeWindow,
@@ -152,6 +175,9 @@ describe('renderer App', () => {
     listModels.mockReset()
     listTools.mockReset()
     setToolEnabled.mockClear()
+    toolCredentialStatus.mockReset()
+    saveToolApiKey.mockReset()
+    deleteToolApiKey.mockReset()
     minimizeWindow.mockClear()
     toggleMaximizeWindow.mockClear()
     closeWindow.mockClear()
@@ -181,13 +207,36 @@ describe('renderer App', () => {
     ])
     setToolEnabled.mockImplementation(async (input: { id: string; enabled: boolean }) => ({
       id: input.id,
-      name: input.id === 'web.fetch-url' ? 'Fetch URL' : 'Read File',
-      description: input.id === 'web.fetch-url' ? 'Fetch and extract text from a URL.' : 'Read a text file from the selected workspace.',
-      category: input.id === 'web.fetch-url' ? 'web' : 'filesystem',
+      name: input.id === 'web.fetch-url' ? 'Fetch URL' : input.id === 'web.search' ? 'Web Search' : 'Read File',
+      description: input.id === 'web.fetch-url' ? 'Fetch and extract text from a URL.' : input.id === 'web.search' ? 'Search the web with TinyFish.' : 'Read a text file from the selected workspace.',
+      category: input.id.startsWith('web.') ? 'web' : 'filesystem',
       inputSchema: input.id === 'web.fetch-url'
         ? { type: 'object', required: ['url'], properties: { url: { type: 'string' } } }
-        : { type: 'object', required: ['path'], properties: { path: { type: 'string' } } },
+        : input.id === 'web.search'
+          ? { type: 'object', required: ['query'], properties: { query: { type: 'string' } } }
+          : { type: 'object', required: ['path'], properties: { path: { type: 'string' } } },
+      requiresApiKey: input.id === 'web.search' ? true : undefined,
+      hasApiKey: input.id === 'web.search' ? input.enabled : undefined,
       enabled: input.enabled
+    }))
+    toolCredentialStatus.mockImplementation(async (input: { toolId: string }) => ({
+      toolId: input.toolId,
+      apiKeyRef: `tool:${input.toolId}:api-key`,
+      hasApiKey: false,
+      encryptionAvailable: true
+    }))
+    saveToolApiKey.mockImplementation(async (input: { toolId: string; apiKey: string }) => ({
+      toolId: input.toolId,
+      apiKeyRef: `tool:${input.toolId}:api-key`,
+      hasApiKey: true,
+      encryptionAvailable: true,
+      updatedAt: '2026-06-10T03:00:00.000Z'
+    }))
+    deleteToolApiKey.mockImplementation(async (input: { toolId: string }) => ({
+      toolId: input.toolId,
+      apiKeyRef: `tool:${input.toolId}:api-key`,
+      hasApiKey: false,
+      encryptionAvailable: true
     }))
     enqueue.mockResolvedValue({ runId: 'run-1' })
     onEvent.mockImplementation(() => () => undefined)
@@ -272,6 +321,48 @@ describe('renderer App', () => {
     expect(detailSwitch.querySelector('[data-tool-toggle-knob="true"]')).toHaveStyle({ transform: 'translateX(0)' })
     await user.click(detailSwitch)
     expect(setToolEnabled).toHaveBeenCalledWith({ id: 'web.fetch-url', enabled: true })
+  })
+
+  it('manages API keys for credential-required tools from the tools detail panel', async () => {
+    const user = userEvent.setup()
+    const toolsWithoutKey = [
+      {
+        id: 'filesystem.read-file',
+        name: 'Read File',
+        description: 'Read a text file from the selected workspace.',
+        category: 'filesystem',
+        inputSchema: { type: 'object', required: ['path'], properties: { path: { type: 'string' } } },
+        enabled: true
+      },
+      {
+        id: 'web.search',
+        name: 'Web Search',
+        description: 'Search the web with TinyFish.',
+        category: 'web',
+        requiresApiKey: true,
+        hasApiKey: false,
+        inputSchema: { type: 'object', required: ['query'], properties: { query: { type: 'string' } } },
+        enabled: false
+      }
+    ]
+    const toolsWithKey = [{ ...toolsWithoutKey[0] }, { ...toolsWithoutKey[1], hasApiKey: true, enabled: true }]
+    listTools.mockResolvedValueOnce(toolsWithoutKey as any).mockResolvedValueOnce(toolsWithKey as any)
+    toolCredentialStatus.mockResolvedValueOnce({ toolId: 'web.search', apiKeyRef: 'tool:web.search:api-key', hasApiKey: false, encryptionAvailable: true })
+
+    render(<App />)
+    await user.click(screen.getByRole('button', { name: '工具' }))
+    await user.click(await screen.findByText('Web Search'))
+
+    const detailsRegion = screen.getByRole('region', { name: '工具详情' })
+    expect(detailsRegion).toHaveTextContent('未保存')
+    expect(screen.getByRole('switch', { name: '工具全局开关' })).toBeDisabled()
+
+    await user.type(screen.getByLabelText('TinyFish API Key'), 'tinyfish-secret')
+    await user.click(screen.getByRole('button', { name: '保存 API Key' }))
+
+    await waitFor(() => expect(saveToolApiKey).toHaveBeenCalledWith({ toolId: 'web.search', apiKey: 'tinyfish-secret' }))
+    await waitFor(() => expect(detailsRegion).toHaveTextContent('已保存'))
+    expect(screen.getByRole('switch', { name: '工具全局开关' })).not.toBeDisabled()
   })
 
   it('shows unread completion icon for background runs until the session is viewed', async () => {
@@ -483,7 +574,7 @@ describe('renderer App', () => {
   it('keeps the submitted session title visible while rename persistence is pending', async () => {
     const user = userEvent.setup()
     let resolveRename!: (value: Awaited<ReturnType<typeof updateTitle>>) => void
-    updateTitle.mockImplementationOnce((input: { id: string; title: string }) => new Promise((resolve) => {
+    updateTitle.mockImplementationOnce((_input: { id: string; title: string }) => new Promise((resolve) => {
       resolveRename = resolve
     }) as ReturnType<typeof updateTitle>)
 

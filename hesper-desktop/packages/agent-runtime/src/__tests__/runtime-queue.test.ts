@@ -110,6 +110,20 @@ function getRuntimeInternals(runtime: AgentRuntime): RuntimeInternals {
 }
 
 describe('AgentRuntime queue', () => {
+  it('defaults queued run workspace to the session workspace when enqueue omits it', async () => {
+    const persistence = await createInMemoryPersistence()
+    await persistence.sessions.save({ ...session, id: 'session-workspace-default', workspacePath: 'C:/workspace' })
+
+    const adapter = new RecordingAdapter()
+    const runtime = new AgentRuntime({ persistence, adapter })
+
+    const run = await runtime.enqueue({ sessionId: 'session-workspace-default', prompt: 'use session workspace', modelId: 'mock/hesper-fast' })
+    await runtime.waitForIdle('session-workspace-default')
+
+    expect((await persistence.runs.get(run.id))?.workspacePath).toBe('C:/workspace')
+    expect(adapter.inputs[0]?.workspacePath).toBe('C:/workspace')
+  })
+
   it('cleans enqueue chains and idle session state after queued runs drain', async () => {
     const persistence = await createInMemoryPersistence()
     await persistence.sessions.save({ ...session, id: 'session-cleanup' })
