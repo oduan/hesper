@@ -103,16 +103,13 @@ export function createRoleManagementService(options: RoleManagementServiceOption
     async updateRole(input) {
       const existing = await options.persistence.roles.get(input.id)
       if (!existing) throw new Error(`Role not found: ${input.id}`)
-      const current = toManagedRole(existing)
-      const role: ManagedRoleDto = {
-        id: current.id,
-        name: input.name === undefined ? current.name : normalizeRequiredName(input.name),
-        description: input.description === undefined ? current.description : normalizeOptionalText(input.description),
-        systemPrompt: input.systemPrompt === undefined ? current.systemPrompt : normalizeOptionalText(input.systemPrompt),
-        defaultToolIds: input.defaultToolIds === undefined ? current.defaultToolIds : validateToolIds(input.defaultToolIds)
-      }
-      await options.persistence.roles.save(toStoredRole(role))
-      return role
+      const next: Role = { ...existing }
+      if (input.name !== undefined) next.name = normalizeRequiredName(input.name)
+      if (input.description !== undefined) next.description = normalizeOptionalText(input.description)
+      if (input.systemPrompt !== undefined) next.systemPrompt = normalizeOptionalText(input.systemPrompt)
+      if (input.defaultToolIds !== undefined) next.defaultToolIds = validateToolIds(input.defaultToolIds)
+      await options.persistence.roles.save(next)
+      return toManagedRole(next)
     },
 
     async deleteRole(id) {

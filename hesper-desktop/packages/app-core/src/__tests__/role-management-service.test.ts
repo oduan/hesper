@@ -89,12 +89,57 @@ describe('role management service', () => {
     })
   })
 
+  it('preserves non-managed role fields when updating managed fields', async () => {
+    const { persistence, service } = await createService()
+    await persistence.roles.save({
+      id: 'custom-role',
+      name: 'Original',
+      description: 'Original description',
+      defaultModelId: 'legacy-model',
+      defaultModelRef: { providerId: 'provider-1', modelId: 'model-1' },
+      systemPrompt: 'Original prompt',
+      allowedSkillIds: ['builtin:notes'],
+      defaultSkillIds: ['workspace:notes'],
+      defaultToolIds: ['filesystem.read-file'],
+      canBeMainAgent: false,
+      canBeWorkerAgent: true,
+      canBeAssignedToWorkerAgent: true,
+      workerAgentGuidance: 'Keep guidance'
+    })
+
+    const updated = await service.updateRole({ id: 'custom-role', name: 'Updated' })
+
+    expect(updated).toEqual({
+      id: 'custom-role',
+      name: 'Updated',
+      description: 'Original description',
+      systemPrompt: 'Original prompt',
+      defaultToolIds: ['filesystem.read-file']
+    })
+    await expect(persistence.roles.get('custom-role')).resolves.toMatchObject({
+      id: 'custom-role',
+      name: 'Updated',
+      description: 'Original description',
+      defaultModelId: 'legacy-model',
+      defaultModelRef: { providerId: 'provider-1', modelId: 'model-1' },
+      systemPrompt: 'Original prompt',
+      allowedSkillIds: ['builtin:notes'],
+      defaultSkillIds: ['workspace:notes'],
+      defaultToolIds: ['filesystem.read-file'],
+      canBeMainAgent: false,
+      canBeWorkerAgent: true,
+      canBeAssignedToWorkerAgent: true,
+      workerAgentGuidance: 'Keep guidance'
+    })
+  })
+
   it('rejects invalid updates and deletes roles', async () => {
     const { service } = await createService()
     const role = await service.createRole({ name: 'Delete me' })
 
     await expect(service.updateRole({ id: 'missing', name: 'Nope' })).rejects.toThrow('Role not found: missing')
     await expect(service.updateRole({ id: role.id, name: '' })).rejects.toThrow('Role name is required')
+    await expect(service.updateRole({ id: role.id, defaultToolIds: ['missing.tool'] })).rejects.toThrow('Unknown tool id: missing.tool')
 
     await expect(service.deleteRole(role.id)).resolves.toEqual({ deleted: true, id: role.id })
     await expect(service.listRoles()).resolves.toEqual([])
