@@ -21,9 +21,13 @@ describe('registry services', () => {
       'git.run',
       'web.fetch-url',
       'web.search',
+      'roles.create',
+      'roles.update',
       'system.execute-command',
       'system.show-notification'
     ])
+    expect(roles.find((role) => role.id === 'worker-agent')?.defaultToolIds).not.toContain('roles.create')
+    expect(roles.find((role) => role.id === 'worker-agent')?.defaultToolIds).not.toContain('roles.update')
     expect(roles.find((role) => role.id === 'worker-agent')?.defaultToolIds).toEqual([
       'filesystem.read-file',
       'filesystem.list-directory',

@@ -7,6 +7,7 @@ import type {
   HesperDesktopApi,
   MessageDto,
   GenerateSessionTitleInput,
+  ManagedRoleDto,
   ModelDto,
   ModelProviderDto,
   RunStepDto,
@@ -41,6 +42,8 @@ const fallbackBuiltinTools: ToolDto[] = [
   { id: 'git.run', name: 'Git Command', description: 'Run git in the selected workspace. Pass only arguments after git.', category: 'git', icon: '🌿', inputSchema: { type: 'object', required: ['args'], properties: { args: { type: 'array', items: { type: 'string' } } } }, enabled: true },
   { id: 'web.fetch-url', name: 'Fetch URL', description: 'Fetch and extract clean page content with the TinyFish Fetch API. Requires a saved TinyFish API key.', category: 'web', icon: '🌐', requiresApiKey: true, hasApiKey: false, inputSchema: { type: 'object', required: ['url'], properties: { url: { type: 'string' }, format: { type: 'string' }, links: { type: 'boolean' }, imageLinks: { type: 'boolean' }, ttl: { type: 'number' }, perUrlTimeoutMs: { type: 'number' } } }, enabled: false },
   { id: 'web.search', name: 'Web Search', description: 'Search the web with TinyFish Search API. Requires a saved TinyFish API key.', category: 'web', icon: '🌐', requiresApiKey: true, hasApiKey: false, inputSchema: { type: 'object', required: ['query'], properties: { query: { type: 'string' } } }, enabled: false },
+  { id: 'roles.create', name: 'Create Role', description: 'Create a user-defined role with a name, description, full prompt, and default tools.', category: 'agent', icon: '🎭', inputSchema: { type: 'object', required: ['name'], properties: { name: { type: 'string' }, description: { type: 'string' }, systemPrompt: { type: 'string' }, defaultToolIds: { type: 'array', items: { type: 'string' } } } }, enabled: true },
+  { id: 'roles.update', name: 'Update Role', description: 'Update an existing user-defined role. This tool cannot delete roles.', category: 'agent', icon: '🎭', inputSchema: { type: 'object', required: ['id'], properties: { id: { type: 'string' }, name: { type: 'string' }, description: { type: 'string' }, systemPrompt: { type: 'string' }, defaultToolIds: { type: 'array', items: { type: 'string' } } } }, enabled: true },
   { id: 'system.execute-command', name: 'Execute Command', description: 'Execute one complete shell command from the selected workspace.', category: 'system', icon: '🖥️', inputSchema: { type: 'object', required: ['command'], properties: { command: { type: 'string' } } }, enabled: true },
   { id: 'system.show-notification', name: 'Show Notification', description: 'Show a desktop notification.', category: 'system', icon: '🔔', inputSchema: { type: 'object', required: ['message'], properties: { message: { type: 'string' } } }, enabled: true }
 ]
@@ -75,6 +78,7 @@ export function createFallbackHesperApi(): HesperDesktopApi {
   let nextRunNumber = 1
   let sessions: SessionDto[] = []
   let tools: ToolDto[] = fallbackBuiltinTools.map((tool) => ({ ...tool }))
+  let roles: ManagedRoleDto[] = []
   const messagesBySession: Record<string, MessageDto[]> = {}
   const runsBySession: Record<string, AgentRunDto[]> = {}
   const stepsByRun: Record<string, RunStepDto[]> = {}
@@ -83,6 +87,24 @@ export function createFallbackHesperApi(): HesperDesktopApi {
     const updated = updater(existing)
     sessions = [updated, ...sessions.filter((session) => session.id !== id)]
     return updated
+  }
+  const cloneRole = (role: ManagedRoleDto): ManagedRoleDto => ({ ...role, defaultToolIds: [...role.defaultToolIds] })
+  const normalizeRoleName = (name: string): string => {
+    const trimmed = name.trim()
+    if (!trimmed) {
+      throw new Error('Role name is required')
+    }
+    return trimmed
+  }
+  const normalizeRoleText = (value: string | undefined): string => value?.trim() ?? ''
+  const validateRoleToolIds = (toolIds: string[] | undefined): string[] => {
+    const ids = toolIds ?? []
+    for (const id of ids) {
+      if (!tools.some((tool) => tool.id === id)) {
+        throw new Error(`Unknown tool id: ${id}`)
+      }
+    }
+    return [...ids]
   }
 
   return {
@@ -268,6 +290,43 @@ export function createFallbackHesperApi(): HesperDesktopApi {
           encryptionAvailable: false,
           warning: 'Secure credential storage is unavailable in renderer fallback mode.'
         }
+      }
+    },
+    roles: {
+      list: async () => roles.map(cloneRole),
+      create: async (input) => {
+        const role: ManagedRoleDto = {
+          id: createId('role'),
+          name: normalizeRoleName(input.name),
+          description: normalizeRoleText(input.description),
+          systemPrompt: normalizeRoleText(input.systemPrompt),
+          defaultToolIds: validateRoleToolIds(input.defaultToolIds)
+        }
+        roles = [...roles, role]
+        return cloneRole(role)
+      },
+      update: async (input) => {
+        const existing = roles.find((role) => role.id === input.id)
+        if (!existing) {
+          throw new Error(`Role not found: ${input.id}`)
+        }
+        const updated: ManagedRoleDto = {
+          ...existing,
+          ...(input.name !== undefined ? { name: normalizeRoleName(input.name) } : {}),
+          ...(input.description !== undefined ? { description: normalizeRoleText(input.description) } : {}),
+          ...(input.systemPrompt !== undefined ? { systemPrompt: normalizeRoleText(input.systemPrompt) } : {}),
+          ...(input.defaultToolIds !== undefined ? { defaultToolIds: validateRoleToolIds(input.defaultToolIds) } : {})
+        }
+        roles = roles.map((role) => role.id === updated.id ? updated : role)
+        return cloneRole(updated)
+      },
+      delete: async (id) => {
+        const existing = roles.find((role) => role.id === id)
+        if (!existing) {
+          throw new Error(`Role not found: ${id}`)
+        }
+        roles = roles.filter((role) => role.id !== id)
+        return { deleted: true as const, id }
       }
     },
     window: {

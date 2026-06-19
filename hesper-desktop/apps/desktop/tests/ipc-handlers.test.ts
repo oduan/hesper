@@ -21,6 +21,7 @@ describe('desktop service container', () => {
 
     expect(session.title).toBe('Desktop test')
     expect(await container.sessionService.listSessions()).toHaveLength(1)
+    expect(container.roleManagementService).toBeDefined()
     expect(container.promptAssemblyService.assembleMainPrompt({
       session,
       role: container.roleService.getRole('main-agent')!,
@@ -28,6 +29,24 @@ describe('desktop service container', () => {
       tools: container.toolCatalogService.list(),
       assignableWorkerAgentRoles: container.roleService.listRoles()
     }).systemPrompt).toContain('hesper desktop Agent')
+  })
+
+  it('injects role management tools into the production tool runner', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock' })
+
+    const result = await container.toolRunner.run(container.toolCatalogService.get('roles.create')!, { name: 'Tool-created role' }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['roles.create']
+    })
+
+    expect(result.isError).not.toBe(true)
+    const created = JSON.parse(result.content) as { id: string; name: string }
+    expect(created).toMatchObject({ id: expect.stringMatching(/^role-/), name: 'Tool-created role' })
+    await expect(persistence.roles.list()).resolves.toEqual([
+      expect.objectContaining({ id: created.id, name: 'Tool-created role' })
+    ])
   })
 
   it('seeds builtin providers for an empty desktop persistence store', async () => {
@@ -199,7 +218,7 @@ describe('registerIpcHandlers', () => {
 
     await expect(handles.get(ipcChannels.agentEnqueue)?.({ sender: { id: 1 } }, { sessionId: session.id, prompt: 'Use assembled prompt', modelId: 'mock/hesper-fast', messageId: 'message-client-1', messageCreatedAt: '2026-06-10T03:00:02.000Z' })).resolves.toEqual({ runId: 'run-assembled' })
 
-    const expectedDefaultEnabledTools = ['filesystem.read-file', 'filesystem.write-file', 'filesystem.edit-file', 'filesystem.delete-file', 'filesystem.delete-directory', 'filesystem.list-directory', 'filesystem.find', 'filesystem.search', 'git.status', 'git.run', 'system.execute-command', 'system.show-notification']
+    const expectedDefaultEnabledTools = ['filesystem.read-file', 'filesystem.write-file', 'filesystem.edit-file', 'filesystem.delete-file', 'filesystem.delete-directory', 'filesystem.list-directory', 'filesystem.find', 'filesystem.search', 'git.status', 'git.run', 'roles.create', 'roles.update', 'system.execute-command', 'system.show-notification']
     expect(promptSpy).toHaveBeenCalledWith(expect.objectContaining({
       session: expect.objectContaining({
         id: session.id,
@@ -304,7 +323,7 @@ describe('registerIpcHandlers', () => {
       { sessionId: session.id, prompt: 'Do not expose disabled web fetch', modelId: 'mock/hesper-fast' }
     )).resolves.toEqual({ runId: 'run-global-filter' })
 
-    const expectedEnabledTools = ['filesystem.read-file', 'filesystem.write-file', 'filesystem.edit-file', 'filesystem.delete-file', 'filesystem.delete-directory', 'filesystem.list-directory', 'filesystem.find', 'filesystem.search', 'git.status', 'git.run', 'system.execute-command']
+    const expectedEnabledTools = ['filesystem.read-file', 'filesystem.write-file', 'filesystem.edit-file', 'filesystem.delete-file', 'filesystem.delete-directory', 'filesystem.list-directory', 'filesystem.find', 'filesystem.search', 'git.status', 'git.run', 'roles.create', 'roles.update', 'system.execute-command']
     expect(promptSpy).toHaveBeenLastCalledWith(expect.objectContaining({
       session: expect.objectContaining({ enabledToolIds: expectedEnabledTools })
     }))
@@ -315,6 +334,41 @@ describe('registerIpcHandlers', () => {
     const updatedTool = await handles.get(ipcChannels.toolsSetEnabled)?.({ sender: { id: 1 } }, { id: 'system.show-notification', enabled: true })
     expect(updatedTool).toMatchObject({ id: 'system.show-notification', enabled: true })
     expect(await container.toolSettingsService.isToolEnabled('system.show-notification')).toBe(true)
+  })
+
+  it('manages roles through typed IPC handlers and persists mutations', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock' })
+    const savePersistence = vi.fn(async () => {})
+    const handles = new Map<string, (event: any, ...args: any[]) => Promise<unknown> | unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (event: any, ...args: any[]) => Promise<unknown> | unknown) => {
+        handles.set(channel, handler)
+      }),
+      removeHandler: vi.fn()
+    }
+    const dialog = { showOpenDialog: vi.fn(async () => ({ canceled: true, filePaths: [] })) }
+
+    registerIpcHandlers({ ipcMain, dialog, container, savePersistence })
+
+    const created = await handles.get(ipcChannels.rolesCreate)?.({ sender: { id: 1 } }, {
+      name: '运维助手',
+      description: '执行命令',
+      systemPrompt: '你是运维助手。',
+      defaultToolIds: ['git.status']
+    }) as { id: string }
+
+    expect(created).toMatchObject({ name: '运维助手', defaultToolIds: ['git.status'] })
+    await expect(handles.get(ipcChannels.rolesList)?.({ sender: { id: 1 } })).resolves.toEqual([expect.objectContaining({ id: created.id })])
+
+    await expect(handles.get(ipcChannels.rolesUpdate)?.({ sender: { id: 1 } }, {
+      id: created.id,
+      name: '更新后的角色'
+    })).resolves.toMatchObject({ id: created.id, name: '更新后的角色' })
+
+    await expect(handles.get(ipcChannels.rolesDelete)?.({ sender: { id: 1 } }, created.id)).resolves.toEqual({ deleted: true, id: created.id })
+    await expect(handles.get(ipcChannels.rolesList)?.({ sender: { id: 1 } })).resolves.toEqual([])
+    expect(savePersistence).toHaveBeenCalledTimes(3)
   })
 
   it('does not persist a user message when runtime enqueue fails', async () => {

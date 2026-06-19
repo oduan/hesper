@@ -7,12 +7,14 @@ import {
   conversationMessagesResultSchema,
   conversationRunsResultSchema,
   conversationStepsResultSchema,
+  createRoleInputSchema,
   createSessionInputSchema,
   directorySelectionSchema,
   generateSessionTitleInputSchema,
   ipcChannels,
   ipcEvents,
   listModelsInputSchema,
+  managedRoleDtoSchema,
   providerConnectionTestInputSchema,
   providerConnectionTestResultSchema,
   providerCredentialInputSchema,
@@ -33,6 +35,7 @@ import {
   toolCredentialStatusSchema,
   toolDtoSchema,
   unsubscribeAgentEventsResultSchema,
+  updateRoleInputSchema,
   updateSessionTitleInputSchema,
   updateSettingsInputSchema
 } from './ipc-contract'
@@ -69,7 +72,10 @@ const mutatingChannels = [
   ipcChannels.modelsSave,
   ipcChannels.toolsSetEnabled,
   ipcChannels.toolsSaveApiKey,
-  ipcChannels.toolsDeleteApiKey
+  ipcChannels.toolsDeleteApiKey,
+  ipcChannels.rolesCreate,
+  ipcChannels.rolesUpdate,
+  ipcChannels.rolesDelete
 ] as const
 
 type StripUndefined<T extends Record<string, unknown>> = {
@@ -298,6 +304,22 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       const settings = await options.container.settingsService.updateSettings(omitUndefined(updateSettingsInputSchema.parse(payload ?? {})))
       await savePersistence()
       return appSettingsSchema.parse(settings)
+    },
+    [ipcChannels.rolesList]: async () => z.array(managedRoleDtoSchema).parse(await options.container.roleManagementService.listRoles()),
+    [ipcChannels.rolesCreate]: async (_event, payload) => {
+      const role = await options.container.roleManagementService.createRole(omitUndefined(createRoleInputSchema.parse(payload)))
+      await savePersistence()
+      return managedRoleDtoSchema.parse(role)
+    },
+    [ipcChannels.rolesUpdate]: async (_event, payload) => {
+      const role = await options.container.roleManagementService.updateRole(omitUndefined(updateRoleInputSchema.parse(payload)))
+      await savePersistence()
+      return managedRoleDtoSchema.parse(role)
+    },
+    [ipcChannels.rolesDelete]: async (_event, payload) => {
+      const result = await options.container.roleManagementService.deleteRole(sessionIdInputSchema.parse(payload))
+      await savePersistence()
+      return result
     },
     [ipcChannels.toolsList]: async () => z.array(toolDtoSchema).parse(await options.container.toolSettingsService.listTools()),
     [ipcChannels.toolsSetEnabled]: async (_event, payload) => {

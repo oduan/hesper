@@ -6,6 +6,7 @@ import {
   createDefaultSkillService,
   createModelProviderService,
   createPromptAssemblyService,
+  createRoleManagementService,
   createSessionService,
   createSettingsService,
   createToolCatalogService,
@@ -35,6 +36,7 @@ export function createServiceContainer(options: ServiceContainerOptions) {
   const skillService = createDefaultSkillService()
   const toolDefinitions = createBuiltinToolDefinitions()
   const toolCatalogService = createToolCatalogService(toolDefinitions)
+  const roleManagementService = createRoleManagementService({ persistence: options.persistence, toolCatalogService })
   const promptAssemblyService = createPromptAssemblyService()
   const credentialVaultService = createCredentialVaultService({
     persistence: options.persistence,
@@ -74,6 +76,10 @@ export function createServiceContainer(options: ServiceContainerOptions) {
           throw new Error('Desktop notifications are not supported on this system')
         }
         new Notification({ title: 'hesper', body: message }).show()
+      },
+      roleTools: {
+        createRole: (input) => roleManagementService.createRole(input),
+        updateRole: (input) => roleManagementService.updateRole(input)
       }
     })
   })
@@ -109,6 +115,7 @@ export function createServiceContainer(options: ServiceContainerOptions) {
     settingsService,
     roleService,
     skillService,
+    roleManagementService,
     toolCatalogService,
     toolSettingsService,
     promptAssemblyService,

@@ -36,6 +36,10 @@ export const ipcChannels = {
   toolsCredentialStatus: 'tools:credentialStatus',
   toolsSaveApiKey: 'tools:saveApiKey',
   toolsDeleteApiKey: 'tools:deleteApiKey',
+  rolesList: 'roles:list',
+  rolesCreate: 'roles:create',
+  rolesUpdate: 'roles:update',
+  rolesDelete: 'roles:delete',
   windowMinimize: 'window:minimize',
   windowToggleMaximize: 'window:toggleMaximize',
   windowClose: 'window:close'
@@ -112,6 +116,29 @@ export const updateSettingsInputSchema = z.object({
   defaultOutputMode: z.enum(['markdown', 'html']).optional(),
   themeMode: z.enum(['system', 'light', 'dark']).optional(),
   fontSize: appFontSizeSchema.optional()
+}).strict()
+
+export const managedRoleDtoSchema = z.object({
+  id: nonEmptyStringSchema,
+  name: nonEmptyStringSchema,
+  description: z.string(),
+  systemPrompt: z.string(),
+  defaultToolIds: z.array(nonEmptyStringSchema)
+}).strict()
+
+export const createRoleInputSchema = z.object({
+  name: nonEmptyStringSchema,
+  description: z.string().optional(),
+  systemPrompt: z.string().optional(),
+  defaultToolIds: z.array(nonEmptyStringSchema).optional()
+}).strict()
+
+export const updateRoleInputSchema = z.object({
+  id: nonEmptyStringSchema,
+  name: nonEmptyStringSchema.optional(),
+  description: z.string().optional(),
+  systemPrompt: z.string().optional(),
+  defaultToolIds: z.array(nonEmptyStringSchema).optional()
 }).strict()
 
 export const directorySelectionSchema = z.object({
@@ -236,6 +263,9 @@ export type SetSessionOutputModeInput = z.infer<typeof setSessionOutputModeInput
 export type AgentEnqueueInput = z.infer<typeof agentEnqueueInputSchema>
 export type AppSettings = z.infer<typeof appSettingsSchema>
 export type UpdateSettingsInput = z.infer<typeof updateSettingsInputSchema>
+export type ManagedRoleDto = z.infer<typeof managedRoleDtoSchema>
+export type CreateRoleInput = z.infer<typeof createRoleInputSchema>
+export type UpdateRoleInput = z.infer<typeof updateRoleInputSchema>
 export type DirectorySelectionResult = z.infer<typeof directorySelectionSchema>
 export type ProviderCredentialInput = z.infer<typeof providerCredentialInputSchema>
 export type SaveProviderApiKeyInput = z.infer<typeof saveProviderApiKeyInputSchema>
@@ -311,6 +341,12 @@ export type HesperDesktopApi = {
     credentialStatus(input: ToolCredentialInput): Promise<ToolCredentialStatus>
     saveApiKey(input: SaveToolApiKeyInput): Promise<ToolCredentialStatus>
     deleteApiKey(input: ToolCredentialInput): Promise<ToolCredentialStatus>
+  }
+  roles: {
+    list(): Promise<ManagedRoleDto[]>
+    create(input: CreateRoleInput): Promise<ManagedRoleDto>
+    update(input: UpdateRoleInput): Promise<ManagedRoleDto>
+    delete(id: string): Promise<{ deleted: true; id: string }>
   }
   window: {
     platform: NodeJS.Platform
