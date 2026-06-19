@@ -93,13 +93,14 @@ VALUES ('legacy-run', 'legacy-session', NULL, 'queued', 'mock/hesper-fast', NULL
 }
 
 describe('persistence repositories', () => {
-  it('creates and lists sessions without deleted sessions', async () => {
+  it('creates and lists sessions by latest update without deleted sessions', async () => {
     const db = await createInMemoryPersistence()
-    await db.sessions.save({ id: 'session-1', title: 'Build hesper', status: 'active', outputMode: 'markdown', unreadCompletedAt: '2026-06-10T03:01:00.000Z', createdAt: now, updatedAt: now })
-    await db.sessions.save({ id: 'session-2', title: 'Deleted session', status: 'deleted', outputMode: 'html', createdAt: now, updatedAt: now })
+    await db.sessions.save({ id: 'session-1', title: 'Build hesper', status: 'active', outputMode: 'markdown', unreadCompletedAt: '2026-06-10T03:01:00.000Z', createdAt: now, updatedAt: '2026-06-10T03:01:00.000Z' })
+    await db.sessions.save({ id: 'session-2', title: 'Deleted session', status: 'deleted', outputMode: 'html', createdAt: now, updatedAt: '2026-06-10T03:03:00.000Z' })
+    await db.sessions.save({ id: 'session-3', title: 'Recently touched', status: 'active', outputMode: 'markdown', createdAt: now, updatedAt: '2026-06-10T03:02:00.000Z' })
     const visible = await db.sessions.listVisible()
-    expect(visible).toHaveLength(1)
-    expect(visible[0]!.unreadCompletedAt).toBe('2026-06-10T03:01:00.000Z')
+    expect(visible.map((session) => session.id)).toEqual(['session-3', 'session-1'])
+    expect(visible[1]!.unreadCompletedAt).toBe('2026-06-10T03:01:00.000Z')
   })
 
   it('persists runtime events across all event shapes', async () => {

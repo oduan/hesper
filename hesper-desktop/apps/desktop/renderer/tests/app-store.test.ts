@@ -30,6 +30,59 @@ describe('app-store reducer', () => {
     expect(nextState.activeSessionId).toBe('session-active')
   })
 
+  it('moves touched sessions to the top and safely reverts failed optimistic touches', () => {
+    const loaded = appReducer(initialAppState, {
+      type: 'sessions.loaded',
+      sessions: [
+        {
+          id: 'session-old',
+          title: 'Old chat',
+          status: 'active',
+          outputMode: 'markdown',
+          createdAt: now,
+          updatedAt: '2026-06-10T03:00:00.000Z'
+        },
+        {
+          id: 'session-new',
+          title: 'New chat',
+          status: 'active',
+          outputMode: 'markdown',
+          createdAt: now,
+          updatedAt: '2026-06-10T03:10:00.000Z'
+        }
+      ]
+    })
+
+    const optimisticUpdatedAt = '2026-06-10T03:11:00.000Z'
+    const touched = appReducer(loaded, {
+      type: 'session.touched',
+      sessionId: 'session-old',
+      updatedAt: optimisticUpdatedAt
+    })
+    expect(touched.sessions.map((session) => session.id)).toEqual(['session-old', 'session-new'])
+
+    const reverted = appReducer(touched, {
+      type: 'session.touch-reverted',
+      sessionId: 'session-old',
+      optimisticUpdatedAt,
+      previousUpdatedAt: '2026-06-10T03:00:00.000Z'
+    })
+    expect(reverted.sessions.map((session) => session.id)).toEqual(['session-new', 'session-old'])
+
+    const laterTouched = appReducer(touched, {
+      type: 'session.touched',
+      sessionId: 'session-old',
+      updatedAt: '2026-06-10T03:12:00.000Z'
+    })
+    const ignoredRevert = appReducer(laterTouched, {
+      type: 'session.touch-reverted',
+      sessionId: 'session-old',
+      optimisticUpdatedAt,
+      previousUpdatedAt: '2026-06-10T03:00:00.000Z'
+    })
+    expect(ignoredRevert.sessions[0]).toMatchObject({ id: 'session-old', updatedAt: '2026-06-10T03:12:00.000Z' })
+  })
+
   it('stores optimistic user messages locally', () => {
     const sessionLoadedState = appReducer(initialAppState, {
       type: 'sessions.loaded',

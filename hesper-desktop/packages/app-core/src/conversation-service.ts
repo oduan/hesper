@@ -40,6 +40,13 @@ async function ensureRunExists(persistence: Persistence, runId: string): Promise
   if (!run) throw createNotFoundError('Run', runId)
 }
 
+async function touchSessionUpdatedAt(persistence: Persistence, sessionId: string, timestamp: string): Promise<void> {
+  const session = await persistence.sessions.get(sessionId)
+  if (!session || session.status === 'deleted') throw createNotFoundError('Session', sessionId)
+  if (session.updatedAt >= timestamp) return
+  await persistence.sessions.save({ ...session, updatedAt: timestamp })
+}
+
 export function createConversationService(persistence: Persistence): ConversationService {
   return {
     async createUserMessage(input) {
@@ -54,6 +61,7 @@ export function createConversationService(persistence: Persistence): Conversatio
         createdAt: input.now ?? nowIso()
       }
       await persistence.messages.save(message)
+      await touchSessionUpdatedAt(persistence, input.sessionId, message.createdAt)
       return message
     },
     async createAssistantMessage(input) {
@@ -69,6 +77,7 @@ export function createConversationService(persistence: Persistence): Conversatio
         createdAt: input.now ?? nowIso()
       }
       await persistence.messages.save(message)
+      await touchSessionUpdatedAt(persistence, input.sessionId, message.createdAt)
       return message
     },
     async listMessages(sessionId) {

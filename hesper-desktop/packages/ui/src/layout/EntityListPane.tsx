@@ -70,6 +70,18 @@ function arraysEqual(left: string[], right: string[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index])
 }
 
+export function formatRelativeSessionTime(updatedAt: string, nowMs: number): string {
+  const updatedMs = new Date(updatedAt).getTime()
+  if (!Number.isFinite(updatedMs)) return ''
+  const elapsedSeconds = Math.max(0, Math.floor((nowMs - updatedMs) / 1000))
+  if (elapsedSeconds < 60) return `${elapsedSeconds}秒`
+  const elapsedMinutes = Math.floor(elapsedSeconds / 60)
+  if (elapsedMinutes < 60) return `${elapsedMinutes}分钟`
+  const elapsedHours = Math.floor(elapsedMinutes / 60)
+  if (elapsedHours < 24) return `${elapsedHours}小时`
+  return `${Math.floor(elapsedHours / 24)}天`
+}
+
 export function EntityListPane({
   title,
   activeSection,
@@ -95,7 +107,22 @@ export function EntityListPane({
   const [editingSession, setEditingSession] = useState<EditingSessionState>()
   const [selectedSessionIds, setSelectedSessionIds] = useState<string[]>([])
   const [selectionAnchorSessionId, setSelectionAnchorSessionId] = useState<string>()
+  const [relativeNowMs, setRelativeNowMs] = useState(() => Date.now())
   const renameInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (activeSection !== 'sessions') return undefined
+
+    const refreshRelativeTime = () => setRelativeNowMs(Date.now())
+    const interval = window.setInterval(refreshRelativeTime, 1_000)
+    window.addEventListener('focus', refreshRelativeTime)
+    document.addEventListener('visibilitychange', refreshRelativeTime)
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener('focus', refreshRelativeTime)
+      document.removeEventListener('visibilitychange', refreshRelativeTime)
+    }
+  }, [activeSection])
 
   useEffect(() => {
     if (!sessionMenu) return undefined
@@ -216,6 +243,7 @@ export function EntityListPane({
               const isSelected = selectedSessionIds.includes(session.id)
               const isRunning = runningSessionIdSet.has(session.id)
               const hasUnreadCompletion = Boolean(session.unreadCompletedAt)
+              const relativeUpdatedAt = formatRelativeSessionTime(session.updatedAt, relativeNowMs)
               const sessionRowClassName = `hesper-list-row${isActive ? ' is-active' : ''}${isSelected ? ' is-selected' : ''}`
               return (
                 <li key={session.id}>
@@ -257,6 +285,7 @@ export function EntityListPane({
                       style={sessionRowStyle}
                       aria-current={isActive ? 'true' : undefined}
                       aria-selected={isSelected ? 'true' : undefined}
+                      aria-label={session.title}
                       onClick={(event) => handleSessionClick(session.id, event.shiftKey)}
                       onContextMenu={(event) => {
                         event.preventDefault()
@@ -267,6 +296,7 @@ export function EntityListPane({
                         {isRunning ? <RunningStatusIcon ariaHidden /> : hasUnreadCompletion ? <NewMessageIcon /> : null}
                         <span style={sessionTitleTextStyle}>{session.title}</span>
                       </div>
+                      {relativeUpdatedAt ? <span aria-hidden="true" style={sessionRelativeTimeStyle}>{relativeUpdatedAt}</span> : null}
                     </button>
                   )}
                 </li>
@@ -399,7 +429,9 @@ const settingsCategories: Array<{ id: 'ai' | 'appearance'; title: string; label:
 ]
 
 const sessionRowStyle: CSSProperties = {
-  alignItems: 'center'
+  gridTemplateColumns: 'minmax(0, 1fr) auto',
+  alignItems: 'center',
+  columnGap: 10
 }
 
 const toolRowStyle: CSSProperties = {
@@ -491,6 +523,15 @@ const sessionTitleTextStyle: CSSProperties = {
   minWidth: 0,
   overflow: 'hidden',
   textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap'
+}
+
+const sessionRelativeTimeStyle: CSSProperties = {
+  flex: '0 0 auto',
+  color: 'var(--hesper-color-text-muted, #737aa2)',
+  fontSize: 11,
+  fontWeight: 600,
+  opacity: 0.72,
   whiteSpace: 'nowrap'
 }
 

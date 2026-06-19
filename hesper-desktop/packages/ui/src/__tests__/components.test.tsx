@@ -25,6 +25,7 @@ const baseSession = {
 afterEach(() => {
   cleanup()
   vi.useRealTimers()
+  vi.restoreAllMocks()
 })
 
 describe('ui components', () => {
@@ -188,6 +189,39 @@ describe('ui components', () => {
     await user.click(writeSwitch)
     expect(onToggleToolEnabled).toHaveBeenCalledWith('filesystem.write-file', true)
     expect(onSelectTool).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows dynamic single-unit relative update times in session rows', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-06-10T03:00:59.000Z'))
+
+    render(
+      <AppShell
+        sessions={[
+          {
+            id: 'session-relative-time',
+            title: '带更新时间的会话',
+            status: 'active',
+            outputMode: 'markdown',
+            createdAt: now,
+            updatedAt: '2026-06-10T03:00:00.000Z'
+          }
+        ]}
+        activeSection="sessions"
+        activeSessionId="session-relative-time"
+        title="构建 hesper MVP"
+      />
+    )
+
+    expect(screen.getByRole('button', { name: '带更新时间的会话' })).toBeInTheDocument()
+    expect(screen.getByText('59秒')).toHaveStyle({ color: 'var(--hesper-color-text-muted, #737aa2)', opacity: '0.72' })
+
+    act(() => {
+      vi.advanceTimersByTime(15_000)
+    })
+
+    expect(screen.queryByText('59秒')).not.toBeInTheDocument()
+    expect(screen.getByText('1分钟')).toBeInTheDocument()
   })
 
   it('shows the same nine-dot running animation before running session titles', () => {

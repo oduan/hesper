@@ -18,6 +18,8 @@ export type AppAction =
   | { type: 'sessions.loaded'; sessions: Session[] }
   | { type: 'session.created'; session: Session }
   | { type: 'session.updated'; session: Session }
+  | { type: 'session.touched'; sessionId: string; updatedAt: string }
+  | { type: 'session.touch-reverted'; sessionId: string; optimisticUpdatedAt: string; previousUpdatedAt: string }
   | { type: 'session.selected'; sessionId: string }
   | { type: 'history.loaded'; sessionId: string; messages: Message[]; runs: AgentRun[]; stepsByRun: Record<string, RunStep[]> }
   | { type: 'message.optimistic'; message: Message }
@@ -49,6 +51,24 @@ function pickActiveSessionId(currentId: string | undefined, sessions: Session[])
   }
 
   return sessions.find((session) => session.status === 'active')?.id ?? sessions[0]?.id
+}
+
+function withSessionUpdatedAt(sessions: Session[], sessionId: string, updatedAt: string): Session[] {
+  return sessions.map((session) => {
+    if (session.id !== sessionId || session.updatedAt >= updatedAt) {
+      return session
+    }
+    return { ...session, updatedAt }
+  })
+}
+
+function revertSessionUpdatedAt(sessions: Session[], sessionId: string, optimisticUpdatedAt: string, previousUpdatedAt: string): Session[] {
+  return sessions.map((session) => {
+    if (session.id !== sessionId || session.updatedAt !== optimisticUpdatedAt) {
+      return session
+    }
+    return { ...session, updatedAt: previousUpdatedAt }
+  })
 }
 
 function mergeById<T extends { id: string }>(items: T[], nextItem: T): T[] {
@@ -188,6 +208,18 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           ...state.messagesBySession,
           [action.session.id]: state.messagesBySession[action.session.id] ?? []
         }
+      }
+    }
+    case 'session.touched': {
+      return {
+        ...state,
+        sessions: sortSessions(withSessionUpdatedAt(state.sessions, action.sessionId, action.updatedAt))
+      }
+    }
+    case 'session.touch-reverted': {
+      return {
+        ...state,
+        sessions: sortSessions(revertSessionUpdatedAt(state.sessions, action.sessionId, action.optimisticUpdatedAt, action.previousUpdatedAt))
       }
     }
     case 'session.selected':

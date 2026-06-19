@@ -532,7 +532,7 @@ export function createRepositories(db: Database): Persistence {
         return row ? toSession(row) : undefined
       },
       async listVisible() {
-        return fetchAll("SELECT * FROM sessions WHERE status != 'deleted' ORDER BY sort_seq ASC, id ASC").map(toSession)
+        return fetchAll("SELECT * FROM sessions WHERE status != 'deleted' ORDER BY updated_at DESC, sort_seq ASC, id ASC").map(toSession)
       }
     },
     messages: {

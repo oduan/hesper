@@ -20,18 +20,23 @@ describe('createConversationService', () => {
       retryCount: 0,
       maxRetries: 5
     })
+    const userMessageAt = '2026-06-10T05:01:00.000Z'
+    const assistantMessageAt = '2026-06-10T05:02:00.000Z'
     const userMessage = await conversation.createUserMessage({
       sessionId: session.id,
       content: 'Hello',
-      now
+      now: userMessageAt
     })
+    expect((await sessions.getSession(session.id)).updatedAt).toBe(userMessageAt)
+
     const assistantMessage = await conversation.createAssistantMessage({
       sessionId: session.id,
       runId: 'run-1',
       content: 'Hi',
       contentType: 'markdown',
-      now
+      now: assistantMessageAt
     })
+    expect((await sessions.getSession(session.id)).updatedAt).toBe(assistantMessageAt)
 
     expect((await conversation.listMessages(session.id)).map((message) => message.id)).toEqual([
       userMessage.id,

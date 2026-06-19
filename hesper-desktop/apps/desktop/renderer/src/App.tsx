@@ -118,8 +118,12 @@ function clearSessionUnreadCompletion(session: Session): Session {
 }
 
 function applySessionUnreadCompletion(session: Session, completedAt: string): Session {
-  if (session.unreadCompletedAt && session.unreadCompletedAt >= completedAt) return session
-  return { ...session, unreadCompletedAt: completedAt }
+  const updatedAt = session.updatedAt >= completedAt ? session.updatedAt : completedAt
+  const unreadCompletedAt = session.unreadCompletedAt && session.unreadCompletedAt >= completedAt
+    ? session.unreadCompletedAt
+    : completedAt
+  if (session.unreadCompletedAt === unreadCompletedAt && session.updatedAt === updatedAt) return session
+  return { ...session, unreadCompletedAt, updatedAt }
 }
 
 function AppContent() {
@@ -329,13 +333,16 @@ function AppContent() {
       }
 
       if (event.type === 'message.completed' && event.message.role === 'assistant') {
+        dispatch({ type: 'session.touched', sessionId: event.message.sessionId, updatedAt: event.message.createdAt })
         handleSessionCompletionUnread(event.message.sessionId, event.message.createdAt)
       }
 
       if (event.type === 'run.failed') {
         const run = stateRef.current.runsById[event.runId]
         if (run) {
-          handleSessionCompletionUnread(run.sessionId, event.endedAt ?? run.endedAt ?? new Date().toISOString())
+          const failedAt = event.endedAt ?? run.endedAt ?? new Date().toISOString()
+          dispatch({ type: 'session.touched', sessionId: run.sessionId, updatedAt: failedAt })
+          handleSessionCompletionUnread(run.sessionId, failedAt)
         }
       }
 
@@ -1032,7 +1039,7 @@ async function sendMessage({
   dispatch,
   setSendErrorsBySession
 }: {
-  session: Parameters<typeof createOptimisticUserMessage>[0]['session']
+  session: Pick<Session, 'id' | 'workspacePath' | 'updatedAt'>
   modelId: string
   content: string
   dispatch: ReturnType<typeof useAppStore>['dispatch']
@@ -1041,6 +1048,7 @@ async function sendMessage({
   setSendErrorsBySession((current) => clearSessionSendError(current, session.id))
   const message = createOptimisticUserMessage({ session, content })
   dispatch({ type: 'message.optimistic', message })
+  dispatch({ type: 'session.touched', sessionId: session.id, updatedAt: message.createdAt })
 
   try {
     const result = await hesperApi.agent.enqueue({
@@ -1054,6 +1062,7 @@ async function sendMessage({
     dispatch({ type: 'message.run-linked', sessionId: session.id, messageId: message.id, runId: result.runId })
   } catch (error) {
     dispatch({ type: 'message.removed', sessionId: session.id, messageId: message.id })
+    dispatch({ type: 'session.touch-reverted', sessionId: session.id, optimisticUpdatedAt: message.createdAt, previousUpdatedAt: session.updatedAt })
     setSendErrorsBySession((current) => ({
       ...current,
       [session.id]: error instanceof Error ? error.message : 'unknown enqueue error'
