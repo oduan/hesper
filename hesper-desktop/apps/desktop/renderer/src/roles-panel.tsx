@@ -7,6 +7,7 @@ type RolesPanelProps = {
   creating?: boolean
   tools: ToolDto[]
   pending?: boolean
+  loading?: boolean
   error?: string
   onCreateDraft: () => void
   onCancelDraft?: () => void
@@ -40,6 +41,7 @@ export function RolesPanel({
   creating = false,
   tools,
   pending = false,
+  loading = false,
   error,
   onCreateDraft,
   onCancelDraft,
@@ -91,6 +93,17 @@ export function RolesPanel({
     if (window.confirm(`确定要删除角色“${selectedRole.name}”吗？此操作无法撤销。`)) {
       onDelete?.(selectedRole.id)
     }
+  }
+
+  if (loading && !canEdit) {
+    return (
+      <section aria-label="角色管理" style={emptyStateStyle}>
+        <div>
+          <h2 style={emptyTitleStyle}>角色加载中…</h2>
+          <p style={mutedTextStyle}>正在加载角色列表，请稍候。</p>
+        </div>
+      </section>
+    )
   }
 
   if (!canEdit && roles.length === 0) {

@@ -150,6 +150,7 @@ function AppContent() {
   const [activeRoleId, setActiveRoleId] = useState<string>()
   const [creatingRole, setCreatingRole] = useState(false)
   const [rolesPending, setRolesPending] = useState(false)
+  const [rolesLoading, setRolesLoading] = useState(true)
   const resolvedThemeMode = useResolvedThemeMode(appSettings.themeMode)
   const loadedHistorySessionIdsRef = useRef<Set<string>>(new Set())
   const loadingHistorySessionIdsRef = useRef<Set<string>>(new Set())
@@ -306,8 +307,13 @@ function AppContent() {
 
   useEffect(() => {
     let cancelled = false
+    setRolesLoading(true)
 
-    void loadRoles({ isCancelled: () => cancelled })
+    void loadRoles({ isCancelled: () => cancelled }).finally(() => {
+      if (!cancelled) {
+        setRolesLoading(false)
+      }
+    })
 
     return () => {
       cancelled = true
@@ -868,13 +874,13 @@ function AppContent() {
         void updateToolEnabled(toolId, enabled)
       }}
       onSelectRole={(roleId) => {
-        if (rolesPending) return
+        if (rolesLoading || rolesPending) return
         setRolesError(undefined)
         setCreatingRole(false)
         setActiveRoleId(roleId)
       }}
       onCreateRole={() => {
-        if (rolesPending) return
+        if (rolesLoading || rolesPending) return
         setRolesError(undefined)
         setCreatingRole(true)
         setActiveRoleId(undefined)
@@ -910,16 +916,17 @@ function AppContent() {
             {...(activeRole ? { selectedRole: activeRole } : {})}
             creating={creatingRole}
             tools={tools}
-            pending={rolesPending}
+            pending={rolesPending || rolesLoading}
+            loading={rolesLoading}
             {...(rolesError ? { error: rolesError } : {})}
             onCreateDraft={() => {
-              if (rolesPending) return
+              if (rolesLoading || rolesPending) return
               setRolesError(undefined)
               setCreatingRole(true)
               setActiveRoleId(undefined)
             }}
             onCancelDraft={() => {
-              if (rolesPending) return
+              if (rolesLoading || rolesPending) return
               setRolesError(undefined)
               setCreatingRole(false)
               setActiveRoleId(roles[0]?.id)

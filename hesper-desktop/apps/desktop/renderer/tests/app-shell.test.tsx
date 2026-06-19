@@ -381,6 +381,32 @@ describe('renderer App', () => {
     expect(screen.getByLabelText('角色名称')).toHaveValue('运维助手')
   })
 
+  it('blocks role creation until the initial roles load completes', async () => {
+    const user = userEvent.setup()
+    const initialRoles = createDeferred<any[]>()
+    listRoles.mockReturnValueOnce(initialRoles.promise as any)
+
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: '角色' }))
+
+    expect(screen.getByText('角色加载中…')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '创建第一个角色' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '新建角色' }))
+
+    expect(screen.queryByLabelText('角色名称')).not.toBeInTheDocument()
+
+    await act(async () => {
+      initialRoles.resolve([])
+      await initialRoles.promise
+    })
+
+    await waitFor(() => expect(screen.queryByText('角色加载中…')).not.toBeInTheDocument())
+    expect((await screen.findAllByText('暂无角色')).length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: '创建第一个角色' })).toBeInTheDocument()
+  })
+
   it('creates a role from the roles management section and refreshes the list', async () => {
     const user = userEvent.setup()
     const createdRole = {
@@ -572,74 +598,63 @@ describe('renderer App', () => {
     await waitFor(() => expect(screen.getByLabelText('角色名称')).toHaveValue('运维助手'))
   })
 
-  it('does not let stale initial role loads overwrite a newer refresh', async () => {
+  it('shows loaded roles after a pending initial load blocks creation attempts', async () => {
     const user = userEvent.setup()
     const initialRoles = createDeferred<any[]>()
-    const staleRole = {
-      id: 'role-stale',
-      name: '旧角色',
-      description: '旧数据',
-      systemPrompt: '旧提示词',
+    const loadedRole = {
+      id: 'role-loaded',
+      name: '已有角色',
+      description: '服务端已有',
+      systemPrompt: '已有提示词',
       defaultToolIds: []
     }
+    listRoles.mockReturnValueOnce(initialRoles.promise as any)
+
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: '角色' }))
+    expect(screen.getByText('角色加载中…')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '新建角色' }))
+    expect(screen.queryByLabelText('角色名称')).not.toBeInTheDocument()
+
+    await act(async () => {
+      initialRoles.resolve([loadedRole])
+      await initialRoles.promise
+    })
+
+    expect(await screen.findByRole('button', { name: /已有角色/ })).toBeInTheDocument()
+    expect(screen.getByLabelText('角色名称')).toHaveValue('已有角色')
+    expect(createRole).not.toHaveBeenCalled()
+  })
+
+  it('allows role creation after the initial roles load fails', async () => {
+    const user = userEvent.setup()
     const newRole = {
       id: 'role-created',
-      name: '新角色',
-      description: '新数据',
-      systemPrompt: '新提示词',
+      name: '恢复创建',
+      description: '',
+      systemPrompt: '',
       defaultToolIds: []
     }
-    listRoles.mockReturnValueOnce(initialRoles.promise as any).mockResolvedValueOnce([newRole] as any)
+    listRoles.mockRejectedValueOnce(new Error('initial failed')).mockResolvedValueOnce([newRole] as any)
     createRole.mockResolvedValueOnce(newRole)
 
     render(<App />)
 
     await user.click(screen.getByRole('button', { name: '角色' }))
-    await user.click(await screen.findByRole('button', { name: '创建第一个角色' }))
-    await user.type(screen.getByLabelText('角色名称'), '新角色')
-    await user.type(screen.getByLabelText('角色简介'), '新数据')
-    await user.type(screen.getByLabelText('完整提示词'), '新提示词')
+    expect(await screen.findByRole('alert')).toHaveTextContent('initial failed')
+    await user.click(screen.getByRole('button', { name: '创建第一个角色' }))
+    await user.type(screen.getByLabelText('角色名称'), '恢复创建')
     await user.click(screen.getByRole('button', { name: '创建角色' }))
 
-    expect(await screen.findByRole('button', { name: /新角色/ })).toBeInTheDocument()
-
-    await act(async () => {
-      initialRoles.resolve([staleRole])
-    })
-
-    expect(screen.queryByRole('button', { name: /旧角色/ })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /新角色/ })).toBeInTheDocument()
-    expect(screen.getByLabelText('角色名称')).toHaveValue('新角色')
-  })
-
-  it('keeps role mutation errors visible when an older initial load resolves later', async () => {
-    const user = userEvent.setup()
-    const initialRoles = createDeferred<any[]>()
-    const staleRole = {
-      id: 'role-stale',
-      name: '旧角色',
-      description: '旧数据',
-      systemPrompt: '旧提示词',
+    await waitFor(() => expect(createRole).toHaveBeenCalledWith({
+      name: '恢复创建',
+      description: '',
+      systemPrompt: '',
       defaultToolIds: []
-    }
-    listRoles.mockReturnValueOnce(initialRoles.promise as any)
-    createRole.mockRejectedValueOnce(new Error('create failed'))
-
-    render(<App />)
-
-    await user.click(screen.getByRole('button', { name: '角色' }))
-    await user.click(await screen.findByRole('button', { name: '创建第一个角色' }))
-    await user.type(screen.getByLabelText('角色名称'), '失败角色')
-    await user.click(screen.getByRole('button', { name: '创建角色' }))
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('create failed')
-
-    await act(async () => {
-      initialRoles.resolve([staleRole])
-    })
-
-    expect(screen.getByRole('alert')).toHaveTextContent('create failed')
-    expect(screen.queryByRole('button', { name: /旧角色/ })).not.toBeInTheDocument()
+    }))
+    expect(await screen.findByRole('button', { name: /恢复创建/ })).toBeInTheDocument()
   })
 
   it('manages API keys for credential-required tools from the tools detail panel', async () => {
