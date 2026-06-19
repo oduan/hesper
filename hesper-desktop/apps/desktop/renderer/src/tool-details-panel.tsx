@@ -37,12 +37,6 @@ export function ToolDetailsPanel({
 
       {error ? <p role="alert" style={errorTextStyle}>{error}</p> : null}
 
-      {!tool.enabled ? (
-        <div style={disabledNoticeStyle}>
-          当前工具已全局关闭。它不会被写入 Agent prompt，也不会注册为 Agent 可调用工具；即使角色或会话允许该工具，运行时也会拒绝执行。
-        </div>
-      ) : null}
-
       <div style={infoGridStyle}>
         <InfoItem label="工具 ID" value={tool.id} />
         <InfoItem label="分类" value={tool.category} />
@@ -153,15 +147,6 @@ const errorTextStyle: CSSProperties = {
   borderRadius: 12,
   color: 'var(--hesper-color-danger, #f7768e)',
   background: 'rgba(247, 118, 142, 0.12)'
-}
-
-const disabledNoticeStyle: CSSProperties = {
-  padding: '12px 14px',
-  borderRadius: 14,
-  border: '1px solid rgba(247, 118, 142, 0.32)',
-  background: 'rgba(247, 118, 142, 0.10)',
-  color: 'var(--hesper-color-danger, #f7768e)',
-  lineHeight: 1.55
 }
 
 const infoGridStyle: CSSProperties = {

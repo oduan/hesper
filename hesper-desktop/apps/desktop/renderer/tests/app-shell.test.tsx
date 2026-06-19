@@ -262,7 +262,10 @@ describe('renderer App', () => {
     expect(screen.getByRole('region', { name: '工具详情' })).toHaveTextContent('Read File')
 
     await user.click(screen.getByText('Fetch URL').closest('[role="button"]') as HTMLElement)
-    expect(screen.getByRole('region', { name: '工具详情' })).toHaveTextContent('Fetch URL')
+    const detailsRegion = screen.getByRole('region', { name: '工具详情' })
+    expect(detailsRegion).toHaveTextContent('Fetch URL')
+    expect(detailsRegion).toHaveTextContent('关闭')
+    expect(screen.queryByText(/当前工具已全局关闭/)).not.toBeInTheDocument()
     const detailSwitch = screen.getByRole('switch', { name: '工具全局开关' })
     expect(detailSwitch).toHaveAttribute('aria-checked', 'false')
     expect(detailSwitch.querySelector('[data-tool-toggle-track="true"]')).toHaveStyle({ background: 'var(--hesper-color-surface-muted, #24283b)' })
