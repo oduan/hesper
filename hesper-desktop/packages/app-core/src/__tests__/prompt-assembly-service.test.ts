@@ -114,6 +114,23 @@ describe('PromptAssemblyService', () => {
     expect(output.systemPrompt).not.toMatch(/api[_ -]?key/i)
   })
 
+  it('includes write file when it is enabled for the run', () => {
+    const service = createPromptAssemblyService()
+
+    const output = service.assembleMainPrompt({
+      session: { ...session, enabledToolIds: ['filesystem.read-file', 'filesystem.write-file'] },
+      role: mainRole,
+      skills,
+      tools,
+      assignableSubagentRoles: [reviewerRole]
+    })
+
+    expect(output.toolManifest).toContain('filesystem.read-file')
+    expect(output.toolManifest).toContain('filesystem.write-file')
+    expect(output.toolManifest).toContain('Write File')
+    expect(output.toolManifest).toContain('"required":["content","path"]')
+  })
+
   it('does not encourage subagent calls when the tool is absent from the catalog', () => {
     const service = createPromptAssemblyService()
 

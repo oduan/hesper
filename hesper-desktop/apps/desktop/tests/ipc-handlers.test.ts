@@ -203,7 +203,7 @@ describe('registerIpcHandlers', () => {
       session: expect.objectContaining({
         id: session.id,
         workspacePath: 'C:/workspace',
-        enabledToolIds: ['filesystem.read-file', 'git.status', 'web.fetch-url', 'system.show-notification']
+        enabledToolIds: ['filesystem.read-file', 'filesystem.write-file', 'git.status', 'web.fetch-url', 'system.show-notification']
       }),
       role: expect.objectContaining({ id: 'main-agent' }),
       skills: expect.any(Array),
@@ -215,7 +215,7 @@ describe('registerIpcHandlers', () => {
       prompt: 'Use assembled prompt',
       modelId: 'mock/hesper-fast',
       systemPrompt: 'assembled system prompt',
-      enabledToolIds: ['filesystem.read-file', 'git.status', 'web.fetch-url', 'system.show-notification']
+      enabledToolIds: ['filesystem.read-file', 'filesystem.write-file', 'git.status', 'web.fetch-url', 'system.show-notification']
     }))
     expect(createUserMessageSpy).toHaveBeenCalledWith(expect.objectContaining({
       id: 'message-client-1',
@@ -254,10 +254,10 @@ describe('registerIpcHandlers', () => {
     )).resolves.toEqual({ runId: 'run-narrowed' })
 
     expect(promptSpy).toHaveBeenLastCalledWith(expect.objectContaining({
-      session: expect.objectContaining({ enabledToolIds: ['filesystem.read-file'] })
+      session: expect.objectContaining({ enabledToolIds: ['filesystem.read-file', 'filesystem.write-file'] })
     }))
     expect(enqueueSpy).toHaveBeenLastCalledWith(expect.objectContaining({
-      enabledToolIds: ['filesystem.read-file']
+      enabledToolIds: ['filesystem.read-file', 'filesystem.write-file']
     }))
 
     await expect(handles.get(ipcChannels.agentEnqueue)?.(
@@ -302,7 +302,7 @@ describe('registerIpcHandlers', () => {
       { sessionId: session.id, prompt: 'Do not expose disabled web fetch', modelId: 'mock/hesper-fast' }
     )).resolves.toEqual({ runId: 'run-global-filter' })
 
-    const expectedEnabledTools = ['filesystem.read-file', 'git.status', 'system.show-notification']
+    const expectedEnabledTools = ['filesystem.read-file', 'filesystem.write-file', 'git.status', 'system.show-notification']
     expect(promptSpy).toHaveBeenLastCalledWith(expect.objectContaining({
       session: expect.objectContaining({ enabledToolIds: expectedEnabledTools })
     }))

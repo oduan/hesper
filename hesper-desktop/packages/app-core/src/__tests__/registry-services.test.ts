@@ -9,12 +9,12 @@ describe('registry services', () => {
     expect(roles.map((role) => role.id)).toEqual(['main-agent', 'subagent'])
     expect(roles.find((role) => role.id === 'main-agent')?.defaultToolIds).toEqual([
       'filesystem.read-file',
+      'filesystem.write-file',
       'git.status',
       'web.fetch-url',
       'system.show-notification'
     ])
     expect(roles.find((role) => role.id === 'main-agent')?.defaultToolIds).not.toContain('agent.spawn-subagent')
-    expect(roles.find((role) => role.id === 'main-agent')?.defaultToolIds).not.toContain('filesystem.write-file')
     expect(skills.map((skill) => skill.id)).toEqual([
       'builtin:notes',
       'workspace:notes',
