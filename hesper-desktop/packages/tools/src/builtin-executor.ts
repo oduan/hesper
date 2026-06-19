@@ -107,14 +107,37 @@ function jsonContent(value: unknown): string {
   return JSON.stringify(value, null, 2)
 }
 
-function optionalRoleToolInput(args: unknown): RoleToolInput {
+function optionalRoleStringArg(record: Record<string, unknown>, key: string): string | undefined {
+  const value = record[key]
+  if (value === undefined) return undefined
+  if (typeof value !== 'string') throw new Error(`Tool argument must be a string: ${key}`)
+  return value
+}
+
+function createRoleToolInput(args: unknown): Omit<RoleToolInput, 'id'> & { name: string } {
   const record = argsObject(args)
+  const description = optionalRoleStringArg(record, 'description')
+  const systemPrompt = optionalRoleStringArg(record, 'systemPrompt')
   const defaultToolIds = optionalStringArrayArg(args, 'defaultToolIds')
   return {
-    ...(typeof record.id === 'string' ? { id: record.id } : {}),
-    ...(typeof record.name === 'string' ? { name: record.name } : {}),
-    ...(typeof record.description === 'string' ? { description: record.description } : {}),
-    ...(typeof record.systemPrompt === 'string' ? { systemPrompt: record.systemPrompt } : {}),
+    name: stringArg(args, 'name'),
+    ...(description !== undefined ? { description } : {}),
+    ...(systemPrompt !== undefined ? { systemPrompt } : {}),
+    ...(defaultToolIds !== undefined ? { defaultToolIds } : {})
+  }
+}
+
+function updateRoleToolInput(args: unknown): RoleToolInput & { id: string } {
+  const record = argsObject(args)
+  const name = optionalRoleStringArg(record, 'name')
+  const description = optionalRoleStringArg(record, 'description')
+  const systemPrompt = optionalRoleStringArg(record, 'systemPrompt')
+  const defaultToolIds = optionalStringArrayArg(args, 'defaultToolIds')
+  return {
+    id: stringArg(args, 'id'),
+    ...(name !== undefined ? { name } : {}),
+    ...(description !== undefined ? { description } : {}),
+    ...(systemPrompt !== undefined ? { systemPrompt } : {}),
     ...(defaultToolIds !== undefined ? { defaultToolIds } : {})
   }
 }
@@ -129,15 +152,13 @@ function roleToolsUnavailable(tool: ToolDefinition): ToolExecutionResult {
 
 async function createRoleTool(tool: ToolDefinition, args: unknown, roleTools: RoleToolHandlers | undefined): Promise<ToolExecutionResult> {
   if (!roleTools) return roleToolsUnavailable(tool)
-  const input = { ...optionalRoleToolInput(args), name: stringArg(args, 'name') }
-  const role = await roleTools.createRole(input)
+  const role = await roleTools.createRole(createRoleToolInput(args))
   return { content: jsonContent(role), details: { toolId: tool.id, role } }
 }
 
 async function updateRoleTool(tool: ToolDefinition, args: unknown, roleTools: RoleToolHandlers | undefined): Promise<ToolExecutionResult> {
   if (!roleTools) return roleToolsUnavailable(tool)
-  const input = { ...optionalRoleToolInput(args), id: stringArg(args, 'id') }
-  const role = await roleTools.updateRole(input)
+  const role = await roleTools.updateRole(updateRoleToolInput(args))
   return { content: jsonContent(role), details: { toolId: tool.id, role } }
 }
 

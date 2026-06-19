@@ -426,6 +426,45 @@ describe('createBuiltinToolExecutor', () => {
     expect(JSON.parse(updated.content)).toMatchObject({ id: 'role-1', systemPrompt: '更新提示词' })
   })
 
+  it('does not forward unsupported create role fields', async () => {
+    const createRole = vi.fn(async (input) => ({ id: 'role-1', ...input }))
+    const updateRole = vi.fn(async (input) => input)
+    const executor = createBuiltinToolExecutor({ roleTools: { createRole, updateRole } })
+
+    await executor.execute(tool('roles.create'), {
+      id: 'unexpected',
+      name: '角色',
+      description: '描述',
+      systemPrompt: '提示词',
+      defaultToolIds: ['git.status']
+    }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['roles.create']
+    })
+
+    expect(createRole).toHaveBeenCalledWith({
+      name: '角色',
+      description: '描述',
+      systemPrompt: '提示词',
+      defaultToolIds: ['git.status']
+    })
+    expect(createRole.mock.calls[0]?.[0]).not.toHaveProperty('id')
+  })
+
+  it('rejects invalid optional role string fields', async () => {
+    const createRole = vi.fn(async (input) => input)
+    const updateRole = vi.fn(async (input) => input)
+    const executor = createBuiltinToolExecutor({ roleTools: { createRole, updateRole } })
+
+    await expect(executor.execute(tool('roles.update'), { id: 'role-1', description: 123 }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['roles.update']
+    })).rejects.toThrow('Tool argument must be a string: description')
+    expect(updateRole).not.toHaveBeenCalled()
+  })
+
   it('returns a controlled error when role tools are unavailable', async () => {
     const executor = createBuiltinToolExecutor()
 
@@ -436,6 +475,14 @@ describe('createBuiltinToolExecutor', () => {
     })).resolves.toMatchObject({
       isError: true,
       details: { code: 'not_available', toolId: 'roles.create' }
+    })
+    await expect(executor.execute(tool('roles.update'), { id: 'role-1' }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['roles.update']
+    })).resolves.toMatchObject({
+      isError: true,
+      details: { code: 'not_available', toolId: 'roles.update' }
     })
   })
 
