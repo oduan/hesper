@@ -34,7 +34,7 @@ async function chooseThemedOption(user: ReturnType<typeof userEvent.setup>, labe
   await user.click(await screen.findByRole('option', { name: option }))
 }
 
-const { listSessions, setWorkspace, setModel, setOutputMode, selectDirectory, onEvent, enqueue, getSettings, updateSettings, listModels } = vi.hoisted(() => ({
+const { listSessions, setWorkspace, setModel, setOutputMode, selectDirectory, onEvent, enqueue, getSettings, updateSettings, listModels, listTools, setToolEnabled } = vi.hoisted(() => ({
   listSessions: vi.fn(async () => []),
   setWorkspace: vi.fn(async (input: { id: string; workspacePath?: string }) =>
     createSession({ id: input.id, workspacePath: input.workspacePath, updatedAt: '2026-06-10T03:05:00.000Z' })
@@ -59,7 +59,25 @@ const { listSessions, setWorkspace, setModel, setOutputMode, selectDirectory, on
     { id: 'mock/hesper-fast', providerId: 'mock', modelName: 'mock/hesper-fast', displayName: 'Hesper Mock Fast', capabilities: ['streaming'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' },
     { id: 'gpt-4o', providerId: 'openai', modelName: 'gpt-4o', displayName: 'GPT-4o', capabilities: ['streaming', 'toolCalls'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' },
     { id: 'deepseek-chat', providerId: 'deepseek', modelName: 'deepseek-chat', displayName: 'DeepSeek Chat', capabilities: ['streaming', 'toolCalls'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
-  ])
+  ]),
+  listTools: vi.fn(async () => [
+    {
+      id: 'filesystem.read-file',
+      name: 'Read File',
+      description: 'Read a text file from the selected workspace.',
+      category: 'filesystem',
+      inputSchema: { type: 'object', required: ['path'], properties: { path: { type: 'string' } } },
+      enabled: true
+    }
+  ]),
+  setToolEnabled: vi.fn(async (input: { id: string; enabled: boolean }) => ({
+    id: input.id,
+    name: 'Read File',
+    description: 'Read a text file from the selected workspace.',
+    category: 'filesystem',
+    inputSchema: { type: 'object', required: ['path'], properties: { path: { type: 'string' } } },
+    enabled: input.enabled
+  }))
 }))
 
 vi.mock('../src/ipc-client', () => ({
@@ -88,6 +106,10 @@ vi.mock('../src/ipc-client', () => ({
       list: listModels,
       save: vi.fn()
     },
+    tools: {
+      list: listTools,
+      setEnabled: setToolEnabled
+    },
     window: {
       platform: 'win32',
       minimize: vi.fn(async () => ({ minimized: true })),
@@ -113,6 +135,8 @@ describe('session settings and restore flow', () => {
     getSettings.mockReset()
     updateSettings.mockReset()
     listModels.mockClear()
+    listTools.mockClear()
+    setToolEnabled.mockClear()
     onEvent.mockImplementation(() => () => undefined)
     enqueue.mockResolvedValue({ runId: 'run-1' })
     getSettings.mockResolvedValue({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', fontSize: 14 })
@@ -121,6 +145,24 @@ describe('session settings and restore flow', () => {
       defaultOutputMode: input.defaultOutputMode ?? 'markdown',
       themeMode: input.themeMode ?? 'dark',
       fontSize: input.fontSize ?? 14
+    }))
+    listTools.mockResolvedValue([
+      {
+        id: 'filesystem.read-file',
+        name: 'Read File',
+        description: 'Read a text file from the selected workspace.',
+        category: 'filesystem',
+        inputSchema: { type: 'object', required: ['path'], properties: { path: { type: 'string' } } },
+        enabled: true
+      }
+    ])
+    setToolEnabled.mockImplementation(async (input: { id: string; enabled: boolean }) => ({
+      id: input.id,
+      name: 'Read File',
+      description: 'Read a text file from the selected workspace.',
+      category: 'filesystem',
+      inputSchema: { type: 'object', required: ['path'], properties: { path: { type: 'string' } } },
+      enabled: input.enabled
     }))
   })
 
@@ -147,7 +189,7 @@ describe('session settings and restore flow', () => {
     expect(screen.getByRole('button', { name: '选择工作目录' })).toHaveTextContent('C:/active')
   })
 
-  it('shows tools, skills and roles placeholders from the activity rail', async () => {
+  it('shows tools page and keeps skills and roles placeholders from the activity rail', async () => {
     const user = userEvent.setup()
     listSessions.mockResolvedValueOnce([createSession()] as any)
 
@@ -156,7 +198,8 @@ describe('session settings and restore flow', () => {
     await screen.findByRole('heading', { name: 'Current chat' })
 
     await user.click(screen.getByRole('button', { name: '工具' }))
-    expect(screen.getByRole('region', { name: 'Tools 即将支持 占位区域' })).toBeInTheDocument()
+    expect(await screen.findByLabelText('工具列表')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: '工具详情' })).toHaveTextContent('Read File')
 
     await user.click(screen.getByRole('button', { name: '技能' }))
     expect(screen.getByRole('region', { name: 'Skills 即将支持 占位区域' })).toBeInTheDocument()

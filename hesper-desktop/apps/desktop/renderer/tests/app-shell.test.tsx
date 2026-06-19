@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, clearSessionSendError, pruneSessionSendErrors } from '../src/App'
 
-const { listSessions, createSession, updateTitle, deleteSession, generateTitle, markViewed, listMessages, listRuns, listSteps, enqueue, onEvent, getSettings, updateSettings, listProviders, listModels, minimizeWindow, toggleMaximizeWindow, closeWindow } = vi.hoisted(() => ({
+const { listSessions, createSession, updateTitle, deleteSession, generateTitle, markViewed, listMessages, listRuns, listSteps, enqueue, onEvent, getSettings, updateSettings, listProviders, listModels, listTools, setToolEnabled, minimizeWindow, toggleMaximizeWindow, closeWindow } = vi.hoisted(() => ({
   listSessions: vi.fn(async () => []),
   createSession: vi.fn(async () => ({
     id: 'session-1',
@@ -61,6 +61,34 @@ const { listSessions, createSession, updateTitle, deleteSession, generateTitle, 
   })),
   listProviders: vi.fn(async () => []),
   listModels: vi.fn(async () => []),
+  listTools: vi.fn(async () => [
+    {
+      id: 'filesystem.read-file',
+      name: 'Read File',
+      description: 'Read a text file from the selected workspace.',
+      category: 'filesystem',
+      inputSchema: { type: 'object', required: ['path'], properties: { path: { type: 'string' } } },
+      enabled: true
+    },
+    {
+      id: 'web.fetch-url',
+      name: 'Fetch URL',
+      description: 'Fetch and extract text from a URL.',
+      category: 'web',
+      inputSchema: { type: 'object', required: ['url'], properties: { url: { type: 'string' } } },
+      enabled: false
+    }
+  ]),
+  setToolEnabled: vi.fn(async (input: { id: string; enabled: boolean }) => ({
+    id: input.id,
+    name: input.id === 'web.fetch-url' ? 'Fetch URL' : 'Read File',
+    description: input.id === 'web.fetch-url' ? 'Fetch and extract text from a URL.' : 'Read a text file from the selected workspace.',
+    category: input.id === 'web.fetch-url' ? 'web' : 'filesystem',
+    inputSchema: input.id === 'web.fetch-url'
+      ? { type: 'object', required: ['url'], properties: { url: { type: 'string' } } }
+      : { type: 'object', required: ['path'], properties: { path: { type: 'string' } } },
+    enabled: input.enabled
+  })),
   minimizeWindow: vi.fn(async () => ({ minimized: true })),
   toggleMaximizeWindow: vi.fn(async () => ({ isMaximized: true })),
   closeWindow: vi.fn(async () => ({ closed: true }))
@@ -82,6 +110,7 @@ vi.mock('../src/ipc-client', () => ({
     settings: { get: getSettings, update: updateSettings },
     providers: { list: listProviders },
     models: { list: listModels },
+    tools: { list: listTools, setEnabled: setToolEnabled },
     window: {
       platform: 'win32',
       minimize: minimizeWindow,
@@ -121,6 +150,8 @@ describe('renderer App', () => {
     updateSettings.mockReset()
     listProviders.mockReset()
     listModels.mockReset()
+    listTools.mockReset()
+    setToolEnabled.mockClear()
     minimizeWindow.mockClear()
     toggleMaximizeWindow.mockClear()
     closeWindow.mockClear()
@@ -130,6 +161,34 @@ describe('renderer App', () => {
     listSteps.mockResolvedValue([])
     listProviders.mockResolvedValue([])
     listModels.mockResolvedValue([])
+    listTools.mockResolvedValue([
+      {
+        id: 'filesystem.read-file',
+        name: 'Read File',
+        description: 'Read a text file from the selected workspace.',
+        category: 'filesystem',
+        inputSchema: { type: 'object', required: ['path'], properties: { path: { type: 'string' } } },
+        enabled: true
+      },
+      {
+        id: 'web.fetch-url',
+        name: 'Fetch URL',
+        description: 'Fetch and extract text from a URL.',
+        category: 'web',
+        inputSchema: { type: 'object', required: ['url'], properties: { url: { type: 'string' } } },
+        enabled: false
+      }
+    ])
+    setToolEnabled.mockImplementation(async (input: { id: string; enabled: boolean }) => ({
+      id: input.id,
+      name: input.id === 'web.fetch-url' ? 'Fetch URL' : 'Read File',
+      description: input.id === 'web.fetch-url' ? 'Fetch and extract text from a URL.' : 'Read a text file from the selected workspace.',
+      category: input.id === 'web.fetch-url' ? 'web' : 'filesystem',
+      inputSchema: input.id === 'web.fetch-url'
+        ? { type: 'object', required: ['url'], properties: { url: { type: 'string' } } }
+        : { type: 'object', required: ['path'], properties: { path: { type: 'string' } } },
+      enabled: input.enabled
+    }))
     enqueue.mockResolvedValue({ runId: 'run-1' })
     onEvent.mockImplementation(() => () => undefined)
     markViewed.mockImplementation(async (id: string) => ({
@@ -198,7 +257,14 @@ describe('renderer App', () => {
     await user.click(screen.getByRole('button', { name: '工具' }))
 
     expect(screen.getByRole('button', { name: '工具' })).toHaveAttribute('aria-current', 'page')
-    expect(screen.getByRole('region', { name: 'Tools 即将支持 占位区域' })).toBeInTheDocument()
+    expect(await screen.findByLabelText('工具列表')).toBeInTheDocument()
+    expect(screen.getAllByText('Read File')).not.toHaveLength(0)
+    expect(screen.getByRole('region', { name: '工具详情' })).toHaveTextContent('Read File')
+
+    await user.click(screen.getByText('Fetch URL').closest('[role="button"]') as HTMLElement)
+    expect(screen.getByRole('region', { name: '工具详情' })).toHaveTextContent('Fetch URL')
+    await user.click(screen.getByRole('switch', { name: '工具全局开关' }))
+    expect(setToolEnabled).toHaveBeenCalledWith({ id: 'web.fetch-url', enabled: true })
   })
 
   it('shows unread completion icon for background runs until the session is viewed', async () => {

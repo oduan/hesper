@@ -30,6 +30,8 @@ const ipcChannels = {
   providersTestConnection: 'providers:testConnection',
   modelsList: 'models:list',
   modelsSave: 'models:save',
+  toolsList: 'tools:list',
+  toolsSetEnabled: 'tools:setEnabled',
   windowMinimize: 'window:minimize',
   windowToggleMaximize: 'window:toggleMaximize',
   windowClose: 'window:close'
@@ -117,6 +119,10 @@ const hesperApi = {
   models: {
     list: (input) => ipcRenderer.invoke(ipcChannels.modelsList, input),
     save: (input) => ipcRenderer.invoke(ipcChannels.modelsSave, input)
+  },
+  tools: {
+    list: () => ipcRenderer.invoke(ipcChannels.toolsList),
+    setEnabled: (input) => ipcRenderer.invoke(ipcChannels.toolsSetEnabled, input)
   },
   window: {
     platform: process.platform,

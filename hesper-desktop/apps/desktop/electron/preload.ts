@@ -80,6 +80,10 @@ const hesperApi: HesperDesktopApi = {
     list: (input) => ipcRenderer.invoke(ipcChannels.modelsList, input),
     save: (input) => ipcRenderer.invoke(ipcChannels.modelsSave, input)
   },
+  tools: {
+    list: () => ipcRenderer.invoke(ipcChannels.toolsList),
+    setEnabled: (input) => ipcRenderer.invoke(ipcChannels.toolsSetEnabled, input)
+  },
   window: {
     platform: process.platform,
     minimize: () => ipcRenderer.invoke(ipcChannels.windowMinimize),

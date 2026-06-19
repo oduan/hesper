@@ -90,7 +90,9 @@ const {
   saveModel,
   saveProviderApiKey,
   getSettings,
-  updateSettings
+  updateSettings,
+  listTools,
+  setToolEnabled
 } = vi.hoisted(() => ({
   listSessions: vi.fn(async () => []),
   onEvent: vi.fn(() => () => undefined),
@@ -103,7 +105,9 @@ const {
   saveModel: vi.fn(),
   saveProviderApiKey: vi.fn(),
   getSettings: vi.fn(),
-  updateSettings: vi.fn()
+  updateSettings: vi.fn(),
+  listTools: vi.fn(),
+  setToolEnabled: vi.fn()
 }))
 
 vi.mock('../src/ipc-client', () => ({
@@ -140,6 +144,10 @@ vi.mock('../src/ipc-client', () => ({
       saveProviderApiKey,
       deleteProviderApiKey: vi.fn()
     },
+    tools: {
+      list: listTools,
+      setEnabled: setToolEnabled
+    },
     window: {
       platform: 'win32',
       minimize: vi.fn(async () => ({ minimized: true })),
@@ -160,6 +168,8 @@ function resetProviderMocks() {
   testConnection.mockResolvedValue({ providerId: 'deepseek', status: 'needs_api_key', hasApiKey: false, message: 'API key missing' })
   saveModel.mockImplementation(async (input: any) => ({ ...baseModels[1], ...input, createdAt: now, updatedAt: now }))
   saveProviderApiKey.mockResolvedValue({ providerId: 'deepseek', apiKeyRef: 'provider:deepseek:api-key', hasApiKey: true, encryptionAvailable: true })
+  listTools.mockResolvedValue([])
+  setToolEnabled.mockImplementation(async (input: any) => ({ id: input.id, name: input.id, description: input.id, category: 'system', inputSchema: {}, enabled: input.enabled }))
   getSettings.mockResolvedValue({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', fontSize: 14 })
   updateSettings.mockImplementation(async (input: any) => ({
     defaultModelId: input.defaultModelId ?? 'mock/hesper-fast',

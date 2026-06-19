@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
-import type { Session } from '@hesper/shared'
+import type { Session, ToolDefinition } from '@hesper/shared'
 import { RunningStatusIcon } from '../conversation/RunningStatusIcon'
 import { darkTheme } from '../theme'
 import type { AppSection } from './ActivityRail'
+
+type ToolListItem = ToolDefinition & { enabled: boolean }
 
 export type EntityListPaneProps = {
   title?: string
@@ -10,8 +12,13 @@ export type EntityListPaneProps = {
   sessions: Session[]
   activeSessionId?: string
   runningSessionIds?: string[]
+  tools?: ToolListItem[]
+  activeToolId?: string
+  pendingToolIds?: string[]
   activeSettingsCategory?: 'ai' | 'appearance'
   onSelectSession?: (sessionId: string) => void
+  onSelectTool?: (toolId: string) => void
+  onToggleToolEnabled?: (toolId: string, enabled: boolean) => void
   onSelectSettingsCategory?: (category: 'ai' | 'appearance') => void
   onRenameSession?: (sessionId: string, title: string) => void
   onRegenerateSessionTitle?: (sessionId: string, sessionIds?: string[]) => void
@@ -69,15 +76,21 @@ export function EntityListPane({
   sessions,
   activeSessionId,
   runningSessionIds = [],
+  tools = [],
+  activeToolId,
+  pendingToolIds = [],
   activeSettingsCategory = 'ai',
   onSelectSession,
+  onSelectTool,
+  onToggleToolEnabled,
   onSelectSettingsCategory,
   onRenameSession,
   onRegenerateSessionTitle,
   onDeleteSession
 }: EntityListPaneProps) {
-  const heading = title ?? (activeSection === 'sessions' ? '所有会话' : activeSection === 'settings' ? '设置' : '列表')
+  const heading = title ?? (activeSection === 'sessions' ? '所有会话' : activeSection === 'settings' ? '设置' : activeSection === 'tools' ? '工具' : '列表')
   const runningSessionIdSet = new Set(runningSessionIds)
+  const pendingToolIdSet = new Set(pendingToolIds)
   const [sessionMenu, setSessionMenu] = useState<SessionMenuState>()
   const [editingSession, setEditingSession] = useState<EditingSessionState>()
   const [selectedSessionIds, setSelectedSessionIds] = useState<string[]>([])
@@ -263,6 +276,46 @@ export function EntityListPane({
         ) : (
           <div style={{ margin: 'auto', color: darkTheme.color.textMuted, fontSize: darkTheme.typography.body, textAlign: 'center' }}>暂无会话</div>
         )
+      ) : activeSection === 'tools' ? (
+        tools.length > 0 ? (
+          <ul aria-label="工具列表" className="hesper-theme-scrollbar" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 4, overflow: 'auto', minHeight: 0 }}>
+            {tools.map((tool) => {
+              const isActive = tool.id === activeToolId
+              const isPending = pendingToolIdSet.has(tool.id)
+              return (
+                <li key={tool.id}>
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    className={`hesper-list-row${isActive ? ' is-active' : ''}`}
+                    aria-selected={isActive ? 'true' : undefined}
+                    data-tool-id={tool.id}
+                    style={toolRowStyle}
+                    onClick={() => onSelectTool?.(tool.id)}
+                    onKeyDown={(event) => {
+                      if (event.key !== 'Enter' && event.key !== ' ') return
+                      event.preventDefault()
+                      onSelectTool?.(tool.id)
+                    }}
+                  >
+                    <div style={toolTextColumnStyle}>
+                      <span style={toolNameStyle}>{tool.name}</span>
+                      <span style={toolDescriptionStyle}>{tool.description}</span>
+                    </div>
+                    <ToolEnableSwitch
+                      enabled={tool.enabled}
+                      pending={isPending}
+                      label={`${tool.name} 全局开关`}
+                      onToggle={() => onToggleToolEnabled?.(tool.id, !tool.enabled)}
+                    />
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        ) : (
+          <div style={{ margin: 'auto', color: darkTheme.color.textMuted, fontSize: darkTheme.typography.body, textAlign: 'center' }}>暂无内置工具</div>
+        )
       ) : activeSection === 'settings' ? (
         <nav aria-label="设置分类" style={{ display: 'grid', gap: 4 }}>
           {settingsCategories.map((category) => {
@@ -318,6 +371,27 @@ export function EntityListPane({
   )
 }
 
+function ToolEnableSwitch({ enabled, pending, label, onToggle }: { enabled: boolean; pending: boolean; label: string; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={enabled}
+      aria-label={label}
+      disabled={pending}
+      data-tool-enabled={enabled ? 'true' : 'false'}
+      onClick={(event) => {
+        event.stopPropagation()
+        onToggle()
+      }}
+      style={toolToggleStyle(enabled, pending)}
+    >
+      <span aria-hidden="true" style={toolToggleKnobStyle(enabled)} />
+      <span style={toolToggleTextStyle}>{enabled ? '开启' : '关闭'}</span>
+    </button>
+  )
+}
+
 const settingsCategories: Array<{ id: 'ai' | 'appearance'; title: string; label: string; description: string }> = [
   { id: 'ai', title: 'AI', label: 'AI 设置', description: '模型、思考、连接' },
   { id: 'appearance', title: '外观', label: '外观设置', description: '字体大小、亮色与暗色' }
@@ -325,6 +399,73 @@ const settingsCategories: Array<{ id: 'ai' | 'appearance'; title: string; label:
 
 const sessionRowStyle: CSSProperties = {
   alignItems: 'center'
+}
+
+const toolRowStyle: CSSProperties = {
+  minHeight: 66,
+  gridTemplateColumns: 'minmax(0, 1fr) auto',
+  alignItems: 'center',
+  columnGap: 10
+}
+
+const toolTextColumnStyle: CSSProperties = {
+  minWidth: 0,
+  display: 'grid',
+  gap: 3
+}
+
+const toolNameStyle: CSSProperties = {
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  fontWeight: 700
+}
+
+const toolDescriptionStyle: CSSProperties = {
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  color: 'var(--hesper-color-text-muted, #9aa5ce)',
+  fontSize: 12,
+  lineHeight: '16px'
+}
+
+function toolToggleStyle(enabled: boolean, pending: boolean): CSSProperties {
+  return {
+    width: 58,
+    height: 28,
+    flex: '0 0 auto',
+    border: `1px solid ${enabled ? 'var(--hesper-color-accent, #7aa2f7)' : 'var(--hesper-color-border, #414868)'}`,
+    borderRadius: 999,
+    background: enabled ? 'var(--hesper-color-soft-control, rgba(122, 162, 247, 0.14))' : 'rgba(148, 163, 184, 0.12)',
+    color: enabled ? 'var(--hesper-color-accent, #7aa2f7)' : 'var(--hesper-color-text-muted, #9aa5ce)',
+    display: 'grid',
+    gridTemplateColumns: '16px 1fr',
+    alignItems: 'center',
+    gap: 4,
+    padding: '0 7px',
+    opacity: pending ? 0.62 : 1,
+    cursor: pending ? 'progress' : 'pointer',
+    fontSize: 11,
+    fontWeight: 700
+  }
+}
+
+function toolToggleKnobStyle(enabled: boolean): CSSProperties {
+  return {
+    width: 12,
+    height: 12,
+    borderRadius: 999,
+    background: enabled ? 'var(--hesper-color-accent, #7aa2f7)' : 'var(--hesper-color-text-muted, #9aa5ce)',
+    boxShadow: enabled ? '0 0 10px var(--hesper-color-accent, #7aa2f7)' : 'none'
+  }
+}
+
+const toolToggleTextStyle: CSSProperties = {
+  lineHeight: 1,
+  textAlign: 'center'
 }
 
 const sessionTitleRowStyle: CSSProperties = {

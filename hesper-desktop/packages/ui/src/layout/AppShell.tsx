@@ -1,9 +1,11 @@
 import type { ReactNode } from 'react'
-import type { Session } from '@hesper/shared'
+import type { Session, ToolDefinition } from '@hesper/shared'
 import { createThemeVariables, darkTheme, type ThemeMode } from '../theme'
 import { ActivityRail, type AppSection } from './ActivityRail'
 import { EntityListPane } from './EntityListPane'
 import { TitleBar, type DesktopPlatform, type WindowControlAction } from './TitleBar'
+
+export type ToolListItem = ToolDefinition & { enabled: boolean }
 
 export type AppShellProps = {
   sessions: Session[]
@@ -12,11 +14,16 @@ export type AppShellProps = {
   platform?: DesktopPlatform
   activeSessionId?: string
   runningSessionIds?: string[]
+  tools?: ToolListItem[]
+  activeToolId?: string
+  pendingToolIds?: string[]
   activeSettingsCategory?: 'ai' | 'appearance'
   appearance?: { themeMode: ThemeMode; fontSize: number }
   onCreateSession?: () => void | Promise<void>
   onSelectSection?: (section: AppSection) => void
   onSelectSession?: (sessionId: string) => void
+  onSelectTool?: (toolId: string) => void
+  onToggleToolEnabled?: (toolId: string, enabled: boolean) => void
   onSelectSettingsCategory?: (category: 'ai' | 'appearance') => void
   onRenameSession?: (sessionId: string, title: string) => void
   onRegenerateSessionTitle?: (sessionId: string, sessionIds?: string[]) => void
@@ -27,7 +34,7 @@ export type AppShellProps = {
   children?: ReactNode
 }
 
-export function AppShell({ sessions, activeSection, title, platform, activeSessionId, runningSessionIds, activeSettingsCategory, appearance, onCreateSession, onSelectSection, onSelectSession, onSelectSettingsCategory, onRenameSession, onRegenerateSessionTitle, onDeleteSession, onWindowMinimize, onWindowToggleMaximize, onWindowClose, children }: AppShellProps) {
+export function AppShell({ sessions, activeSection, title, platform, activeSessionId, runningSessionIds, tools, activeToolId, pendingToolIds, activeSettingsCategory, appearance, onCreateSession, onSelectSection, onSelectSession, onSelectTool, onToggleToolEnabled, onSelectSettingsCategory, onRenameSession, onRegenerateSessionTitle, onDeleteSession, onWindowMinimize, onWindowToggleMaximize, onWindowClose, children }: AppShellProps) {
   const themeVariables = createThemeVariables(appearance?.themeMode ?? 'dark', appearance?.fontSize ?? 14)
 
   return (
@@ -73,8 +80,13 @@ export function AppShell({ sessions, activeSection, title, platform, activeSessi
           sessions={sessions}
           {...(activeSessionId ? { activeSessionId } : {})}
           {...(runningSessionIds ? { runningSessionIds } : {})}
+          {...(tools ? { tools } : {})}
+          {...(activeToolId ? { activeToolId } : {})}
+          {...(pendingToolIds ? { pendingToolIds } : {})}
           {...(activeSettingsCategory ? { activeSettingsCategory } : {})}
           {...(onSelectSession ? { onSelectSession } : {})}
+          {...(onSelectTool ? { onSelectTool } : {})}
+          {...(onToggleToolEnabled ? { onToggleToolEnabled } : {})}
           {...(onSelectSettingsCategory ? { onSelectSettingsCategory } : {})}
           {...(onRenameSession ? { onRenameSession } : {})}
           {...(onRegenerateSessionTitle ? { onRegenerateSessionTitle } : {})}

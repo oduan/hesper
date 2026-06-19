@@ -120,6 +120,57 @@ describe('ui components', () => {
     expect(onSelectSection).toHaveBeenCalledWith('tools')
   })
 
+  it('renders builtin tools with global enable switches in the entity list', async () => {
+    const user = userEvent.setup()
+    const onSelectTool = vi.fn()
+    const onToggleToolEnabled = vi.fn()
+
+    render(
+      <AppShell
+        sessions={[]}
+        activeSection="tools"
+        title="工具"
+        tools={[
+          {
+            id: 'filesystem.read-file',
+            name: 'Read File',
+            description: 'Read a text file from the selected workspace.',
+            category: 'filesystem',
+            inputSchema: { type: 'object', required: ['path'], properties: { path: { type: 'string' } } },
+            enabled: true
+          },
+          {
+            id: 'filesystem.write-file',
+            name: 'Write File',
+            description: 'Write a text file in the selected workspace.',
+            category: 'filesystem',
+            inputSchema: { type: 'object', required: ['path', 'content'], properties: { path: { type: 'string' }, content: { type: 'string' } } },
+            enabled: false
+          }
+        ]}
+        activeToolId="filesystem.read-file"
+        onSelectTool={onSelectTool}
+        onToggleToolEnabled={onToggleToolEnabled}
+      />
+    )
+
+    expect(screen.getByRole('button', { name: '工具' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByLabelText('工具列表')).toHaveClass('hesper-theme-scrollbar')
+    expect(screen.getByText('Read File').closest('[role="button"]')).toHaveClass('is-active')
+    expect(screen.getByText('Read a text file from the selected workspace.')).toBeInTheDocument()
+
+    const writeRow = screen.getByText('Write File').closest('[role="button"]') as HTMLElement
+    const writeSwitch = screen.getByRole('switch', { name: 'Write File 全局开关' })
+    expect(writeSwitch).toHaveAttribute('aria-checked', 'false')
+
+    await user.click(writeRow)
+    expect(onSelectTool).toHaveBeenCalledWith('filesystem.write-file')
+
+    await user.click(writeSwitch)
+    expect(onToggleToolEnabled).toHaveBeenCalledWith('filesystem.write-file', true)
+    expect(onSelectTool).toHaveBeenCalledTimes(1)
+  })
+
   it('shows the same nine-dot running animation before running session titles', () => {
     render(
       <AppShell

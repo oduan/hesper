@@ -26,7 +26,9 @@ import {
   setSessionModelInputSchema,
   setSessionOutputModeInputSchema,
   setSessionWorkspaceInputSchema,
+  setToolEnabledInputSchema,
   subscribeAgentEventsResultSchema,
+  toolDtoSchema,
   unsubscribeAgentEventsResultSchema,
   updateSessionTitleInputSchema,
   updateSettingsInputSchema
@@ -61,7 +63,8 @@ const mutatingChannels = [
   ipcChannels.providersSave,
   ipcChannels.providersDisable,
   ipcChannels.providersDelete,
-  ipcChannels.modelsSave
+  ipcChannels.modelsSave,
+  ipcChannels.toolsSetEnabled
 ] as const
 
 type StripUndefined<T extends Record<string, unknown>> = {
@@ -127,7 +130,8 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
     const assignableSubagentRoles = roles.filter((candidate) => candidate.canBeAssignedToSubagent ?? candidate.canBeSubagent)
     const configuredToolIds = session.enabledToolIds?.length ? session.enabledToolIds : role?.defaultToolIds ?? []
     const requestedToolIdSet = requestedEnabledToolIds === undefined ? undefined : new Set(requestedEnabledToolIds)
-    const enabledToolIds = requestedToolIdSet ? configuredToolIds.filter((toolId) => requestedToolIdSet.has(toolId)) : configuredToolIds
+    const enabledToolIdsBeforeGlobalFilter = requestedToolIdSet ? configuredToolIds.filter((toolId) => requestedToolIdSet.has(toolId)) : configuredToolIds
+    const enabledToolIds = await options.container.toolSettingsService.filterEnabledToolIds(enabledToolIdsBeforeGlobalFilter)
     const sessionForPrompt = {
       ...session,
       ...(workspacePath !== undefined ? { workspacePath } : {}),
@@ -288,6 +292,13 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       const settings = await options.container.settingsService.updateSettings(omitUndefined(updateSettingsInputSchema.parse(payload ?? {})))
       await savePersistence()
       return appSettingsSchema.parse(settings)
+    },
+    [ipcChannels.toolsList]: async () => z.array(toolDtoSchema).parse(await options.container.toolSettingsService.listTools()),
+    [ipcChannels.toolsSetEnabled]: async (_event, payload) => {
+      const input = setToolEnabledInputSchema.parse(payload)
+      const tool = await options.container.toolSettingsService.setToolEnabled(input.id, input.enabled)
+      await savePersistence()
+      return toolDtoSchema.parse(tool)
     },
     [ipcChannels.credentialsProviderStatus]: async (_event, payload) => {
       const status = await options.container.credentialVaultService.getProviderApiKeyStatus(providerCredentialInputSchema.parse(payload))

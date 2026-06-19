@@ -9,6 +9,7 @@ import {
   createSessionService,
   createSettingsService,
   createToolCatalogService,
+  createToolSettingsService,
   type CredentialVaultCodec
 } from '@hesper/app-core'
 import type { Persistence } from '@hesper/persistence'
@@ -34,6 +35,7 @@ export function createServiceContainer(options: ServiceContainerOptions) {
   const skillService = createDefaultSkillService()
   const toolDefinitions = createBuiltinToolDefinitions()
   const toolCatalogService = createToolCatalogService(toolDefinitions)
+  const toolSettingsService = createToolSettingsService({ persistence: options.persistence, tools: toolDefinitions })
   const promptAssemblyService = createPromptAssemblyService()
   const credentialVaultService = createCredentialVaultService({
     persistence: options.persistence,
@@ -53,8 +55,18 @@ export function createServiceContainer(options: ServiceContainerOptions) {
     },
     readProviderApiKey: (providerId) => credentialVaultService.readProviderApiKey(providerId)
   })
+  const allowlistPolicy = createAllowlistPermissionPolicy()
   const toolRunner = createToolRunner({
-    policy: createAllowlistPermissionPolicy(),
+    policy: {
+      async evaluate(tool, args, context) {
+        const allowlistDecision = await allowlistPolicy.evaluate(tool, args, context)
+        if (!allowlistDecision.allowed) return allowlistDecision
+        if (!(await toolSettingsService.isToolEnabled(tool.id))) {
+          return { allowed: false, reason: `Tool is globally disabled: ${tool.id}` }
+        }
+        return { allowed: true }
+      }
+    },
     executor: createBuiltinToolExecutor({
       showNotification: (message) => {
         if (!Notification.isSupported()) {
@@ -97,6 +109,7 @@ export function createServiceContainer(options: ServiceContainerOptions) {
     roleService,
     skillService,
     toolCatalogService,
+    toolSettingsService,
     promptAssemblyService,
     toolRunner,
     credentialVaultService,

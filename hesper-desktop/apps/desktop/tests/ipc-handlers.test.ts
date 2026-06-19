@@ -273,6 +273,48 @@ describe('registerIpcHandlers', () => {
     }))
   })
 
+  it('filters globally disabled tools out of prompt assembly and runtime enqueue', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock' })
+    const handles = new Map<string, (event: any, ...args: any[]) => Promise<unknown> | unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (event: any, ...args: any[]) => Promise<unknown> | unknown) => {
+        handles.set(channel, handler)
+      }),
+      removeHandler: vi.fn()
+    }
+    const dialog = {
+      showOpenDialog: vi.fn(async () => ({ canceled: false, filePaths: ['C:/workspace'] }))
+    }
+    const promptSpy = vi.spyOn(container.promptAssemblyService, 'assembleMainPrompt')
+    const enqueueSpy = vi.spyOn(container.agentRuntime, 'enqueue').mockResolvedValueOnce({ id: 'run-global-filter' } as Awaited<ReturnType<typeof container.agentRuntime.enqueue>>)
+
+    await container.toolSettingsService.setToolEnabled('web.fetch-url', false)
+    registerIpcHandlers({ ipcMain, dialog, container })
+    const session = await container.sessionService.createSession({ title: 'Global tools', workspacePath: 'C:/workspace' })
+
+    await expect(handles.get(ipcChannels.toolsList)?.({ sender: { id: 1 } })).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'web.fetch-url', enabled: false })
+    ]))
+
+    await expect(handles.get(ipcChannels.agentEnqueue)?.(
+      { sender: { id: 1 } },
+      { sessionId: session.id, prompt: 'Do not expose disabled web fetch', modelId: 'mock/hesper-fast' }
+    )).resolves.toEqual({ runId: 'run-global-filter' })
+
+    const expectedEnabledTools = ['filesystem.read-file', 'git.status', 'system.show-notification']
+    expect(promptSpy).toHaveBeenLastCalledWith(expect.objectContaining({
+      session: expect.objectContaining({ enabledToolIds: expectedEnabledTools })
+    }))
+    expect(enqueueSpy).toHaveBeenLastCalledWith(expect.objectContaining({
+      enabledToolIds: expectedEnabledTools
+    }))
+
+    const updatedTool = await handles.get(ipcChannels.toolsSetEnabled)?.({ sender: { id: 1 } }, { id: 'web.fetch-url', enabled: true })
+    expect(updatedTool).toMatchObject({ id: 'web.fetch-url', enabled: true })
+    expect(await container.toolSettingsService.isToolEnabled('web.fetch-url')).toBe(true)
+  })
+
   it('does not persist a user message when runtime enqueue fails', async () => {
     const persistence = await createInMemoryPersistence()
     const container = createServiceContainer({ persistence, agentMode: 'mock' })

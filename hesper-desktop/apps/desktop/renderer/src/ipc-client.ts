@@ -14,6 +14,8 @@ import type {
   SetSessionModelInput,
   SetSessionOutputModeInput,
   SetSessionWorkspaceInput,
+  SetToolEnabledInput,
+  ToolDto,
   UpdateSessionTitleInput,
   UpdateSettingsInput
 } from '../../electron/ipc-contract'
@@ -25,6 +27,49 @@ const defaultSettings: AppSettings = {
   themeMode: 'dark',
   fontSize: 14
 }
+
+const fallbackBuiltinTools: ToolDto[] = [
+  {
+    id: 'filesystem.read-file',
+    name: 'Read File',
+    description: 'Read a text file from the selected workspace.',
+    category: 'filesystem',
+    inputSchema: { type: 'object', required: ['path'], properties: { path: { type: 'string' } } },
+    enabled: true
+  },
+  {
+    id: 'filesystem.write-file',
+    name: 'Write File',
+    description: 'Write a text file in the selected workspace.',
+    category: 'filesystem',
+    inputSchema: { type: 'object', required: ['path', 'content'], properties: { path: { type: 'string' }, content: { type: 'string' } } },
+    enabled: true
+  },
+  {
+    id: 'git.status',
+    name: 'Git Status',
+    description: 'Read git working tree status.',
+    category: 'git',
+    inputSchema: { type: 'object', properties: {} },
+    enabled: true
+  },
+  {
+    id: 'web.fetch-url',
+    name: 'Fetch URL',
+    description: 'Fetch and extract text from a URL.',
+    category: 'web',
+    inputSchema: { type: 'object', required: ['url'], properties: { url: { type: 'string' } } },
+    enabled: true
+  },
+  {
+    id: 'system.show-notification',
+    name: 'Show Notification',
+    description: 'Show a desktop notification.',
+    category: 'system',
+    inputSchema: { type: 'object', required: ['message'], properties: { message: { type: 'string' } } },
+    enabled: true
+  }
+]
 
 function withDefined<T extends object>(value: T): T {
   return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined)) as T
@@ -55,6 +100,7 @@ function updateMockSession(session: SessionDto, overrides: Partial<SessionDto> =
 export function createFallbackHesperApi(): HesperDesktopApi {
   let nextRunNumber = 1
   let sessions: SessionDto[] = []
+  let tools: ToolDto[] = fallbackBuiltinTools.map((tool) => ({ ...tool }))
   const messagesBySession: Record<string, MessageDto[]> = {}
   const runsBySession: Record<string, AgentRunDto[]> = {}
   const stepsByRun: Record<string, RunStepDto[]> = {}
@@ -203,6 +249,18 @@ export function createFallbackHesperApi(): HesperDesktopApi {
           updatedAt: timestamp,
           ...(input.contextWindow !== undefined ? { contextWindow: input.contextWindow } : {})
         }) as ModelDto
+      }
+    },
+    tools: {
+      list: async () => tools.map((tool) => ({ ...tool })),
+      setEnabled: async (input: SetToolEnabledInput): Promise<ToolDto> => {
+        const existing = tools.find((tool) => tool.id === input.id)
+        if (!existing) {
+          throw new Error(`Unknown builtin tool: ${input.id}`)
+        }
+        const updated = { ...existing, enabled: input.enabled }
+        tools = tools.map((tool) => tool.id === input.id ? updated : tool)
+        return { ...updated }
       }
     },
     window: {

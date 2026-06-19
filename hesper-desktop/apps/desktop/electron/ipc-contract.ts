@@ -1,4 +1,4 @@
-import { agentRunSchema, agentRuntimeEventSchema, messageSchema, modelConfigSchema, modelProviderConfigSchema, runStepSchema, sessionSchema } from '@hesper/shared'
+import { agentRunSchema, agentRuntimeEventSchema, messageSchema, modelConfigSchema, modelProviderConfigSchema, runStepSchema, sessionSchema, toolDefinitionSchema } from '@hesper/shared'
 import { z } from 'zod'
 
 export const ipcChannels = {
@@ -31,6 +31,8 @@ export const ipcChannels = {
   providersTestConnection: 'providers:testConnection',
   modelsList: 'models:list',
   modelsSave: 'models:save',
+  toolsList: 'tools:list',
+  toolsSetEnabled: 'tools:setEnabled',
   windowMinimize: 'window:minimize',
   windowToggleMaximize: 'window:toggleMaximize',
   windowClose: 'window:close'
@@ -169,6 +171,15 @@ export const saveModelInputSchema = z.object({
   enabled: z.boolean().optional()
 }).strict()
 
+export const toolDtoSchema = toolDefinitionSchema.extend({
+  enabled: z.boolean()
+})
+
+export const setToolEnabledInputSchema = z.object({
+  id: nonEmptyStringSchema,
+  enabled: z.boolean()
+}).strict()
+
 export const providerConnectionTestResultSchema = z.object({
   providerId: nonEmptyStringSchema,
   status: z.enum(['ok', 'disabled', 'needs_api_key', 'not_found', 'failed']),
@@ -202,6 +213,8 @@ export type ProviderIdInput = z.infer<typeof providerIdInputSchema>
 export type ProviderConnectionTestInput = z.infer<typeof providerConnectionTestInputSchema>
 export type ListModelsInput = z.infer<typeof listModelsInputSchema>
 export type SaveModelInput = z.infer<typeof saveModelInputSchema>
+export type ToolDto = z.infer<typeof toolDtoSchema>
+export type SetToolEnabledInput = z.infer<typeof setToolEnabledInputSchema>
 export type ProviderConnectionTestResult = z.infer<typeof providerConnectionTestResultSchema>
 export type AgentEvent = z.infer<typeof agentRuntimeEventSchema>
 export type SessionDto = z.infer<typeof sessionSchema>
@@ -256,6 +269,10 @@ export type HesperDesktopApi = {
   models: {
     list(input?: ListModelsInput): Promise<ModelDto[]>
     save(input: SaveModelInput): Promise<ModelDto>
+  }
+  tools: {
+    list(): Promise<ToolDto[]>
+    setEnabled(input: SetToolEnabledInput): Promise<ToolDto>
   }
   window: {
     platform: NodeJS.Platform

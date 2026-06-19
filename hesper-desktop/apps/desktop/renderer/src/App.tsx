@@ -4,10 +4,11 @@ import { AppShell, ConversationView, type AppSection, type ConversationShortcutC
 import { AppStoreProvider, useAppStore } from './app-store'
 import { hesperApi } from './ipc-client'
 import { defaultFallbackModelId, fallbackSessionModelCatalog, loadAvailableModelCatalog, mergeModelOptions, type SessionModelCatalog } from './model-options'
-import type { AppSettings, UpdateSettingsInput } from '../../electron/ipc-contract'
+import type { AppSettings, ToolDto, UpdateSettingsInput } from '../../electron/ipc-contract'
 import { AppearanceSettingsPanel } from './appearance-settings-panel'
 import { ProviderSettingsPanel } from './provider-settings-panel'
 import { createShortcutHandler } from './shortcuts'
+import { ToolDetailsPanel } from './tool-details-panel'
 
 export function App() {
   return (
@@ -133,6 +134,10 @@ function AppContent() {
   const [appSettings, setAppSettings] = useState<AppSettings>(defaultAppSettings)
   const [settingsError, setSettingsError] = useState<string>()
   const [activeSettingsCategory, setActiveSettingsCategory] = useState<SettingsCategory>('ai')
+  const [tools, setTools] = useState<ToolDto[]>([])
+  const [activeToolId, setActiveToolId] = useState<string>()
+  const [pendingToolIds, setPendingToolIds] = useState<Set<string>>(new Set())
+  const [toolsError, setToolsError] = useState<string>()
   const resolvedThemeMode = useResolvedThemeMode(appSettings.themeMode)
   const loadedHistorySessionIdsRef = useRef<Set<string>>(new Set())
   const loadingHistorySessionIdsRef = useRef<Set<string>>(new Set())
@@ -149,6 +154,8 @@ function AppContent() {
   const activeSessionUnreadCompletedAt = state.activeSessionId
     ? state.sessions.find((session) => session.id === state.activeSessionId)?.unreadCompletedAt
     : undefined
+  const activeTool = tools.find((tool) => tool.id === activeToolId) ?? tools[0]
+  const pendingToolIdList = useMemo(() => [...pendingToolIds], [pendingToolIds])
 
   const markSessionUnreadCompletedLocally = (sessionId: string, completedAt: string) => {
     const session = stateRef.current.sessions.find((candidate) => candidate.id === sessionId)
@@ -218,6 +225,36 @@ function AppContent() {
   useEffect(() => {
     document.documentElement.dataset.theme = resolvedThemeMode
   }, [resolvedThemeMode])
+
+  useEffect(() => {
+    let cancelled = false
+
+    void hesperApi.tools.list().then((loadedTools) => {
+      if (!cancelled) {
+        setTools(loadedTools)
+        setToolsError(undefined)
+      }
+    }).catch((error) => {
+      if (!cancelled) {
+        setToolsError(error instanceof Error ? error.message : '未知工具加载错误')
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (tools.length === 0) {
+      setActiveToolId(undefined)
+      return
+    }
+
+    if (!activeToolId || !tools.some((tool) => tool.id === activeToolId)) {
+      setActiveToolId(tools[0]!.id)
+    }
+  }, [activeToolId, tools])
 
   useEffect(() => {
     let cancelled = false
@@ -489,6 +526,23 @@ function AppContent() {
     }
   }
 
+  const updateToolEnabled = async (toolId: string, enabled: boolean) => {
+    setToolsError(undefined)
+    setPendingToolIds((current) => new Set(current).add(toolId))
+    try {
+      const updatedTool = await hesperApi.tools.setEnabled({ id: toolId, enabled })
+      setTools((current) => current.map((tool) => tool.id === updatedTool.id ? updatedTool : tool))
+    } catch (error) {
+      setToolsError(error instanceof Error ? error.message : '未知工具保存错误')
+    } finally {
+      setPendingToolIds((current) => {
+        const next = new Set(current)
+        next.delete(toolId)
+        return next
+      })
+    }
+  }
+
   const renameSession = async (sessionId: string, title: string) => {
     const session = stateRef.current.sessions.find((candidate) => candidate.id === sessionId)
     const nextTitle = title.trim()
@@ -598,6 +652,9 @@ function AppContent() {
       appearance={{ themeMode: resolvedThemeMode, fontSize: appSettings.fontSize }}
       activeSettingsCategory={activeSettingsCategory}
       runningSessionIds={runningSessionIds}
+      tools={tools}
+      pendingToolIds={pendingToolIdList}
+      {...(activeTool ? { activeToolId: activeTool.id } : {})}
       {...(state.activeSessionId ? { activeSessionId: state.activeSessionId } : {})}
       onCreateSession={async () => {
         dispatch({ type: 'section.selected', section: 'sessions' })
@@ -605,6 +662,10 @@ function AppContent() {
       }}
       onSelectSection={(section) => dispatch({ type: 'section.selected', section })}
       onSelectSettingsCategory={setActiveSettingsCategory}
+      onSelectTool={setActiveToolId}
+      onToggleToolEnabled={(toolId, enabled) => {
+        void updateToolEnabled(toolId, enabled)
+      }}
       onSelectSession={(sessionId) => {
         dispatch({ type: 'section.selected', section: 'sessions' })
         dispatch({ type: 'session.selected', sessionId })
@@ -630,6 +691,15 @@ function AppContent() {
           ) : (
             <ProviderSettingsPanel onModelRegistryChanged={refreshSessionModelOptions} />
           )
+        ) : state.activeSection === 'tools' ? (
+          <ToolDetailsPanel
+            {...(activeTool ? { tool: activeTool } : {})}
+            pending={activeTool ? pendingToolIds.has(activeTool.id) : false}
+            {...(toolsError ? { error: toolsError } : {})}
+            onToggle={(enabled) => {
+              if (activeTool) void updateToolEnabled(activeTool.id, enabled)
+            }}
+          />
         ) : <SectionPlaceholder section={state.activeSection} />
       ) : activeSession ? (
         <>
@@ -708,7 +778,7 @@ const sectionTitles: Record<AppSection, string> = {
   sessions: '所有会话',
   skills: 'Skills 即将支持',
   roles: 'Roles 即将支持',
-  tools: 'Tools 即将支持',
+  tools: '工具',
   settings: '设置'
 }
 
