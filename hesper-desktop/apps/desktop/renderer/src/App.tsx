@@ -626,6 +626,13 @@ function AppContent() {
     }
   }
 
+  const mergeSavedRole = (roleList: ManagedRoleDto[], savedRole: ManagedRoleDto) => {
+    const hasRole = roleList.some((candidate) => candidate.id === savedRole.id)
+    return hasRole
+      ? roleList.map((candidate) => candidate.id === savedRole.id ? savedRole : candidate)
+      : [savedRole, ...roleList]
+  }
+
   const saveRole = async (role: ManagedRoleDto) => {
     setRolesPending(true)
     invalidateRolesRequests()
@@ -646,12 +653,11 @@ function AppContent() {
             defaultToolIds: role.defaultToolIds
           })
       const result = await loadRoles()
-      if (!result.applied || 'error' in result) return
-      const loadedRoles = result.loadedRoles
-      const nextRoles = loadedRoles.some((candidate) => candidate.id === savedRole.id)
-        ? loadedRoles
-        : [savedRole, ...loadedRoles.filter((candidate) => candidate.id !== savedRole.id)]
-      setRoles(nextRoles)
+      if (result.applied && !('error' in result)) {
+        setRoles(mergeSavedRole(result.loadedRoles, savedRole))
+      } else {
+        setRoles((current) => mergeSavedRole(current, savedRole))
+      }
       setCreatingRole(false)
       setActiveRoleId(savedRole.id)
     } catch (error) {
@@ -668,9 +674,12 @@ function AppContent() {
     try {
       await hesperApi.roles.delete(roleId)
       const result = await loadRoles()
-      if (!result.applied || 'error' in result) return
+      const nextRoles = result.applied && !('error' in result)
+        ? result.loadedRoles
+        : roles.filter((role) => role.id !== roleId)
+      setRoles(nextRoles)
       setCreatingRole(false)
-      setActiveRoleId(result.loadedRoles[0]?.id)
+      setActiveRoleId(nextRoles[0]?.id)
     } catch (error) {
       setRolesError(error instanceof Error ? error.message : '未知角色删除错误')
     } finally {

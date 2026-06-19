@@ -413,6 +413,35 @@ describe('renderer App', () => {
     expect(screen.getByLabelText('角色名称')).toHaveValue('部署助手')
   })
 
+  it('completes role creation locally when refresh fails after create succeeds', async () => {
+    const user = userEvent.setup()
+    const createdRole = {
+      id: 'role-created',
+      name: '部署助手',
+      description: '协助部署',
+      systemPrompt: '你是部署助手。',
+      defaultToolIds: ['filesystem.read-file']
+    }
+    listRoles.mockResolvedValueOnce([]).mockRejectedValueOnce(new Error('refresh failed'))
+    createRole.mockResolvedValueOnce(createdRole)
+
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: '角色' }))
+    await user.click(await screen.findByRole('button', { name: '创建第一个角色' }))
+    await user.type(screen.getByLabelText('角色名称'), '部署助手')
+    await user.type(screen.getByLabelText('角色简介'), '协助部署')
+    await user.type(screen.getByLabelText('完整提示词'), '你是部署助手。')
+    await user.click(screen.getByLabelText('Read File'))
+    await user.click(screen.getByRole('button', { name: '创建角色' }))
+
+    await waitFor(() => expect(createRole).toHaveBeenCalled())
+    expect(await screen.findByRole('button', { name: /部署助手/ })).toBeInTheDocument()
+    expect(screen.getByLabelText('角色名称')).toHaveValue('部署助手')
+    expect(screen.getByRole('button', { name: '保存修改' })).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('refresh failed')
+  })
+
   it('updates an existing role and keeps it active after refresh', async () => {
     const user = userEvent.setup()
     const existingRole = {
@@ -478,6 +507,30 @@ describe('renderer App', () => {
     await waitFor(() => expect(deleteRole).toHaveBeenCalledWith('role-1'))
     expect(await screen.findByRole('button', { name: /搜索专家/ })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByLabelText('角色名称')).toHaveValue('搜索专家')
+  })
+
+  it('removes a deleted role locally when refresh fails after delete succeeds', async () => {
+    const user = userEvent.setup()
+    const role = {
+      id: 'role-1',
+      name: '运维助手',
+      description: '执行命令',
+      systemPrompt: '你是运维助手。',
+      defaultToolIds: []
+    }
+    vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
+    listRoles.mockResolvedValueOnce([role] as any).mockRejectedValueOnce(new Error('refresh failed'))
+
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: '角色' }))
+    expect(await screen.findByLabelText('角色名称')).toHaveValue('运维助手')
+    await user.click(screen.getByRole('button', { name: '删除角色' }))
+
+    await waitFor(() => expect(deleteRole).toHaveBeenCalledWith('role-1'))
+    expect(screen.queryByRole('button', { name: /运维助手/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '创建第一个角色' })).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('refresh failed')
   })
 
   it('ignores role list selection and creation while a role mutation is pending', async () => {
