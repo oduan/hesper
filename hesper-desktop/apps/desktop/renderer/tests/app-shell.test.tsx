@@ -372,8 +372,9 @@ describe('renderer App', () => {
     expect(appRoot?.style.getPropertyValue('--hesper-color-accent')).toBe('#7aa2f7')
     expect(appRoot?.style.getPropertyValue('--hesper-color-tool-toggle')).toBe('#7aa2f7')
     expect(appRoot?.style.getPropertyValue('--hesper-color-tool-toggle-soft')).toBe('rgba(122, 162, 247, 0.14)')
-    expect(appRoot?.style.getPropertyValue('--hesper-color-scrollbar-thumb')).toBe('rgba(192, 202, 245, 0.18)')
-    expect(appRoot?.style.getPropertyValue('--hesper-color-scrollbar-thumb-hover')).toBe('rgba(192, 202, 245, 0.34)')
+    expect(appRoot?.style.getPropertyValue('--hesper-color-scrollbar-thumb')).toBe('rgba(192, 202, 245, 0.10)')
+    expect(appRoot?.style.getPropertyValue('--hesper-color-scrollbar-thumb-hover')).toBe('rgba(192, 202, 245, 0.24)')
+    expect(appRoot?.style.getPropertyValue('--hesper-color-scrollbar-thumb-active')).toBe('rgba(192, 202, 245, 0.38)')
 
     await user.click(screen.getByRole('button', { name: /^亮色/ }))
     await waitFor(() => expect(updateSettings).toHaveBeenCalledWith({ themeMode: 'light' }))
@@ -382,8 +383,9 @@ describe('renderer App', () => {
     expect(appRoot?.style.getPropertyValue('--hesper-color-accent')).toBe('#8839ef')
     expect(appRoot?.style.getPropertyValue('--hesper-color-tool-toggle')).toBe('#40a02b')
     expect(appRoot?.style.getPropertyValue('--hesper-color-tool-toggle-soft')).toBe('rgba(64, 160, 43, 0.14)')
-    expect(appRoot?.style.getPropertyValue('--hesper-color-scrollbar-thumb')).toBe('rgba(76, 79, 105, 0.18)')
-    expect(appRoot?.style.getPropertyValue('--hesper-color-scrollbar-thumb-hover')).toBe('rgba(76, 79, 105, 0.34)')
+    expect(appRoot?.style.getPropertyValue('--hesper-color-scrollbar-thumb')).toBe('rgba(76, 79, 105, 0.10)')
+    expect(appRoot?.style.getPropertyValue('--hesper-color-scrollbar-thumb-hover')).toBe('rgba(76, 79, 105, 0.22)')
+    expect(appRoot?.style.getPropertyValue('--hesper-color-scrollbar-thumb-active')).toBe('rgba(76, 79, 105, 0.36)')
 
     await user.click(screen.getByRole('button', { name: '16px' }))
     await waitFor(() => expect(updateSettings).toHaveBeenCalledWith({ fontSize: 16 }))

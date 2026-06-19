@@ -149,12 +149,12 @@ button {
 
 .hesper-theme-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: var(--hesper-color-scrollbar-thumb, rgba(192, 202, 245, 0.18)) transparent;
+  scrollbar-color: var(--hesper-color-scrollbar-thumb, rgba(192, 202, 245, 0.10)) transparent;
 }
 
 .hesper-theme-scrollbar::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
 }
 
 .hesper-theme-scrollbar::-webkit-scrollbar-track {
@@ -163,15 +163,21 @@ button {
 }
 
 .hesper-theme-scrollbar::-webkit-scrollbar-thumb {
-  min-height: 28px;
-  border: 1px solid transparent;
+  min-height: 24px;
+  border: 0;
   border-radius: 999px;
-  background: var(--hesper-color-scrollbar-thumb, rgba(192, 202, 245, 0.18)) border-box;
+  background: var(--hesper-color-scrollbar-thumb, rgba(192, 202, 245, 0.10)) border-box;
   background-clip: padding-box;
+  transition: background 120ms ease;
 }
 
 .hesper-theme-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: var(--hesper-color-scrollbar-thumb-hover, rgba(192, 202, 245, 0.34)) border-box;
+  background: var(--hesper-color-scrollbar-thumb-hover, rgba(192, 202, 245, 0.24)) border-box;
+  background-clip: padding-box;
+}
+
+.hesper-theme-scrollbar::-webkit-scrollbar-thumb:active {
+  background: var(--hesper-color-scrollbar-thumb-active, rgba(192, 202, 245, 0.38)) border-box;
   background-clip: padding-box;
 }
 
