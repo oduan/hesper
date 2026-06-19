@@ -16,6 +16,18 @@ describe('ipc-client fallback', () => {
     expect(first.id).not.toBe(second.id)
   })
 
+  it('lists the edit-file tool in fallback mode', async () => {
+    const api = createHesperApi({ allowFallback: true })
+
+    const tools = await api.tools.list()
+
+    expect(tools.find((tool) => tool.id === 'filesystem.edit-file')).toMatchObject({
+      category: 'filesystem',
+      enabled: true,
+      inputSchema: expect.objectContaining({ required: ['path', 'edits'] })
+    })
+  })
+
   it('fails fast when preload api is unavailable outside fallback mode', () => {
     expect(() => createHesperApi({ allowFallback: false })).toThrowError('window.hesper preload API is unavailable')
   })

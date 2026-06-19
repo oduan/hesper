@@ -41,6 +41,7 @@ export function createDefaultRoleService(): RoleService {
       defaultToolIds: [
         'filesystem.read-file',
         'filesystem.write-file',
+        'filesystem.edit-file',
         'filesystem.delete-file',
         'filesystem.delete-directory',
         'filesystem.list-directory',

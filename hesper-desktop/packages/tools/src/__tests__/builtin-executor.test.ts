@@ -54,6 +54,30 @@ describe('createBuiltinToolExecutor', () => {
     expect(result.details).toMatchObject({ bytes: 13 })
   })
 
+  it('edits multiple line ranges using original line numbers without drift', async () => {
+    const root = await workspace()
+    await writeFile(join(root, 'notes.txt'), 'one\ntwo\nthree\nfour\nfive\n', 'utf8')
+    const executor = createBuiltinToolExecutor()
+
+    const result = await executor.execute(tool('filesystem.edit-file'), {
+      path: 'notes.txt',
+      edits: [
+        { startLine: 1, content: 'zero\none' },
+        { startLine: 2, content: 'TWO' },
+        { startLine: 4, endLine: 5, content: 'FOUR' }
+      ]
+    }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.edit-file']
+    })
+
+    expect(await readFile(join(root, 'notes.txt'), 'utf8')).toBe('zero\none\nTWO\nthree\nFOUR\n')
+    expect(result.content).toContain('Edited 3 line range')
+    expect(result.details).toMatchObject({ edits: 3, linesBefore: 5, linesAfter: 5 })
+  })
+
   it('blocks symlinks or junctions that resolve outside the workspace', async () => {
     const root = await workspace()
     const outside = await workspace()

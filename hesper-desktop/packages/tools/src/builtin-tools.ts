@@ -42,6 +42,33 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
       }
     },
     {
+      id: 'filesystem.edit-file',
+      name: 'Edit File',
+      description: 'Edit specific 1-based inclusive line ranges in an existing text file from the selected workspace. Multiple edits are applied against the original line numbers.',
+      category: 'filesystem',
+      icon: '📝',
+      inputSchema: {
+        type: 'object',
+        required: ['path', 'edits'],
+        properties: {
+          path: { type: 'string', description: 'File path relative to the selected workspace.' },
+          edits: {
+            type: 'array',
+            description: 'Line range edits using original 1-based inclusive line numbers. Empty content deletes the range.',
+            items: {
+              type: 'object',
+              required: ['startLine', 'content'],
+              properties: {
+                startLine: { type: 'number', description: '1-based inclusive start line.' },
+                endLine: { type: 'number', description: '1-based inclusive end line. Defaults to startLine.' },
+                content: { type: 'string', description: 'Replacement text for the range. Empty string deletes the range.' }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
       id: 'filesystem.delete-file',
       name: 'Delete File',
       description: 'Delete a file inside the selected workspace. The path must resolve to a file.',

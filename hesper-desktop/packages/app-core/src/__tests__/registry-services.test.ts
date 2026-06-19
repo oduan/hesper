@@ -11,6 +11,7 @@ describe('registry services', () => {
     expect(roles.find((role) => role.id === 'main-agent')?.defaultToolIds).toEqual([
       'filesystem.read-file',
       'filesystem.write-file',
+      'filesystem.edit-file',
       'filesystem.delete-file',
       'filesystem.delete-directory',
       'filesystem.list-directory',

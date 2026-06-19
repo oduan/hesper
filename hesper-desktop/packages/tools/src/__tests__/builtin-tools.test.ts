@@ -4,7 +4,7 @@ import { createBuiltinToolDefinitions } from '../builtin-tools'
 describe('builtin tools', () => {
   it('contains the builtin tool set without exposing legacy worker execution', () => {
     const tools = createBuiltinToolDefinitions()
-    expect(tools).toHaveLength(13)
+    expect(tools).toHaveLength(14)
     expect(tools.map((tool) => tool.id)).not.toContain('agent.spawn-worker-agent')
     expect(tools.every((tool) => typeof tool.icon === 'string' && tool.icon.length > 0)).toBe(true)
   })
@@ -15,6 +15,7 @@ describe('builtin tools', () => {
       expect.arrayContaining([
         'filesystem.read-file',
         'filesystem.write-file',
+        'filesystem.edit-file',
         'filesystem.delete-file',
         'filesystem.delete-directory',
         'filesystem.list-directory',
@@ -35,6 +36,7 @@ describe('builtin tools', () => {
     const tools = createBuiltinToolDefinitions()
     const readFile = tools.find((tool) => tool.id === 'filesystem.read-file')
     const writeFile = tools.find((tool) => tool.id === 'filesystem.write-file')
+    const editFile = tools.find((tool) => tool.id === 'filesystem.edit-file')
     const listDirectory = tools.find((tool) => tool.id === 'filesystem.list-directory')
     const find = tools.find((tool) => tool.id === 'filesystem.find')
     const search = tools.find((tool) => tool.id === 'filesystem.search')
@@ -58,6 +60,29 @@ describe('builtin tools', () => {
         properties: {
           path: { type: 'string' },
           content: { type: 'string' }
+        }
+      }
+    })
+
+    expect(editFile).toMatchObject({
+      category: 'filesystem',
+      inputSchema: {
+        type: 'object',
+        required: ['path', 'edits'],
+        properties: {
+          path: { type: 'string' },
+          edits: {
+            type: 'array',
+            items: {
+              type: 'object',
+              required: ['startLine', 'content'],
+              properties: {
+                startLine: { type: 'number' },
+                endLine: { type: 'number' },
+                content: { type: 'string' }
+              }
+            }
+          }
         }
       }
     })

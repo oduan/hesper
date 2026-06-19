@@ -1,6 +1,6 @@
 import type { ToolDefinition } from '@hesper/shared'
 import { execFile } from 'node:child_process'
-import { lstat, mkdir, open, readdir, realpath, rm, stat, unlink, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, open, readFile, readdir, realpath, rm, stat, unlink, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import { promisify } from 'node:util'
 import type { ToolExecutionContext, ToolExecutionResult, ToolExecutor } from './tool-runner'
@@ -207,6 +207,96 @@ async function writeTextFile(tool: ToolDefinition, args: unknown, context: ToolE
   return {
     content: `Wrote ${bytes} bytes to ${filePath}`,
     details: { toolId: tool.id, path: filePath, bytes }
+  }
+}
+
+type LineEdit = {
+  startLine: number
+  endLine: number
+  content: string
+}
+
+function integerLineArg(value: unknown, key: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || !Number.isInteger(value)) {
+    throw new Error(`Tool argument ${key} must be an integer`)
+  }
+  if (value < 1) {
+    throw new Error(`Tool argument ${key} must be >= 1`)
+  }
+  return value
+}
+
+function lineEditsArg(args: unknown): LineEdit[] {
+  const value = argsObject(args).edits
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error('Tool argument edits must be a non-empty array')
+  }
+  return value.map((entry, index) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      throw new Error(`Tool argument edits[${index}] must be an object`)
+    }
+    const record = entry as Record<string, unknown>
+    const startLine = integerLineArg(record.startLine, `edits[${index}].startLine`)
+    const endLine = record.endLine === undefined ? startLine : integerLineArg(record.endLine, `edits[${index}].endLine`)
+    if (endLine < startLine) {
+      throw new Error(`Tool argument edits[${index}].endLine must be >= startLine`)
+    }
+    if (typeof record.content !== 'string') {
+      throw new Error(`Tool argument edits[${index}].content must be a string`)
+    }
+    return { startLine, endLine, content: record.content }
+  })
+}
+
+function splitEditableLines(content: string): { lines: string[]; newline: string; hasFinalNewline: boolean } {
+  const newline = content.includes('\r\n') ? '\r\n' : '\n'
+  const hasFinalNewline = content.endsWith('\n')
+  if (content === '') return { lines: [], newline, hasFinalNewline: false }
+  const lines = content.split(/\r\n|\n/)
+  if (hasFinalNewline) lines.pop()
+  return { lines, newline, hasFinalNewline }
+}
+
+function replacementLines(content: string): string[] {
+  if (content === '') return []
+  const normalized = content.replace(/\r\n/g, '\n')
+  const lines = normalized.split('\n')
+  if (normalized.endsWith('\n')) lines.pop()
+  return lines
+}
+
+function validateLineEdits(edits: LineEdit[], lineCount: number): LineEdit[] {
+  const sorted = [...edits].sort((left, right) => left.startLine - right.startLine)
+  for (const [index, edit] of sorted.entries()) {
+    if (edit.endLine > lineCount) {
+      throw new Error(`Line edit range ${edit.startLine}-${edit.endLine} is outside the file; file has ${lineCount} line${lineCount === 1 ? '' : 's'}`)
+    }
+    const previous = sorted[index - 1]
+    if (previous && edit.startLine <= previous.endLine) {
+      throw new Error(`Line edit ranges must not overlap: ${previous.startLine}-${previous.endLine} overlaps ${edit.startLine}-${edit.endLine}`)
+    }
+  }
+  return sorted
+}
+
+async function editTextFile(tool: ToolDefinition, args: unknown, context: ToolExecutionContext): Promise<ToolExecutionResult> {
+  const filePath = await resolveExistingWorkspaceFile(context, stringArg(args, 'path'))
+  const edits = lineEditsArg(args)
+  const originalContent = await readFile(filePath, 'utf8')
+  const editable = splitEditableLines(originalContent)
+  const linesBefore = editable.lines.length
+  const sortedEdits = validateLineEdits(edits, linesBefore)
+
+  for (const edit of [...sortedEdits].reverse()) {
+    editable.lines.splice(edit.startLine - 1, edit.endLine - edit.startLine + 1, ...replacementLines(edit.content))
+  }
+
+  const nextContent = `${editable.lines.join(editable.newline)}${editable.hasFinalNewline && editable.lines.length > 0 ? editable.newline : ''}`
+  await writeFile(filePath, nextContent, 'utf8')
+  const bytes = Buffer.byteLength(nextContent, 'utf8')
+  return {
+    content: `Edited ${edits.length} line range${edits.length === 1 ? '' : 's'} in ${filePath}`,
+    details: { toolId: tool.id, path: filePath, edits: edits.length, linesBefore, linesAfter: editable.lines.length, bytes }
   }
 }
 
@@ -908,6 +998,8 @@ export function createBuiltinToolExecutor(options: BuiltinToolExecutorOptions = 
           return readTextFile(tool, args, context, maxReadBytes)
         case 'filesystem.write-file':
           return writeTextFile(tool, args, context)
+        case 'filesystem.edit-file':
+          return editTextFile(tool, args, context)
         case 'filesystem.delete-file':
           return deleteFile(tool, args, context)
         case 'filesystem.delete-directory':
