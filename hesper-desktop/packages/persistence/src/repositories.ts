@@ -14,7 +14,7 @@ import {
   type RunStep,
   type Session,
   type Skill,
-  type SubagentInvocation,
+  type WorkerAgentInvocation,
   type ToolPermissionPolicy,
   type ToolPermissionScope
 } from '@hesper/shared'
@@ -100,11 +100,11 @@ export type ToolPermissionPolicyRepository = {
   listByScope(scope: ToolPermissionScope, subjectId?: string): Promise<ToolPermissionPolicy[]>
 }
 
-export type SubagentInvocationRepository = {
-  save(invocation: SubagentInvocation): Promise<void>
-  get(id: string): Promise<SubagentInvocation | undefined>
-  listByParentRun(parentRunId: string): Promise<SubagentInvocation[]>
-  listByChildRun(childRunId: string): Promise<SubagentInvocation[]>
+export type WorkerAgentInvocationRepository = {
+  save(invocation: WorkerAgentInvocation): Promise<void>
+  get(id: string): Promise<WorkerAgentInvocation | undefined>
+  listByParentRun(parentRunId: string): Promise<WorkerAgentInvocation[]>
+  listByChildRun(childRunId: string): Promise<WorkerAgentInvocation[]>
 }
 
 export type CredentialRecordRepository = {
@@ -131,7 +131,7 @@ export type Persistence = {
   skills: SkillRepository
   roles: RoleRepository
   toolPermissionPolicies: ToolPermissionPolicyRepository
-  subagentInvocations: SubagentInvocationRepository
+  workerAgentInvocations: WorkerAgentInvocationRepository
   credentialRecords: CredentialRecordRepository
   exportDatabaseBytes(): Uint8Array
 }
@@ -210,9 +210,9 @@ function toSession(row: any): Session {
     roleId: optionalString(row.role_id),
     enabledSkillIds: parseStringArrayJson(row.enabled_skill_ids_json, 'sessions.enabled_skill_ids_json'),
     enabledToolIds: parseStringArrayJson(row.enabled_tool_ids_json, 'sessions.enabled_tool_ids_json'),
-    allowedSubagentRoleIds: parseStringArrayJson(row.allowed_subagent_role_ids_json, 'sessions.allowed_subagent_role_ids_json'),
-    maxSubagentDepth: optionalNumber(row.max_subagent_depth) ?? 1,
-    maxSubagentsPerRun: optionalNumber(row.max_subagents_per_run) ?? 3,
+    allowedWorkerAgentRoleIds: parseStringArrayJson(row.allowed_worker_agent_role_ids_json, 'sessions.allowed_worker_agent_role_ids_json'),
+    maxWorkerAgentDepth: optionalNumber(row.max_worker_agent_depth) ?? 1,
+    maxWorkerAgentsPerRun: optionalNumber(row.max_worker_agents_per_run) ?? 3,
     outputMode: row.output_mode,
     unreadCompletedAt: row.unread_completed_at ?? undefined,
     createdAt: row.created_at,
@@ -238,7 +238,7 @@ function toRun(row: any): AgentRun {
     id: row.id,
     sessionId: row.session_id,
     parentRunId: row.parent_run_id ?? undefined,
-    subagentInvocationId: row.subagent_invocation_id ?? undefined,
+    workerAgentInvocationId: row.worker_agent_invocation_id ?? undefined,
     depth: optionalNumber(row.depth),
     status: row.status,
     modelId: row.model_id,
@@ -320,9 +320,9 @@ function toRole(row: any): Role {
     defaultSkillIds: parseStringArrayJson(row.default_skill_ids_json, 'roles.default_skill_ids_json'),
     defaultToolIds: parseStringArrayJson(row.default_tool_ids_json, 'roles.default_tool_ids_json'),
     canBeMainAgent: Number(row.can_be_main_agent) === 1,
-    canBeSubagent: Number(row.can_be_subagent) === 1,
-    canBeAssignedToSubagent: optionalBoolean(row.can_be_assigned_to_subagent),
-    subagentGuidance: row.subagent_guidance ?? undefined
+    canBeWorkerAgent: Number(row.can_be_worker_agent) === 1,
+    canBeAssignedToWorkerAgent: optionalBoolean(row.can_be_assigned_to_worker_agent),
+    workerAgentGuidance: row.worker_agent_guidance ?? undefined
   }) as Role
 }
 
@@ -339,7 +339,7 @@ function toToolPermissionPolicy(row: any): ToolPermissionPolicy {
   }) as ToolPermissionPolicy
 }
 
-function toSubagentInvocation(row: any): SubagentInvocation {
+function toWorkerAgentInvocation(row: any): WorkerAgentInvocation {
   const error = row.error_json ? runErrorSchema.parse(JSON.parse(String(row.error_json))) : undefined
   return stripUndefined({
     id: row.id,
@@ -347,14 +347,14 @@ function toSubagentInvocation(row: any): SubagentInvocation {
     childRunId: row.child_run_id ?? undefined,
     task: row.task,
     roleId: row.role_id,
-    allowedToolIds: parseStringArrayJson(row.allowed_tool_ids_json, 'subagent_invocations.allowed_tool_ids_json'),
-    modelRef: parseOptionalModelRef(row.model_ref_json, 'subagent_invocations.model_ref_json'),
+    allowedToolIds: parseStringArrayJson(row.allowed_tool_ids_json, 'worker_agent_invocations.allowed_tool_ids_json'),
+    modelRef: parseOptionalModelRef(row.model_ref_json, 'worker_agent_invocations.model_ref_json'),
     expectedOutput: row.expected_output ?? undefined,
     status: row.status,
     createdAt: row.created_at,
     completedAt: row.completed_at ?? undefined,
     error
-  }) as SubagentInvocation
+  }) as WorkerAgentInvocation
 }
 
 function toCredentialRecord(row: any): CredentialRecord {
@@ -427,7 +427,7 @@ export function createRepositories(db: Database): Persistence {
     'skills',
     'roles',
     'tool_permission_policies',
-    'subagent_invocations',
+    'worker_agent_invocations',
     'credential_records'
   ]
   const bindValues = (values: unknown[]) => values.map((value) => (value === undefined ? null : value))
@@ -498,9 +498,9 @@ export function createRepositories(db: Database): Persistence {
           'role_id',
           'enabled_skill_ids_json',
           'enabled_tool_ids_json',
-          'allowed_subagent_role_ids_json',
-          'max_subagent_depth',
-          'max_subagents_per_run',
+          'allowed_worker_agent_role_ids_json',
+          'max_worker_agent_depth',
+          'max_worker_agents_per_run',
           'output_mode',
           'unread_completed_at',
           'created_at',
@@ -517,9 +517,9 @@ export function createRepositories(db: Database): Persistence {
           session.roleId,
           json(session.enabledSkillIds),
           json(session.enabledToolIds),
-          json(session.allowedSubagentRoleIds),
-          session.maxSubagentDepth,
-          session.maxSubagentsPerRun,
+          json(session.allowedWorkerAgentRoleIds),
+          session.maxWorkerAgentDepth,
+          session.maxWorkerAgentsPerRun,
           session.outputMode,
           session.unreadCompletedAt,
           session.createdAt,
@@ -554,11 +554,11 @@ export function createRepositories(db: Database): Persistence {
     },
     runs: {
       async save(run) {
-        upsert('agent_runs', ['id', 'session_id', 'parent_run_id', 'subagent_invocation_id', 'depth', 'status', 'model_id', 'workspace_path', 'retry_count', 'max_retries', 'started_at', 'ended_at', 'error_json', 'sort_seq'], [
+        upsert('agent_runs', ['id', 'session_id', 'parent_run_id', 'worker_agent_invocation_id', 'depth', 'status', 'model_id', 'workspace_path', 'retry_count', 'max_retries', 'started_at', 'ended_at', 'error_json', 'sort_seq'], [
           run.id,
           run.sessionId,
           run.parentRunId,
-          run.subagentInvocationId,
+          run.workerAgentInvocationId,
           run.depth,
           run.status,
           run.modelId,
@@ -688,7 +688,7 @@ export function createRepositories(db: Database): Persistence {
     },
     roles: {
       async save(role) {
-        upsert('roles', ['id', 'name', 'description', 'default_model_id', 'default_model_ref_json', 'system_prompt', 'allowed_skill_ids_json', 'default_skill_ids_json', 'default_tool_ids_json', 'can_be_main_agent', 'can_be_subagent', 'can_be_assigned_to_subagent', 'subagent_guidance', 'sort_seq'], [
+        upsert('roles', ['id', 'name', 'description', 'default_model_id', 'default_model_ref_json', 'system_prompt', 'allowed_skill_ids_json', 'default_skill_ids_json', 'default_tool_ids_json', 'can_be_main_agent', 'can_be_worker_agent', 'can_be_assigned_to_worker_agent', 'worker_agent_guidance', 'sort_seq'], [
           role.id,
           role.name,
           role.description,
@@ -699,9 +699,9 @@ export function createRepositories(db: Database): Persistence {
           json(role.defaultSkillIds),
           json(role.defaultToolIds),
           role.canBeMainAgent ? 1 : 0,
-          role.canBeSubagent ? 1 : 0,
-          role.canBeAssignedToSubagent === undefined ? undefined : role.canBeAssignedToSubagent ? 1 : 0,
-          role.subagentGuidance,
+          role.canBeWorkerAgent ? 1 : 0,
+          role.canBeAssignedToWorkerAgent === undefined ? undefined : role.canBeAssignedToWorkerAgent ? 1 : 0,
+          role.workerAgentGuidance,
           nextSeq()
         ], role.id)
       },
@@ -742,9 +742,9 @@ export function createRepositories(db: Database): Persistence {
         return fetchAll(sql, params).map(toToolPermissionPolicy)
       }
     },
-    subagentInvocations: {
+    workerAgentInvocations: {
       async save(invocation) {
-        upsert('subagent_invocations', ['id', 'parent_run_id', 'child_run_id', 'task', 'role_id', 'allowed_tool_ids_json', 'model_ref_json', 'expected_output', 'status', 'created_at', 'completed_at', 'error_json', 'sort_seq'], [
+        upsert('worker_agent_invocations', ['id', 'parent_run_id', 'child_run_id', 'task', 'role_id', 'allowed_tool_ids_json', 'model_ref_json', 'expected_output', 'status', 'created_at', 'completed_at', 'error_json', 'sort_seq'], [
           invocation.id,
           invocation.parentRunId,
           invocation.childRunId,
@@ -761,14 +761,14 @@ export function createRepositories(db: Database): Persistence {
         ], invocation.id)
       },
       async get(id) {
-        const row = fetchAll('SELECT * FROM subagent_invocations WHERE id = ?', [id])[0]
-        return row ? toSubagentInvocation(row) : undefined
+        const row = fetchAll('SELECT * FROM worker_agent_invocations WHERE id = ?', [id])[0]
+        return row ? toWorkerAgentInvocation(row) : undefined
       },
       async listByParentRun(parentRunId) {
-        return fetchAll('SELECT * FROM subagent_invocations WHERE parent_run_id = ? ORDER BY sort_seq ASC, id ASC', [parentRunId]).map(toSubagentInvocation)
+        return fetchAll('SELECT * FROM worker_agent_invocations WHERE parent_run_id = ? ORDER BY sort_seq ASC, id ASC', [parentRunId]).map(toWorkerAgentInvocation)
       },
       async listByChildRun(childRunId) {
-        return fetchAll('SELECT * FROM subagent_invocations WHERE child_run_id = ? ORDER BY sort_seq ASC, id ASC', [childRunId]).map(toSubagentInvocation)
+        return fetchAll('SELECT * FROM worker_agent_invocations WHERE child_run_id = ? ORDER BY sort_seq ASC, id ASC', [childRunId]).map(toWorkerAgentInvocation)
       }
     },
     credentialRecords: {

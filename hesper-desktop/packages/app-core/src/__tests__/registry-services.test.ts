@@ -6,8 +6,8 @@ describe('registry services', () => {
     const roles = createDefaultRoleService().listRoles()
     const skills = createDefaultSkillService().listSkills()
 
-    expect(roles.map((role) => role.id)).toEqual(['main-agent', 'subagent'])
-    expect(roles.find((role) => role.id === 'subagent')?.name).toBe('Worker Agent')
+    expect(roles.map((role) => role.id)).toEqual(['main-agent', 'worker-agent'])
+    expect(roles.find((role) => role.id === 'worker-agent')?.name).toBe('Worker Agent')
     expect(roles.find((role) => role.id === 'main-agent')?.defaultToolIds).toEqual([
       'filesystem.read-file',
       'filesystem.write-file',
@@ -15,7 +15,7 @@ describe('registry services', () => {
       'web.fetch-url',
       'system.show-notification'
     ])
-    expect(roles.find((role) => role.id === 'main-agent')?.defaultToolIds).not.toContain('agent.spawn-subagent')
+    expect(roles.find((role) => role.id === 'main-agent')?.defaultToolIds).not.toContain('agent.spawn-worker-agent')
     expect(skills.map((skill) => skill.id)).toEqual([
       'builtin:notes',
       'workspace:notes',
@@ -27,13 +27,13 @@ describe('registry services', () => {
     const catalog = createToolCatalogService([
       { id: 'filesystem.read-file', name: 'Read File', description: 'Read file', inputSchema: {}, category: 'filesystem' },
       { id: 'web.fetch-url', name: 'Fetch URL', description: 'Fetch URL', inputSchema: {}, category: 'web' },
-      { id: 'agent.spawn-subagent', name: 'Spawn Worker Agent', description: 'Spawn Worker Agent', inputSchema: {}, category: 'agent' }
+      { id: 'agent.spawn-worker-agent', name: 'Spawn Worker Agent', description: 'Spawn Worker Agent', inputSchema: {}, category: 'agent' }
     ])
 
     expect(catalog.list().map((tool) => tool.id)).toEqual([
       'filesystem.read-file',
       'web.fetch-url',
-      'agent.spawn-subagent'
+      'agent.spawn-worker-agent'
     ])
     expect(Object.keys(catalog.listByCategory())).toEqual(['filesystem', 'git', 'web', 'agent', 'system'])
     expect(catalog.get('web.fetch-url')?.category).toBe('web')

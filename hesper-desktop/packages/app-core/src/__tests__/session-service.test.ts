@@ -19,10 +19,10 @@ describe('createSessionService', () => {
       modelId: 'deepseek-chat',
       roleId: 'coding',
       enabledSkillIds: ['skill-review'],
-      enabledToolIds: ['filesystem.read-file', 'agent.spawn-subagent'],
-      allowedSubagentRoleIds: ['reviewer'],
-      maxSubagentDepth: 2,
-      maxSubagentsPerRun: 4,
+      enabledToolIds: ['filesystem.read-file', 'agent.spawn-worker-agent'],
+      allowedWorkerAgentRoleIds: ['reviewer'],
+      maxWorkerAgentDepth: 2,
+      maxWorkerAgentsPerRun: 4,
       outputMode: 'markdown' as const,
       createdAt: now,
       updatedAt: now
@@ -40,9 +40,9 @@ describe('createSessionService', () => {
       roleId: session.roleId,
       enabledSkillIds: session.enabledSkillIds,
       enabledToolIds: session.enabledToolIds,
-      allowedSubagentRoleIds: session.allowedSubagentRoleIds,
-      maxSubagentDepth: session.maxSubagentDepth,
-      maxSubagentsPerRun: session.maxSubagentsPerRun,
+      allowedWorkerAgentRoleIds: session.allowedWorkerAgentRoleIds,
+      maxWorkerAgentDepth: session.maxWorkerAgentDepth,
+      maxWorkerAgentsPerRun: session.maxWorkerAgentsPerRun,
       outputMode: session.outputMode,
       status: 'active'
     })
@@ -56,9 +56,9 @@ describe('createSessionService', () => {
       roleId: session.roleId,
       enabledSkillIds: session.enabledSkillIds,
       enabledToolIds: session.enabledToolIds,
-      allowedSubagentRoleIds: session.allowedSubagentRoleIds,
-      maxSubagentDepth: session.maxSubagentDepth,
-      maxSubagentsPerRun: session.maxSubagentsPerRun,
+      allowedWorkerAgentRoleIds: session.allowedWorkerAgentRoleIds,
+      maxWorkerAgentDepth: session.maxWorkerAgentDepth,
+      maxWorkerAgentsPerRun: session.maxWorkerAgentsPerRun,
       outputMode: session.outputMode,
       title: 'Updated'
     })
@@ -72,9 +72,9 @@ describe('createSessionService', () => {
       roleId: session.roleId,
       enabledSkillIds: session.enabledSkillIds,
       enabledToolIds: session.enabledToolIds,
-      allowedSubagentRoleIds: session.allowedSubagentRoleIds,
-      maxSubagentDepth: session.maxSubagentDepth,
-      maxSubagentsPerRun: session.maxSubagentsPerRun,
+      allowedWorkerAgentRoleIds: session.allowedWorkerAgentRoleIds,
+      maxWorkerAgentDepth: session.maxWorkerAgentDepth,
+      maxWorkerAgentsPerRun: session.maxWorkerAgentsPerRun,
       outputMode: session.outputMode,
       title: 'Updated'
     })
@@ -88,9 +88,9 @@ describe('createSessionService', () => {
       roleId: session.roleId,
       enabledSkillIds: session.enabledSkillIds,
       enabledToolIds: session.enabledToolIds,
-      allowedSubagentRoleIds: session.allowedSubagentRoleIds,
-      maxSubagentDepth: session.maxSubagentDepth,
-      maxSubagentsPerRun: session.maxSubagentsPerRun,
+      allowedWorkerAgentRoleIds: session.allowedWorkerAgentRoleIds,
+      maxWorkerAgentDepth: session.maxWorkerAgentDepth,
+      maxWorkerAgentsPerRun: session.maxWorkerAgentsPerRun,
       outputMode: 'html',
       title: 'Updated'
     })
@@ -105,9 +105,9 @@ describe('createSessionService', () => {
       roleId: session.roleId,
       enabledSkillIds: session.enabledSkillIds,
       enabledToolIds: session.enabledToolIds,
-      allowedSubagentRoleIds: session.allowedSubagentRoleIds,
-      maxSubagentDepth: session.maxSubagentDepth,
-      maxSubagentsPerRun: session.maxSubagentsPerRun,
+      allowedWorkerAgentRoleIds: session.allowedWorkerAgentRoleIds,
+      maxWorkerAgentDepth: session.maxWorkerAgentDepth,
+      maxWorkerAgentsPerRun: session.maxWorkerAgentsPerRun,
       outputMode: 'html',
       status: 'archived'
     })
@@ -120,9 +120,9 @@ describe('createSessionService', () => {
       roleId: session.roleId,
       enabledSkillIds: session.enabledSkillIds,
       enabledToolIds: session.enabledToolIds,
-      allowedSubagentRoleIds: session.allowedSubagentRoleIds,
-      maxSubagentDepth: session.maxSubagentDepth,
-      maxSubagentsPerRun: session.maxSubagentsPerRun
+      allowedWorkerAgentRoleIds: session.allowedWorkerAgentRoleIds,
+      maxWorkerAgentDepth: session.maxWorkerAgentDepth,
+      maxWorkerAgentsPerRun: session.maxWorkerAgentsPerRun
     })
   })
 

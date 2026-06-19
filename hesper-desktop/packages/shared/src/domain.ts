@@ -15,9 +15,9 @@ export type RunError = {
 export type ModelProviderKind = 'mock' | 'openai' | 'deepseek' | 'openai-compatible' | 'anthropic' | 'custom'
 export type ModelCapability = 'streaming' | 'toolCalls' | 'jsonOutput' | 'reasoning'
 export type ToolPermissionMode = 'allow' | 'deny' | 'ask'
-export type ToolPermissionScope = 'global' | 'session' | 'role' | 'subagent'
+export type ToolPermissionScope = 'global' | 'session' | 'role' | 'worker-agent'
 export type ToolRiskLevel = 'low' | 'medium' | 'high' | 'critical'
-export type SubagentInvocationStatus = RunStatus
+export type WorkerAgentInvocationStatus = RunStatus
 
 export type ModelRef = {
   providerId: string
@@ -60,9 +60,9 @@ export type Session = {
   roleId?: string
   enabledSkillIds?: string[]
   enabledToolIds?: string[]
-  allowedSubagentRoleIds?: string[]
-  maxSubagentDepth?: number
-  maxSubagentsPerRun?: number
+  allowedWorkerAgentRoleIds?: string[]
+  maxWorkerAgentDepth?: number
+  maxWorkerAgentsPerRun?: number
   outputMode: OutputMode
   unreadCompletedAt?: string
   createdAt: string
@@ -83,7 +83,7 @@ export type AgentRun = {
   id: string
   sessionId: string
   parentRunId?: string
-  subagentInvocationId?: string
+  workerAgentInvocationId?: string
   depth?: number
   status: RunStatus
   modelId: string
@@ -130,9 +130,9 @@ export type Role = {
   defaultSkillIds?: string[]
   defaultToolIds?: string[]
   canBeMainAgent: boolean
-  canBeSubagent: boolean
-  canBeAssignedToSubagent?: boolean
-  subagentGuidance?: string
+  canBeWorkerAgent: boolean
+  canBeAssignedToWorkerAgent?: boolean
+  workerAgentGuidance?: string
 }
 
 export type ToolDefinition = {
@@ -154,7 +154,7 @@ export type ToolPermissionPolicy = {
   updatedAt: string
 }
 
-export type SubagentInvocation = {
+export type WorkerAgentInvocation = {
   id: string
   parentRunId: string
   childRunId?: string
@@ -163,7 +163,7 @@ export type SubagentInvocation = {
   allowedToolIds: string[]
   modelRef?: ModelRef
   expectedOutput?: string
-  status: SubagentInvocationStatus
+  status: WorkerAgentInvocationStatus
   createdAt: string
   completedAt?: string
   error?: RunError

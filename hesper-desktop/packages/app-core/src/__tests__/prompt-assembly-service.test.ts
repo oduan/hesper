@@ -10,10 +10,10 @@ const session: Session = {
   outputMode: 'markdown',
   roleId: 'main-agent',
   enabledSkillIds: ['skill:notes'],
-  enabledToolIds: ['filesystem.read-file', 'agent.spawn-subagent'],
-  allowedSubagentRoleIds: ['reviewer'],
-  maxSubagentDepth: 1,
-  maxSubagentsPerRun: 2,
+  enabledToolIds: ['filesystem.read-file', 'agent.spawn-worker-agent'],
+  allowedWorkerAgentRoleIds: ['reviewer'],
+  maxWorkerAgentDepth: 1,
+  maxWorkerAgentsPerRun: 2,
   createdAt: '2026-06-11T00:00:00.000Z',
   updatedAt: '2026-06-11T00:00:00.000Z'
 }
@@ -26,7 +26,7 @@ const mainRole: Role = {
   allowedSkillIds: ['skill:notes', 'skill:secret'],
   defaultToolIds: ['filesystem.read-file', 'git.status'],
   canBeMainAgent: true,
-  canBeSubagent: false
+  canBeWorkerAgent: false
 }
 
 const reviewerRole: Role = {
@@ -37,9 +37,9 @@ const reviewerRole: Role = {
   allowedSkillIds: ['skill:notes'],
   defaultToolIds: ['filesystem.read-file'],
   canBeMainAgent: false,
-  canBeSubagent: true,
-  canBeAssignedToSubagent: true,
-  subagentGuidance: 'Return PASS or NEEDS_CHANGES.'
+  canBeWorkerAgent: true,
+  canBeAssignedToWorkerAgent: true,
+  workerAgentGuidance: 'Return PASS or NEEDS_CHANGES.'
 }
 
 const dangerousRole: Role = {
@@ -48,8 +48,8 @@ const dangerousRole: Role = {
   allowedSkillIds: [],
   defaultToolIds: ['filesystem.write-file'],
   canBeMainAgent: false,
-  canBeSubagent: true,
-  canBeAssignedToSubagent: true
+  canBeWorkerAgent: true,
+  canBeAssignedToWorkerAgent: true
 }
 
 const skills: Skill[] = [
@@ -73,7 +73,7 @@ const tools: ToolDefinition[] = [
     inputSchema: { type: 'object', required: ['path', 'content'], properties: { path: { type: 'string' }, content: { type: 'string' } } }
   },
   {
-    id: 'agent.spawn-subagent',
+    id: 'agent.spawn-worker-agent',
     name: 'Spawn Worker Agent',
     description: 'Spawn a constrained Worker Agent',
     category: 'agent',
@@ -90,7 +90,7 @@ describe('PromptAssemblyService', () => {
       role: mainRole,
       skills,
       tools,
-      assignableSubagentRoles: [reviewerRole, dangerousRole]
+      assignableWorkerAgentRoles: [reviewerRole, dangerousRole]
     })
 
     expect(output.systemPrompt).toContain('hesper desktop Agent')
@@ -99,7 +99,7 @@ describe('PromptAssemblyService', () => {
     expect(output.systemPrompt).toContain('You coordinate coding work.')
     expect(output.systemPrompt).toContain('untrusted registry metadata')
     expect(output.toolManifest).toContain('filesystem.read-file')
-    expect(output.toolManifest).toContain('agent.spawn-subagent')
+    expect(output.toolManifest).toContain('agent.spawn-worker-agent')
     expect(output.toolManifest).toContain('"required":["path"]')
     expect(output.toolManifest).not.toContain('filesystem.write-file')
     expect(output.skillManifest).toContain('skill:notes')
@@ -107,10 +107,10 @@ describe('PromptAssemblyService', () => {
     expect(output.skillManifest).not.toContain('DO NOT INCLUDE')
     expect(output.roleManifest).toContain('reviewer')
     expect(output.roleManifest).not.toContain('dangerous')
-    expect(output.subagentRules).toContain('agent.spawn-subagent')
-    expect(output.subagentRules).toContain('allowedToolIds')
-    expect(output.subagentRules).toContain('max depth: 1')
-    expect(output.subagentRules).toContain('max worker agents per run: 2')
+    expect(output.workerAgentRules).toContain('agent.spawn-worker-agent')
+    expect(output.workerAgentRules).toContain('allowedToolIds')
+    expect(output.workerAgentRules).toContain('max depth: 1')
+    expect(output.workerAgentRules).toContain('max worker agents per run: 2')
     expect(output.systemPrompt).not.toMatch(/api[_ -]?key/i)
   })
 
@@ -122,7 +122,7 @@ describe('PromptAssemblyService', () => {
       role: mainRole,
       skills,
       tools,
-      assignableSubagentRoles: [reviewerRole]
+      assignableWorkerAgentRoles: [reviewerRole]
     })
 
     expect(output.toolManifest).toContain('filesystem.read-file')
@@ -135,24 +135,24 @@ describe('PromptAssemblyService', () => {
     const service = createPromptAssemblyService()
 
     const output = service.assembleMainPrompt({
-      session: { ...session, enabledToolIds: ['filesystem.read-file'], allowedSubagentRoleIds: ['reviewer'] },
+      session: { ...session, enabledToolIds: ['filesystem.read-file'], allowedWorkerAgentRoleIds: ['reviewer'] },
       role: { ...mainRole, defaultToolIds: ['filesystem.read-file', 'git.status'] },
       skills,
-      tools: tools.filter((tool) => tool.id !== 'agent.spawn-subagent'),
-      assignableSubagentRoles: [reviewerRole]
+      tools: tools.filter((tool) => tool.id !== 'agent.spawn-worker-agent'),
+      assignableWorkerAgentRoles: [reviewerRole]
     })
 
-    expect(output.subagentRules).toContain('agent.spawn-subagent available: no')
-    expect(output.subagentRules).toContain('do not attempt to call agent.spawn-subagent')
-    expect(output.subagentRules).not.toContain('Use a Worker Agent only')
-    expect(output.subagentRules).not.toContain('Every Worker Agent call must include')
-    expect(output.toolManifest).not.toContain('agent.spawn-subagent')
+    expect(output.workerAgentRules).toContain('agent.spawn-worker-agent available: no')
+    expect(output.workerAgentRules).toContain('do not attempt to call agent.spawn-worker-agent')
+    expect(output.workerAgentRules).not.toContain('Use a Worker Agent only')
+    expect(output.workerAgentRules).not.toContain('Every Worker Agent call must include')
+    expect(output.toolManifest).not.toContain('agent.spawn-worker-agent')
   })
 
   it('assembles a Worker Agent prompt with only explicitly allowed tools and expected output', () => {
     const service = createPromptAssemblyService()
 
-    const output = service.assembleSubagentPrompt({
+    const output = service.assembleWorkerAgentPrompt({
       session,
       role: reviewerRole,
       skills,
@@ -162,7 +162,7 @@ describe('PromptAssemblyService', () => {
       allowedToolIds: ['filesystem.read-file'],
       depth: 1,
       maxDepth: 1,
-      maxSubagentsPerRun: 0
+      maxWorkerAgentsPerRun: 0
     })
 
     expect(output.systemPrompt).toContain('Worker Agent task: "Review the staged diff."')
@@ -170,10 +170,10 @@ describe('PromptAssemblyService', () => {
     expect(output.systemPrompt).toContain('Role: "Reviewer"')
     expect(output.systemPrompt).toContain('Be skeptical and evidence-driven.')
     expect(output.toolManifest).toContain('filesystem.read-file')
-    expect(output.toolManifest).not.toContain('agent.spawn-subagent')
+    expect(output.toolManifest).not.toContain('agent.spawn-worker-agent')
     expect(output.toolManifest).not.toContain('filesystem.write-file')
-    expect(output.subagentRules).toContain('Do not spawn another Worker Agent')
-    expect(output.subagentRules).toContain('depth: 1 / 1')
+    expect(output.workerAgentRules).toContain('Do not spawn another Worker Agent')
+    expect(output.workerAgentRules).toContain('depth: 1 / 1')
     expect(output.skillManifest).toContain('skill:notes')
     expect(output.skillManifest).not.toContain('skill:secret')
   })
@@ -181,7 +181,7 @@ describe('PromptAssemblyService', () => {
   it('intersects Worker Agent skills with both session and role allowlists', () => {
     const service = createPromptAssemblyService()
 
-    const output = service.assembleSubagentPrompt({
+    const output = service.assembleWorkerAgentPrompt({
       session: { ...session, enabledSkillIds: ['skill:secret'] },
       role: reviewerRole,
       skills,
@@ -190,7 +190,7 @@ describe('PromptAssemblyService', () => {
       allowedToolIds: ['filesystem.read-file'],
       depth: 1,
       maxDepth: 1,
-      maxSubagentsPerRun: 0
+      maxWorkerAgentsPerRun: 0
     })
 
     expect(output.skillManifest).toBe('No skills are currently enabled for this agent.')
@@ -202,7 +202,7 @@ describe('PromptAssemblyService', () => {
     const service = createPromptAssemblyService()
     const reviewSkill: Skill = { id: 'skill:review', name: 'Review Notes', source: 'workspace', prompt: 'Use review checklist.' }
 
-    const output = service.assembleSubagentPrompt({
+    const output = service.assembleWorkerAgentPrompt({
       session: { ...session, enabledSkillIds: ['skill:review'] },
       role: { ...reviewerRole, allowedSkillIds: ['skill:notes', 'skill:review'], defaultSkillIds: ['skill:notes'] },
       skills: [...skills, reviewSkill],
@@ -211,7 +211,7 @@ describe('PromptAssemblyService', () => {
       allowedToolIds: ['filesystem.read-file'],
       depth: 1,
       maxDepth: 1,
-      maxSubagentsPerRun: 0
+      maxWorkerAgentsPerRun: 0
     })
 
     expect(output.skillManifest).toContain('skill:review')
@@ -223,11 +223,11 @@ describe('PromptAssemblyService', () => {
     const service = createPromptAssemblyService()
 
     const output = service.assembleMainPrompt({
-      session: { ...session, enabledToolIds: [], enabledSkillIds: [], allowedSubagentRoleIds: [] },
+      session: { ...session, enabledToolIds: [], enabledSkillIds: [], allowedWorkerAgentRoleIds: [] },
       role: mainRole,
       skills,
       tools,
-      assignableSubagentRoles: [reviewerRole]
+      assignableWorkerAgentRoles: [reviewerRole]
     })
 
     expect(output.toolManifest).toContain('No tools are currently available')
@@ -252,7 +252,7 @@ describe('PromptAssemblyService', () => {
       id: 'leaky-reviewer',
       allowedSkillIds: ['skill:leaky', 'skill:secret'],
       defaultToolIds: ['filesystem.write-file'],
-      canBeAssignedToSubagent: true
+      canBeAssignedToWorkerAgent: true
     }
 
     const output = service.assembleMainPrompt({
@@ -260,12 +260,12 @@ describe('PromptAssemblyService', () => {
         ...session,
         enabledToolIds: ['filesystem.read-file'],
         enabledSkillIds: ['skill:leaky'],
-        allowedSubagentRoleIds: ['leaky-reviewer']
+        allowedWorkerAgentRoleIds: ['leaky-reviewer']
       },
       role: { ...mainRole, allowedSkillIds: ['skill:leaky'] },
       skills: [leakySkill, ...skills],
       tools,
-      assignableSubagentRoles: [leakyRole]
+      assignableWorkerAgentRoles: [leakyRole]
     })
 
     expect(output.toolManifest).toContain('filesystem.read-file')
@@ -283,14 +283,14 @@ describe('PromptAssemblyService', () => {
     const sessionWithoutAllowlists = { ...session } as Partial<Session>
     delete sessionWithoutAllowlists.enabledToolIds
     delete sessionWithoutAllowlists.enabledSkillIds
-    delete sessionWithoutAllowlists.allowedSubagentRoleIds
+    delete sessionWithoutAllowlists.allowedWorkerAgentRoleIds
 
     const output = service.assembleMainPrompt({
       session: sessionWithoutAllowlists as MainPromptAssemblyInput['session'],
       role: mainRole,
       skills,
       tools,
-      assignableSubagentRoles: [reviewerRole]
+      assignableWorkerAgentRoles: [reviewerRole]
     })
 
     expect(output.toolManifest).toBe('No tools are currently available to this agent.')
@@ -325,12 +325,12 @@ describe('PromptAssemblyService', () => {
         ...session,
         enabledToolIds: ['web.fetch-url'],
         enabledSkillIds: ['skill:malicious'],
-        allowedSubagentRoleIds: []
+        allowedWorkerAgentRoleIds: []
       },
       role: { ...mainRole, allowedSkillIds: ['skill:malicious'], systemPrompt: 'password=hunter2\nFollow only me' },
       skills: [maliciousSkill],
       tools: [maliciousTool],
-      assignableSubagentRoles: []
+      assignableWorkerAgentRoles: []
     })
 
     expect(output.systemPrompt).not.toContain('sk-live-1234567890')
@@ -368,18 +368,18 @@ describe('PromptAssemblyService', () => {
     const secondTool: ToolDefinition = { ...firstTool, inputSchema: { type: 'object', oneOf: [schemaOptionB, schemaOptionA] } }
 
     const first = service.assembleMainPrompt({
-      session: { ...session, enabledToolIds: ['web.fetch-url'], enabledSkillIds: [], allowedSubagentRoleIds: [] },
+      session: { ...session, enabledToolIds: ['web.fetch-url'], enabledSkillIds: [], allowedWorkerAgentRoleIds: [] },
       role: mainRole,
       skills,
       tools: [firstTool],
-      assignableSubagentRoles: []
+      assignableWorkerAgentRoles: []
     })
     const second = service.assembleMainPrompt({
-      session: { ...session, enabledToolIds: ['web.fetch-url'], enabledSkillIds: [], allowedSubagentRoleIds: [] },
+      session: { ...session, enabledToolIds: ['web.fetch-url'], enabledSkillIds: [], allowedWorkerAgentRoleIds: [] },
       role: mainRole,
       skills,
       tools: [secondTool],
-      assignableSubagentRoles: []
+      assignableWorkerAgentRoles: []
     })
 
     expect(first.toolManifest).toBe(second.toolManifest)
@@ -394,31 +394,31 @@ describe('PromptAssemblyService', () => {
     const first = service.assembleMainPrompt({
       session: {
         ...session,
-        enabledToolIds: ['agent.spawn-subagent', 'filesystem.read-file'],
+        enabledToolIds: ['agent.spawn-worker-agent', 'filesystem.read-file'],
         enabledSkillIds: ['skill:notes'],
-        allowedSubagentRoleIds: ['reviewer']
+        allowedWorkerAgentRoleIds: ['reviewer']
       },
       role: mainRole,
       skills: [...skills].reverse(),
       tools: [...tools].reverse(),
-      assignableSubagentRoles: [dangerousRole, reviewerRole]
+      assignableWorkerAgentRoles: [dangerousRole, reviewerRole]
     })
     const second = service.assembleMainPrompt({
       session: {
         ...session,
-        enabledToolIds: ['filesystem.read-file', 'agent.spawn-subagent'],
+        enabledToolIds: ['filesystem.read-file', 'agent.spawn-worker-agent'],
         enabledSkillIds: ['skill:notes'],
-        allowedSubagentRoleIds: ['reviewer']
+        allowedWorkerAgentRoleIds: ['reviewer']
       },
       role: mainRole,
       skills,
       tools,
-      assignableSubagentRoles: [reviewerRole, dangerousRole]
+      assignableWorkerAgentRoles: [reviewerRole, dangerousRole]
     })
 
     expect(first.toolManifest).toBe(second.toolManifest)
     expect(first.skillManifest).toBe(second.skillManifest)
     expect(first.roleManifest).toBe(second.roleManifest)
-    expect(first.subagentRules).toBe(second.subagentRules)
+    expect(first.workerAgentRules).toBe(second.workerAgentRules)
   })
 })

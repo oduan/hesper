@@ -10,7 +10,7 @@ import type {
   RunStep,
   Session,
   Skill,
-  SubagentInvocation,
+  WorkerAgentInvocation,
   ToolDefinition,
   ToolPermissionPolicy
 } from './domain'
@@ -90,9 +90,9 @@ const sessionBaseSchema = z.object({
   roleId: z.string().min(1).optional(),
   enabledSkillIds: z.array(z.string().min(1)).optional(),
   enabledToolIds: z.array(z.string().min(1)).optional(),
-  allowedSubagentRoleIds: z.array(z.string().min(1)).optional(),
-  maxSubagentDepth: z.number().int().nonnegative().optional(),
-  maxSubagentsPerRun: z.number().int().nonnegative().optional(),
+  allowedWorkerAgentRoleIds: z.array(z.string().min(1)).optional(),
+  maxWorkerAgentDepth: z.number().int().nonnegative().optional(),
+  maxWorkerAgentsPerRun: z.number().int().nonnegative().optional(),
   outputMode: z.enum(['markdown', 'html']),
   unreadCompletedAt: z.string().datetime().optional(),
   createdAt: z.string().datetime(),
@@ -117,7 +117,7 @@ const agentRunBaseSchema = z.object({
   id: z.string().min(1),
   sessionId: z.string().min(1),
   parentRunId: z.string().optional(),
-  subagentInvocationId: z.string().optional(),
+  workerAgentInvocationId: z.string().optional(),
   depth: z.number().int().nonnegative().optional(),
   status: z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled']),
   modelId: z.string().min(1),
@@ -170,9 +170,9 @@ const roleBaseSchema = z.object({
   defaultSkillIds: z.array(z.string().min(1)).optional(),
   defaultToolIds: z.array(z.string().min(1)).optional(),
   canBeMainAgent: z.boolean(),
-  canBeSubagent: z.boolean(),
-  canBeAssignedToSubagent: z.boolean().optional(),
-  subagentGuidance: z.string().optional()
+  canBeWorkerAgent: z.boolean(),
+  canBeAssignedToWorkerAgent: z.boolean().optional(),
+  workerAgentGuidance: z.string().optional()
 })
 
 export const roleSchema = roleBaseSchema.transform(stripUndefined)
@@ -189,7 +189,7 @@ const toolPermissionPolicyBaseSchema = z.object({
   id: z.string().min(1),
   toolId: z.string().min(1),
   mode: z.enum(['allow', 'deny', 'ask']),
-  scope: z.enum(['global', 'session', 'role', 'subagent']),
+  scope: z.enum(['global', 'session', 'role', 'worker-agent']),
   subjectId: z.string().min(1).optional(),
   riskLevel: z.enum(['low', 'medium', 'high', 'critical']).optional(),
   createdAt: z.string().datetime(),
@@ -198,7 +198,7 @@ const toolPermissionPolicyBaseSchema = z.object({
 
 export const toolPermissionPolicySchema = toolPermissionPolicyBaseSchema.transform(stripUndefined)
 
-const subagentInvocationBaseSchema = z.object({
+const workerAgentInvocationBaseSchema = z.object({
   id: z.string().min(1),
   parentRunId: z.string().min(1),
   childRunId: z.string().min(1).optional(),
@@ -213,7 +213,7 @@ const subagentInvocationBaseSchema = z.object({
   error: runErrorSchema.optional()
 })
 
-export const subagentInvocationSchema = subagentInvocationBaseSchema.transform(stripUndefined)
+export const workerAgentInvocationSchema = workerAgentInvocationBaseSchema.transform(stripUndefined)
 
 const runCreatedEventSchema = z.object({
   type: z.literal('run.created'),
@@ -292,6 +292,6 @@ type _ToolPermissionPolicyCheck = Expect<Equal<z.output<typeof toolPermissionPol
 type _ModelRefCheck = Expect<Equal<z.output<typeof modelRefSchema>, NormalizeOptional<ModelRef>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type _ModelProviderConfigCheck = Expect<Equal<z.output<typeof modelProviderConfigSchema>, NormalizeOptional<ModelProviderConfig>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type _ModelConfigCheck = Expect<Equal<z.output<typeof modelConfigSchema>, NormalizeOptional<ModelConfig>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
-type _SubagentInvocationCheck = Expect<Equal<z.output<typeof subagentInvocationSchema>, NormalizeOptional<SubagentInvocation>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _WorkerAgentInvocationCheck = Expect<Equal<z.output<typeof workerAgentInvocationSchema>, NormalizeOptional<WorkerAgentInvocation>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type _RunErrorCheck = Expect<Equal<z.output<typeof runErrorSchema>, NormalizeOptional<RunError>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type _AgentRuntimeEventCheck = Expect<Equal<z.output<typeof agentRuntimeEventSchema>, NormalizeOptional<AgentRuntimeEvent>>>

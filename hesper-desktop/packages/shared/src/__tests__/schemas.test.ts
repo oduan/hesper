@@ -7,7 +7,7 @@ import {
   roleSchema,
   runStepSchema,
   sessionSchema,
-  subagentInvocationSchema,
+  workerAgentInvocationSchema,
   toolPermissionPolicySchema
 } from '../schemas'
 
@@ -22,12 +22,12 @@ describe('shared schemas', () => {
       modelId: 'model-1',
       retryCount: 0,
       maxRetries: 3,
-      subagentInvocationId: 'subagent-1',
+      workerAgentInvocationId: 'worker-agent-1',
       depth: 1
     })
 
     expect(parsed.status).toBe('running')
-    expect(parsed.subagentInvocationId).toBe('subagent-1')
+    expect(parsed.workerAgentInvocationId).toBe('worker-agent-1')
   })
 
   it('validates a run step', () => {
@@ -162,12 +162,12 @@ describe('shared schemas', () => {
       defaultSkillIds: ['skill-review'],
       defaultToolIds: ['filesystem.read-file', 'git.status'],
       canBeMainAgent: true,
-      canBeSubagent: true,
-      canBeAssignedToSubagent: true,
-      subagentGuidance: 'Return findings with evidence.'
+      canBeWorkerAgent: true,
+      canBeAssignedToWorkerAgent: true,
+      workerAgentGuidance: 'Return findings with evidence.'
     })
 
-    expect(parsed.canBeAssignedToSubagent).toBe(true)
+    expect(parsed.canBeAssignedToWorkerAgent).toBe(true)
   })
 
   it('validates tool permission policies', () => {
@@ -175,19 +175,19 @@ describe('shared schemas', () => {
       id: 'policy-1',
       toolId: 'filesystem.read-file',
       mode: 'allow',
-      scope: 'subagent',
+      scope: 'worker-agent',
       subjectId: 'reviewer',
       riskLevel: 'low',
       createdAt: now,
       updatedAt: now
     })
 
-    expect(parsed.scope).toBe('subagent')
+    expect(parsed.scope).toBe('worker-agent')
   })
 
   it('validates Worker Agent invocations with role and tool constraints', () => {
-    const parsed = subagentInvocationSchema.parse({
-      id: 'subagent-1',
+    const parsed = workerAgentInvocationSchema.parse({
+      id: 'worker-agent-1',
       parentRunId: 'run-parent',
       childRunId: 'run-child',
       task: 'Review the staged diff.',

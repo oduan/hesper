@@ -127,7 +127,7 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
     const session = await options.container.sessionService.getSession(sessionId)
     const roles = options.container.roleService.listRoles()
     const role = options.container.roleService.getRole(session.roleId ?? 'main-agent')
-    const assignableSubagentRoles = roles.filter((candidate) => candidate.canBeAssignedToSubagent ?? candidate.canBeSubagent)
+    const assignableWorkerAgentRoles = roles.filter((candidate) => candidate.canBeAssignedToWorkerAgent ?? candidate.canBeWorkerAgent)
     const configuredToolIds = session.enabledToolIds?.length ? session.enabledToolIds : role?.defaultToolIds ?? []
     const requestedToolIdSet = requestedEnabledToolIds === undefined ? undefined : new Set(requestedEnabledToolIds)
     const enabledToolIdsBeforeGlobalFilter = requestedToolIdSet ? configuredToolIds.filter((toolId) => requestedToolIdSet.has(toolId)) : configuredToolIds
@@ -137,9 +137,9 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       ...(workspacePath !== undefined ? { workspacePath } : {}),
       enabledSkillIds: session.enabledSkillIds?.length ? session.enabledSkillIds : role?.defaultSkillIds ?? role?.allowedSkillIds ?? [],
       enabledToolIds,
-      allowedSubagentRoleIds: session.allowedSubagentRoleIds?.length ? session.allowedSubagentRoleIds : assignableSubagentRoles.map((candidate) => candidate.id),
-      maxSubagentDepth: session.maxSubagentDepth ?? 1,
-      maxSubagentsPerRun: session.maxSubagentsPerRun ?? 3
+      allowedWorkerAgentRoleIds: session.allowedWorkerAgentRoleIds?.length ? session.allowedWorkerAgentRoleIds : assignableWorkerAgentRoles.map((candidate) => candidate.id),
+      maxWorkerAgentDepth: session.maxWorkerAgentDepth ?? 1,
+      maxWorkerAgentsPerRun: session.maxWorkerAgentsPerRun ?? 3
     }
 
     const prompt = options.container.promptAssemblyService.assembleMainPrompt({
@@ -147,7 +147,7 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       role,
       skills: options.container.skillService.listSkills(),
       tools: options.container.toolCatalogService.list(),
-      assignableSubagentRoles
+      assignableWorkerAgentRoles
     })
 
     return { systemPrompt: prompt.systemPrompt, enabledToolIds: sessionForPrompt.enabledToolIds }

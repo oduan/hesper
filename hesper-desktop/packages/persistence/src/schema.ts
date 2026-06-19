@@ -13,9 +13,9 @@ CREATE TABLE IF NOT EXISTS sessions (
   role_id TEXT,
   enabled_skill_ids_json TEXT,
   enabled_tool_ids_json TEXT,
-  allowed_subagent_role_ids_json TEXT,
-  max_subagent_depth INTEGER,
-  max_subagents_per_run INTEGER,
+  allowed_worker_agent_role_ids_json TEXT,
+  max_worker_agent_depth INTEGER,
+  max_worker_agents_per_run INTEGER,
   output_mode TEXT NOT NULL,
   unread_completed_at TEXT,
   created_at TEXT NOT NULL,
@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS agent_runs (
   id TEXT PRIMARY KEY,
   session_id TEXT NOT NULL,
   parent_run_id TEXT,
-  subagent_invocation_id TEXT,
+  worker_agent_invocation_id TEXT,
   depth INTEGER,
   status TEXT NOT NULL,
   model_id TEXT NOT NULL,
@@ -122,9 +122,9 @@ CREATE TABLE IF NOT EXISTS roles (
   default_skill_ids_json TEXT,
   default_tool_ids_json TEXT,
   can_be_main_agent INTEGER NOT NULL,
-  can_be_subagent INTEGER NOT NULL,
-  can_be_assigned_to_subagent INTEGER,
-  subagent_guidance TEXT,
+  can_be_worker_agent INTEGER NOT NULL,
+  can_be_assigned_to_worker_agent INTEGER,
+  worker_agent_guidance TEXT,
   sort_seq INTEGER NOT NULL
 );
 
@@ -140,7 +140,7 @@ CREATE TABLE IF NOT EXISTS tool_permission_policies (
   sort_seq INTEGER NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS subagent_invocations (
+CREATE TABLE IF NOT EXISTS worker_agent_invocations (
   id TEXT PRIMARY KEY,
   parent_run_id TEXT NOT NULL,
   child_run_id TEXT,
@@ -182,13 +182,13 @@ const migrationColumns: Record<string, string[]> = {
     'role_id TEXT',
     'enabled_skill_ids_json TEXT',
     'enabled_tool_ids_json TEXT',
-    'allowed_subagent_role_ids_json TEXT',
-    'max_subagent_depth INTEGER',
-    'max_subagents_per_run INTEGER',
+    'allowed_worker_agent_role_ids_json TEXT',
+    'max_worker_agent_depth INTEGER',
+    'max_worker_agents_per_run INTEGER',
     'unread_completed_at TEXT'
   ],
   agent_runs: [
-    'subagent_invocation_id TEXT',
+    'worker_agent_invocation_id TEXT',
     'depth INTEGER'
   ],
   app_settings: [

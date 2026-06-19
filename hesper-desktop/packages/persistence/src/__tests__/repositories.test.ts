@@ -19,9 +19,9 @@ INSERT INTO models (id, provider_id, model_name, display_name, capabilities_json
 VALUES ('bad-model-json', 'provider-1', 'bad', 'Bad Model JSON', '{not-json', NULL, 1, '${now}', '${now}', 1);
 INSERT INTO models (id, provider_id, model_name, display_name, capabilities_json, context_window, enabled, created_at, updated_at, sort_seq)
 VALUES ('bad-model-capability', 'provider-1', 'bad', 'Bad Capability', '["streaming", "unknownCapability"]', NULL, 1, '${now}', '${now}', 2);
-INSERT INTO roles (id, name, description, default_model_id, default_model_ref_json, system_prompt, allowed_skill_ids_json, default_skill_ids_json, default_tool_ids_json, can_be_main_agent, can_be_subagent, can_be_assigned_to_subagent, subagent_guidance, sort_seq)
+INSERT INTO roles (id, name, description, default_model_id, default_model_ref_json, system_prompt, allowed_skill_ids_json, default_skill_ids_json, default_tool_ids_json, can_be_main_agent, can_be_worker_agent, can_be_assigned_to_worker_agent, worker_agent_guidance, sort_seq)
 VALUES ('bad-role-array', 'Bad Role Array', NULL, NULL, NULL, NULL, '{"not":"an-array"}', NULL, NULL, 1, 1, 1, NULL, 3);
-INSERT INTO roles (id, name, description, default_model_id, default_model_ref_json, system_prompt, allowed_skill_ids_json, default_skill_ids_json, default_tool_ids_json, can_be_main_agent, can_be_subagent, can_be_assigned_to_subagent, subagent_guidance, sort_seq)
+INSERT INTO roles (id, name, description, default_model_id, default_model_ref_json, system_prompt, allowed_skill_ids_json, default_skill_ids_json, default_tool_ids_json, can_be_main_agent, can_be_worker_agent, can_be_assigned_to_worker_agent, worker_agent_guidance, sort_seq)
 VALUES ('bad-role-ref', 'Bad Role Ref', NULL, NULL, '{"providerId":"provider-1"}', NULL, '[]', NULL, NULL, 1, 1, 1, NULL, 4);
 `)
   return db.export()
@@ -220,15 +220,15 @@ describe('persistence repositories', () => {
       defaultSkillIds: ['skill-review'],
       defaultToolIds: ['filesystem.read-file', 'git.status'],
       canBeMainAgent: true,
-      canBeSubagent: true,
-      canBeAssignedToSubagent: true,
-      subagentGuidance: 'Return findings with evidence.'
+      canBeWorkerAgent: true,
+      canBeAssignedToWorkerAgent: true,
+      workerAgentGuidance: 'Return findings with evidence.'
     })
     await db.toolPermissionPolicies.save({
       id: 'policy-1',
       toolId: 'filesystem.read-file',
       mode: 'allow',
-      scope: 'subagent',
+      scope: 'worker-agent',
       subjectId: 'reviewer',
       riskLevel: 'low',
       createdAt: now,
@@ -236,8 +236,8 @@ describe('persistence repositories', () => {
     })
 
     expect(await db.skills.get('skill-review')).toMatchObject({ allowedToolIds: ['filesystem.read-file'], enabled: true })
-    expect(await db.roles.get('reviewer')).toMatchObject({ canBeAssignedToSubagent: true, defaultToolIds: ['filesystem.read-file', 'git.status'] })
-    expect(await db.toolPermissionPolicies.listByScope('subagent', 'reviewer')).toHaveLength(1)
+    expect(await db.roles.get('reviewer')).toMatchObject({ canBeAssignedToWorkerAgent: true, defaultToolIds: ['filesystem.read-file', 'git.status'] })
+    expect(await db.toolPermissionPolicies.listByScope('worker-agent', 'reviewer')).toHaveLength(1)
   })
 
   it('round-trips session agent configuration defaults and Worker Agent invocations', async () => {
@@ -251,16 +251,16 @@ describe('persistence repositories', () => {
       modelId: 'deepseek-chat',
       roleId: 'coding',
       enabledSkillIds: ['skill-review'],
-      enabledToolIds: ['filesystem.read-file', 'agent.spawn-subagent'],
-      allowedSubagentRoleIds: ['reviewer'],
-      maxSubagentDepth: 1,
-      maxSubagentsPerRun: 3,
+      enabledToolIds: ['filesystem.read-file', 'agent.spawn-worker-agent'],
+      allowedWorkerAgentRoleIds: ['reviewer'],
+      maxWorkerAgentDepth: 1,
+      maxWorkerAgentsPerRun: 3,
       createdAt: now,
       updatedAt: now
     })
     await db.runs.save({ id: 'run-parent', sessionId: 'session-1', status: 'running', modelId: 'deepseek-chat', retryCount: 0, maxRetries: 3, depth: 0 })
-    await db.subagentInvocations.save({
-      id: 'subagent-1',
+    await db.workerAgentInvocations.save({
+      id: 'worker-agent-1',
       parentRunId: 'run-parent',
       childRunId: 'run-child',
       task: 'Review the staged diff.',
@@ -271,19 +271,19 @@ describe('persistence repositories', () => {
       status: 'running',
       createdAt: now
     })
-    await db.runs.save({ id: 'run-child', sessionId: 'session-1', parentRunId: 'run-parent', subagentInvocationId: 'subagent-1', status: 'queued', modelId: 'deepseek-chat', retryCount: 0, maxRetries: 3, depth: 1 })
+    await db.runs.save({ id: 'run-child', sessionId: 'session-1', parentRunId: 'run-parent', workerAgentInvocationId: 'worker-agent-1', status: 'queued', modelId: 'deepseek-chat', retryCount: 0, maxRetries: 3, depth: 1 })
 
     expect(await db.sessions.get('session-1')).toMatchObject({
       providerId: 'provider-deepseek',
       modelId: 'deepseek-chat',
       roleId: 'coding',
       enabledSkillIds: ['skill-review'],
-      allowedSubagentRoleIds: ['reviewer'],
-      maxSubagentDepth: 1
+      allowedWorkerAgentRoleIds: ['reviewer'],
+      maxWorkerAgentDepth: 1
     })
-    expect(await db.runs.get('run-child')).toMatchObject({ parentRunId: 'run-parent', subagentInvocationId: 'subagent-1', depth: 1 })
-    expect(await db.subagentInvocations.listByParentRun('run-parent')).toMatchObject([
-      { id: 'subagent-1', childRunId: 'run-child', roleId: 'reviewer', allowedToolIds: ['filesystem.read-file', 'git.status'] }
+    expect(await db.runs.get('run-child')).toMatchObject({ parentRunId: 'run-parent', workerAgentInvocationId: 'worker-agent-1', depth: 1 })
+    expect(await db.workerAgentInvocations.listByParentRun('run-parent')).toMatchObject([
+      { id: 'worker-agent-1', childRunId: 'run-child', roleId: 'reviewer', allowedToolIds: ['filesystem.read-file', 'git.status'] }
     ])
   })
 
@@ -314,9 +314,9 @@ describe('persistence repositories', () => {
         defaultModelId: 'mock/hesper-fast',
         enabledSkillIds: [],
         enabledToolIds: [],
-        allowedSubagentRoleIds: [],
-        maxSubagentDepth: 1,
-        maxSubagentsPerRun: 3
+        allowedWorkerAgentRoleIds: [],
+        maxWorkerAgentDepth: 1,
+        maxWorkerAgentsPerRun: 3
       })
       expect(session?.unreadCompletedAt).toBeUndefined()
 

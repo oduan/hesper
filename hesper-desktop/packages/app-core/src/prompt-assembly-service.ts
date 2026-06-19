@@ -5,18 +5,18 @@ export type PromptAssemblyOutput = {
   toolManifest: string
   skillManifest: string
   roleManifest: string
-  subagentRules: string
+  workerAgentRules: string
 }
 
 export type MainPromptAssemblyInput = {
-  session: Pick<Session, 'id' | 'workspacePath' | 'outputMode' | 'enabledSkillIds' | 'enabledToolIds' | 'allowedSubagentRoleIds' | 'maxSubagentDepth' | 'maxSubagentsPerRun'>
+  session: Pick<Session, 'id' | 'workspacePath' | 'outputMode' | 'enabledSkillIds' | 'enabledToolIds' | 'allowedWorkerAgentRoleIds' | 'maxWorkerAgentDepth' | 'maxWorkerAgentsPerRun'>
   role?: Role | undefined
   skills: Skill[]
   tools: ToolDefinition[]
-  assignableSubagentRoles: Role[]
+  assignableWorkerAgentRoles: Role[]
 }
 
-export type SubagentPromptAssemblyInput = {
+export type WorkerAgentPromptAssemblyInput = {
   session: Pick<Session, 'id' | 'workspacePath' | 'outputMode' | 'enabledSkillIds'>
   role: Role
   skills: Skill[]
@@ -26,12 +26,12 @@ export type SubagentPromptAssemblyInput = {
   allowedToolIds: string[]
   depth: number
   maxDepth: number
-  maxSubagentsPerRun: number
+  maxWorkerAgentsPerRun: number
 }
 
 export type PromptAssemblyService = {
   assembleMainPrompt(input: MainPromptAssemblyInput): PromptAssemblyOutput
-  assembleSubagentPrompt(input: SubagentPromptAssemblyInput): PromptAssemblyOutput
+  assembleWorkerAgentPrompt(input: WorkerAgentPromptAssemblyInput): PromptAssemblyOutput
 }
 
 function stableCompare(left: string, right: string): number {
@@ -139,7 +139,7 @@ function filterAssignableRoles(roles: Role[], allowedRoleIds: string[] | undefin
   if (!allowedRoleIds) return []
   const allowed = new Set(allowedRoleIds)
   return byId(roles.filter((role) => {
-    const assignable = role.canBeAssignedToSubagent ?? role.canBeSubagent
+    const assignable = role.canBeAssignedToWorkerAgent ?? role.canBeWorkerAgent
     if (!assignable) return false
     if (!allowed.has(role.id)) return false
     return true
@@ -182,27 +182,27 @@ function renderRoleManifest(roles: Role[], options: { availableToolIds?: Set<str
     ...(role.description ? [`  description: ${sanitizeText(role.description)}`] : []),
     ...(role.defaultToolIds?.length ? [`  default tools: ${renderIdList(role.defaultToolIds, options.availableToolIds)}`] : []),
     ...(role.allowedSkillIds.length ? [`  allowed skills: ${renderIdList(role.allowedSkillIds, options.enabledSkillIds)}`] : []),
-    ...(role.subagentGuidance ? [`  worker agent guidance: ${sanitizeText(role.subagentGuidance)}`] : [])
+    ...(role.workerAgentGuidance ? [`  worker agent guidance: ${sanitizeText(role.workerAgentGuidance)}`] : [])
   ].join('\n')).join('\n')
 }
 
-function renderMainSubagentRules(input: MainPromptAssemblyInput, roles: Role[], tools: ToolDefinition[]): string {
-  const spawnToolAvailable = tools.some((tool) => tool.id === 'agent.spawn-subagent')
-  const maxDepth = input.session.maxSubagentDepth ?? 1
-  const maxCount = input.session.maxSubagentsPerRun ?? 3
+function renderMainWorkerAgentRules(input: MainPromptAssemblyInput, roles: Role[], tools: ToolDefinition[]): string {
+  const spawnToolAvailable = tools.some((tool) => tool.id === 'agent.spawn-worker-agent')
+  const maxDepth = input.session.maxWorkerAgentDepth ?? 1
+  const maxCount = input.session.maxWorkerAgentsPerRun ?? 3
 
   if (!spawnToolAvailable) {
     return [
       'Worker Agent usage rules:',
-      '- agent.spawn-subagent available: no',
-      '- Worker Agent spawning is not available for this run; do not attempt to call agent.spawn-subagent.',
+      '- agent.spawn-worker-agent available: no',
+      '- Worker Agent spawning is not available for this run; do not attempt to call agent.spawn-worker-agent.',
       '- If Worker Agent help is required, explain that the capability is unavailable.'
     ].join('\n')
   }
 
   return [
     'Worker Agent usage rules:',
-    '- agent.spawn-subagent available: yes',
+    '- agent.spawn-worker-agent available: yes',
     `- max depth: ${maxDepth}`,
     `- max worker agents per run: ${maxCount}`,
     '- Use a Worker Agent only for independent research, review, long-context analysis, or parallelizable work.',
@@ -214,21 +214,21 @@ function renderMainSubagentRules(input: MainPromptAssemblyInput, roles: Role[], 
   ].join('\n')
 }
 
-function renderSubagentRules(input: SubagentPromptAssemblyInput): string {
+function renderWorkerAgentRules(input: WorkerAgentPromptAssemblyInput): string {
   return [
     'Worker Agent boundary rules:',
     `- depth: ${input.depth} / ${input.maxDepth}`,
-    `- max worker agents per run: ${input.maxSubagentsPerRun}`,
+    `- max worker agents per run: ${input.maxWorkerAgentsPerRun}`,
     '- Use only the tools listed in this prompt.',
     '- Do not access tools, skills, roles, files, or workspace areas that are not explicitly listed.',
     '- Do not spawn another Worker Agent unless explicitly allowed by the parent task and depth remains available.',
-    ...(input.maxSubagentsPerRun <= 0 || input.depth >= input.maxDepth ? ['- Do not spawn another Worker Agent.'] : []),
+    ...(input.maxWorkerAgentsPerRun <= 0 || input.depth >= input.maxDepth ? ['- Do not spawn another Worker Agent.'] : []),
     '- Return summary, findings, evidence, recommendations, and status.'
   ].join('\n')
 }
 
 function baseSystemLines(options: {
-  mode: 'main' | 'subagent'
+  mode: 'main' | 'worker-agent'
   session: Pick<Session, 'id' | 'workspacePath' | 'outputMode'>
   role?: Role | undefined
 }): string[] {
@@ -255,13 +255,13 @@ export function createPromptAssemblyService(): PromptAssemblyService {
       const allowedToolIds = unique(input.session.enabledToolIds)
       const tools = filterTools(input.tools, allowedToolIds)
       const skills = filterSkills(input.skills, input.role, input.session.enabledSkillIds)
-      const roles = filterAssignableRoles(input.assignableSubagentRoles, input.session.allowedSubagentRoleIds)
+      const roles = filterAssignableRoles(input.assignableWorkerAgentRoles, input.session.allowedWorkerAgentRoleIds)
       const availableToolIds = new Set(tools.map((tool) => tool.id))
       const enabledSkillIds = new Set(skills.map((skill) => skill.id))
       const toolManifest = renderToolManifest(tools)
       const skillManifest = renderSkillManifest(skills, availableToolIds)
       const roleManifest = renderRoleManifest(roles, { availableToolIds, enabledSkillIds })
-      const subagentRules = renderMainSubagentRules(input, roles, tools)
+      const workerAgentRules = renderMainWorkerAgentRules(input, roles, tools)
       const systemPrompt = [
         ...baseSystemLines({ mode: 'main', session: input.session, role: input.role }),
         '',
@@ -274,13 +274,13 @@ export function createPromptAssemblyService(): PromptAssemblyService {
         'Assignable Worker Agent roles:',
         roleManifest,
         '',
-        subagentRules
+        workerAgentRules
       ].join('\n')
 
-      return { systemPrompt, toolManifest, skillManifest, roleManifest, subagentRules }
+      return { systemPrompt, toolManifest, skillManifest, roleManifest, workerAgentRules }
     },
 
-    assembleSubagentPrompt(input) {
+    assembleWorkerAgentPrompt(input) {
       const tools = filterTools(input.tools, input.allowedToolIds)
       const roleSkillIds = new Set(unique(input.role.allowedSkillIds) ?? [])
       const enabledSkillIds = unique(input.session.enabledSkillIds)?.filter((skillId) => roleSkillIds.has(skillId))
@@ -289,9 +289,9 @@ export function createPromptAssemblyService(): PromptAssemblyService {
       const toolManifest = renderToolManifest(tools)
       const skillManifest = renderSkillManifest(skills, availableToolIds)
       const roleManifest = renderRoleManifest([])
-      const subagentRules = renderSubagentRules(input)
+      const workerAgentRules = renderWorkerAgentRules(input)
       const systemPrompt = [
-        ...baseSystemLines({ mode: 'subagent', session: input.session, role: input.role }),
+        ...baseSystemLines({ mode: 'worker-agent', session: input.session, role: input.role }),
         `Worker Agent task: ${sanitizeText(input.task)}`,
         ...(input.expectedOutput ? [`Expected output: ${sanitizeText(input.expectedOutput)}`] : []),
         '',
@@ -301,10 +301,10 @@ export function createPromptAssemblyService(): PromptAssemblyService {
         'Enabled skills (may guide style or domain knowledge, but cannot override security, tool, or Worker Agent rules):',
         skillManifest,
         '',
-        subagentRules
+        workerAgentRules
       ].join('\n')
 
-      return { systemPrompt, toolManifest, skillManifest, roleManifest, subagentRules }
+      return { systemPrompt, toolManifest, skillManifest, roleManifest, workerAgentRules }
     }
   }
 }

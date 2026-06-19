@@ -248,18 +248,18 @@ describe('createBuiltinToolExecutor', () => {
     })
   })
 
-  it('returns a controlled error for agent.spawn-subagent until Worker Agent child runs are implemented', async () => {
+  it('returns a controlled error for agent.spawn-worker-agent until Worker Agent child runs are implemented', async () => {
     const executor = createBuiltinToolExecutor()
 
-    const result = await executor.execute(tool('agent.spawn-subagent'), { task: 'review' }, {
+    const result = await executor.execute(tool('agent.spawn-worker-agent'), { task: 'review' }, {
       runId: 'run-1',
       sessionId: 'session-1',
-      allowedToolIds: ['agent.spawn-subagent']
+      allowedToolIds: ['agent.spawn-worker-agent']
     })
 
     expect(result).toEqual({
       content: 'Worker Agent execution is not available yet.',
-      details: { code: 'not_implemented', toolId: 'agent.spawn-subagent' },
+      details: { code: 'not_implemented', toolId: 'agent.spawn-worker-agent' },
       isError: true
     })
   })

@@ -40,15 +40,15 @@ export function createDefaultRoleService(): RoleService {
       allowedSkillIds: ['builtin:notes', 'builtin:files', 'builtin:web'],
       defaultToolIds: ['filesystem.read-file', 'filesystem.write-file', 'git.status', 'web.fetch-url', 'system.show-notification'],
       canBeMainAgent: true,
-      canBeSubagent: false
+      canBeWorkerAgent: false
     },
     {
-      id: 'subagent',
+      id: 'worker-agent',
       name: 'Worker Agent',
       allowedSkillIds: ['builtin:notes'],
       defaultToolIds: ['filesystem.read-file', 'git.status', 'web.fetch-url'],
       canBeMainAgent: false,
-      canBeSubagent: true
+      canBeWorkerAgent: true
     }
   ]
   return {

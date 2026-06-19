@@ -5,7 +5,7 @@ describe('builtin tools', () => {
   it('contains exactly five builtin tools', () => {
     const tools = createBuiltinToolDefinitions()
     expect(tools).toHaveLength(5)
-    expect(tools.map((tool) => tool.id)).not.toContain('agent.spawn-subagent')
+    expect(tools.map((tool) => tool.id)).not.toContain('agent.spawn-worker-agent')
   })
 
   it('uses stable ids', () => {
@@ -19,7 +19,7 @@ describe('builtin tools', () => {
         'system.show-notification'
       ])
     )
-    expect(ids).not.toContain('agent.spawn-subagent')
+    expect(ids).not.toContain('agent.spawn-worker-agent')
   })
 
   it('defines filesystem tools with required schema fields', () => {
@@ -70,7 +70,7 @@ describe('builtin tools', () => {
       }
     })
 
-    expect(tools.find((tool) => tool.id === 'agent.spawn-subagent')).toBeUndefined()
+    expect(tools.find((tool) => tool.id === 'agent.spawn-worker-agent')).toBeUndefined()
 
     expect(tools.find((tool) => tool.id === 'system.show-notification')).toMatchObject({
       category: 'system',

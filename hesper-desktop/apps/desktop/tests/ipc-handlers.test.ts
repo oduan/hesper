@@ -26,7 +26,7 @@ describe('desktop service container', () => {
       role: container.roleService.getRole('main-agent')!,
       skills: container.skillService.listSkills(),
       tools: container.toolCatalogService.list(),
-      assignableSubagentRoles: container.roleService.listRoles()
+      assignableWorkerAgentRoles: container.roleService.listRoles()
     }).systemPrompt).toContain('hesper desktop Agent')
   })
 
@@ -188,7 +188,7 @@ describe('registerIpcHandlers', () => {
       toolManifest: 'tools',
       skillManifest: 'skills',
       roleManifest: 'roles',
-      subagentRules: 'rules'
+      workerAgentRules: 'rules'
     }
     const promptSpy = vi.spyOn(container.promptAssemblyService, 'assembleMainPrompt').mockReturnValueOnce(assembled)
     const enqueueSpy = vi.spyOn(container.agentRuntime, 'enqueue').mockResolvedValueOnce({ id: 'run-assembled' } as Awaited<ReturnType<typeof container.agentRuntime.enqueue>>)
@@ -208,7 +208,7 @@ describe('registerIpcHandlers', () => {
       role: expect.objectContaining({ id: 'main-agent' }),
       skills: expect.any(Array),
       tools: expect.any(Array),
-      assignableSubagentRoles: expect.any(Array)
+      assignableWorkerAgentRoles: expect.any(Array)
     }))
     expect(enqueueSpy).toHaveBeenCalledWith(expect.objectContaining({
       sessionId: session.id,

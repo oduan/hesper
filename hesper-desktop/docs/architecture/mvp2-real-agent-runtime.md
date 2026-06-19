@@ -93,7 +93,7 @@ MVP2 uses a three-layer tool model:
 
 1. **ToolDefinition**: id, name, description, schema, category
 2. **ToolExecutor**: actual execution implementation
-3. **PermissionPolicy**: whether this run/role/subagent may call the tool
+3. **PermissionPolicy**: whether this run/role/Worker Agent may call the tool
 
 ### Required rule
 
@@ -227,7 +227,7 @@ Pi-owned responsibilities:
 
 ## 10. Worker Agent child run
 
-The main agent must call the legacy `agent.spawn-subagent` entry point to create Worker Agent child runs.
+The main agent must call the legacy `agent.spawn-worker-agent` entry point to create Worker Agent child runs.
 
 A child run must be created with:
 

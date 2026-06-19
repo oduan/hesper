@@ -497,7 +497,7 @@ export function createBuiltinToolExecutor(options: BuiltinToolExecutorOptions = 
           return fetchUrl(tool, args, context, requestHttp, resolveHostname, maxFetchBytes, fetchTimeoutMs, now)
         case 'system.show-notification':
           return showNotification(tool, args, options.showNotification)
-        case 'agent.spawn-subagent':
+        case 'agent.spawn-worker-agent':
           // Legacy compatibility path: the tool is no longer exposed by default.
           return workerAgentNotImplemented(tool)
         default:
