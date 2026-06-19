@@ -74,15 +74,15 @@ const tools: ToolDefinition[] = [
   },
   {
     id: 'agent.spawn-subagent',
-    name: 'Spawn Subagent',
-    description: 'Spawn a constrained child agent',
+    name: 'Spawn Worker Agent',
+    description: 'Spawn a constrained Worker Agent',
     category: 'agent',
     inputSchema: { type: 'object', required: ['task', 'roleId', 'allowedToolIds'], properties: { task: { type: 'string' }, roleId: { type: 'string' }, allowedToolIds: { type: 'array' } } }
   }
 ]
 
 describe('PromptAssemblyService', () => {
-  it('assembles a main agent prompt with allowed tools, skills and assignable subagent roles', () => {
+  it('assembles a main agent prompt with allowed tools, skills and assignable Worker Agent roles', () => {
     const service = createPromptAssemblyService()
 
     const output = service.assembleMainPrompt({
@@ -110,7 +110,7 @@ describe('PromptAssemblyService', () => {
     expect(output.subagentRules).toContain('agent.spawn-subagent')
     expect(output.subagentRules).toContain('allowedToolIds')
     expect(output.subagentRules).toContain('max depth: 1')
-    expect(output.subagentRules).toContain('max subagents per run: 2')
+    expect(output.subagentRules).toContain('max worker agents per run: 2')
     expect(output.systemPrompt).not.toMatch(/api[_ -]?key/i)
   })
 
@@ -131,7 +131,7 @@ describe('PromptAssemblyService', () => {
     expect(output.toolManifest).toContain('"required":["content","path"]')
   })
 
-  it('does not encourage subagent calls when the tool is absent from the catalog', () => {
+  it('does not encourage Worker Agent calls when the tool is absent from the catalog', () => {
     const service = createPromptAssemblyService()
 
     const output = service.assembleMainPrompt({
@@ -144,12 +144,12 @@ describe('PromptAssemblyService', () => {
 
     expect(output.subagentRules).toContain('agent.spawn-subagent available: no')
     expect(output.subagentRules).toContain('do not attempt to call agent.spawn-subagent')
-    expect(output.subagentRules).not.toContain('Use a subagent only')
-    expect(output.subagentRules).not.toContain('Every subagent call must include')
+    expect(output.subagentRules).not.toContain('Use a Worker Agent only')
+    expect(output.subagentRules).not.toContain('Every Worker Agent call must include')
     expect(output.toolManifest).not.toContain('agent.spawn-subagent')
   })
 
-  it('assembles a subagent prompt with only explicitly allowed tools and expected output', () => {
+  it('assembles a Worker Agent prompt with only explicitly allowed tools and expected output', () => {
     const service = createPromptAssemblyService()
 
     const output = service.assembleSubagentPrompt({
@@ -165,20 +165,20 @@ describe('PromptAssemblyService', () => {
       maxSubagentsPerRun: 0
     })
 
-    expect(output.systemPrompt).toContain('Subagent task: "Review the staged diff."')
+    expect(output.systemPrompt).toContain('Worker Agent task: "Review the staged diff."')
     expect(output.systemPrompt).toContain('Expected output: "Findings and PASS/NEEDS_CHANGES."')
     expect(output.systemPrompt).toContain('Role: "Reviewer"')
     expect(output.systemPrompt).toContain('Be skeptical and evidence-driven.')
     expect(output.toolManifest).toContain('filesystem.read-file')
     expect(output.toolManifest).not.toContain('agent.spawn-subagent')
     expect(output.toolManifest).not.toContain('filesystem.write-file')
-    expect(output.subagentRules).toContain('Do not spawn another subagent')
+    expect(output.subagentRules).toContain('Do not spawn another Worker Agent')
     expect(output.subagentRules).toContain('depth: 1 / 1')
     expect(output.skillManifest).toContain('skill:notes')
     expect(output.skillManifest).not.toContain('skill:secret')
   })
 
-  it('intersects subagent skills with both session and role allowlists', () => {
+  it('intersects Worker Agent skills with both session and role allowlists', () => {
     const service = createPromptAssemblyService()
 
     const output = service.assembleSubagentPrompt({
@@ -198,7 +198,7 @@ describe('PromptAssemblyService', () => {
     expect(output.skillManifest).not.toContain('skill:secret')
   })
 
-  it('does not let role default skills narrow explicitly enabled and allowed subagent skills', () => {
+  it('does not let role default skills narrow explicitly enabled and allowed Worker Agent skills', () => {
     const service = createPromptAssemblyService()
     const reviewSkill: Skill = { id: 'skill:review', name: 'Review Notes', source: 'workspace', prompt: 'Use review checklist.' }
 
@@ -234,7 +234,7 @@ describe('PromptAssemblyService', () => {
     expect(output.toolManifest).not.toContain('filesystem.read-file')
     expect(output.skillManifest).toContain('No skills are currently enabled')
     expect(output.skillManifest).not.toContain('skill:notes')
-    expect(output.roleManifest).toContain('No subagent roles are assignable')
+    expect(output.roleManifest).toContain('No Worker Agent roles are assignable')
     expect(output.roleManifest).not.toContain('reviewer')
   })
 
@@ -295,7 +295,7 @@ describe('PromptAssemblyService', () => {
 
     expect(output.toolManifest).toBe('No tools are currently available to this agent.')
     expect(output.skillManifest).toBe('No skills are currently enabled for this agent.')
-    expect(output.roleManifest).toBe('No subagent roles are assignable for this run.')
+    expect(output.roleManifest).toBe('No Worker Agent roles are assignable for this run.')
   })
 
   it('quotes untrusted registry text and redacts credential-shaped values', () => {

@@ -21,4 +21,4 @@ For local development and stable tests, the desktop shell defaults to the determ
 - MVP1 keeps a single runtime abstraction for mock and pi-core execution.
 - Renderer code only reacts to `AgentRuntimeEvent` records over IPC.
 - Queueing, retries and message persistence stay outside Electron window code.
-- Future skills, roles, tools and subagent support can extend `@hesper/agent-runtime` without rewriting the UI shell.
+- Future skills, roles, tools and Worker Agent support can extend `@hesper/agent-runtime` without rewriting the UI shell.

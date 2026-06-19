@@ -153,7 +153,7 @@ describe('shared schemas', () => {
     expect(parsed.capabilities).toEqual(['streaming', 'toolCalls'])
   })
 
-  it('validates role prompt and subagent assignment metadata', () => {
+  it('validates role prompt and Worker Agent assignment metadata', () => {
     const parsed = roleSchema.parse({
       id: 'reviewer',
       name: 'Reviewer',
@@ -185,7 +185,7 @@ describe('shared schemas', () => {
     expect(parsed.scope).toBe('subagent')
   })
 
-  it('validates subagent invocations with role and tool constraints', () => {
+  it('validates Worker Agent invocations with role and tool constraints', () => {
     const parsed = subagentInvocationSchema.parse({
       id: 'subagent-1',
       parentRunId: 'run-parent',

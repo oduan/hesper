@@ -240,7 +240,7 @@ describe('persistence repositories', () => {
     expect(await db.toolPermissionPolicies.listByScope('subagent', 'reviewer')).toHaveLength(1)
   })
 
-  it('round-trips session agent configuration defaults and subagent invocations', async () => {
+  it('round-trips session agent configuration defaults and Worker Agent invocations', async () => {
     const db = await createInMemoryPersistence()
     await db.sessions.save({
       id: 'session-1',

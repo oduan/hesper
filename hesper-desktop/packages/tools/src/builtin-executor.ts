@@ -466,9 +466,9 @@ async function showNotification(tool: ToolDefinition, args: unknown, showNotific
   }
 }
 
-function subagentNotImplemented(tool: ToolDefinition): ToolExecutionResult {
+function workerAgentNotImplemented(tool: ToolDefinition): ToolExecutionResult {
   return {
-    content: 'Subagent execution is not available yet.',
+    content: 'Worker Agent execution is not available yet.',
     details: { code: 'not_implemented', toolId: tool.id },
     isError: true
   }
@@ -499,7 +499,7 @@ export function createBuiltinToolExecutor(options: BuiltinToolExecutorOptions = 
           return showNotification(tool, args, options.showNotification)
         case 'agent.spawn-subagent':
           // Legacy compatibility path: the tool is no longer exposed by default.
-          return subagentNotImplemented(tool)
+          return workerAgentNotImplemented(tool)
         default:
           throw new Error(`No builtin executor registered for tool: ${tool.id}`)
       }

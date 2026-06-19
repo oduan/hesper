@@ -3,7 +3,7 @@
 ## 1. Scope
 
 This document describes the target runtime architecture for MVP2 of `hesper-desktop/`.
-It focuses on the real Agent loop, provider/model registry, secure secret storage, tools, skills, roles, prompt assembly, and subagent child runs.
+It focuses on the real Agent loop, provider/model registry, secure secret storage, tools, skills, roles, prompt assembly, and Worker Agent child runs.
 
 ## 2. Architecture overview
 
@@ -23,7 +23,7 @@ graph TD
     RT --> Pi[@earendil-works/pi-agent-core / pi-ai]
     Pi --> ProviderAPI[DeepSeek / OpenAI / OpenAI-compatible]
     Pi --> Executor[Tool Executors]
-    Pi --> Child[agent.spawn-subagent]
+    Pi --> Child[Worker Agent child run]
     RT --> Store[(Persistence)]
     Core --> Store
 ```
@@ -59,7 +59,7 @@ It must expose:
 - context length
 - tool-call support
 - streaming support
-- suitability for main agent / subagent
+- suitability for main agent / Worker Agent
 
 ## 4. Secret storage
 
@@ -130,14 +130,14 @@ A role should include:
 - default model id
 - allowed tool ids
 - allowed skill ids
-- can be main agent / subagent
+- can be main agent / Worker Agent
 - max depth / max count
 
-Prompt assembly must clearly state the role boundary for both main agent and subagent prompts.
+Prompt assembly must clearly state the role boundary for both main agent and Worker Agent prompts.
 
 ## 8. PromptAssemblyService
 
-PromptAssemblyService is a central service used before every run and should be introduced behind a small interface boundary first, then split into provider/tool/role/subagent submodules as implementation grows.
+PromptAssemblyService is a central service used before every run and should be introduced behind a small interface boundary first, then split into provider/tool/role/Worker Agent submodules as implementation grows.
 
 ### Inputs
 
@@ -147,16 +147,16 @@ PromptAssemblyService is a central service used before every run and should be i
 - skill registry
 - role registry
 - permission policy
-- subagent constraints
+- Worker Agent constraints
 - current depth / parent run context
 
 ### Outputs
 
 - main agent system prompt
-- subagent system prompt
+- Worker Agent system prompt
 - tool list
 - role instructions
-- subagent usage rules
+- Worker Agent usage rules
 
 ### Minimal interface sketches
 
@@ -173,7 +173,7 @@ type PromptAssemblyInput = {
 type PromptAssemblyOutput = {
   systemPrompt: string
   toolManifest: string
-  subagentRules: string
+  workerAgentRules: string
 }
 
 type ProviderRegistry = {
@@ -188,7 +188,7 @@ type ToolRegistry = {
   listDefinitions(roleId?: string): ToolDefinition[]
 }
 
-type SubagentService = {
+type WorkerAgentService = {
   spawn(input: { roleId: string; allowedToolIds: string[]; maxDepth: number; maxCount: number }): Promise<string>
 }
 ```
@@ -200,7 +200,7 @@ The prompt must explicitly state:
 - which tools are available
 - how to use each tool
 - which tools are not allowed
-- when to spawn a subagent
+- when to spawn a Worker Agent
 - how to assign `roleId`
 - how to limit `allowedToolIds`
 - how to obey `maxDepth` and `maxCount`
@@ -225,9 +225,9 @@ Pi-owned responsibilities:
 - tool call orchestration
 - child run execution semantics
 
-## 10. Subagent child run
+## 10. Worker Agent child run
 
-The main agent must call `agent.spawn-subagent` to create child runs.
+The main agent must call the legacy `agent.spawn-subagent` entry point to create Worker Agent child runs.
 
 A child run must be created with:
 

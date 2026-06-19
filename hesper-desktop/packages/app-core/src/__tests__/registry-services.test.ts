@@ -7,6 +7,7 @@ describe('registry services', () => {
     const skills = createDefaultSkillService().listSkills()
 
     expect(roles.map((role) => role.id)).toEqual(['main-agent', 'subagent'])
+    expect(roles.find((role) => role.id === 'subagent')?.name).toBe('Worker Agent')
     expect(roles.find((role) => role.id === 'main-agent')?.defaultToolIds).toEqual([
       'filesystem.read-file',
       'filesystem.write-file',
@@ -26,7 +27,7 @@ describe('registry services', () => {
     const catalog = createToolCatalogService([
       { id: 'filesystem.read-file', name: 'Read File', description: 'Read file', inputSchema: {}, category: 'filesystem' },
       { id: 'web.fetch-url', name: 'Fetch URL', description: 'Fetch URL', inputSchema: {}, category: 'web' },
-      { id: 'agent.spawn-subagent', name: 'Spawn Subagent', description: 'Spawn subagent', inputSchema: {}, category: 'agent' }
+      { id: 'agent.spawn-subagent', name: 'Spawn Worker Agent', description: 'Spawn Worker Agent', inputSchema: {}, category: 'agent' }
     ])
 
     expect(catalog.list().map((tool) => tool.id)).toEqual([

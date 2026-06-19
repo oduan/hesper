@@ -49,11 +49,11 @@ See also:
 ## MVP1 scope and limitations
 
 - MVP1 implements a single-session desktop runtime loop with queueing, retry visibility and markdown/html output support.
-- Skills, roles, tools and subagents are modeled for future expansion, but their UX remains intentionally minimal in this milestone.
+- Skills, roles, tools and Worker Agents are modeled for future expansion, but their UX remains intentionally minimal in this milestone.
 - Local development and automated coverage default to the mock adapter so tests do not require external API credentials.
 
 ## Follow-up suggestions
 
-- Expand runtime event coverage for richer tool payloads and future child-run/subagent events.
+- Expand runtime event coverage for richer tool payloads and future Worker Agent child-run events.
 - Add stronger smoke assertions around window boot timing and initial session creation.
 - Document production packaging, signing and distribution steps after MVP1 stabilizes.
