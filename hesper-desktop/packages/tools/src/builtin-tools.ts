@@ -223,6 +223,41 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
       }
     },
     {
+      id: 'roles.create',
+      name: 'Create Role',
+      description: 'Create a user-defined role with a name, description, full prompt, and default tools.',
+      category: 'agent',
+      icon: '🎭',
+      inputSchema: {
+        type: 'object',
+        required: ['name'],
+        properties: {
+          name: { type: 'string', description: 'Role name.' },
+          description: { type: 'string', description: 'Short role description shown in the roles list.' },
+          systemPrompt: { type: 'string', description: 'Full prompt for this role.' },
+          defaultToolIds: { type: 'array', items: { type: 'string' }, description: 'Default tool IDs for this role.' }
+        }
+      }
+    },
+    {
+      id: 'roles.update',
+      name: 'Update Role',
+      description: 'Update an existing user-defined role. This tool cannot delete roles.',
+      category: 'agent',
+      icon: '🎭',
+      inputSchema: {
+        type: 'object',
+        required: ['id'],
+        properties: {
+          id: { type: 'string', description: 'Role ID to update.' },
+          name: { type: 'string', description: 'New role name.' },
+          description: { type: 'string', description: 'New short role description.' },
+          systemPrompt: { type: 'string', description: 'New full prompt.' },
+          defaultToolIds: { type: 'array', items: { type: 'string' }, description: 'Replacement default tool IDs for this role.' }
+        }
+      }
+    },
+    {
       id: 'system.execute-command',
       name: 'Execute Command',
       description: `Execute one complete shell command from the selected workspace. ${currentCommandRuntimeDescription()} The command is run after changing to the workspace directory.`,

@@ -12,6 +12,19 @@ export type GitStatusOptions = {
   signal?: AbortSignal
 }
 
+type RoleToolInput = {
+  id?: string
+  name?: string
+  description?: string
+  systemPrompt?: string
+  defaultToolIds?: string[]
+}
+
+export type RoleToolHandlers = {
+  createRole(input: Omit<RoleToolInput, 'id'> & { name: string }): Promise<unknown>
+  updateRole(input: RoleToolInput & { id: string }): Promise<unknown>
+}
+
 export type BuiltinToolExecutorOptions = {
   maxReadBytes?: number
   gitTimeoutMs?: number
@@ -20,6 +33,7 @@ export type BuiltinToolExecutorOptions = {
   readToolApiKey?: (toolId: string) => Promise<string | undefined>
   fetch?: typeof fetch
   showNotification?: (message: string) => Promise<void> | void
+  roleTools?: RoleToolHandlers
   now?: () => string
 }
 
@@ -80,8 +94,51 @@ function stringArrayArg(args: unknown, key: string): string[] {
   return value
 }
 
+function optionalStringArrayArg(args: unknown, key: string): string[] | undefined {
+  const value = argsObject(args)[key]
+  if (value === undefined) return undefined
+  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string' || item.trim() === '')) {
+    throw new Error(`Tool argument must be an array of non-empty strings: ${key}`)
+  }
+  return value
+}
+
 function jsonContent(value: unknown): string {
   return JSON.stringify(value, null, 2)
+}
+
+function optionalRoleToolInput(args: unknown): RoleToolInput {
+  const record = argsObject(args)
+  const defaultToolIds = optionalStringArrayArg(args, 'defaultToolIds')
+  return {
+    ...(typeof record.id === 'string' ? { id: record.id } : {}),
+    ...(typeof record.name === 'string' ? { name: record.name } : {}),
+    ...(typeof record.description === 'string' ? { description: record.description } : {}),
+    ...(typeof record.systemPrompt === 'string' ? { systemPrompt: record.systemPrompt } : {}),
+    ...(defaultToolIds !== undefined ? { defaultToolIds } : {})
+  }
+}
+
+function roleToolsUnavailable(tool: ToolDefinition): ToolExecutionResult {
+  return {
+    content: 'Role management tools are not available in this runtime.',
+    details: { code: 'not_available', toolId: tool.id },
+    isError: true
+  }
+}
+
+async function createRoleTool(tool: ToolDefinition, args: unknown, roleTools: RoleToolHandlers | undefined): Promise<ToolExecutionResult> {
+  if (!roleTools) return roleToolsUnavailable(tool)
+  const input = { ...optionalRoleToolInput(args), name: stringArg(args, 'name') }
+  const role = await roleTools.createRole(input)
+  return { content: jsonContent(role), details: { toolId: tool.id, role } }
+}
+
+async function updateRoleTool(tool: ToolDefinition, args: unknown, roleTools: RoleToolHandlers | undefined): Promise<ToolExecutionResult> {
+  if (!roleTools) return roleToolsUnavailable(tool)
+  const input = { ...optionalRoleToolInput(args), id: stringArg(args, 'id') }
+  const role = await roleTools.updateRole(input)
+  return { content: jsonContent(role), details: { toolId: tool.id, role } }
 }
 
 function requireWorkspace(context: ToolExecutionContext): string {
@@ -1018,6 +1075,10 @@ export function createBuiltinToolExecutor(options: BuiltinToolExecutorOptions = 
           return tinyFishFetchUrl(tool, args, context, fetchImpl, options.readToolApiKey, now)
         case 'web.search':
           return tinyFishSearch(tool, args, context, fetchImpl, options.readToolApiKey, fetchTimeoutMs, now)
+        case 'roles.create':
+          return createRoleTool(tool, args, options.roleTools)
+        case 'roles.update':
+          return updateRoleTool(tool, args, options.roleTools)
         case 'system.execute-command':
           return executeCommand(tool, args, context)
         case 'system.show-notification':

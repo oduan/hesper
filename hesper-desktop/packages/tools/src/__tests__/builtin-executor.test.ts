@@ -404,6 +404,41 @@ describe('createBuiltinToolExecutor', () => {
     })).rejects.toThrow('TinyFish API key is required')
   })
 
+  it('creates and updates roles through injected role handlers', async () => {
+    const createRole = vi.fn(async (input) => ({ id: 'role-1', description: '', systemPrompt: '', defaultToolIds: [], ...input }))
+    const updateRole = vi.fn(async (input) => ({ id: input.id, name: input.name ?? 'Existing', description: input.description ?? '', systemPrompt: input.systemPrompt ?? '', defaultToolIds: input.defaultToolIds ?? [] }))
+    const executor = createBuiltinToolExecutor({ roleTools: { createRole, updateRole } })
+
+    const created = await executor.execute(tool('roles.create'), { name: '运维助手', defaultToolIds: ['git.status'] }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['roles.create']
+    })
+    expect(createRole).toHaveBeenCalledWith({ name: '运维助手', defaultToolIds: ['git.status'] })
+    expect(JSON.parse(created.content)).toMatchObject({ id: 'role-1', name: '运维助手' })
+
+    const updated = await executor.execute(tool('roles.update'), { id: 'role-1', systemPrompt: '更新提示词' }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['roles.update']
+    })
+    expect(updateRole).toHaveBeenCalledWith({ id: 'role-1', systemPrompt: '更新提示词' })
+    expect(JSON.parse(updated.content)).toMatchObject({ id: 'role-1', systemPrompt: '更新提示词' })
+  })
+
+  it('returns a controlled error when role tools are unavailable', async () => {
+    const executor = createBuiltinToolExecutor()
+
+    await expect(executor.execute(tool('roles.create'), { name: '角色' }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['roles.create']
+    })).resolves.toMatchObject({
+      isError: true,
+      details: { code: 'not_available', toolId: 'roles.create' }
+    })
+  })
+
   it('returns a controlled error when notifications are not available', async () => {
     const executor = createBuiltinToolExecutor()
 

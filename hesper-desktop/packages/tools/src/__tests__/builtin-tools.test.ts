@@ -4,7 +4,7 @@ import { createBuiltinToolDefinitions } from '../builtin-tools'
 describe('builtin tools', () => {
   it('contains the builtin tool set without exposing legacy worker execution', () => {
     const tools = createBuiltinToolDefinitions()
-    expect(tools).toHaveLength(14)
+    expect(tools).toHaveLength(16)
     expect(tools.map((tool) => tool.id)).not.toContain('agent.spawn-worker-agent')
     expect(tools.every((tool) => typeof tool.icon === 'string' && tool.icon.length > 0)).toBe(true)
   })
@@ -25,6 +25,8 @@ describe('builtin tools', () => {
         'git.run',
         'web.fetch-url',
         'web.search',
+        'roles.create',
+        'roles.update',
         'system.execute-command',
         'system.show-notification'
       ])
@@ -129,6 +131,35 @@ describe('builtin tools', () => {
     })
 
     expect(tools.find((tool) => tool.id === 'agent.spawn-worker-agent')).toBeUndefined()
+
+    expect(tools.find((tool) => tool.id === 'roles.create')).toMatchObject({
+      category: 'agent',
+      inputSchema: {
+        type: 'object',
+        required: ['name'],
+        properties: {
+          name: expect.objectContaining({ type: 'string' }),
+          description: expect.objectContaining({ type: 'string' }),
+          systemPrompt: expect.objectContaining({ type: 'string' }),
+          defaultToolIds: expect.objectContaining({ type: 'array' })
+        }
+      }
+    })
+    expect(tools.find((tool) => tool.id === 'roles.update')).toMatchObject({
+      category: 'agent',
+      inputSchema: {
+        type: 'object',
+        required: ['id'],
+        properties: {
+          id: expect.objectContaining({ type: 'string' }),
+          name: expect.objectContaining({ type: 'string' }),
+          description: expect.objectContaining({ type: 'string' }),
+          systemPrompt: expect.objectContaining({ type: 'string' }),
+          defaultToolIds: expect.objectContaining({ type: 'array' })
+        }
+      }
+    })
+    expect(tools.find((tool) => tool.id === 'roles.delete')).toBeUndefined()
 
     expect(tools.find((tool) => tool.id === 'system.show-notification')).toMatchObject({
       category: 'system',
