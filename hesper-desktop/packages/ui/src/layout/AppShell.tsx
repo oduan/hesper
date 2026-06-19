@@ -2,10 +2,11 @@ import type { ReactNode } from 'react'
 import type { Session, ToolDefinition } from '@hesper/shared'
 import { createThemeVariables, darkTheme, type ThemeMode } from '../theme'
 import { ActivityRail, type AppSection } from './ActivityRail'
-import { EntityListPane } from './EntityListPane'
+import { EntityListPane, type RoleListItem } from './EntityListPane'
 import { TitleBar, type DesktopPlatform, type WindowControlAction } from './TitleBar'
 
 export type ToolListItem = ToolDefinition & { enabled: boolean }
+export type { RoleListItem } from './EntityListPane'
 
 export type AppShellProps = {
   sessions: Session[]
@@ -17,6 +18,8 @@ export type AppShellProps = {
   tools?: ToolListItem[]
   activeToolId?: string
   pendingToolIds?: string[]
+  roles?: RoleListItem[]
+  activeRoleId?: string
   activeSettingsCategory?: 'ai' | 'appearance'
   appearance?: { themeMode: ThemeMode; fontSize: number }
   onCreateSession?: () => void | Promise<void>
@@ -24,6 +27,8 @@ export type AppShellProps = {
   onSelectSession?: (sessionId: string) => void
   onSelectTool?: (toolId: string) => void
   onToggleToolEnabled?: (toolId: string, enabled: boolean) => void
+  onSelectRole?: (roleId: string) => void
+  onCreateRole?: () => void
   onSelectSettingsCategory?: (category: 'ai' | 'appearance') => void
   onRenameSession?: (sessionId: string, title: string) => void
   onRegenerateSessionTitle?: (sessionId: string, sessionIds?: string[]) => void
@@ -34,7 +39,36 @@ export type AppShellProps = {
   children?: ReactNode
 }
 
-export function AppShell({ sessions, activeSection, title, platform, activeSessionId, runningSessionIds, tools, activeToolId, pendingToolIds, activeSettingsCategory, appearance, onCreateSession, onSelectSection, onSelectSession, onSelectTool, onToggleToolEnabled, onSelectSettingsCategory, onRenameSession, onRegenerateSessionTitle, onDeleteSession, onWindowMinimize, onWindowToggleMaximize, onWindowClose, children }: AppShellProps) {
+export function AppShell({
+  sessions,
+  activeSection,
+  title,
+  platform,
+  activeSessionId,
+  runningSessionIds,
+  tools,
+  activeToolId,
+  pendingToolIds,
+  roles,
+  activeRoleId,
+  activeSettingsCategory,
+  appearance,
+  onCreateSession,
+  onSelectSection,
+  onSelectSession,
+  onSelectTool,
+  onToggleToolEnabled,
+  onSelectRole,
+  onCreateRole,
+  onSelectSettingsCategory,
+  onRenameSession,
+  onRegenerateSessionTitle,
+  onDeleteSession,
+  onWindowMinimize,
+  onWindowToggleMaximize,
+  onWindowClose,
+  children
+}: AppShellProps) {
   const themeVariables = createThemeVariables(appearance?.themeMode ?? 'dark', appearance?.fontSize ?? 14)
 
   return (
@@ -83,10 +117,14 @@ export function AppShell({ sessions, activeSection, title, platform, activeSessi
           {...(tools ? { tools } : {})}
           {...(activeToolId ? { activeToolId } : {})}
           {...(pendingToolIds ? { pendingToolIds } : {})}
+          {...(roles ? { roles } : {})}
+          {...(activeRoleId ? { activeRoleId } : {})}
           {...(activeSettingsCategory ? { activeSettingsCategory } : {})}
           {...(onSelectSession ? { onSelectSession } : {})}
           {...(onSelectTool ? { onSelectTool } : {})}
           {...(onToggleToolEnabled ? { onToggleToolEnabled } : {})}
+          {...(onSelectRole ? { onSelectRole } : {})}
+          {...(onCreateRole ? { onCreateRole } : {})}
           {...(onSelectSettingsCategory ? { onSelectSettingsCategory } : {})}
           {...(onRenameSession ? { onRenameSession } : {})}
           {...(onRegenerateSessionTitle ? { onRegenerateSessionTitle } : {})}

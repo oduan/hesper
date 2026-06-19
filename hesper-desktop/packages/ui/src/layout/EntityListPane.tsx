@@ -6,6 +6,12 @@ import type { AppSection } from './ActivityRail'
 
 type ToolListItem = ToolDefinition & { enabled: boolean }
 
+export type RoleListItem = {
+  id: string
+  name: string
+  description: string
+}
+
 export type EntityListPaneProps = {
   title?: string
   activeSection: AppSection
@@ -15,10 +21,14 @@ export type EntityListPaneProps = {
   tools?: ToolListItem[]
   activeToolId?: string
   pendingToolIds?: string[]
+  roles?: RoleListItem[]
+  activeRoleId?: string
   activeSettingsCategory?: 'ai' | 'appearance'
   onSelectSession?: (sessionId: string) => void
   onSelectTool?: (toolId: string) => void
   onToggleToolEnabled?: (toolId: string, enabled: boolean) => void
+  onSelectRole?: (roleId: string) => void
+  onCreateRole?: () => void
   onSelectSettingsCategory?: (category: 'ai' | 'appearance') => void
   onRenameSession?: (sessionId: string, title: string) => void
   onRegenerateSessionTitle?: (sessionId: string, sessionIds?: string[]) => void
@@ -91,16 +101,20 @@ export function EntityListPane({
   tools = [],
   activeToolId,
   pendingToolIds = [],
+  roles = [],
+  activeRoleId,
   activeSettingsCategory = 'ai',
   onSelectSession,
   onSelectTool,
   onToggleToolEnabled,
+  onSelectRole,
+  onCreateRole,
   onSelectSettingsCategory,
   onRenameSession,
   onRegenerateSessionTitle,
   onDeleteSession
 }: EntityListPaneProps) {
-  const heading = title ?? (activeSection === 'sessions' ? '所有会话' : activeSection === 'settings' ? '设置' : activeSection === 'tools' ? '工具' : '列表')
+  const heading = title ?? (activeSection === 'sessions' ? '所有会话' : activeSection === 'settings' ? '设置' : activeSection === 'tools' ? '工具' : activeSection === 'roles' ? '角色' : '列表')
   const runningSessionIdSet = new Set(runningSessionIds)
   const pendingToolIdSet = new Set(pendingToolIds)
   const [sessionMenu, setSessionMenu] = useState<SessionMenuState>()
@@ -306,6 +320,34 @@ export function EntityListPane({
         ) : (
           <div style={{ margin: 'auto', color: darkTheme.color.textMuted, fontSize: darkTheme.typography.body, textAlign: 'center' }}>暂无会话</div>
         )
+      ) : activeSection === 'roles' ? (
+        <div style={{ display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr)', gap: 12, minHeight: 0 }}>
+          <button type="button" onClick={onCreateRole} style={newRoleButtonStyle}>新建角色</button>
+          {roles.length > 0 ? (
+            <ul aria-label="角色列表" className="hesper-theme-scrollbar" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 4, overflow: 'auto', minHeight: 0 }}>
+              {roles.map((role) => {
+                const isActive = role.id === activeRoleId
+                return (
+                  <li key={role.id}>
+                    <button
+                      type="button"
+                      className={`hesper-list-row${isActive ? ' is-active' : ''}`}
+                      aria-current={isActive ? 'page' : undefined}
+                      aria-label={`${role.name} ${role.description}`.trim()}
+                      onClick={() => onSelectRole?.(role.id)}
+                      style={roleRowStyle}
+                    >
+                      <span style={roleNameStyle}>{role.name}</span>
+                      <span style={roleDescriptionStyle}>{role.description || '暂无简介'}</span>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          ) : (
+            <div style={{ margin: 'auto', color: darkTheme.color.textMuted, fontSize: darkTheme.typography.body, textAlign: 'center' }}>暂无角色</div>
+          )}
+        </div>
       ) : activeSection === 'tools' ? (
         tools.length > 0 ? (
           <ul aria-label="工具列表" className="hesper-theme-scrollbar" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 4, overflow: 'auto', minHeight: 0 }}>
@@ -439,6 +481,43 @@ const toolRowStyle: CSSProperties = {
   gridTemplateColumns: 'minmax(0, 1fr) auto',
   alignItems: 'center',
   columnGap: 10
+}
+
+const newRoleButtonStyle: CSSProperties = {
+  minHeight: 36,
+  border: `1px solid ${darkTheme.color.border}`,
+  borderRadius: darkTheme.radius.md,
+  background: darkTheme.color.surfaceMuted,
+  color: darkTheme.color.text,
+  fontSize: darkTheme.typography.body,
+  fontWeight: 700,
+  cursor: 'pointer'
+}
+
+const roleRowStyle: CSSProperties = {
+  minHeight: 58,
+  gridTemplateColumns: 'minmax(0, 1fr)',
+  alignItems: 'center',
+  gap: 3,
+  textAlign: 'left'
+}
+
+const roleNameStyle: CSSProperties = {
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  fontWeight: 700
+}
+
+const roleDescriptionStyle: CSSProperties = {
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  color: 'var(--hesper-color-text-muted, #9aa5ce)',
+  fontSize: 12,
+  lineHeight: '16px'
 }
 
 const toolTextColumnStyle: CSSProperties = {

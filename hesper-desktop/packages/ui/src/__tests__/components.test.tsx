@@ -191,6 +191,48 @@ describe('ui components', () => {
     expect(onSelectTool).toHaveBeenCalledTimes(1)
   })
 
+  it('renders role list rows and create role action', async () => {
+    const user = userEvent.setup()
+    const onSelectRole = vi.fn()
+    const onCreateRole = vi.fn()
+
+    render(
+      <AppShell
+        sessions={[]}
+        activeSection="roles"
+        title="角色"
+        roles={[
+          { id: 'role-ops', name: '运维助手', description: '执行命令' },
+          { id: 'role-search', name: '搜索专家', description: '搜索资料' }
+        ]}
+        activeRoleId="role-ops"
+        onSelectRole={onSelectRole}
+        onCreateRole={onCreateRole}
+      >
+        <div>Role detail</div>
+      </AppShell>
+    )
+
+    expect(screen.getByRole('button', { name: /运维助手/ })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByText('执行命令')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /搜索专家/ }))
+    expect(onSelectRole).toHaveBeenCalledWith('role-search')
+
+    await user.click(screen.getByRole('button', { name: '新建角色' }))
+    expect(onCreateRole).toHaveBeenCalledTimes(1)
+  })
+
+  it('renders empty role list state', () => {
+    render(
+      <AppShell sessions={[]} activeSection="roles" title="角色" roles={[]}>
+        <div>Role detail</div>
+      </AppShell>
+    )
+
+    expect(screen.getByText('暂无角色')).toBeInTheDocument()
+  })
+
   it('shows dynamic single-unit relative update times in session rows', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-06-10T03:00:59.000Z'))
