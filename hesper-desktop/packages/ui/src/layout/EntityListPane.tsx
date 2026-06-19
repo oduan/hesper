@@ -9,7 +9,7 @@ type ToolListItem = ToolDefinition & { enabled: boolean }
 export type RoleListItem = {
   id: string
   name: string
-  description: string
+  description?: string
 }
 
 export type EntityListPaneProps = {
@@ -327,18 +327,19 @@ export function EntityListPane({
             <ul aria-label="角色列表" className="hesper-theme-scrollbar" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 4, overflow: 'auto', minHeight: 0 }}>
               {roles.map((role) => {
                 const isActive = role.id === activeRoleId
+                const roleDescription = role.description || '暂无简介'
                 return (
                   <li key={role.id}>
                     <button
                       type="button"
                       className={`hesper-list-row${isActive ? ' is-active' : ''}`}
                       aria-current={isActive ? 'page' : undefined}
-                      aria-label={`${role.name} ${role.description}`.trim()}
+                      aria-label={`${role.name} ${roleDescription}`.trim()}
                       onClick={() => onSelectRole?.(role.id)}
                       style={roleRowStyle}
                     >
                       <span style={roleNameStyle}>{role.name}</span>
-                      <span style={roleDescriptionStyle}>{role.description || '暂无简介'}</span>
+                      <span style={roleDescriptionStyle}>{roleDescription}</span>
                     </button>
                   </li>
                 )

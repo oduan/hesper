@@ -223,6 +223,31 @@ describe('ui components', () => {
     expect(onCreateRole).toHaveBeenCalledTimes(1)
   })
 
+  it('renders fallback description for roles without description', async () => {
+    const user = userEvent.setup()
+    const onSelectRole = vi.fn()
+
+    render(
+      <AppShell
+        sessions={[]}
+        activeSection="roles"
+        title="角色"
+        roles={[{ id: 'role-fallback', name: '整理助手' }]}
+        activeRoleId="role-fallback"
+        onSelectRole={onSelectRole}
+      >
+        <div>Role detail</div>
+      </AppShell>
+    )
+
+    expect(screen.getByText('暂无简介')).toBeInTheDocument()
+    const fallbackRoleRow = screen.getByRole('button', { name: '整理助手 暂无简介' })
+    expect(fallbackRoleRow).toHaveAttribute('aria-current', 'page')
+
+    await user.click(fallbackRoleRow)
+    expect(onSelectRole).toHaveBeenCalledWith('role-fallback')
+  })
+
   it('renders empty role list state', () => {
     render(
       <AppShell sessions={[]} activeSection="roles" title="角色" roles={[]}>
