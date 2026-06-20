@@ -1,4 +1,4 @@
-import type { CredentialVaultCodec } from '@hesper/app-core'
+import { createModelProviderService, type CredentialVaultCodec } from '@hesper/app-core'
 import { createInMemoryPersistence } from '@hesper/persistence'
 import { describe, expect, it, vi } from 'vitest'
 import { registerIpcHandlers } from '../electron/ipc-handlers'
@@ -1063,6 +1063,79 @@ describe('registerIpcHandlers', () => {
       )
     ).rejects.toThrow(/untrusted|trusted|authorization/i)
     expect(openExternal).not.toHaveBeenCalled()
+  })
+
+  it('saves Codex OAuth connections through IPC and persists the provider', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock', credentialCodec: createMockCredentialCodec() })
+    const oauthGateway = {
+      startAuthorization: vi.fn(async () => ({
+        sessionId: 'oauth-session-save',
+        authorizationUrl: 'https://auth.craft.do/oauth/openai-codex?state=oauth-session-save'
+      })),
+      getAuthorizationStatus: vi.fn(async () => ({ status: 'authorized' as const, message: '授权成功' })),
+      consumeAuthorization: vi.fn(async () => ({
+        accessToken: 'codex-oauth-access-token',
+        models: [
+          { id: 'pi/gpt-5.5', modelName: 'gpt-5.5', displayName: 'GPT-5.5', capabilities: ['streaming', 'toolCalls', 'reasoning'] as any, contextWindow: 272000 }
+        ],
+        defaultModelId: 'pi/gpt-5.5'
+      }))
+    }
+    container.modelProviderService = createModelProviderService({
+      persistence,
+      credentialVaultService: container.credentialVaultService,
+      now: () => '2026-06-21T00:37:00.000Z',
+      oauthGateway
+    })
+    const savePersistence = vi.fn(async () => {})
+    const openExternal = vi.fn(async (_url: string) => {})
+    const handles = new Map<string, (event: any, ...args: any[]) => Promise<unknown> | unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (event: any, ...args: any[]) => Promise<unknown> | unknown) => {
+        handles.set(channel, handler)
+      }),
+      removeHandler: vi.fn()
+    }
+    const dialog = {
+      showOpenDialog: vi.fn(async () => ({ canceled: false, filePaths: ['C:/workspace'] }))
+    }
+
+    registerIpcHandlers({ ipcMain, dialog, container, savePersistence, openExternal })
+
+    const started = await handles.get(ipcChannels.providersStartOAuthAuthorization)?.(
+      { sender: { id: 1 } },
+      { provider: 'openai-codex', connectionName: 'ChatGPT Codex' }
+    ) as { sessionId: string }
+    const saved = await handles.get(ipcChannels.providersSaveOAuthConnection)?.(
+      { sender: { id: 1 } },
+      { sessionId: started.sessionId, connectionName: 'ChatGPT Codex' }
+    )
+
+    expect(oauthGateway.startAuthorization).toHaveBeenCalledWith({ provider: 'openai-codex', connectionName: 'ChatGPT Codex' })
+    expect(oauthGateway.consumeAuthorization).toHaveBeenCalledWith({ sessionId: 'oauth-session-save' })
+    expect(openExternal).toHaveBeenCalledWith('https://auth.craft.do/oauth/openai-codex?state=oauth-session-save')
+    expect(saved).toMatchObject({
+      id: 'chatgpt-codex',
+      name: 'ChatGPT Codex',
+      kind: 'pi',
+      authType: 'oauth',
+      piAuthProvider: 'openai-codex',
+      enabled: true,
+      defaultModelId: 'pi/gpt-5.5',
+      hasApiKey: true
+    })
+    await expect(container.modelProviderService.getProvider('chatgpt-codex')).resolves.toMatchObject({
+      id: 'chatgpt-codex',
+      kind: 'pi',
+      authType: 'oauth',
+      piAuthProvider: 'openai-codex',
+      hasApiKey: true
+    })
+    await expect(container.modelProviderService.listModels('chatgpt-codex')).resolves.toEqual([
+      expect.objectContaining({ id: 'pi/gpt-5.5', providerId: 'chatgpt-codex' })
+    ])
+    expect(savePersistence).toHaveBeenCalledTimes(1)
   })
 
   it('rejects unknown provider/model IPC fields at the boundary', async () => {
