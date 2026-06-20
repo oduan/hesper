@@ -353,7 +353,7 @@ effectiveAllowedToolIds =
 
 ### count 与 depth
 
-- `maxWorkerAgentsPerRun` 默认 10，按 parent run 统计。
+- `maxWorkerAgentsPerRun` 默认 64，按 parent run 统计。
 - 主 Agent run depth 为 0。
 - Worker child run depth 为 `parent.depth + 1`。
 - 第一版不开放递归，但仍写入 depth，为未来准备。
