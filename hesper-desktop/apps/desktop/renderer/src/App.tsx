@@ -149,7 +149,6 @@ function AppContent() {
   const [roles, setRoles] = useState<ManagedRoleDto[]>([])
   const [rolesError, setRolesError] = useState<string>()
   const [activeRoleId, setActiveRoleId] = useState<string>()
-  const [creatingRole, setCreatingRole] = useState(false)
   const [rolesPending, setRolesPending] = useState(false)
   const [rolesLoading, setRolesLoading] = useState(true)
   const resolvedThemeMode = useResolvedThemeMode(appSettings.themeMode)
@@ -171,7 +170,7 @@ function AppContent() {
     ? state.sessions.find((session) => session.id === state.activeSessionId)?.unreadCompletedAt
     : undefined
   const activeTool = tools.find((tool) => tool.id === activeToolId) ?? tools[0]
-  const activeRole = creatingRole ? undefined : roles.find((role) => role.id === activeRoleId) ?? roles[0]
+  const activeRole = roles.find((role) => role.id === activeRoleId) ?? roles[0]
   const activeToolCredentialStatus = activeTool ? toolCredentialStatuses[activeTool.id] : undefined
   const pendingToolIdList = useMemo(() => [...pendingToolIds], [pendingToolIds])
 
@@ -339,7 +338,6 @@ function AppContent() {
   }, [state.activeSection])
 
   useEffect(() => {
-    if (creatingRole) return
     if (roles.length === 0) {
       setActiveRoleId(undefined)
       return
@@ -347,7 +345,7 @@ function AppContent() {
     if (!activeRoleId || !roles.some((role) => role.id === activeRoleId)) {
       setActiveRoleId(roles[0]!.id)
     }
-  }, [activeRoleId, creatingRole, roles])
+  }, [activeRoleId, roles])
 
   useEffect(() => {
     const tool = activeTool
@@ -666,27 +664,19 @@ function AppContent() {
     invalidateRolesRequests()
     setRolesError(undefined)
     try {
-      const savedRole = creatingRole
-        ? await hesperApi.roles.create({
-            name: role.name,
-            description: role.description,
-            systemPrompt: role.systemPrompt,
-            defaultToolIds: role.defaultToolIds
-          })
-        : await hesperApi.roles.update({
-            id: role.id,
-            name: role.name,
-            description: role.description,
-            systemPrompt: role.systemPrompt,
-            defaultToolIds: role.defaultToolIds
-          })
+      const savedRole = await hesperApi.roles.update({
+        id: role.id,
+        name: role.name,
+        description: role.description,
+        systemPrompt: role.systemPrompt,
+        defaultToolIds: role.defaultToolIds
+      })
       const result = await loadRoles()
       if (result.applied && !('error' in result)) {
         setRoles(mergeSavedRole(result.loadedRoles, savedRole))
       } else {
         setRoles((current) => mergeSavedRole(current, savedRole))
       }
-      setCreatingRole(false)
       setActiveRoleId(savedRole.id)
     } catch (error) {
       setRolesError(error instanceof Error ? error.message : '未知角色保存错误')
@@ -706,7 +696,6 @@ function AppContent() {
         ? result.loadedRoles
         : roles.filter((role) => role.id !== roleId)
       setRoles(nextRoles)
-      setCreatingRole(false)
       setActiveRoleId(nextRoles[0]?.id)
     } catch (error) {
       setRolesError(error instanceof Error ? error.message : '未知角色删除错误')
@@ -898,14 +887,7 @@ function AppContent() {
       onSelectRole={(roleId) => {
         if (rolesLoading || rolesPending) return
         setRolesError(undefined)
-        setCreatingRole(false)
         setActiveRoleId(roleId)
-      }}
-      onCreateRole={() => {
-        if (rolesLoading || rolesPending) return
-        setRolesError(undefined)
-        setCreatingRole(true)
-        setActiveRoleId(undefined)
       }}
       onSelectSession={(sessionId) => {
         dispatch({ type: 'section.selected', section: 'sessions' })
@@ -936,23 +918,10 @@ function AppContent() {
           <RolesPanel
             roles={roles}
             {...(activeRole ? { selectedRole: activeRole } : {})}
-            creating={creatingRole}
             tools={tools}
             pending={rolesPending || rolesLoading}
             loading={rolesLoading}
             {...(rolesError ? { error: rolesError } : {})}
-            onCreateDraft={() => {
-              if (rolesLoading || rolesPending) return
-              setRolesError(undefined)
-              setCreatingRole(true)
-              setActiveRoleId(undefined)
-            }}
-            onCancelDraft={() => {
-              if (rolesLoading || rolesPending) return
-              setRolesError(undefined)
-              setCreatingRole(false)
-              setActiveRoleId(roles[0]?.id)
-            }}
             onSave={(role) => { void saveRole(role) }}
             onDelete={(roleId) => { void deleteRole(roleId) }}
           />

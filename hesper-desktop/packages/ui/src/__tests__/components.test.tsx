@@ -191,10 +191,9 @@ describe('ui components', () => {
     expect(onSelectTool).toHaveBeenCalledTimes(1)
   })
 
-  it('renders role list rows and create role action', async () => {
+  it('renders role list rows without a create role action', async () => {
     const user = userEvent.setup()
     const onSelectRole = vi.fn()
-    const onCreateRole = vi.fn()
 
     render(
       <AppShell
@@ -207,7 +206,6 @@ describe('ui components', () => {
         ]}
         activeRoleId="role-ops"
         onSelectRole={onSelectRole}
-        onCreateRole={onCreateRole}
       >
         <div>Role detail</div>
       </AppShell>
@@ -215,12 +213,10 @@ describe('ui components', () => {
 
     expect(screen.getByRole('button', { name: /运维助手/ })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByText('执行命令')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '新建角色' })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /搜索专家/ }))
     expect(onSelectRole).toHaveBeenCalledWith('role-search')
-
-    await user.click(screen.getByRole('button', { name: '新建角色' }))
-    expect(onCreateRole).toHaveBeenCalledTimes(1)
   })
 
   it('renders fallback description for roles without description', async () => {

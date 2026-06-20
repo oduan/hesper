@@ -28,7 +28,6 @@ export type EntityListPaneProps = {
   onSelectTool?: (toolId: string) => void
   onToggleToolEnabled?: (toolId: string, enabled: boolean) => void
   onSelectRole?: (roleId: string) => void
-  onCreateRole?: () => void
   onSelectSettingsCategory?: (category: 'ai' | 'appearance') => void
   onRenameSession?: (sessionId: string, title: string) => void
   onRegenerateSessionTitle?: (sessionId: string, sessionIds?: string[]) => void
@@ -108,7 +107,6 @@ export function EntityListPane({
   onSelectTool,
   onToggleToolEnabled,
   onSelectRole,
-  onCreateRole,
   onSelectSettingsCategory,
   onRenameSession,
   onRegenerateSessionTitle,
@@ -321,8 +319,7 @@ export function EntityListPane({
           <div style={{ margin: 'auto', color: darkTheme.color.textMuted, fontSize: darkTheme.typography.body, textAlign: 'center' }}>暂无会话</div>
         )
       ) : activeSection === 'roles' ? (
-        <div style={{ display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr)', gap: 12, minHeight: 0 }}>
-          <button type="button" onClick={onCreateRole} style={newRoleButtonStyle}>新建角色</button>
+        <div style={{ display: 'grid', minHeight: 0 }}>
           {roles.length > 0 ? (
             <ul aria-label="角色列表" className="hesper-theme-scrollbar" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 4, overflow: 'auto', minHeight: 0 }}>
               {roles.map((role) => {
@@ -482,17 +479,6 @@ const toolRowStyle: CSSProperties = {
   gridTemplateColumns: 'minmax(0, 1fr) auto',
   alignItems: 'center',
   columnGap: 10
-}
-
-const newRoleButtonStyle: CSSProperties = {
-  minHeight: 36,
-  border: `1px solid ${darkTheme.color.border}`,
-  borderRadius: darkTheme.radius.md,
-  background: darkTheme.color.surfaceMuted,
-  color: darkTheme.color.text,
-  fontSize: darkTheme.typography.body,
-  fontWeight: 700,
-  cursor: 'pointer'
 }
 
 const roleRowStyle: CSSProperties = {

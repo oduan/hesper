@@ -4,13 +4,10 @@ import type { ManagedRoleDto, ToolDto } from '../../electron/ipc-contract'
 type RolesPanelProps = {
   roles: ManagedRoleDto[]
   selectedRole?: ManagedRoleDto
-  creating?: boolean
   tools: ToolDto[]
   pending?: boolean
   loading?: boolean
   error?: string
-  onCreateDraft: () => void
-  onCancelDraft?: () => void
   onSave?: (role: ManagedRoleDto) => void
   onDelete?: (roleId: string) => void
 }
@@ -53,33 +50,27 @@ function roleDraftChanged(draft: ManagedRoleDto, selectedRole: ManagedRoleDto | 
 export function RolesPanel({
   roles,
   selectedRole,
-  creating = false,
   tools,
   pending = false,
   loading = false,
   error,
-  onCreateDraft,
-  onCancelDraft,
   onSave,
   onDelete
 }: RolesPanelProps) {
   const [draft, setDraft] = useState<ManagedRoleDto>(() => selectedRole ? cloneRole(selectedRole) : emptyDraft())
-  const isExistingRole = Boolean(selectedRole && !creating)
-  const canEdit = creating || Boolean(selectedRole)
+  const isExistingRole = Boolean(selectedRole)
+  const canEdit = Boolean(selectedRole)
   const trimmedName = draft.name.trim()
-  const hasDraftChanges = creating || roleDraftChanged(draft, selectedRole)
+  const hasDraftChanges = roleDraftChanged(draft, selectedRole)
   const canSave = Boolean(trimmedName) && !pending && hasDraftChanges
 
   useEffect(() => {
-    if (selectedRole && !creating) {
+    if (selectedRole) {
       setDraft(cloneRole(selectedRole))
       return
     }
-
-    if (creating) {
-      setDraft(emptyDraft())
-    }
-  }, [creating, selectedRole])
+    setDraft(emptyDraft())
+  }, [selectedRole])
 
   const updateField = (field: 'name' | 'description' | 'systemPrompt', value: string) => {
     setDraft((current) => ({ ...current, [field]: value }))
@@ -128,12 +119,9 @@ export function RolesPanel({
       <section aria-label="角色管理" style={emptyStateStyle}>
         <div>
           <h2 style={emptyTitleStyle}>暂无角色</h2>
-          <p style={mutedTextStyle}>创建角色后，可以在这里维护名称、简介、提示词和默认工具。</p>
+          <p style={mutedTextStyle}>请让 Agent 创建角色后，再在这里维护名称、简介、提示词和默认工具。</p>
         </div>
         {error ? <p role="alert" style={errorStyle}>{error}</p> : null}
-        <button type="button" onClick={onCreateDraft} disabled={pending} style={primaryButtonStyle}>
-          创建第一个角色
-        </button>
       </section>
     )
   }
@@ -142,10 +130,7 @@ export function RolesPanel({
     return (
       <section aria-label="角色管理" style={emptyStateStyle}>
         {error ? <p role="alert" style={errorStyle}>{error}</p> : null}
-        <p style={mutedTextStyle}>请选择一个角色，或新建角色开始编辑。</p>
-        <button type="button" onClick={onCreateDraft} disabled={pending} style={primaryButtonStyle}>
-          新建角色
-        </button>
+        <p style={mutedTextStyle}>请选择一个角色；新角色请通过 Agent 创建。</p>
       </section>
     )
   }
@@ -154,14 +139,9 @@ export function RolesPanel({
     <section aria-label="角色管理" style={panelStyle}>
       <header style={headerStyle}>
         <div>
-          <h2 style={titleStyle}>{creating ? '创建角色' : '编辑角色'}</h2>
+          <h2 style={titleStyle}>编辑角色</h2>
           <p style={mutedTextStyle}>角色仅用于管理预设内容；当前不会影响会话运行逻辑。</p>
         </div>
-        {creating && onCancelDraft ? (
-          <button type="button" onClick={onCancelDraft} disabled={pending} style={secondaryButtonStyle}>
-            取消
-          </button>
-        ) : null}
       </header>
 
       {error ? <p role="alert" style={errorStyle}>{error}</p> : null}
@@ -231,7 +211,7 @@ export function RolesPanel({
           </button>
         ) : <span />}
         <button type="button" onClick={saveDraft} disabled={!canSave} style={canSave ? primaryButtonStyle : disabledButtonStyle}>
-          {creating ? '创建角色' : '保存修改'}
+          保存修改
         </button>
       </footer>
     </section>
@@ -400,13 +380,6 @@ const disabledButtonStyle: CSSProperties = {
   background: 'var(--hesper-color-surface-muted, #24283b)',
   color: 'var(--hesper-color-text-muted, #737aa2)',
   cursor: 'not-allowed'
-}
-
-const secondaryButtonStyle: CSSProperties = {
-  ...buttonBaseStyle,
-  border: '1px solid var(--hesper-color-border, #414868)',
-  background: 'transparent',
-  color: 'var(--hesper-color-text, #c0caf5)'
 }
 
 const dangerButtonStyle: CSSProperties = {

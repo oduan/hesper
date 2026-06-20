@@ -28,7 +28,6 @@ export type AppShellProps = {
   onSelectTool?: (toolId: string) => void
   onToggleToolEnabled?: (toolId: string, enabled: boolean) => void
   onSelectRole?: (roleId: string) => void
-  onCreateRole?: () => void
   onSelectSettingsCategory?: (category: 'ai' | 'appearance') => void
   onRenameSession?: (sessionId: string, title: string) => void
   onRegenerateSessionTitle?: (sessionId: string, sessionIds?: string[]) => void
@@ -59,7 +58,6 @@ export function AppShell({
   onSelectTool,
   onToggleToolEnabled,
   onSelectRole,
-  onCreateRole,
   onSelectSettingsCategory,
   onRenameSession,
   onRegenerateSessionTitle,
@@ -124,7 +122,6 @@ export function AppShell({
           {...(onSelectTool ? { onSelectTool } : {})}
           {...(onToggleToolEnabled ? { onToggleToolEnabled } : {})}
           {...(onSelectRole ? { onSelectRole } : {})}
-          {...(onCreateRole ? { onCreateRole } : {})}
           {...(onSelectSettingsCategory ? { onSelectSettingsCategory } : {})}
           {...(onRenameSession ? { onRenameSession } : {})}
           {...(onRegenerateSessionTitle ? { onRegenerateSessionTitle } : {})}

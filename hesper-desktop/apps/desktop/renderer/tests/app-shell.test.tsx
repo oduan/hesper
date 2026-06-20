@@ -425,7 +425,7 @@ describe('renderer App', () => {
     expect(screen.getByLabelText('角色名称')).toHaveValue('Agent 创建的角色')
   })
 
-  it('blocks role creation until the initial roles load completes', async () => {
+  it('does not expose role creation while or after roles load', async () => {
     const user = userEvent.setup()
     const initialRoles = createDeferred<any[]>()
     listRoles.mockReturnValueOnce(initialRoles.promise as any)
@@ -436,9 +436,7 @@ describe('renderer App', () => {
 
     expect(screen.getByText('角色加载中…')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '创建第一个角色' })).not.toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: '新建角色' }))
-
+    expect(screen.queryByRole('button', { name: '新建角色' })).not.toBeInTheDocument()
     expect(screen.queryByLabelText('角色名称')).not.toBeInTheDocument()
 
     await act(async () => {
@@ -448,69 +446,12 @@ describe('renderer App', () => {
 
     await waitFor(() => expect(screen.queryByText('角色加载中…')).not.toBeInTheDocument())
     expect((await screen.findAllByText('暂无角色')).length).toBeGreaterThan(0)
-    expect(screen.getByRole('button', { name: '创建第一个角色' })).toBeInTheDocument()
+    expect(screen.getByText('请让 Agent 创建角色后，再在这里维护名称、简介、提示词和默认工具。')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '创建第一个角色' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '新建角色' })).not.toBeInTheDocument()
+    expect(createRole).not.toHaveBeenCalled()
   })
 
-  it('creates a role from the roles management section and refreshes the list', async () => {
-    const user = userEvent.setup()
-    const createdRole = {
-      id: 'role-created',
-      name: '部署助手',
-      description: '协助部署',
-      systemPrompt: '你是部署助手。',
-      defaultToolIds: ['filesystem.read-file']
-    }
-    listRoles.mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([createdRole] as any)
-    createRole.mockResolvedValueOnce(createdRole)
-
-    render(<App />)
-
-    await user.click(screen.getByRole('button', { name: '角色' }))
-    await user.click(await screen.findByRole('button', { name: '创建第一个角色' }))
-    await user.type(screen.getByLabelText('角色名称'), '部署助手')
-    await user.type(screen.getByLabelText('角色简介'), '协助部署')
-    await user.type(screen.getByLabelText('完整提示词'), '你是部署助手。')
-    await user.click(screen.getByLabelText('Read File'))
-    await user.click(screen.getByRole('button', { name: '创建角色' }))
-
-    await waitFor(() => expect(createRole).toHaveBeenCalledWith({
-      name: '部署助手',
-      description: '协助部署',
-      systemPrompt: '你是部署助手。',
-      defaultToolIds: ['filesystem.read-file']
-    }))
-    expect(await screen.findByRole('button', { name: /部署助手/ })).toBeInTheDocument()
-    expect(screen.getByLabelText('角色名称')).toHaveValue('部署助手')
-  })
-
-  it('completes role creation locally when refresh fails after create succeeds', async () => {
-    const user = userEvent.setup()
-    const createdRole = {
-      id: 'role-created',
-      name: '部署助手',
-      description: '协助部署',
-      systemPrompt: '你是部署助手。',
-      defaultToolIds: ['filesystem.read-file']
-    }
-    listRoles.mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockRejectedValueOnce(new Error('refresh failed'))
-    createRole.mockResolvedValueOnce(createdRole)
-
-    render(<App />)
-
-    await user.click(screen.getByRole('button', { name: '角色' }))
-    await user.click(await screen.findByRole('button', { name: '创建第一个角色' }))
-    await user.type(screen.getByLabelText('角色名称'), '部署助手')
-    await user.type(screen.getByLabelText('角色简介'), '协助部署')
-    await user.type(screen.getByLabelText('完整提示词'), '你是部署助手。')
-    await user.click(screen.getByLabelText('Read File'))
-    await user.click(screen.getByRole('button', { name: '创建角色' }))
-
-    await waitFor(() => expect(createRole).toHaveBeenCalled())
-    expect(await screen.findByRole('button', { name: /部署助手/ })).toBeInTheDocument()
-    expect(screen.getByLabelText('角色名称')).toHaveValue('部署助手')
-    expect(screen.getByRole('button', { name: '保存修改' })).toBeInTheDocument()
-    expect(screen.getByRole('alert')).toHaveTextContent('refresh failed')
-  })
 
   it('updates an existing role and keeps it active after refresh', async () => {
     const user = userEvent.setup()
@@ -599,11 +540,13 @@ describe('renderer App', () => {
 
     await waitFor(() => expect(deleteRole).toHaveBeenCalledWith('role-1'))
     expect(screen.queryByRole('button', { name: /运维助手/ })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '创建第一个角色' })).toBeInTheDocument()
+    expect(screen.getByText('请让 Agent 创建角色后，再在这里维护名称、简介、提示词和默认工具。')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '创建第一个角色' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '新建角色' })).not.toBeInTheDocument()
     expect(screen.getByRole('alert')).toHaveTextContent('refresh failed')
   })
 
-  it('ignores role list selection and creation while a role mutation is pending', async () => {
+  it('ignores role list selection while a role mutation is pending', async () => {
     const user = userEvent.setup()
     const updateDeferred = createDeferred<any>()
     const firstRole = {
@@ -632,7 +575,7 @@ describe('renderer App', () => {
     await waitFor(() => expect(updateRole).toHaveBeenCalled())
 
     await user.click(screen.getByRole('button', { name: /搜索专家/ }))
-    await user.click(screen.getByRole('button', { name: '新建角色' }))
+    expect(screen.queryByRole('button', { name: '新建角色' })).not.toBeInTheDocument()
 
     expect(screen.getByLabelText('角色名称')).toHaveValue('运维助手')
     expect(screen.getByRole('button', { name: '保存修改' })).toBeInTheDocument()
@@ -643,7 +586,7 @@ describe('renderer App', () => {
     await waitFor(() => expect(screen.getByLabelText('角色名称')).toHaveValue('运维助手'))
   })
 
-  it('shows loaded roles after a pending initial load blocks creation attempts', async () => {
+  it('shows loaded roles after a pending initial load without exposing creation', async () => {
     const user = userEvent.setup()
     const initialRoles = createDeferred<any[]>()
     const loadedRole = {
@@ -659,8 +602,7 @@ describe('renderer App', () => {
 
     await user.click(screen.getByRole('button', { name: '角色' }))
     expect(screen.getByText('角色加载中…')).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: '新建角色' }))
+    expect(screen.queryByRole('button', { name: '新建角色' })).not.toBeInTheDocument()
     expect(screen.queryByLabelText('角色名称')).not.toBeInTheDocument()
 
     await act(async () => {
@@ -673,33 +615,18 @@ describe('renderer App', () => {
     expect(createRole).not.toHaveBeenCalled()
   })
 
-  it('allows role creation after the initial roles load fails', async () => {
+  it('does not expose role creation after the initial roles load fails', async () => {
     const user = userEvent.setup()
-    const newRole = {
-      id: 'role-created',
-      name: '恢复创建',
-      description: '',
-      systemPrompt: '',
-      defaultToolIds: []
-    }
-    listRoles.mockRejectedValueOnce(new Error('initial failed')).mockRejectedValueOnce(new Error('initial failed')).mockResolvedValueOnce([newRole] as any)
-    createRole.mockResolvedValueOnce(newRole)
+    listRoles.mockRejectedValueOnce(new Error('initial failed')).mockRejectedValueOnce(new Error('initial failed'))
 
     render(<App />)
 
     await user.click(screen.getByRole('button', { name: '角色' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('initial failed')
-    await user.click(screen.getByRole('button', { name: '创建第一个角色' }))
-    await user.type(screen.getByLabelText('角色名称'), '恢复创建')
-    await user.click(screen.getByRole('button', { name: '创建角色' }))
-
-    await waitFor(() => expect(createRole).toHaveBeenCalledWith({
-      name: '恢复创建',
-      description: '',
-      systemPrompt: '',
-      defaultToolIds: []
-    }))
-    expect(await screen.findByRole('button', { name: /恢复创建/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '创建第一个角色' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '新建角色' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '创建角色' })).not.toBeInTheDocument()
+    expect(createRole).not.toHaveBeenCalled()
   })
 
   it('manages API keys for credential-required tools from the tools detail panel', async () => {

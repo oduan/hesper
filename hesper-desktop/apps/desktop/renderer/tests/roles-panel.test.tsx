@@ -21,19 +21,19 @@ const role = {
 describe('RolesPanel', () => {
   afterEach(() => cleanup())
 
-  it('renders an empty state with create action', async () => {
-    const onCreateDraft = vi.fn()
-    render(<RolesPanel roles={[]} tools={tools} onCreateDraft={onCreateDraft} />)
+  it('renders an empty state without a create action', () => {
+    render(<RolesPanel roles={[]} tools={tools} />)
 
     expect(screen.getByText('暂无角色')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: '创建第一个角色' }))
-    expect(onCreateDraft).toHaveBeenCalledTimes(1)
+    expect(screen.getByText('请让 Agent 创建角色后，再在这里维护名称、简介、提示词和默认工具。')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '创建第一个角色' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '新建角色' })).not.toBeInTheDocument()
   })
 
   it('disables save for unchanged existing roles', async () => {
     const user = userEvent.setup()
     const onSave = vi.fn()
-    render(<RolesPanel roles={[role]} selectedRole={role} tools={tools} onCreateDraft={vi.fn()} onSave={onSave} onDelete={vi.fn()} />)
+    render(<RolesPanel roles={[role]} selectedRole={role} tools={tools} onSave={onSave} onDelete={vi.fn()} />)
 
     const saveButton = screen.getByRole('button', { name: '保存修改' })
     expect(saveButton).toBeDisabled()
@@ -47,7 +47,7 @@ describe('RolesPanel', () => {
   it('edits and saves an existing role', async () => {
     const user = userEvent.setup()
     const onSave = vi.fn()
-    render(<RolesPanel roles={[role]} selectedRole={role} tools={tools} onCreateDraft={vi.fn()} onSave={onSave} onDelete={vi.fn()} />)
+    render(<RolesPanel roles={[role]} selectedRole={role} tools={tools} onSave={onSave} onDelete={vi.fn()} />)
 
     await user.clear(screen.getByLabelText('角色名称'))
     await user.type(screen.getByLabelText('角色名称'), '更新角色')
@@ -67,7 +67,7 @@ describe('RolesPanel', () => {
     const user = userEvent.setup()
     const onDelete = vi.fn()
     vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
-    render(<RolesPanel roles={[role]} selectedRole={role} tools={tools} onCreateDraft={vi.fn()} onSave={vi.fn()} onDelete={onDelete} />)
+    render(<RolesPanel roles={[role]} selectedRole={role} tools={tools} onSave={vi.fn()} onDelete={onDelete} />)
 
     const deleteButton = screen.getByRole('button', { name: '删除角色' })
     expect(deleteButton).toHaveStyle({

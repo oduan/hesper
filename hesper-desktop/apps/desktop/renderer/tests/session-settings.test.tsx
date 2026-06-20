@@ -219,7 +219,9 @@ describe('session settings and restore flow', () => {
 
     await user.click(screen.getByRole('button', { name: '角色' }))
     expect(screen.queryByText('Roles 即将支持')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '创建第一个角色' })).toBeInTheDocument()
+    expect(screen.getByText('请让 Agent 创建角色后，再在这里维护名称、简介、提示词和默认工具。')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '创建第一个角色' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '新建角色' })).not.toBeInTheDocument()
   })
 
   it('persists workspace and model changes, with output mode switching removed', async () => {
