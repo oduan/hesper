@@ -36,8 +36,15 @@ const knownProviderByKind: Partial<Record<ModelProviderKind, KnownProvider>> = {
   anthropic: 'anthropic'
 }
 
+const knownProviderByPiAuthProvider = {
+  'openai-codex': 'openai-codex'
+} satisfies Record<NonNullable<ModelProviderConfig['piAuthProvider']>, KnownProvider>
+
 function piKnownProvider(provider: ModelProviderConfig): KnownProvider | undefined {
-  return provider.kind === 'pi' ? provider.piAuthProvider as KnownProvider | undefined : knownProviderByKind[provider.kind]
+  if (provider.kind === 'pi') {
+    return provider.piAuthProvider ? knownProviderByPiAuthProvider[provider.piAuthProvider] : undefined
+  }
+  return knownProviderByKind[provider.kind]
 }
 
 const defaultCost = {
