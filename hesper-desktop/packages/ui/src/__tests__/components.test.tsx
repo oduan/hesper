@@ -513,6 +513,38 @@ describe('ui components', () => {
     expect(onModelChange).toHaveBeenCalledWith('gpt-4o')
   })
 
+  it('renders a stop button instead of send while the session is running', async () => {
+    const user = userEvent.setup()
+    const onSend = vi.fn()
+    const onStop = vi.fn()
+
+    render(<Composer workspacePath="C:/dev/hesper" modelId="mock/hesper-fast" onSend={onSend} running onStop={onStop} />)
+
+    expect(screen.queryByRole('button', { name: '发送' })).not.toBeInTheDocument()
+    const stopButton = screen.getByRole('button', { name: '停止' })
+    expect(stopButton).toBeEnabled()
+
+    await user.click(stopButton)
+
+    expect(onStop).toHaveBeenCalledTimes(1)
+    expect(onSend).not.toHaveBeenCalled()
+  })
+
+  it('uses controlled draft values when provided', async () => {
+    const user = userEvent.setup()
+    const onDraftChange = vi.fn()
+
+    const { rerender } = render(<Composer workspacePath="C:/dev/hesper" modelId="mock/hesper-fast" value="first draft" onDraftChange={onDraftChange} onSend={() => undefined} />)
+    const textarea = screen.getByPlaceholderText(/输入消息/)
+    expect(textarea).toHaveValue('first draft')
+
+    await user.type(textarea, '!')
+    expect(onDraftChange).toHaveBeenLastCalledWith('first draft!')
+
+    rerender(<Composer workspacePath="C:/dev/hesper" modelId="mock/hesper-fast" value="restored draft" onDraftChange={onDraftChange} onSend={() => undefined} />)
+    expect(textarea).toHaveValue('restored draft')
+  })
+
   it('handles each external send signal only once', async () => {
     const user = userEvent.setup()
     const onSend = vi.fn()

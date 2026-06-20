@@ -255,6 +255,47 @@ describe('app-store reducer', () => {
     ])
   })
 
+  it('marks cancelled runs terminal and ignores late started events', () => {
+    const runCreatedState = appReducer(initialAppState, {
+      type: 'agent.event',
+      event: {
+        type: 'run.created',
+        run: {
+          id: 'run-cancelled',
+          sessionId: 'session-1',
+          status: 'running',
+          modelId: 'mock/hesper-fast',
+          retryCount: 0,
+          maxRetries: 2
+        }
+      }
+    })
+    const deltaState = appReducer(runCreatedState, {
+      type: 'agent.event',
+      event: { type: 'message.delta', runId: 'run-cancelled', delta: 'partial' }
+    })
+    const cancelledState = appReducer(deltaState, {
+      type: 'agent.event',
+      event: { type: 'run.cancelled', runId: 'run-cancelled', endedAt: '2026-06-10T03:00:05.000Z' }
+    })
+
+    expect(cancelledState.runsById['run-cancelled']).toMatchObject({
+      status: 'cancelled',
+      endedAt: '2026-06-10T03:00:05.000Z'
+    })
+    expect(cancelledState.streamingByRun['run-cancelled']).toBeUndefined()
+
+    const lateStartedState = appReducer(cancelledState, {
+      type: 'agent.event',
+      event: { type: 'run.started', runId: 'run-cancelled', startedAt: '2026-06-10T03:00:06.000Z' }
+    })
+
+    expect(lateStartedState.runsById['run-cancelled']).toMatchObject({
+      status: 'cancelled',
+      endedAt: '2026-06-10T03:00:05.000Z'
+    })
+  })
+
   it('uses durable run.succeeded endedAt instead of assistant message timestamp for live timers', () => {
     const userCreatedAt = '2026-06-10T03:00:00.000Z'
     const durableEndedAt = '2026-06-10T03:00:05.000Z'

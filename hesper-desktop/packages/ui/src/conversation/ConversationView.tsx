@@ -23,7 +23,11 @@ export type ConversationViewProps = {
   modelId: string
   modelOptions?: string[]
   modelOptionGroups?: ModelOptionGroup[]
+  draftValue?: string
+  running?: boolean
+  onDraftChange?: (value: string) => void
   onSend: (content: string) => void
+  onStop?: () => void
   onSelectWorkspace?: () => void
   onModelChange?: (modelId: string) => void
   shortcutCommand?: ConversationShortcutCommand
@@ -185,7 +189,11 @@ export function ConversationView({
   modelId,
   modelOptions,
   modelOptionGroups,
+  draftValue,
+  running = false,
+  onDraftChange,
   onSend,
+  onStop,
   onSelectWorkspace,
   onModelChange,
   shortcutCommand
@@ -595,6 +603,10 @@ export function ConversationView({
           modelId={modelId}
           {...(modelOptions ? { modelOptions } : {})}
           {...(modelOptionGroups ? { modelOptionGroups } : {})}
+          {...(draftValue !== undefined ? { value: draftValue } : {})}
+          running={running}
+          {...(onDraftChange ? { onDraftChange } : {})}
+          {...(onStop ? { onStop } : {})}
           {...(onSelectWorkspace ? { onSelectWorkspace } : {})}
           {...(onModelChange ? { onModelChange } : {})}
           onSend={onSend}

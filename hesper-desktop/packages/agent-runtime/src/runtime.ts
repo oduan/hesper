@@ -60,6 +60,8 @@ export class AgentRuntime {
   private readonly sessionStates = new Map<string, SessionState>()
   private readonly enqueueChains = new Map<string, Promise<void>>()
   private readonly terminatedRuns = new Map<string, RunError>()
+  private readonly cancelledRuns = new Set<string>()
+  private readonly activeControllers = new Map<string, AbortController>()
 
   constructor(options: AgentRuntimeOptions) {
     this.persistence = options.persistence
@@ -152,6 +154,30 @@ export class AgentRuntime {
     return failedRun
   }
 
+  async cancelRun(runId: string): Promise<AgentRun | undefined> {
+    const existing = await this.persistence.runs.get(runId)
+    if (!existing) return undefined
+    if (existing.status === 'succeeded' || existing.status === 'failed' || existing.status === 'cancelled') {
+      return existing
+    }
+
+    this.cancelledRuns.add(runId)
+    for (const state of this.sessionStates.values()) {
+      state.queue = state.queue.filter((entry) => entry.run.id !== runId)
+    }
+
+    const cancelledRun = await this.persistCancelledRun(existing)
+    clearPiEventRunState(runId)
+    await this.emitAndPersist({ type: 'run.cancelled', runId, ...(cancelledRun.endedAt ? { endedAt: cancelledRun.endedAt } : {}) })
+    this.activeControllers.get(runId)?.abort()
+
+    if (!this.isActiveRun(runId)) {
+      this.cancelledRuns.delete(runId)
+    }
+
+    return cancelledRun
+  }
+
   private getSessionState(sessionId: string): SessionState {
     const existing = this.sessionStates.get(sessionId)
     if (existing) return existing
@@ -241,6 +267,27 @@ export class AgentRuntime {
     return failedRun
   }
 
+  private async persistCancelledRun(run: AgentRun): Promise<AgentRun> {
+    const cancelledRun: AgentRun = {
+      ...run,
+      status: 'cancelled',
+      endedAt: run.endedAt ?? nowIso()
+    }
+    await this.persistence.runs.save(cancelledRun)
+    return cancelledRun
+  }
+
+  private async applyCancellationIfNeeded(runId: string): Promise<boolean> {
+    if (!this.cancelledRuns.has(runId)) return false
+
+    const latest = await this.persistence.runs.get(runId)
+    if (latest && latest.status !== 'cancelled') {
+      await this.persistCancelledRun(latest)
+    }
+    clearPiEventRunState(runId)
+    return true
+  }
+
   private async applyTerminationIfNeeded(runId: string): Promise<boolean> {
     const error = this.terminatedRuns.get(runId)
     if (!error) return false
@@ -255,6 +302,10 @@ export class AgentRuntime {
 
   private async executeRun(run: AgentRun, prompt: string, systemPrompt?: string, enabledToolIds?: string[]): Promise<void> {
     try {
+      if (await this.applyCancellationIfNeeded(run.id) || await this.applyTerminationIfNeeded(run.id)) {
+        return
+      }
+
       const current: AgentRun = { ...run, status: 'running', startedAt: run.startedAt ?? nowIso() }
       await this.persistence.runs.save(current)
       await this.emitAndPersist({ type: 'run.started', runId: current.id, ...(current.startedAt ? { startedAt: current.startedAt } : {}) })
@@ -266,87 +317,97 @@ export class AgentRuntime {
         .sort(compareMessages)
 
       while (true) {
-        if (await this.applyTerminationIfNeeded(latestRun.id)) {
+        if (await this.applyCancellationIfNeeded(latestRun.id) || await this.applyTerminationIfNeeded(latestRun.id)) {
           return
         }
 
         const controller = new AbortController()
+        this.activeControllers.set(latestRun.id, controller)
         try {
-        await this.adapter.run(
-          {
-            runId: latestRun.id,
-            sessionId: latestRun.sessionId,
-            prompt,
-            modelId: latestRun.modelId,
-            ...(systemPrompt !== undefined ? { systemPrompt } : {}),
-            ...(enabledToolIds !== undefined ? { enabledToolIds } : {}),
-            ...(latestRun.workspacePath !== undefined ? { workspacePath: latestRun.workspacePath } : {}),
-            historyMessages,
-            signal: controller.signal
-          },
-          async (event) => this.handleAdapterEvent(event)
-        )
+          await this.adapter.run(
+            {
+              runId: latestRun.id,
+              sessionId: latestRun.sessionId,
+              prompt,
+              modelId: latestRun.modelId,
+              ...(systemPrompt !== undefined ? { systemPrompt } : {}),
+              ...(enabledToolIds !== undefined ? { enabledToolIds } : {}),
+              ...(latestRun.workspacePath !== undefined ? { workspacePath: latestRun.workspacePath } : {}),
+              historyMessages,
+              signal: controller.signal
+            },
+            async (event) => this.handleAdapterEvent(event)
+          )
 
-        if (await this.applyTerminationIfNeeded(latestRun.id)) {
-          return
-        }
+          if (await this.applyCancellationIfNeeded(latestRun.id) || await this.applyTerminationIfNeeded(latestRun.id)) {
+            return
+          }
 
-        latestRun = {
-          ...latestRun,
-          status: 'succeeded',
-          endedAt: nowIso()
-        } satisfies AgentRun
-        await this.persistence.runs.save(latestRun)
-        if (await this.applyTerminationIfNeeded(latestRun.id)) {
-          return
-        }
-        clearPiEventRunState(latestRun.id)
-        await this.emitAndPersist({ type: 'run.succeeded', runId: latestRun.id, ...(latestRun.endedAt ? { endedAt: latestRun.endedAt } : {}) })
-        return
-      } catch (error) {
-        const normalized = normalizeUnknownError(error)
-        if (await this.applyTerminationIfNeeded(latestRun.id)) {
-          return
-        }
-        if (isRetryableRunError(normalized, this.retryPolicy) && attempt < this.retryPolicy.maxRetries) {
-          const delayMs = getRetryDelayMs(this.retryPolicy, attempt)
-          attempt += 1
           latestRun = {
             ...latestRun,
-            retryCount: attempt
-          }
+            status: 'succeeded',
+            endedAt: nowIso()
+          } satisfies AgentRun
           await this.persistence.runs.save(latestRun)
-          await this.emitAndPersist({
-            type: 'run.retrying',
-            runId: latestRun.id,
-            retryCount: attempt,
-            nextRetryAt: new Date(Date.now() + delayMs).toISOString()
-          })
-          await sleep(delayMs)
-          continue
-        }
+          if (await this.applyCancellationIfNeeded(latestRun.id) || await this.applyTerminationIfNeeded(latestRun.id)) {
+            return
+          }
+          clearPiEventRunState(latestRun.id)
+          await this.emitAndPersist({ type: 'run.succeeded', runId: latestRun.id, ...(latestRun.endedAt ? { endedAt: latestRun.endedAt } : {}) })
+          return
+        } catch (error) {
+          const normalized = normalizeUnknownError(error)
+          if (await this.applyCancellationIfNeeded(latestRun.id) || await this.applyTerminationIfNeeded(latestRun.id)) {
+            return
+          }
+          if (isRetryableRunError(normalized, this.retryPolicy) && attempt < this.retryPolicy.maxRetries) {
+            const delayMs = getRetryDelayMs(this.retryPolicy, attempt)
+            attempt += 1
+            latestRun = {
+              ...latestRun,
+              retryCount: attempt
+            }
+            await this.persistence.runs.save(latestRun)
+            await this.emitAndPersist({
+              type: 'run.retrying',
+              runId: latestRun.id,
+              retryCount: attempt,
+              nextRetryAt: new Date(Date.now() + delayMs).toISOString()
+            })
+            await sleep(delayMs)
+            if (await this.applyCancellationIfNeeded(latestRun.id) || await this.applyTerminationIfNeeded(latestRun.id)) {
+              return
+            }
+            continue
+          }
 
-        latestRun = {
-          ...latestRun,
-          status: 'failed',
-          retryCount: attempt,
-          endedAt: nowIso(),
-          error: normalized
-        } satisfies AgentRun
-        await this.persistence.runs.save(latestRun)
-        clearPiEventRunState(latestRun.id)
-        await this.emitAndPersist({ type: 'run.failed', runId: latestRun.id, error: normalized, ...(latestRun.endedAt ? { endedAt: latestRun.endedAt } : {}) })
-        return
+          latestRun = {
+            ...latestRun,
+            status: 'failed',
+            retryCount: attempt,
+            endedAt: nowIso(),
+            error: normalized
+          } satisfies AgentRun
+          await this.persistence.runs.save(latestRun)
+          clearPiEventRunState(latestRun.id)
+          await this.emitAndPersist({ type: 'run.failed', runId: latestRun.id, error: normalized, ...(latestRun.endedAt ? { endedAt: latestRun.endedAt } : {}) })
+          return
+        } finally {
+          if (this.activeControllers.get(latestRun.id) === controller) {
+            this.activeControllers.delete(latestRun.id)
+          }
+        }
       }
-    }
     } finally {
       this.terminatedRuns.delete(run.id)
+      this.cancelledRuns.delete(run.id)
+      this.activeControllers.delete(run.id)
     }
   }
 
   private async handleAdapterEvent(event: AgentRuntimeEvent): Promise<void> {
     const eventRunId = runIdFromEvent(event)
-    if (eventRunId && this.terminatedRuns.has(eventRunId)) {
+    if (eventRunId && (this.terminatedRuns.has(eventRunId) || this.cancelledRuns.has(eventRunId))) {
       return
     }
     if (event.type === 'step.created' || event.type === 'step.updated') {

@@ -124,7 +124,7 @@ vi.mock('../src/ipc-client', () => ({
       setModel: vi.fn(),
       setOutputMode: vi.fn()
     },
-    agent: { enqueue: vi.fn(), onEvent },
+    agent: { enqueue: vi.fn(), stop: vi.fn(), onEvent },
     dialog: { selectDirectory: vi.fn() },
     settings: {
       get: getSettings,

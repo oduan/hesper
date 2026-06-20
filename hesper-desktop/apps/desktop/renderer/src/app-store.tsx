@@ -379,7 +379,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         }
         case 'run.started': {
           const currentRun = state.runsById[event.runId]
-          if (!currentRun) return state
+          if (!currentRun || currentRun.status === 'cancelled' || currentRun.status === 'failed' || currentRun.status === 'succeeded') return state
           return {
             ...state,
             runsById: {
@@ -396,7 +396,20 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             runsById: {
               ...state.runsById,
               [event.runId]: { ...currentRun, status: 'succeeded', ...(event.endedAt ? { endedAt: event.endedAt } : currentRun.endedAt ? { endedAt: currentRun.endedAt } : {}) }
-            }
+            },
+            streamingByRun: clearStreamingByRun(state.streamingByRun, event.runId)
+          }
+        }
+        case 'run.cancelled': {
+          const currentRun = state.runsById[event.runId]
+          if (!currentRun) return state
+          return {
+            ...state,
+            runsById: {
+              ...state.runsById,
+              [event.runId]: { ...currentRun, status: 'cancelled', ...(event.endedAt ? { endedAt: event.endedAt } : currentRun.endedAt ? { endedAt: currentRun.endedAt } : {}) }
+            },
+            streamingByRun: clearStreamingByRun(state.streamingByRun, event.runId)
           }
         }
       }

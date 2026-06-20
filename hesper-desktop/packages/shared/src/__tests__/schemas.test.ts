@@ -67,6 +67,12 @@ describe('shared schemas', () => {
       runId: 'run-1',
       endedAt: now
     })).toMatchObject({ type: 'run.succeeded', endedAt: now })
+
+    expect(agentRuntimeEventSchema.parse({
+      type: 'run.cancelled',
+      runId: 'run-1',
+      endedAt: now
+    })).toMatchObject({ type: 'run.cancelled', endedAt: now })
   })
 
   it('parses run.created events', () => {

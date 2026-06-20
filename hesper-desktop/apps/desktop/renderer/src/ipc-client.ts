@@ -141,6 +141,7 @@ export function createFallbackHesperApi(): HesperDesktopApi {
     },
     agent: {
       enqueue: async (_input: AgentEnqueueInput) => ({ runId: `run-fallback-${nextRunNumber++}` }),
+      stop: async (_runId: string) => undefined,
       subscribe: async () => ({ subscribed: true }),
       onEvent: () => () => undefined
     },

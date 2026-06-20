@@ -15,7 +15,7 @@ function createDeferred<T>() {
   return { promise, resolve, reject }
 }
 
-const { listSessions, createSession, updateTitle, deleteSession, generateTitle, markViewed, listRoles, createRole, updateRole, deleteRole, listMessages, listRuns, listSteps, enqueue, onEvent, getSettings, updateSettings, listProviders, listModels, listTools, setToolEnabled, toolCredentialStatus, saveToolApiKey, deleteToolApiKey, minimizeWindow, toggleMaximizeWindow, closeWindow } = vi.hoisted(() => ({
+const { listSessions, createSession, updateTitle, deleteSession, generateTitle, markViewed, listRoles, createRole, updateRole, deleteRole, listMessages, listRuns, listSteps, enqueue, stopRun, onEvent, getSettings, updateSettings, listProviders, listModels, listTools, setToolEnabled, toolCredentialStatus, saveToolApiKey, deleteToolApiKey, minimizeWindow, toggleMaximizeWindow, closeWindow } = vi.hoisted(() => ({
   listSessions: vi.fn(async () => []),
   createSession: vi.fn(async () => ({
     id: 'session-1',
@@ -65,6 +65,15 @@ const { listSessions, createSession, updateTitle, deleteSession, generateTitle, 
   listRuns: vi.fn(async (_sessionId?: string) => []),
   listSteps: vi.fn(async (_runId?: string) => []),
   enqueue: vi.fn(async () => ({ runId: 'run-1' })),
+  stopRun: vi.fn(async (runId: string) => ({
+    id: runId,
+    sessionId: 'session-1',
+    status: 'cancelled',
+    modelId: 'mock/hesper-fast',
+    retryCount: 0,
+    maxRetries: 5,
+    endedAt: '2026-06-10T03:00:05.000Z'
+  })),
   onEvent: vi.fn(() => () => undefined),
   getSettings: vi.fn(async () => ({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', fontSize: 14 })),
   updateSettings: vi.fn(async (input: Partial<{ defaultModelId: string; defaultOutputMode: 'markdown' | 'html'; themeMode: 'system' | 'light' | 'dark'; fontSize: number }>) => ({
@@ -154,7 +163,7 @@ vi.mock('../src/ipc-client', () => ({
       markViewed
     },
     conversation: { listMessages, listRuns, listSteps },
-    agent: { enqueue, onEvent },
+    agent: { enqueue, stop: stopRun, onEvent },
     dialog: { selectDirectory: vi.fn() },
     settings: { get: getSettings, update: updateSettings },
     providers: { list: listProviders },
@@ -199,6 +208,7 @@ describe('renderer App', () => {
     listRuns.mockReset()
     listSteps.mockReset()
     enqueue.mockReset()
+    stopRun.mockReset()
     onEvent.mockReset()
     getSettings.mockReset()
     updateSettings.mockReset()
@@ -283,6 +293,15 @@ describe('renderer App', () => {
       encryptionAvailable: true
     }))
     enqueue.mockResolvedValue({ runId: 'run-1' })
+    stopRun.mockImplementation(async (runId: string) => ({
+      id: runId,
+      sessionId: 'session-1',
+      status: 'cancelled',
+      modelId: 'mock/hesper-fast',
+      retryCount: 0,
+      maxRetries: 5,
+      endedAt: '2026-06-10T03:00:05.000Z'
+    }))
     onEvent.mockImplementation(() => () => undefined)
     markViewed.mockImplementation(async (id: string) => ({
       id,
@@ -1215,6 +1234,95 @@ describe('renderer App', () => {
       })
     })
     expect(await screen.findAllByText('模型生成标题')).not.toHaveLength(0)
+  })
+
+  it('preserves separate composer drafts for each session', async () => {
+    const user = userEvent.setup()
+
+    listSessions.mockResolvedValueOnce([
+      {
+        id: 'session-a',
+        title: '会话 A',
+        status: 'active',
+        outputMode: 'markdown',
+        createdAt: '2026-06-10T03:00:00.000Z',
+        updatedAt: '2026-06-10T03:00:02.000Z'
+      },
+      {
+        id: 'session-b',
+        title: '会话 B',
+        status: 'active',
+        outputMode: 'markdown',
+        createdAt: '2026-06-10T03:00:00.000Z',
+        updatedAt: '2026-06-10T03:00:01.000Z'
+      }
+    ] as any)
+
+    render(<App />)
+
+    const composer = await screen.findByPlaceholderText(/输入消息/)
+    await user.type(composer, 'A draft')
+    expect(composer).toHaveValue('A draft')
+
+    await user.click(screen.getByRole('button', { name: '会话 B' }))
+    const switchedComposer = await screen.findByPlaceholderText(/输入消息/)
+    expect(switchedComposer).toHaveValue('')
+    await user.type(switchedComposer, 'B draft')
+    expect(switchedComposer).toHaveValue('B draft')
+
+    await user.click(screen.getByRole('button', { name: '会话 A' }))
+    expect(await screen.findByPlaceholderText(/输入消息/)).toHaveValue('A draft')
+
+    await user.click(screen.getByRole('button', { name: '会话 B' }))
+    expect(await screen.findByPlaceholderText(/输入消息/)).toHaveValue('B draft')
+  })
+
+  it('shows a stop button for the active running session and stops its run', async () => {
+    const user = userEvent.setup()
+    let runtimeListener: ((event: { type: string; [key: string]: unknown }) => void) | undefined
+
+    listSessions.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        title: 'Running chat',
+        status: 'active',
+        defaultModelId: 'mock/hesper-fast',
+        outputMode: 'markdown',
+        createdAt: '2026-06-10T03:00:00.000Z',
+        updatedAt: '2026-06-10T03:00:00.000Z'
+      }
+    ] as any)
+    onEvent.mockImplementation(((listener: (event: { type: string; [key: string]: unknown }) => void) => {
+      runtimeListener = listener
+      return () => {
+        runtimeListener = undefined
+      }
+    }) as any)
+
+    render(<App />)
+
+    await screen.findByRole('button', { name: '发送' })
+    await act(async () => {
+      runtimeListener?.({
+        type: 'run.created',
+        run: {
+          id: 'run-running',
+          sessionId: 'session-1',
+          status: 'running',
+          modelId: 'mock/hesper-fast',
+          retryCount: 0,
+          maxRetries: 5
+        }
+      })
+    })
+
+    await user.click(await screen.findByRole('button', { name: '停止' }))
+
+    expect(stopRun).toHaveBeenCalledWith('run-running')
+    await act(async () => {
+      runtimeListener?.({ type: 'run.cancelled', runId: 'run-running', endedAt: '2026-06-10T03:00:05.000Z' })
+    })
+    expect(await screen.findByRole('button', { name: '发送' })).toBeInTheDocument()
   })
 
   it('sends messages through IPC, renders optimistic user text, and hydrates assistant output from runtime events', async () => {

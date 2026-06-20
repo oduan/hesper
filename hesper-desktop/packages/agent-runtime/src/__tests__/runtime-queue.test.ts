@@ -99,6 +99,28 @@ class ControllableAdapter implements AgentAdapter {
   }
 }
 
+class AbortableAdapter implements AgentAdapter {
+  private releaseRunning!: () => void
+  readonly inputs: AgentPromptInput[] = []
+  readonly running = new Promise<void>((resolve) => {
+    this.releaseRunning = resolve
+  })
+  aborted = false
+
+  async run(input: AgentPromptInput, emit: (event: AgentRuntimeEvent) => void | Promise<void>): Promise<void> {
+    this.inputs.push(input)
+    await emit({ type: 'message.delta', runId: input.runId, delta: 'partial' })
+    this.releaseRunning()
+    await new Promise<void>((resolve) => {
+      input.signal.addEventListener('abort', () => {
+        this.aborted = true
+        resolve()
+      }, { once: true })
+    })
+    throw new Error('aborted')
+  }
+}
+
 type RuntimeInternals = {
   enqueueChains: Map<string, Promise<void>>
   sessionStates: Map<string, unknown>
@@ -169,6 +191,32 @@ describe('AgentRuntime queue', () => {
     } finally {
       consoleError.mockRestore()
     }
+  })
+
+  it('cancels an active run and aborts the adapter', async () => {
+    const persistence = await createInMemoryPersistence()
+    await persistence.sessions.save({ ...session, id: 'session-cancel-active' })
+
+    const adapter = new AbortableAdapter()
+    const runtime = new AgentRuntime({ persistence, adapter })
+    const events: AgentRuntimeEvent[] = []
+    runtime.subscribe((event) => {
+      events.push(event)
+    })
+
+    const run = await runtime.enqueue({ sessionId: 'session-cancel-active', prompt: 'cancel me', modelId: 'mock/hesper-fast' })
+    await adapter.running
+
+    const cancelledRun = await runtime.cancelRun(run.id)
+    await runtime.waitForIdle('session-cancel-active')
+
+    expect(adapter.aborted).toBe(true)
+    expect(cancelledRun).toMatchObject({ id: run.id, status: 'cancelled' })
+    expect(await persistence.runs.get(run.id)).toMatchObject({ id: run.id, status: 'cancelled' })
+    expect(events.map((event) => event.type)).toContain('run.cancelled')
+    expect(events.map((event) => event.type)).not.toContain('run.succeeded')
+    expect(events.map((event) => event.type)).not.toContain('run.failed')
+    expect(await persistence.messages.listBySession('session-cancel-active')).toEqual([])
   })
 
   it('keeps a compensated active run failed and ignores later adapter events', async () => {

@@ -41,6 +41,7 @@ const hesperApi: HesperDesktopApi = {
   },
   agent: {
     enqueue: (input) => ipcRenderer.invoke(ipcChannels.agentEnqueue, input),
+    stop: (runId) => ipcRenderer.invoke(ipcChannels.agentStop, runId),
     subscribe: () => ipcRenderer.invoke(ipcChannels.agentEventsSubscribe),
     onEvent: (listener) => {
       const handler = (_event: unknown, runtimeEvent: AgentEvent) => listener(runtimeEvent)

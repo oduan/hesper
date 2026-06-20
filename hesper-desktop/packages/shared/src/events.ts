@@ -10,3 +10,4 @@ export type AgentRuntimeEvent =
   | { type: 'run.retrying'; runId: string; retryCount: number; nextRetryAt: string }
   | { type: 'run.failed'; runId: string; error: RunError; endedAt?: string }
   | { type: 'run.succeeded'; runId: string; endedAt?: string }
+  | { type: 'run.cancelled'; runId: string; endedAt?: string }

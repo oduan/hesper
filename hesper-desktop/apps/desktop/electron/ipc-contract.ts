@@ -17,6 +17,7 @@ export const ipcChannels = {
   conversationListSteps: 'conversation:listSteps',
   dialogSelectDirectory: 'dialog:selectDirectory',
   agentEnqueue: 'agent:enqueue',
+  agentStop: 'agent:stop',
   agentEventsSubscribe: 'agent:events:subscribe',
   agentEventsUnsubscribe: 'agent:events:unsubscribe',
   settingsGet: 'settings:get',
@@ -254,6 +255,8 @@ export const unsubscribeAgentEventsResultSchema = z.object({
   unsubscribed: z.literal(true)
 })
 
+export const agentStopResultSchema = agentRunSchema.optional()
+
 export type CreateSessionInput = z.infer<typeof createSessionInputSchema>
 export type UpdateSessionTitleInput = z.infer<typeof updateSessionTitleInputSchema>
 export type GenerateSessionTitleInput = z.infer<typeof generateSessionTitleInputSchema>
@@ -261,6 +264,7 @@ export type SetSessionWorkspaceInput = z.infer<typeof setSessionWorkspaceInputSc
 export type SetSessionModelInput = z.infer<typeof setSessionModelInputSchema>
 export type SetSessionOutputModeInput = z.infer<typeof setSessionOutputModeInputSchema>
 export type AgentEnqueueInput = z.infer<typeof agentEnqueueInputSchema>
+export type AgentStopResult = z.infer<typeof agentStopResultSchema>
 export type AppSettings = z.infer<typeof appSettingsSchema>
 export type UpdateSettingsInput = z.infer<typeof updateSettingsInputSchema>
 export type ManagedRoleDto = z.infer<typeof managedRoleDtoSchema>
@@ -309,6 +313,7 @@ export type HesperDesktopApi = {
   }
   agent: {
     enqueue(input: AgentEnqueueInput): Promise<{ runId: string }>
+    stop(runId: string): Promise<AgentStopResult>
     subscribe(): Promise<{ subscribed: true }>
     onEvent(listener: (event: AgentEvent) => void): () => void
   }

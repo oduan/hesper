@@ -9,7 +9,11 @@ export type ComposerProps = {
   modelId: string
   modelOptions?: string[]
   modelOptionGroups?: ModelOptionGroup[]
+  value?: string
+  running?: boolean
+  onDraftChange?: (value: string) => void
   onSend: (content: string) => void
+  onStop?: () => void
   onSelectWorkspace?: () => void
   onModelChange?: (modelId: string) => void
   sendSignal?: number
@@ -22,24 +26,40 @@ export function Composer({
   modelId,
   modelOptions = defaultModelOptions,
   modelOptionGroups,
+  value: controlledValue,
+  running = false,
+  onDraftChange,
   onSend,
+  onStop,
   onSelectWorkspace,
   onModelChange,
   sendSignal = 0
 }: ComposerProps) {
-  const [value, setValue] = useState('')
+  const [internalValue, setInternalValue] = useState('')
+  const value = controlledValue ?? internalValue
   const lastHandledSendSignalRef = useRef(0)
   const canSend = useMemo(() => value.trim().length > 0, [value])
+  const setComposerValue = useCallback((nextValue: string) => {
+    if (controlledValue === undefined) {
+      setInternalValue(nextValue)
+    }
+    onDraftChange?.(nextValue)
+  }, [controlledValue, onDraftChange])
 
   const handleSend = useCallback(() => {
+    if (running) {
+      onStop?.()
+      return
+    }
+
     const content = value.trim()
     if (!content) {
       return
     }
 
     onSend(content)
-    setValue('')
-  }, [onSend, value])
+    setComposerValue('')
+  }, [onSend, onStop, running, setComposerValue, value])
 
   useEffect(() => {
     if (sendSignal <= 0 || sendSignal === lastHandledSendSignalRef.current) {
@@ -68,7 +88,7 @@ export function Composer({
         placeholder="输入消息，支持 @skills"
         rows={4}
         value={value}
-        onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setValue(event.target.value)}
+        onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setComposerValue(event.target.value)}
         onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
           if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
             event.preventDefault()
@@ -103,19 +123,25 @@ export function Composer({
           <button
             type="button"
             className="hesper-send-button"
-            aria-label="发送"
-            disabled={!canSend}
+            aria-label={running ? '停止' : '发送'}
+            disabled={!running && !canSend}
             onClick={handleSend}
             style={{
               ...sendButtonStyle,
-              opacity: canSend ? 1 : 0.45,
-              cursor: canSend ? 'pointer' : 'not-allowed'
+              opacity: running || canSend ? 1 : 0.45,
+              cursor: running || canSend ? 'pointer' : 'not-allowed'
             }}
           >
-            <svg aria-hidden="true" viewBox="0 0 24 24" style={sendIconStyle}>
-              <path d="M12 17V7" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-              <path d="M6.5 12.5 12 7l5.5 5.5" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
+            {running ? (
+              <svg aria-hidden="true" viewBox="0 0 24 24" style={sendIconStyle}>
+                <rect x="8" y="8" width="8" height="8" rx="1.5" fill="currentColor" />
+              </svg>
+            ) : (
+              <svg aria-hidden="true" viewBox="0 0 24 24" style={sendIconStyle}>
+                <path d="M12 17V7" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+                <path d="M6.5 12.5 12 7l5.5 5.5" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            )}
           </button>
         </div>
       </div>

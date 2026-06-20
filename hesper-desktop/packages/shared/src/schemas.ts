@@ -271,6 +271,12 @@ const runSucceededEventSchema = z.object({
   endedAt: z.string().datetime().optional()
 }).transform(stripUndefined)
 
+const runCancelledEventSchema = z.object({
+  type: z.literal('run.cancelled'),
+  runId: z.string().min(1),
+  endedAt: z.string().datetime().optional()
+}).transform(stripUndefined)
+
 export const agentRuntimeEventSchema = z.union([
   runCreatedEventSchema,
   runStartedEventSchema,
@@ -280,7 +286,8 @@ export const agentRuntimeEventSchema = z.union([
   messageCompletedEventSchema,
   runRetryingEventSchema,
   runFailedEventSchema,
-  runSucceededEventSchema
+  runSucceededEventSchema,
+  runCancelledEventSchema
 ])
 
 // Compile-time contract checks

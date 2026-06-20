@@ -132,6 +132,7 @@ function AppContent() {
   const [loadError, setLoadError] = useState<string>()
   const [titleGenerationError, setTitleGenerationError] = useState<string>()
   const [sendErrorsBySession, setSendErrorsBySession] = useState<Record<string, string>>({})
+  const [draftsBySession, setDraftsBySession] = useState<Record<string, string>>({})
   const [pendingSettingsBySession, setPendingSettingsBySession] = useState<Record<string, SessionSettingsOverride>>({})
   const [shortcutCommand, setShortcutCommand] = useState<ConversationShortcutCommand>()
   const [sessionModelCatalog, setSessionModelCatalog] = useState<SessionModelCatalog>(fallbackSessionModelCatalog)
@@ -523,6 +524,7 @@ function AppContent() {
   useEffect(() => {
     const visibleSessionIds = state.sessions.map((session) => session.id)
     setSendErrorsBySession((current) => pruneSessionSendErrors(current, visibleSessionIds))
+    setDraftsBySession((current) => pruneSessionSendErrors(current, visibleSessionIds))
     setPendingSettingsBySession((current) => {
       const visible = new Set(visibleSessionIds)
       const next = Object.fromEntries(Object.entries(current).filter(([sessionId]) => visible.has(sessionId)))
@@ -592,6 +594,9 @@ function AppContent() {
       .map((run) => run.sessionId))]
   }, [effectiveSessions, state.runsById])
   const activeRunId = activeSession ? state.latestRunIdBySession[activeSession.id] : undefined
+  const activeRunningRunId = activeSession
+    ? Object.values(state.runsById).find((run) => run.sessionId === activeSession.id && run.status === 'running')?.id
+    : undefined
   const activeSteps = activeRunId ? state.stepsByRun[activeRunId] ?? [] : []
   const activeStreamingText = activeRunId ? state.streamingByRun[activeRunId] ?? '' : ''
   const activeMessages = activeSession ? state.messagesBySession[activeSession.id] ?? [] : []
@@ -980,6 +985,15 @@ function AppContent() {
             modelId={activeModelId}
             modelOptions={activeModelOptions}
             modelOptionGroups={sessionModelCatalog.optionGroups}
+            draftValue={draftsBySession[activeSession.id] ?? ''}
+            running={Boolean(activeRunningRunId)}
+            onDraftChange={(value) => {
+              setDraftsBySession((current) => ({ ...current, [activeSession.id]: value }))
+            }}
+            onStop={() => {
+              if (!activeRunningRunId) return
+              void stopActiveRun({ sessionId: activeSession.id, runId: activeRunningRunId, setSendErrorsBySession })
+            }}
             onSelectWorkspace={() => {
               void updateSessionWorkspace({
                 session: activeSession,
@@ -1273,6 +1287,26 @@ async function updateSessionModel({
     }
     setPendingSettingsBySession((current) => clearSessionOverrideFields(current, session.id, ['defaultModelId']))
     clearLatestRequest(session.id, 'defaultModelId', requestId)
+  }
+}
+
+async function stopActiveRun({
+  sessionId,
+  runId,
+  setSendErrorsBySession
+}: {
+  sessionId: string
+  runId: string
+  setSendErrorsBySession: Dispatch<SetStateAction<Record<string, string>>>
+}) {
+  setSendErrorsBySession((current) => clearSessionSendError(current, sessionId))
+  try {
+    await hesperApi.agent.stop(runId)
+  } catch (error) {
+    setSendErrorsBySession((current) => ({
+      ...current,
+      [sessionId]: `停止失败：${error instanceof Error ? error.message : 'unknown stop error'}`
+    }))
   }
 }
 

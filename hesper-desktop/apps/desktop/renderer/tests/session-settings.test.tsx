@@ -34,7 +34,7 @@ async function chooseThemedOption(user: ReturnType<typeof userEvent.setup>, labe
   await user.click(await screen.findByRole('option', { name: option }))
 }
 
-const { listSessions, setWorkspace, setModel, setOutputMode, selectDirectory, onEvent, enqueue, getSettings, updateSettings, listModels, listTools, setToolEnabled, listRoles } = vi.hoisted(() => ({
+const { listSessions, setWorkspace, setModel, setOutputMode, selectDirectory, onEvent, enqueue, stopRun, getSettings, updateSettings, listModels, listTools, setToolEnabled, listRoles } = vi.hoisted(() => ({
   listSessions: vi.fn(async () => []),
   setWorkspace: vi.fn(async (input: { id: string; workspacePath?: string }) =>
     createSession({ id: input.id, workspacePath: input.workspacePath, updatedAt: '2026-06-10T03:05:00.000Z' })
@@ -48,6 +48,7 @@ const { listSessions, setWorkspace, setModel, setOutputMode, selectDirectory, on
   selectDirectory: vi.fn(async () => ({ canceled: false, path: 'D:/updated-workspace' })),
   onEvent: vi.fn(() => () => undefined),
   enqueue: vi.fn(async () => ({ runId: 'run-1' })),
+  stopRun: vi.fn(async () => undefined),
   getSettings: vi.fn(async () => ({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', fontSize: 14 })),
   updateSettings: vi.fn(async (input: Partial<{ defaultModelId: string; defaultOutputMode: 'markdown' | 'html'; themeMode: 'system' | 'light' | 'dark'; fontSize: number }>) => ({
     defaultModelId: input.defaultModelId ?? 'mock/hesper-fast',
@@ -96,6 +97,7 @@ vi.mock('../src/ipc-client', () => ({
     dialog: { selectDirectory },
     agent: {
       enqueue,
+      stop: stopRun,
       onEvent,
       subscribe: vi.fn()
     },
@@ -139,6 +141,7 @@ describe('session settings and restore flow', () => {
     selectDirectory.mockClear()
     onEvent.mockReset()
     enqueue.mockReset()
+    stopRun.mockReset()
     getSettings.mockReset()
     updateSettings.mockReset()
     listModels.mockClear()
@@ -148,6 +151,7 @@ describe('session settings and restore flow', () => {
     onEvent.mockImplementation(() => () => undefined)
     listRoles.mockResolvedValue([])
     enqueue.mockResolvedValue({ runId: 'run-1' })
+    stopRun.mockResolvedValue(undefined)
     getSettings.mockResolvedValue({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', fontSize: 14 })
     updateSettings.mockImplementation(async (input) => ({
       defaultModelId: input.defaultModelId ?? 'mock/hesper-fast',

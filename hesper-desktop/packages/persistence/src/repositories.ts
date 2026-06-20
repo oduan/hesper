@@ -401,6 +401,7 @@ function extractRunId(event: RuntimeEventRecord): string {
     case 'run.retrying':
     case 'run.failed':
     case 'run.succeeded':
+    case 'run.cancelled':
       return event.runId
     case 'step.created':
     case 'step.updated':

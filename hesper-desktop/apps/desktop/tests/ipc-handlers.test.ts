@@ -103,6 +103,42 @@ describe('registerIpcHandlers', () => {
     expect(savePersistence).not.toHaveBeenCalled()
   })
 
+  it('stops agent runs through IPC and persists the cancellation', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock' })
+    const savePersistence = vi.fn(async () => {})
+    const schedulePersistenceSave = vi.fn()
+    const handles = new Map<string, (event: any, ...args: any[]) => Promise<unknown> | unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (event: any, ...args: any[]) => Promise<unknown> | unknown) => {
+        handles.set(channel, handler)
+      }),
+      removeHandler: vi.fn()
+    }
+    const dialog = {
+      showOpenDialog: vi.fn(async () => ({ canceled: true, filePaths: [] }))
+    }
+    const cancelSpy = vi.spyOn(container.agentRuntime, 'cancelRun').mockResolvedValueOnce({
+      id: 'run-to-stop',
+      sessionId: 'session-1',
+      status: 'cancelled',
+      modelId: 'mock/hesper-fast',
+      retryCount: 0,
+      maxRetries: 5,
+      endedAt: '2026-06-10T03:00:05.000Z'
+    })
+
+    registerIpcHandlers({ ipcMain, dialog, container, savePersistence, schedulePersistenceSave })
+
+    await expect(handles.get(ipcChannels.agentStop)?.({ sender: { id: 1 } }, 'run-to-stop')).resolves.toMatchObject({
+      id: 'run-to-stop',
+      status: 'cancelled'
+    })
+    expect(cancelSpy).toHaveBeenCalledWith('run-to-stop')
+    expect(schedulePersistenceSave).toHaveBeenCalled()
+    expect(savePersistence).toHaveBeenCalled()
+  })
+
   it('registers typed handlers and forwards runtime events to the sender', async () => {
     const persistence = await createInMemoryPersistence()
     const container = createServiceContainer({ persistence, agentMode: 'mock' })

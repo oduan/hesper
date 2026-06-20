@@ -16,6 +16,7 @@ const ipcChannels = {
   conversationListSteps: 'conversation:listSteps',
   dialogSelectDirectory: 'dialog:selectDirectory',
   agentEnqueue: 'agent:enqueue',
+  agentStop: 'agent:stop',
   agentEventsSubscribe: 'agent:events:subscribe',
   agentEventsUnsubscribe: 'agent:events:unsubscribe',
   settingsGet: 'settings:get',
@@ -88,6 +89,7 @@ const hesperApi = {
   },
   agent: {
     enqueue: (input) => ipcRenderer.invoke(ipcChannels.agentEnqueue, input),
+    stop: (runId) => ipcRenderer.invoke(ipcChannels.agentStop, runId),
     subscribe: () => ipcRenderer.invoke(ipcChannels.agentEventsSubscribe),
     onEvent: (listener) => {
       const handler = (_event, runtimeEvent) => listener(runtimeEvent)

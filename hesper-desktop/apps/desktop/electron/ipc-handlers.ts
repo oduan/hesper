@@ -3,6 +3,7 @@ import { BrowserWindow, type Dialog, type IpcMain, type IpcMainInvokeEvent } fro
 import { z } from 'zod'
 import {
   agentEnqueueInputSchema,
+  agentStopResultSchema,
   appSettingsSchema,
   conversationMessagesResultSchema,
   conversationRunsResultSchema,
@@ -63,6 +64,7 @@ const mutatingChannels = [
   ipcChannels.sessionsSetOutputMode,
   ipcChannels.sessionsMarkViewed,
   ipcChannels.agentEnqueue,
+  ipcChannels.agentStop,
   ipcChannels.settingsUpdate,
   ipcChannels.credentialsSaveProviderApiKey,
   ipcChannels.credentialsDeleteProviderApiKey,
@@ -290,6 +292,13 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       schedulePersistenceSave()
       await savePersistence()
       return { runId: run.id }
+    },
+    [ipcChannels.agentStop]: async (_event, payload) => {
+      const runId = runIdInputSchema.parse(payload)
+      const run = await options.container.agentRuntime.cancelRun(runId)
+      schedulePersistenceSave()
+      await savePersistence()
+      return agentStopResultSchema.parse(run)
     },
     [ipcChannels.agentEventsSubscribe]: async (event) => {
       subscribeSender(event)
