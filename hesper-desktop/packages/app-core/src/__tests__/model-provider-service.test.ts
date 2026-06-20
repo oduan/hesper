@@ -333,6 +333,76 @@ describe('createModelProviderService', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  it('does not leave a half-initialized Codex OAuth provider when credential save fails', async () => {
+    const persistence = await createInMemoryPersistence()
+    const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
+    const failingCredentialVaultService = {
+      ...credentialVaultService,
+      saveProviderApiKey: vi.fn(async () => {
+        throw new Error('vault unavailable')
+      })
+    }
+    const oauthGateway = {
+      startAuthorization: vi.fn(async () => ({
+        sessionId: 'oauth-session-1',
+        authorizationUrl: 'https://auth.craft.do/oauth/openai-codex?state=oauth-session-1'
+      })),
+      getAuthorizationStatus: vi.fn(async () => ({ status: 'authorized' as const, message: '授权成功' })),
+      consumeAuthorization: vi.fn(async () => ({
+        accessToken: 'codex-oauth-access-token',
+        models: [
+          { id: 'pi/gpt-5.5', modelName: 'gpt-5.5', displayName: 'GPT-5.5', capabilities: ['streaming', 'toolCalls', 'reasoning'] as any, contextWindow: 272000 }
+        ],
+        defaultModelId: 'pi/gpt-5.5'
+      }))
+    }
+    const service = createModelProviderService({ persistence, credentialVaultService: failingCredentialVaultService, now: () => now, oauthGateway })
+
+    await service.startOAuthAuthorization({ provider: 'openai-codex', connectionName: 'ChatGPT Codex' })
+    await expect(service.saveOAuthConnection({ sessionId: 'oauth-session-1', connectionName: 'ChatGPT Codex' })).rejects.toThrow('vault unavailable')
+
+    await expect(service.getProvider('chatgpt-codex')).resolves.toBeUndefined()
+    await expect(service.listModels('chatgpt-codex')).resolves.toEqual([])
+    expect(Buffer.from(exportDatabaseBytes(persistence)).toString('latin1')).not.toContain('codex-oauth-access-token')
+  })
+
+  it('replaces stale Codex OAuth models on reauthorization', async () => {
+    const persistence = await createInMemoryPersistence()
+    const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
+    const oauthGateway = {
+      startAuthorization: vi.fn()
+        .mockResolvedValueOnce({ sessionId: 'oauth-session-1', authorizationUrl: 'https://auth.craft.do/oauth/openai-codex?state=oauth-session-1' })
+        .mockResolvedValueOnce({ sessionId: 'oauth-session-2', authorizationUrl: 'https://auth.craft.do/oauth/openai-codex?state=oauth-session-2' }),
+      getAuthorizationStatus: vi.fn(async () => ({ status: 'authorized' as const, message: '授权成功' })),
+      consumeAuthorization: vi.fn()
+        .mockResolvedValueOnce({
+          accessToken: 'codex-oauth-access-token-1',
+          models: [
+            { id: 'pi/gpt-5.5', modelName: 'gpt-5.5', displayName: 'GPT-5.5', capabilities: ['streaming', 'toolCalls', 'reasoning'] as any, contextWindow: 272000 },
+            { id: 'pi/gpt-5.4-mini', modelName: 'gpt-5.4-mini', displayName: 'GPT-5.4 Mini', capabilities: ['streaming', 'toolCalls', 'reasoning'] as any, contextWindow: 272000 }
+          ],
+          defaultModelId: 'pi/gpt-5.5'
+        })
+        .mockResolvedValueOnce({
+          accessToken: 'codex-oauth-access-token-2',
+          models: [
+            { id: 'pi/gpt-5.5', modelName: 'gpt-5.5', displayName: 'GPT-5.5', capabilities: ['streaming', 'toolCalls', 'reasoning'] as any, contextWindow: 272000 }
+          ],
+          defaultModelId: 'pi/gpt-5.5'
+        })
+    }
+    const service = createModelProviderService({ persistence, credentialVaultService, now: () => now, oauthGateway })
+
+    await service.startOAuthAuthorization({ provider: 'openai-codex', connectionName: 'ChatGPT Codex' })
+    await service.saveOAuthConnection({ sessionId: 'oauth-session-1', connectionName: 'ChatGPT Codex' })
+    expect((await service.listModels('chatgpt-codex')).map((model) => model.id)).toEqual(['pi/gpt-5.5', 'pi/gpt-5.4-mini'])
+
+    await service.startOAuthAuthorization({ provider: 'openai-codex', connectionName: 'ChatGPT Codex' })
+    await service.saveOAuthConnection({ sessionId: 'oauth-session-2', connectionName: 'ChatGPT Codex' })
+
+    expect((await service.listModels('chatgpt-codex')).map((model) => model.id)).toEqual(['pi/gpt-5.5'])
+  })
+
   it('tests Codex OAuth providers by credential status instead of chat completions probe', async () => {
     const persistence = await createInMemoryPersistence()
     const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })

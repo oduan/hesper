@@ -415,7 +415,9 @@ export function createModelProviderService(options: {
     async startOAuthAuthorization(input) {
       const gateway = requireOAuthGateway()
       assertId(input.connectionName, 'connectionName')
+      if ((input.provider as string) !== 'openai-codex') throw new Error(`Unsupported OAuth provider: ${input.provider}`)
       const started = await gateway.startAuthorization(input)
+      assertId(started.sessionId, 'sessionId')
       oauthSessions.set(started.sessionId, { provider: input.provider, connectionName: input.connectionName })
       return {
         provider: input.provider,
@@ -426,6 +428,7 @@ export function createModelProviderService(options: {
       }
     },
     async getOAuthAuthorizationStatus(input) {
+      assertId(input.sessionId, 'sessionId')
       const session = oauthSessions.get(input.sessionId)
       if (!session) {
         return { provider: 'openai-codex', sessionId: input.sessionId, status: 'failed', message: '授权会话不存在' }
@@ -434,6 +437,7 @@ export function createModelProviderService(options: {
       return { provider: session.provider, sessionId: input.sessionId, ...status }
     },
     async saveOAuthConnection(input) {
+      assertId(input.sessionId, 'sessionId')
       const session = oauthSessions.get(input.sessionId)
       if (!session) throw new Error('授权会话不存在')
       assertId(input.connectionName, 'connectionName')
@@ -443,8 +447,10 @@ export function createModelProviderService(options: {
         throw new Error(authorizationStatus.message || '授权尚未完成')
       }
       const consumed = await gateway.consumeAuthorization({ sessionId: input.sessionId })
+      const providerId = 'chatgpt-codex'
+      await options.credentialVaultService.saveProviderApiKey({ providerId, apiKey: consumed.accessToken })
       const provider = await saveProviderInternal({
-        id: 'chatgpt-codex',
+        id: providerId,
         name: input.connectionName.trim(),
         kind: 'pi',
         authType: 'oauth',
@@ -452,7 +458,7 @@ export function createModelProviderService(options: {
         enabled: true,
         defaultModelId: consumed.defaultModelId
       })
-      await options.credentialVaultService.saveProviderApiKey({ providerId: provider.id, apiKey: consumed.accessToken })
+      await options.persistence.models.deleteByProvider(provider.id)
       for (const model of consumed.models) {
         await saveModelInternal({
           ...model,
