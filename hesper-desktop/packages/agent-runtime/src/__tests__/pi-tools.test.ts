@@ -79,6 +79,28 @@ describe('createPiAgentTools', () => {
     }))
   })
 
+  it('disambiguates repeated toolCallId parent step ids within a run', async () => {
+    const run = vi.fn(async () => ({ content: 'ok' }))
+    const [tool] = createPiAgentTools({
+      tools: [{ id: 'agent.spawn-worker-agent', name: 'Spawn Worker Agent', description: 'Spawn', category: 'agent', inputSchema: { type: 'object', properties: {} } }],
+      runner: { run },
+      context: { runId: 'run-parent', sessionId: 'session-1', allowedToolIds: ['agent.spawn-worker-agent'] }
+    })
+
+    await tool!.execute('tool-1', { purpose: 'delegate work' }, new AbortController().signal)
+    await tool!.execute('tool-1', { purpose: 'delegate work again' }, new AbortController().signal)
+
+    const firstCall = run.mock.calls[0] as unknown as [unknown, unknown, { parentStepId: string }]
+    const secondCall = run.mock.calls[1] as unknown as [unknown, unknown, { parentStepId: string }]
+
+    expect(firstCall[2]).toMatchObject({
+      parentStepId: 'step-run-parent-tool-tool-1'
+    })
+    expect(secondCall[2]).toMatchObject({
+      parentStepId: 'step-run-parent-tool-tool-1-2'
+    })
+  })
+
   it('throws with structured details when ToolRunner returns an error result', async () => {
     const runner: ToolRunner = {
       run: vi.fn(async () => ({ content: 'Tool blocked by permission policy', details: { code: 'permission_denied' }, isError: true }))
