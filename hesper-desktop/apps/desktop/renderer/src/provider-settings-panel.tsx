@@ -26,6 +26,15 @@ type ConnectionDialogState = {
   form: ConnectionFormState
 }
 
+type CodexOAuthState = {
+  connectionName: string
+  sessionId?: string
+  status: 'idle' | 'pending' | 'authorized' | 'failed'
+  message?: string
+}
+
+const initialCodexOAuthState: CodexOAuthState = { connectionName: 'ChatGPT Codex', status: 'idle' }
+
 export type ProviderSettingsPanelProps = {
   onModelRegistryChanged?: () => void | Promise<void>
 }
@@ -47,7 +56,7 @@ function createConnectionForm(provider?: ModelProviderDto, models: ModelDto[] = 
 }
 
 function formatUnknownError(error: unknown, fallback: string): string {
-  return error instanceof Error ? error.message : fallback
+  return error instanceof Error && error.message ? error.message : fallback
 }
 
 function slugFromEndpoint(endpoint: string): string {
@@ -120,6 +129,7 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
   const [renamingProviderId, setRenamingProviderId] = useState<string>()
   const [renameValue, setRenameValue] = useState('')
   const [connectionResult, setConnectionResult] = useState<ProviderConnectionTestResult>()
+  const [codexOAuthState, setCodexOAuthState] = useState<CodexOAuthState>(initialCodexOAuthState)
   const [message, setMessage] = useState<string>()
   const [error, setError] = useState<string>()
   const mountedRef = useRef(true)
@@ -165,12 +175,17 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
     return () => window.clearTimeout(timer)
   }, [renamingProviderId])
 
+  const resetCodexOAuthState = () => {
+    setCodexOAuthState({ ...initialCodexOAuthState })
+  }
+
   const openAddConnection = () => {
     setError(undefined)
     setMessage(undefined)
     setConnectionResult(undefined)
     setOpenMenuProviderId(undefined)
     setDialogState(undefined)
+    resetCodexOAuthState()
     setAddConnectionFlow('picker')
   }
 
@@ -179,8 +194,30 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
     setMessage(undefined)
     setConnectionResult(undefined)
     setOpenMenuProviderId(undefined)
+    resetCodexOAuthState()
     setAddConnectionFlow('custom')
     setDialogState({ mode: 'add', form: createConnectionForm() })
+  }
+
+  const openCodexConnection = () => {
+    setError(undefined)
+    setMessage(undefined)
+    setConnectionResult(undefined)
+    setOpenMenuProviderId(undefined)
+    setDialogState(undefined)
+    resetCodexOAuthState()
+    setAddConnectionFlow('codex')
+  }
+
+  const closeCodexConnection = () => {
+    resetCodexOAuthState()
+    setAddConnectionFlow(undefined)
+  }
+
+  const backFromCodexConnection = () => {
+    setError(undefined)
+    resetCodexOAuthState()
+    setAddConnectionFlow('picker')
   }
 
   const openEditConnection = (provider: ModelProviderDto) => {
@@ -194,6 +231,71 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
 
   const updateDialogForm = (updater: ConnectionFormState | ((current: ConnectionFormState) => ConnectionFormState)) => {
     setDialogState((current) => current ? { ...current, form: typeof updater === 'function' ? updater(current.form) : updater } : current)
+  }
+
+  const startCodexOAuth = async () => {
+    const connectionName = codexOAuthState.connectionName.trim() || initialCodexOAuthState.connectionName
+    setError(undefined)
+    setMessage(undefined)
+    setCodexOAuthState({ connectionName, status: 'idle' })
+
+    try {
+      const result = await hesperApi.providers.startOAuthAuthorization({ provider: 'openai-codex', connectionName })
+      if (!mountedRef.current) return
+      setCodexOAuthState((current) => ({
+        ...current,
+        connectionName,
+        sessionId: result.sessionId,
+        status: result.status,
+        message: result.message
+      }))
+    } catch (startError) {
+      if (!mountedRef.current) return
+      setError(formatUnknownError(startError, 'Codex 授权启动失败'))
+    }
+  }
+
+  const checkCodexOAuthStatus = async () => {
+    const sessionId = codexOAuthState.sessionId
+    if (!sessionId) return
+
+    setError(undefined)
+    setMessage(undefined)
+    try {
+      const result = await hesperApi.providers.getOAuthAuthorizationStatus({ sessionId })
+      if (!mountedRef.current) return
+      setCodexOAuthState((current) => ({
+        ...current,
+        sessionId: result.sessionId,
+        status: result.status,
+        message: result.message
+      }))
+    } catch (statusError) {
+      if (!mountedRef.current) return
+      setError(formatUnknownError(statusError, 'Codex 授权状态检查失败'))
+    }
+  }
+
+  const saveCodexOAuthConnection = async () => {
+    const sessionId = codexOAuthState.sessionId
+    if (!sessionId) return
+
+    const connectionName = codexOAuthState.connectionName.trim() || initialCodexOAuthState.connectionName
+    setError(undefined)
+    setMessage(undefined)
+
+    try {
+      const provider = await hesperApi.providers.saveOAuthConnection({ sessionId, connectionName })
+      if (!mountedRef.current) return
+      setAddConnectionFlow(undefined)
+      resetCodexOAuthState()
+      setMessage(`已添加连接：${provider.name}`)
+      await loadProviderSettings()
+      await onModelRegistryChanged?.()
+    } catch (saveError) {
+      if (!mountedRef.current) return
+      setError(formatUnknownError(saveError, 'Codex 连接保存失败'))
+    }
   }
 
   const saveConnection = async () => {
@@ -436,16 +538,21 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
 
       {addConnectionFlow === 'picker' ? (
         <ConnectionTypePicker
-          onSelectCodex={() => setAddConnectionFlow('codex')}
+          onSelectCodex={openCodexConnection}
           onSelectCustom={openCustomConnection}
           onCancel={() => setAddConnectionFlow(undefined)}
         />
       ) : null}
 
       {addConnectionFlow === 'codex' ? (
-        <CodexConnectionPlaceholder
-          onBack={() => setAddConnectionFlow('picker')}
-          onCancel={() => setAddConnectionFlow(undefined)}
+        <CodexAuthorizationPage
+          state={codexOAuthState}
+          onConnectionNameChange={(connectionName) => setCodexOAuthState((current) => ({ ...current, connectionName }))}
+          onBack={backFromCodexConnection}
+          onCancel={closeCodexConnection}
+          onStart={() => void startCodexOAuth()}
+          onCheckStatus={() => void checkCodexOAuthStatus()}
+          onSave={() => void saveCodexOAuthConnection()}
         />
       ) : null}
 
@@ -588,24 +695,73 @@ function ConnectionTypePicker({
   )
 }
 
-function CodexConnectionPlaceholder({
+function CodexAuthorizationPage({
+  state,
+  onConnectionNameChange,
   onBack,
-  onCancel
+  onCancel,
+  onStart,
+  onCheckStatus,
+  onSave
 }: {
+  state: CodexOAuthState
+  onConnectionNameChange: (connectionName: string) => void
   onBack: () => void
   onCancel: () => void
+  onStart: () => void
+  onCheckStatus: () => void
+  onSave: () => void
 }) {
+  const hasSession = Boolean(state.sessionId)
+  const canSave = state.status === 'authorized'
+  const feedbackIsError = state.status === 'failed'
+  const feedbackText = state.message ? `${state.status}: ${state.message}` : undefined
+
   return (
     <FullWindowDialogShell ariaLabel="Codex 授权" onClose={onCancel}>
       <div style={overlayFormStyle}>
         <header style={{ textAlign: 'center', marginBottom: 6 }}>
           <h2 style={{ margin: 0, fontSize: bodyFontSize }}>Codex 授权</h2>
           <p style={{ margin: '12px 0 0', color: mutedTextColor, lineHeight: 1.5 }}>
-            Codex 授权流程将在下一步实现。
+            使用默认浏览器完成 ChatGPT Codex 授权。
           </p>
         </header>
-        <footer style={{ display: 'flex', justifyContent: 'center', marginTop: 10 }}>
+        <label style={fieldStyle}>
+          Connection Name
+          <input
+            aria-label="Codex 连接名称"
+            value={state.connectionName}
+            onChange={(event) => onConnectionNameChange(event.target.value)}
+            style={inputStyle}
+          />
+        </label>
+        {feedbackText ? (
+          <p
+            role={feedbackIsError ? 'alert' : 'status'}
+            style={{ ...connectionFeedbackTextStyle, ...(feedbackIsError ? errorTextStyle : statusTextStyle) }}
+          >
+            {feedbackText}
+          </p>
+        ) : null}
+        <footer style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10, marginTop: 22 }}>
           <button type="button" onClick={onBack} style={secondaryActionStyle}>Back</button>
+          <button type="button" onClick={onStart} style={secondaryActionStyle}>Open Browser</button>
+          <button
+            type="button"
+            onClick={onCheckStatus}
+            disabled={!hasSession}
+            style={{ ...secondaryActionStyle, ...(!hasSession ? disabledActionStyle : {}) }}
+          >
+            Check Status
+          </button>
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={!canSave}
+            style={{ ...primaryActionStyle, ...(!canSave ? disabledActionStyle : {}) }}
+          >
+            Save
+          </button>
         </footer>
       </div>
     </FullWindowDialogShell>
@@ -948,6 +1104,11 @@ const secondaryActionStyle: CSSProperties = {
   color: bodyTextColor,
   padding: '8px 12px',
   cursor: 'pointer'
+}
+
+const disabledActionStyle: CSSProperties = {
+  opacity: 0.55,
+  cursor: 'not-allowed'
 }
 
 const fullWindowOverlayStyle: CSSProperties = {
