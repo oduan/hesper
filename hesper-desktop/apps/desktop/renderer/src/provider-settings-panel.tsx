@@ -11,6 +11,7 @@ import { modelNameFromNamespacedId, namespaceModelId } from './model-options'
 
 type ProtocolMode = 'openai-compatible' | 'anthropic-compatible'
 type ConnectionDialogMode = 'add' | 'edit'
+type AddConnectionFlow = 'picker' | 'custom' | 'codex'
 
 type ConnectionFormState = {
   apiKey: string
@@ -113,6 +114,7 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
   const [providers, setProviders] = useState<ModelProviderDto[]>([])
   const [models, setModels] = useState<ModelDto[]>([])
   const [dialogState, setDialogState] = useState<ConnectionDialogState>()
+  const [addConnectionFlow, setAddConnectionFlow] = useState<AddConnectionFlow>()
   const [openMenuProviderId, setOpenMenuProviderId] = useState<string>()
   const [hoveredProviderId, setHoveredProviderId] = useState<string>()
   const [renamingProviderId, setRenamingProviderId] = useState<string>()
@@ -168,6 +170,16 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
     setMessage(undefined)
     setConnectionResult(undefined)
     setOpenMenuProviderId(undefined)
+    setDialogState(undefined)
+    setAddConnectionFlow('picker')
+  }
+
+  const openCustomConnection = () => {
+    setError(undefined)
+    setMessage(undefined)
+    setConnectionResult(undefined)
+    setOpenMenuProviderId(undefined)
+    setAddConnectionFlow('custom')
     setDialogState({ mode: 'add', form: createConnectionForm() })
   }
 
@@ -176,6 +188,7 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
     setMessage(undefined)
     setConnectionResult(undefined)
     setOpenMenuProviderId(undefined)
+    setAddConnectionFlow(undefined)
     setDialogState({ mode: 'edit', providerId: provider.id, form: createConnectionForm(provider, models) })
   }
 
@@ -229,6 +242,7 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
 
       if (!mountedRef.current) return
       setDialogState(undefined)
+      setAddConnectionFlow(undefined)
       setMessage(dialogState.mode === 'edit' ? `已保存连接：${provider.name}` : `已添加连接：${provider.name}`)
       await loadProviderSettings()
       await onModelRegistryChanged?.()
@@ -420,6 +434,21 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
         </section>
       </div>
 
+      {addConnectionFlow === 'picker' ? (
+        <ConnectionTypePicker
+          onSelectCodex={() => setAddConnectionFlow('codex')}
+          onSelectCustom={openCustomConnection}
+          onCancel={() => setAddConnectionFlow(undefined)}
+        />
+      ) : null}
+
+      {addConnectionFlow === 'codex' ? (
+        <CodexConnectionPlaceholder
+          onBack={() => setAddConnectionFlow('picker')}
+          onCancel={() => setAddConnectionFlow(undefined)}
+        />
+      ) : null}
+
       {dialogState ? (
         <ConnectionDialog
           state={dialogState}
@@ -428,12 +457,73 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
           onCancel={() => {
             setConnectionResult(undefined)
             setDialogState(undefined)
+            setAddConnectionFlow(undefined)
           }}
           onTest={() => void testDialogConnection()}
           onSave={() => void saveConnection()}
         />
       ) : null}
     </section>
+  )
+}
+
+function ConnectionTypePicker({
+  onSelectCodex,
+  onSelectCustom,
+  onCancel
+}: {
+  onSelectCodex: () => void
+  onSelectCustom: () => void
+  onCancel: () => void
+}) {
+  return (
+    <div role="dialog" aria-modal="true" aria-label="Add connection" style={fullWindowOverlayStyle}>
+      <button type="button" aria-label="关闭 Add connection" onClick={onCancel} style={overlayCloseStyle}>×</button>
+      <div style={connectionTypePickerPanelStyle}>
+        <header style={{ textAlign: 'center', marginBottom: 6 }}>
+          <h2 style={{ margin: 0, fontSize: bodyFontSize }}>Add connection</h2>
+          <p style={{ margin: '12px 0 0', color: mutedTextColor, lineHeight: 1.5 }}>选择一种连接方式。</p>
+        </header>
+        <div style={connectionTypeGridStyle}>
+          <button type="button" onClick={onSelectCodex} style={connectionTypeCardStyle}>
+            <strong style={connectionTypeTitleStyle}>Codex 授权</strong>
+            <span style={connectionTypeDescriptionStyle}>使用 Codex OAuth 授权连接。</span>
+          </button>
+          <button type="button" onClick={onSelectCustom} style={connectionTypeCardStyle}>
+            <strong style={connectionTypeTitleStyle}>Custom</strong>
+            <span style={connectionTypeDescriptionStyle}>手动填写 API key、Endpoint 和模型。</span>
+          </button>
+        </div>
+        <footer style={{ display: 'flex', justifyContent: 'center', marginTop: 22 }}>
+          <button type="button" onClick={onCancel} style={secondaryActionStyle}>Back</button>
+        </footer>
+      </div>
+    </div>
+  )
+}
+
+function CodexConnectionPlaceholder({
+  onBack,
+  onCancel
+}: {
+  onBack: () => void
+  onCancel: () => void
+}) {
+  return (
+    <div role="dialog" aria-modal="true" aria-label="Codex 授权" style={fullWindowOverlayStyle}>
+      <button type="button" aria-label="关闭 Codex 授权" onClick={onCancel} style={overlayCloseStyle}>×</button>
+      <div style={overlayFormStyle}>
+        <header style={{ textAlign: 'center', marginBottom: 6 }}>
+          <h2 style={{ margin: 0, fontSize: bodyFontSize }}>Codex 授权</h2>
+          <p style={{ margin: '12px 0 0', color: mutedTextColor, lineHeight: 1.5 }}>
+            Codex 授权流程将在下一步实现。
+          </p>
+        </header>
+        <footer style={{ display: 'flex', justifyContent: 'center', marginTop: 10 }}>
+          <button type="button" onClick={onBack} style={secondaryActionStyle}>Back</button>
+        </footer>
+      </div>
+    </div>
   )
 }
 
@@ -454,7 +544,7 @@ function ConnectionDialog({
 }) {
   const hasSavedKey = state.mode === 'edit'
   return (
-    <div role="dialog" aria-modal="true" aria-label="API 配置" style={overlayStyle}>
+    <div role="dialog" aria-modal="true" aria-label="API 配置" style={fullWindowOverlayStyle}>
       <button type="button" aria-label="关闭 API 配置" onClick={onCancel} style={overlayCloseStyle}>×</button>
       <div style={overlayFormStyle}>
         <header style={{ textAlign: 'center', marginBottom: 24 }}>
@@ -776,10 +866,13 @@ const secondaryActionStyle: CSSProperties = {
   cursor: 'pointer'
 }
 
-const overlayStyle: CSSProperties = {
+const fullWindowOverlayStyle: CSSProperties = {
   position: 'fixed',
-  inset: 0,
-  zIndex: 20,
+  top: 36,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  zIndex: 50,
   background: surfaceColor,
   display: 'grid',
   placeItems: 'center',
@@ -804,7 +897,7 @@ const overlayFormStyle: CSSProperties = {
   width: 'min(460px, 100%)',
   boxSizing: 'border-box',
   minWidth: 0,
-  maxHeight: 'calc(100vh - 48px)',
+  maxHeight: 'calc(100vh - 84px)',
   overflowY: 'auto',
   display: 'grid',
   gap: 18,
@@ -813,6 +906,43 @@ const overlayFormStyle: CSSProperties = {
   background: surfaceMutedColor,
   boxShadow: '0 24px 64px rgba(0, 0, 0, 0.32)',
   padding: 24
+}
+
+const connectionTypePickerPanelStyle: CSSProperties = {
+  ...overlayFormStyle,
+  width: 'min(600px, 100%)'
+}
+
+const connectionTypeGridStyle: CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+  gap: 12
+}
+
+const connectionTypeCardStyle: CSSProperties = {
+  minHeight: 132,
+  border: `1px solid ${borderColor}`,
+  outline: 0,
+  borderRadius: 16,
+  background: surfaceColor,
+  color: bodyTextColor,
+  padding: 18,
+  cursor: 'pointer',
+  display: 'grid',
+  alignContent: 'start',
+  gap: 10,
+  textAlign: 'left'
+}
+
+const connectionTypeTitleStyle: CSSProperties = {
+  color: bodyTextColor,
+  fontSize: bodyFontSize,
+  lineHeight: 1.2
+}
+
+const connectionTypeDescriptionStyle: CSSProperties = {
+  color: mutedTextColor,
+  lineHeight: 1.5
 }
 
 const segmentedControlStyle: CSSProperties = {

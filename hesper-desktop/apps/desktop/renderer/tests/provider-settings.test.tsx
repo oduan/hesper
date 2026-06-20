@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../src/App'
@@ -292,6 +292,35 @@ describe('provider settings panel', () => {
     })
   })
 
+  it('opens the full-window add connection picker before custom API configuration', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: '设置' }))
+    await user.click(await screen.findByRole('button', { name: '+ 添加连接' }))
+
+    const picker = await screen.findByRole('dialog', { name: 'Add connection' })
+    expect(picker).toHaveStyle({
+      position: 'fixed',
+      top: '36px',
+      left: '0px',
+      right: '0px',
+      bottom: '0px'
+    })
+    expect(within(picker).getByRole('heading', { name: 'Add connection' })).toBeInTheDocument()
+    expect(within(picker).getByRole('button', { name: /Codex 授权/ })).toBeInTheDocument()
+    expect(within(picker).getByRole('button', { name: /Custom/ })).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'API 配置' })).not.toBeInTheDocument()
+
+    await user.click(within(picker).getByRole('button', { name: /Custom/ }))
+
+    const apiDialog = await screen.findByRole('dialog', { name: 'API 配置' })
+    expect(apiDialog).toHaveStyle({
+      position: 'fixed',
+      top: '36px'
+    })
+  })
+
   it('adds a custom AI connection from the API configuration dialog', async () => {
     const user = userEvent.setup()
     testConnection.mockResolvedValueOnce({ providerId: 'custom-api-example-com', status: 'ok', hasApiKey: true, message: '连接成功' })
@@ -299,6 +328,7 @@ describe('provider settings panel', () => {
 
     await user.click(await screen.findByRole('button', { name: '设置' }))
     await user.click(await screen.findByRole('button', { name: '+ 添加连接' }))
+    await user.click(await screen.findByRole('button', { name: /Custom/ }))
 
     expect(await screen.findByRole('dialog', { name: 'API 配置' })).toBeInTheDocument()
     await user.type(screen.getByLabelText('添加连接 API key'), 'sk-custom-value')
@@ -361,6 +391,7 @@ describe('provider settings panel', () => {
 
     await user.click(await screen.findByRole('button', { name: '设置' }))
     await user.click(await screen.findByRole('button', { name: '+ 添加连接' }))
+    await user.click(await screen.findByRole('button', { name: /Custom/ }))
     await user.type(screen.getByLabelText('添加连接 API key'), 'sk-custom-value')
     await user.type(screen.getByLabelText('添加连接 Endpoint'), 'https://api.example.com')
     await user.type(screen.getByLabelText('添加连接默认模型'), 'gpt-4o')
