@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import type { Message, RunStep, WorkerAgentInvocation } from '@hesper/shared'
 import { appReducer, initialAppState } from '../src/app-store'
 
 const now = '2026-06-10T03:00:00.000Z'
@@ -196,6 +197,226 @@ describe('app-store reducer', () => {
       id: 'message-user-pending',
       runId: 'run-created-before-ipc-return'
     })
+  })
+
+  it('keeps child runs out of main session messages and latest run tracking', () => {
+    const sessionLoadedState = appReducer(initialAppState, {
+      type: 'sessions.loaded',
+      sessions: [
+        {
+          id: 'session-1',
+          title: 'Chat',
+          status: 'active',
+          outputMode: 'markdown',
+          createdAt: now,
+          updatedAt: now
+        }
+      ]
+    })
+
+    const withOptimisticMessage = appReducer(sessionLoadedState, {
+      type: 'message.optimistic',
+      message: {
+        id: 'message-user-root',
+        sessionId: 'session-1',
+        role: 'user',
+        content: '请查看 worker 结果',
+        contentType: 'plain',
+        createdAt: now
+      }
+    })
+
+    const rootRunCreated = appReducer(withOptimisticMessage, {
+      type: 'agent.event',
+      event: {
+        type: 'run.created',
+        run: {
+          id: 'run-root',
+          sessionId: 'session-1',
+          status: 'running',
+          modelId: 'mock/hesper-fast',
+          retryCount: 0,
+          maxRetries: 2,
+          startedAt: '2026-06-10T03:00:01.000Z'
+        }
+      }
+    })
+
+    expect(rootRunCreated.messagesBySession['session-1']).toEqual([
+      {
+        id: 'message-user-root',
+        sessionId: 'session-1',
+        role: 'user',
+        content: '请查看 worker 结果',
+        contentType: 'plain',
+        createdAt: now,
+        runId: 'run-root'
+      }
+    ])
+    expect(rootRunCreated.latestRunIdBySession['session-1']).toBe('run-root')
+
+    const childRunCreated = appReducer(rootRunCreated, {
+      type: 'agent.event',
+      event: {
+        type: 'run.created',
+        run: {
+          id: 'run-child',
+          sessionId: 'session-1',
+          parentRunId: 'run-root',
+          workerAgentInvocationId: 'worker-invocation-1',
+          status: 'running',
+          modelId: 'mock/hesper-fast',
+          retryCount: 0,
+          maxRetries: 2,
+          startedAt: '2026-06-10T03:00:02.000Z'
+        }
+      }
+    }) as any
+
+    expect(childRunCreated.latestRunIdBySession['session-1']).toBe('run-root')
+    expect(childRunCreated.messagesBySession['session-1']).toEqual(rootRunCreated.messagesBySession['session-1'])
+    expect(childRunCreated.childMessagesByRun['run-child']).toBeUndefined()
+
+    const childCompleted = appReducer(childRunCreated, {
+      type: 'agent.event',
+      event: {
+        type: 'message.completed',
+        message: {
+          id: 'message-child-assistant',
+          sessionId: 'session-1',
+          role: 'assistant',
+          content: 'worker answer',
+          contentType: 'markdown',
+          runId: 'run-child',
+          createdAt: '2026-06-10T03:00:03.000Z'
+        }
+      }
+    }) as any
+
+    expect(childCompleted.messagesBySession['session-1']).toEqual(rootRunCreated.messagesBySession['session-1'])
+    expect(childCompleted.childMessagesByRun['run-child']).toEqual([
+      {
+        id: 'message-child-assistant',
+        sessionId: 'session-1',
+        role: 'assistant',
+        content: 'worker answer',
+        contentType: 'markdown',
+        runId: 'run-child',
+        createdAt: '2026-06-10T03:00:03.000Z'
+      }
+    ])
+    expect(childCompleted.streamingByRun['run-child']).toBeUndefined()
+  })
+
+  it('indexes worker invocations and worker history separately from the main conversation', () => {
+    const childAssistantMessage = {
+      id: 'message-worker-assistant',
+      sessionId: 'session-1',
+      role: 'assistant',
+      content: 'worker answer',
+      contentType: 'markdown',
+      runId: 'run-child',
+      createdAt: '2026-06-10T03:00:03.000Z'
+    } satisfies Message
+
+    const childStep = {
+      id: 'step-worker-child',
+      runId: 'run-child',
+      type: 'tool_call',
+      status: 'succeeded',
+      title: 'Read File',
+      summary: 'Inspect README',
+      detail: 'ok',
+      createdAt: '2026-06-10T03:00:02.000Z'
+    } satisfies RunStep
+
+    const restoredState = appReducer(initialAppState, {
+      type: 'history.loaded',
+      sessionId: 'session-1',
+      messages: [
+        {
+          id: 'message-root-user',
+          sessionId: 'session-1',
+          role: 'user',
+          content: 'root prompt',
+          contentType: 'plain',
+          runId: 'run-root',
+          createdAt: '2026-06-10T03:00:01.000Z'
+        },
+        childAssistantMessage
+      ],
+      runs: [
+        { id: 'run-root', sessionId: 'session-1', status: 'succeeded', modelId: 'mock/hesper-fast', retryCount: 0, maxRetries: 2, endedAt: '2026-06-10T03:00:04.000Z' },
+        { id: 'run-child', sessionId: 'session-1', parentRunId: 'run-root', workerAgentInvocationId: 'worker-invocation-1', status: 'succeeded', modelId: 'mock/hesper-fast', retryCount: 0, maxRetries: 2, endedAt: '2026-06-10T03:00:04.000Z' }
+      ],
+      stepsByRun: {
+        'run-root': [
+          {
+            id: 'step-root',
+            runId: 'run-root',
+            type: 'thought',
+            status: 'succeeded',
+            title: 'Root step',
+            createdAt: '2026-06-10T03:00:01.000Z'
+          }
+        ],
+        'run-child': [childStep]
+      }
+    }) as any
+
+    expect(restoredState.messagesBySession['session-1']).toEqual([
+      {
+        id: 'message-root-user',
+        sessionId: 'session-1',
+        role: 'user',
+        content: 'root prompt',
+        contentType: 'plain',
+        runId: 'run-root',
+        createdAt: '2026-06-10T03:00:01.000Z'
+      }
+    ])
+    expect(restoredState.childMessagesByRun['run-child']).toEqual([childAssistantMessage])
+    expect(restoredState.latestRunIdBySession['session-1']).toBe('run-root')
+
+    const workerInvocation = {
+      id: 'worker-invocation-1',
+      parentRunId: 'run-root',
+      parentStepId: 'step-worker',
+      childRunId: 'run-child',
+      task: 'Review the diff and explain the risk.',
+      roleId: 'worker-reviewer',
+      allowedToolIds: ['filesystem.read-file', 'git.status'],
+      status: 'running',
+      createdAt: '2026-06-10T03:00:02.000Z'
+    } satisfies WorkerAgentInvocation
+
+    const workerIndexed = appReducer(restoredState, {
+      type: 'agent.event',
+      event: {
+        type: 'worker.invocation.created',
+        invocation: workerInvocation
+      }
+    }) as any
+
+    expect(workerIndexed.workerInvocationsById['worker-invocation-1']).toMatchObject(workerInvocation)
+    expect(workerIndexed.workerInvocationIdsByParentRun['run-root']).toEqual(['worker-invocation-1'])
+    expect(workerIndexed.workerInvocationIdByParentStepId['step-worker']).toBe('worker-invocation-1')
+
+    const hydrated = appReducer(workerIndexed, {
+      type: 'worker.history.loaded',
+      invocations: [{ ...workerInvocation, status: 'succeeded', lastEventAt: '2026-06-10T03:00:04.000Z' }],
+      stepsByRun: {
+        'run-child': [childStep]
+      },
+      messagesByRun: {
+        'run-child': [childAssistantMessage]
+      }
+    } as any) as any
+
+    expect(hydrated.workerInvocationsById['worker-invocation-1']).toMatchObject({ status: 'succeeded' })
+    expect(hydrated.stepsByRun['run-child']).toEqual([childStep])
+    expect(hydrated.childMessagesByRun['run-child']).toEqual([childAssistantMessage])
+    expect(hydrated.messagesBySession['session-1']).toEqual(restoredState.messagesBySession['session-1'])
   })
 
   it('aggregates message deltas and removes streaming state when message completes', () => {

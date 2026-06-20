@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react'
-import { createId, nowIso, type Message, type RunStep, type Session } from '@hesper/shared'
+import { createId, nowIso, type Message, type RunStep, type Session, type WorkerAgentInvocation } from '@hesper/shared'
 import { AppShell, ConversationView, type AppSection, type ConversationShortcutCommand } from '@hesper/ui'
 import { AppStoreProvider, useAppStore } from './app-store'
 import { hesperApi } from './ipc-client'
@@ -426,6 +426,42 @@ function AppContent() {
           setHistoryErrorsBySession((current) => clearSessionSendError(current, sessionId))
           dispatch({ type: 'history.loaded', sessionId, messages, runs, stepsByRun })
         }
+
+        const rootRuns = runs.filter((run) => !run.parentRunId)
+        if (rootRuns.length > 0) {
+          const workerHistoryResults = await Promise.all(rootRuns.map(async (run) => {
+            try {
+              const invocations = await hesperApi.workerAgents.listByParentRun({ sessionId, parentRunId: run.id })
+              const childRunEntries = await Promise.all(invocations
+                .filter((invocation) => invocation.childRunId)
+                .map(async (invocation) => {
+                  const childRunId = invocation.childRunId!
+                  const [childSteps, childMessages] = await Promise.all([
+                    conversationApi.listSteps(childRunId),
+                    conversationApi.listMessagesByRun({ sessionId, runId: childRunId })
+                  ])
+                  return [childRunId, { invocation, childSteps, childMessages }] as const
+                }))
+
+              return {
+                invocations,
+                stepsByRun: Object.fromEntries(childRunEntries.map(([childRunId, entry]) => [childRunId, entry.childSteps])) as Record<string, RunStep[]>,
+                messagesByRun: Object.fromEntries(childRunEntries.map(([childRunId, entry]) => [childRunId, entry.childMessages])) as Record<string, Message[]>
+              }
+            } catch (error) {
+              console.warn('Failed to load worker history for run', run.id, error)
+              return { invocations: [], stepsByRun: {}, messagesByRun: {} }
+            }
+          }))
+
+          const invocations = workerHistoryResults.flatMap((result) => result.invocations)
+          const childStepsByRun = Object.fromEntries(workerHistoryResults.flatMap((result) => Object.entries(result.stepsByRun))) as Record<string, RunStep[]>
+          const childMessagesByRun = Object.fromEntries(workerHistoryResults.flatMap((result) => Object.entries(result.messagesByRun))) as Record<string, Message[]>
+
+          if (!cancelled) {
+            dispatch({ type: 'worker.history.loaded', invocations, stepsByRun: childStepsByRun, messagesByRun: childMessagesByRun } as any)
+          }
+        }
       } catch (error) {
         if (!cancelled) {
           const message = error instanceof Error ? error.message : 'Unknown conversation history load error'
@@ -448,13 +484,17 @@ function AppContent() {
       }
 
       if (event.type === 'message.completed' && event.message.role === 'assistant') {
-        dispatch({ type: 'session.touched', sessionId: event.message.sessionId, updatedAt: event.message.createdAt })
-        handleSessionCompletionUnread(event.message.sessionId, event.message.createdAt)
+        const completedRun = event.message.runId ? stateRef.current.runsById[event.message.runId] : undefined
+        const isChildRun = Boolean(completedRun?.parentRunId)
+        if (!isChildRun) {
+          dispatch({ type: 'session.touched', sessionId: event.message.sessionId, updatedAt: event.message.createdAt })
+          handleSessionCompletionUnread(event.message.sessionId, event.message.createdAt)
+        }
       }
 
       if (event.type === 'run.failed') {
         const run = stateRef.current.runsById[event.runId]
-        if (run) {
+        if (run && !run.parentRunId) {
           const failedAt = event.endedAt ?? run.endedAt ?? new Date().toISOString()
           dispatch({ type: 'session.touched', sessionId: run.sessionId, updatedAt: failedAt })
           handleSessionCompletionUnread(run.sessionId, failedAt)
@@ -462,29 +502,32 @@ function AppContent() {
       }
 
       if (event.type === 'message.completed' && event.message.role === 'assistant' && event.message.runId) {
-        const session = stateRef.current.sessions.find((candidate) => candidate.id === event.message.sessionId)
-        const messages = stateRef.current.messagesBySession[event.message.sessionId] ?? []
-        const fallbackPrompt = pendingTitlePromptsBySessionRef.current[event.message.sessionId]
-        const source = session && isDefaultSessionTitle(session.title)
-          ? firstUserTitleSource(messages, event.message.content) ?? (fallbackPrompt ? { userPrompt: fallbackPrompt, assistantOutput: event.message.content } : undefined)
-          : undefined
-        const modelId = runModelIdsRef.current[event.message.runId] ?? session?.defaultModelId ?? defaultFallbackModelId
+        const completedRun = stateRef.current.runsById[event.message.runId]
+        if (!completedRun?.parentRunId) {
+          const session = stateRef.current.sessions.find((candidate) => candidate.id === event.message.sessionId)
+          const messages = stateRef.current.messagesBySession[event.message.sessionId] ?? []
+          const fallbackPrompt = pendingTitlePromptsBySessionRef.current[event.message.sessionId]
+          const source = session && isDefaultSessionTitle(session.title)
+            ? firstUserTitleSource(messages, event.message.content) ?? (fallbackPrompt ? { userPrompt: fallbackPrompt, assistantOutput: event.message.content } : undefined)
+            : undefined
+          const modelId = runModelIdsRef.current[event.message.runId] ?? session?.defaultModelId ?? defaultFallbackModelId
 
-        if (session && source?.userPrompt && !titleGeneratedRunIdsRef.current.has(event.message.runId)) {
-          titleGeneratedRunIdsRef.current.add(event.message.runId)
-          void hesperApi.sessions.generateTitle({
-            id: session.id,
-            modelId,
-            userPrompt: source.userPrompt,
-            ...(source.assistantOutput ? { assistantOutput: source.assistantOutput } : {})
-          }).then((updatedSession) => {
-            dispatch({ type: 'session.updated', session: updatedSession })
-          }).catch((error) => {
-            titleGeneratedRunIdsRef.current.delete(event.message.runId!)
-            console.warn('Failed to generate session title', error)
-          }).finally(() => {
-            delete pendingTitlePromptsBySessionRef.current[event.message.sessionId]
-          })
+          if (session && source?.userPrompt && !titleGeneratedRunIdsRef.current.has(event.message.runId)) {
+            titleGeneratedRunIdsRef.current.add(event.message.runId)
+            void hesperApi.sessions.generateTitle({
+              id: session.id,
+              modelId,
+              userPrompt: source.userPrompt,
+              ...(source.assistantOutput ? { assistantOutput: source.assistantOutput } : {})
+            }).then((updatedSession) => {
+              dispatch({ type: 'session.updated', session: updatedSession })
+            }).catch((error) => {
+              titleGeneratedRunIdsRef.current.delete(event.message.runId!)
+              console.warn('Failed to generate session title', error)
+            }).finally(() => {
+              delete pendingTitlePromptsBySessionRef.current[event.message.sessionId]
+            })
+          }
         }
       }
 
@@ -615,6 +658,18 @@ function AppContent() {
   const activeSteps = activeRunId ? state.stepsByRun[activeRunId] ?? [] : []
   const activeStreamingText = activeRunId ? state.streamingByRun[activeRunId] ?? '' : ''
   const activeMessages = activeSession ? state.messagesBySession[activeSession.id] ?? [] : []
+  const workerAgentView = useMemo(() => ({
+    invocationsByParentStepId: Object.fromEntries(
+      Object.entries(state.workerInvocationIdByParentStepId).flatMap(([stepId, invocationId]) => {
+        const invocation = state.workerInvocationsById[invocationId]
+        return invocation ? [[stepId, invocation] as const] : []
+      })
+    ) as Record<string, WorkerAgentInvocation>,
+    runsById: state.runsById,
+    stepsByRun: state.stepsByRun,
+    messagesByRun: state.childMessagesByRun,
+    streamingByRun: state.streamingByRun
+  }), [state.childMessagesByRun, state.runsById, state.stepsByRun, state.streamingByRun, state.workerInvocationIdByParentStepId, state.workerInvocationsById])
   const activeModelId = activeSession ? resolveSessionModelId(activeSession.defaultModelId, sessionModelCatalog.preferredModelId, explicitModelSelectionSessionIdsRef.current.has(activeSession.id)) : sessionModelCatalog.preferredModelId
   const activeModelOptions = activeSession?.defaultModelId ? mergeModelOptions(sessionModelCatalog.options, [activeModelId, activeSession.defaultModelId]) : mergeModelOptions(sessionModelCatalog.options, [activeModelId])
 
@@ -799,9 +854,14 @@ function AppContent() {
     const loadedSource = latestTitleSource(stateRef.current.messagesBySession[sessionId] ?? [])
     if (loadedSource) return loadedSource
 
-    const messages = await hesperApi.conversation.listMessages(sessionId)
-    dispatch({ type: 'history.loaded', sessionId, messages, runs: [], stepsByRun: {} })
-    return latestTitleSource(messages)
+    const [messages, runs] = await Promise.all([
+      hesperApi.conversation.listMessages(sessionId),
+      hesperApi.conversation.listRuns(sessionId)
+    ])
+    dispatch({ type: 'history.loaded', sessionId, messages, runs, stepsByRun: {} })
+    const childRunIds = new Set(runs.filter((run) => run.parentRunId).map((run) => run.id))
+    const mainMessages = messages.filter((message) => !message.runId || !childRunIds.has(message.runId))
+    return latestTitleSource(mainMessages)
   }
 
   const regenerateSessionTitle = async (sessionId: string) => {
@@ -968,6 +1028,7 @@ function AppContent() {
             runsById={state.runsById}
             streamingText={activeStreamingText}
             streamingByRun={state.streamingByRun}
+            workerAgentView={workerAgentView}
             modelId={activeModelId}
             modelOptions={activeModelOptions}
             modelOptionGroups={sessionModelCatalog.optionGroups}

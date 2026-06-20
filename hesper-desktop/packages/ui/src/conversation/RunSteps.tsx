@@ -1,14 +1,24 @@
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
-import type { RunStep, RunStepStatus } from '@hesper/shared'
+import type { AgentRun, Message, RunStep, RunStepStatus, WorkerAgentInvocation } from '@hesper/shared'
 import { darkTheme } from '../theme'
 import { MarkdownOutput } from './MarkdownOutput'
 import { RunningStatusIcon } from './RunningStatusIcon'
+import { WorkerAgentRunViewer } from './WorkerAgentRunViewer'
+
+export type WorkerAgentView = {
+  invocationsByParentStepId: Record<string, WorkerAgentInvocation>
+  runsById: Record<string, AgentRun>
+  stepsByRun: Record<string, RunStep[]>
+  messagesByRun: Record<string, Message[]>
+  streamingByRun: Record<string, string>
+}
 
 export type RunStepsProps = {
   steps: RunStep[]
   autoExpanded?: boolean
   runStartedAt?: string | undefined
   runEndedAt?: string | undefined
+  workerAgentView?: WorkerAgentView | undefined
   getStepProps?: (step: RunStep) => {
     id?: string
     tabIndex?: number
@@ -262,9 +272,14 @@ function ToolStepDetails({ step }: { step: RunStep }) {
   )
 }
 
-function StepFullscreenDialog({ step, onClose }: { step: RunStep; onClose: () => void }) {
+function StepFullscreenDialog({ step, workerAgentView, onClose }: { step: RunStep; workerAgentView?: WorkerAgentView | undefined; onClose: () => void }) {
   const markdown = createStepMarkdown(step)
   const toolDetailPayload = getToolStepDetailPayload(step)
+  const workerInvocation = step.type === 'tool_call' ? workerAgentView?.invocationsByParentStepId[step.id] : undefined
+  const workerRun = workerInvocation?.childRunId ? workerAgentView?.runsById[workerInvocation.childRunId] : undefined
+  const workerSteps = workerInvocation?.childRunId ? workerAgentView?.stepsByRun[workerInvocation.childRunId] ?? [] : []
+  const workerMessages = workerInvocation?.childRunId ? workerAgentView?.messagesByRun[workerInvocation.childRunId] ?? [] : []
+  const workerStreamingText = workerInvocation?.childRunId ? workerAgentView?.streamingByRun[workerInvocation.childRunId] ?? '' : ''
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -284,7 +299,7 @@ function StepFullscreenDialog({ step, onClose }: { step: RunStep; onClose: () =>
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="步骤全屏查看"
+      aria-label={workerInvocation ? 'Worker Agent 执行详情' : '步骤全屏查看'}
       data-hesper-fullscreen-output="true"
       style={stepFullscreenOverlayStyle}
     >
@@ -303,7 +318,19 @@ function StepFullscreenDialog({ step, onClose }: { step: RunStep; onClose: () =>
           style={stepFullscreenScrollAreaStyle}
         >
           <article aria-label="步骤详情正文" style={stepFullscreenBodyStyle}>
-            {toolDetailPayload ? <ToolStepDetails step={step} /> : <MarkdownOutput content={markdown} />}
+            {workerInvocation ? (
+              <WorkerAgentRunViewer
+                invocation={workerInvocation}
+                run={workerRun}
+                steps={workerSteps}
+                messages={workerMessages}
+                streamingText={workerStreamingText}
+              />
+            ) : toolDetailPayload ? (
+              <ToolStepDetails step={step} />
+            ) : (
+              <MarkdownOutput content={markdown} />
+            )}
           </article>
         </div>
       </div>
@@ -311,7 +338,7 @@ function StepFullscreenDialog({ step, onClose }: { step: RunStep; onClose: () =>
   )
 }
 
-export function RunSteps({ steps, autoExpanded = false, runStartedAt, runEndedAt, getStepProps }: RunStepsProps) {
+export function RunSteps({ steps, autoExpanded = false, runStartedAt, runEndedAt, workerAgentView, getStepProps }: RunStepsProps) {
   const [expanded, setExpanded] = useState(autoExpanded)
   const [activeStep, setActiveStep] = useState<RunStep>()
   const orderedSteps = useMemo(() => [...steps].sort(compareCreatedAt), [steps])
@@ -397,7 +424,7 @@ export function RunSteps({ steps, autoExpanded = false, runStartedAt, runEndedAt
           })}
         </ul>
       ) : null}
-      {activeStep ? <StepFullscreenDialog step={activeStep} onClose={() => setActiveStep(undefined)} /> : null}
+      {activeStep ? <StepFullscreenDialog step={activeStep} workerAgentView={workerAgentView} onClose={() => setActiveStep(undefined)} /> : null}
     </section>
   )
 }

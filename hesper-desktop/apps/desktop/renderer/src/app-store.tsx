@@ -1,5 +1,5 @@
 import { createContext, useContext, useMemo, useReducer, type Dispatch, type ReactNode } from 'react'
-import type { AgentRun, AgentRuntimeEvent, Message, RunStep, Session } from '@hesper/shared'
+import type { AgentRun, AgentRuntimeEvent, Message, RunStep, Session, WorkerAgentInvocation } from '@hesper/shared'
 import type { AppSection } from '@hesper/ui'
 
 export type AppState = {
@@ -12,6 +12,10 @@ export type AppState = {
   activeSection: AppSection
   runSessionIds: Record<string, string>
   latestRunIdBySession: Record<string, string>
+  workerInvocationsById: Record<string, WorkerAgentInvocation>
+  workerInvocationIdsByParentRun: Record<string, string[]>
+  workerInvocationIdByParentStepId: Record<string, string>
+  childMessagesByRun: Record<string, Message[]>
 }
 
 export type AppAction =
@@ -22,6 +26,7 @@ export type AppAction =
   | { type: 'session.touch-reverted'; sessionId: string; optimisticUpdatedAt: string; previousUpdatedAt: string }
   | { type: 'session.selected'; sessionId: string }
   | { type: 'history.loaded'; sessionId: string; messages: Message[]; runs: AgentRun[]; stepsByRun: Record<string, RunStep[]> }
+  | { type: 'worker.history.loaded'; invocations: WorkerAgentInvocation[]; stepsByRun: Record<string, RunStep[]>; messagesByRun: Record<string, Message[]> }
   | { type: 'message.optimistic'; message: Message }
   | { type: 'message.run-linked'; sessionId: string; messageId: string; runId: string }
   | { type: 'message.removed'; sessionId: string; messageId: string }
@@ -36,7 +41,11 @@ export const initialAppState: AppState = {
   runsById: {},
   activeSection: 'sessions',
   runSessionIds: {},
-  latestRunIdBySession: {}
+  latestRunIdBySession: {},
+  workerInvocationsById: {},
+  workerInvocationIdsByParentRun: {},
+  workerInvocationIdByParentStepId: {},
+  childMessagesByRun: {}
 }
 
 const AppStoreContext = createContext<{ state: AppState; dispatch: Dispatch<AppAction> } | undefined>(undefined)
@@ -84,6 +93,14 @@ function mergeById<T extends { id: string }>(items: T[], nextItem: T): T[] {
 
 function removeById<T extends { id: string }>(items: T[], id: string): T[] {
   return items.filter((item) => item.id !== id)
+}
+
+function appendUniqueString(items: string[] | undefined, value: string): string[] {
+  if (items?.includes(value)) {
+    return items
+  }
+
+  return [...(items ?? []), value]
 }
 
 function compareCreatedAt<T extends { id: string; createdAt: string }>(left: T, right: T): number {
@@ -225,9 +242,25 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case 'session.selected':
       return { ...state, activeSessionId: action.sessionId }
     case 'history.loaded': {
+      const childRunIds = new Set(action.runs.filter((run) => run.parentRunId).map((run) => run.id))
+      const mainMessages: Message[] = []
+      const childMessagesByRun: Record<string, Message[]> = {}
+      for (const message of action.messages) {
+        const messageRunId = message.runId
+        if (messageRunId && childRunIds.has(messageRunId)) {
+          childMessagesByRun[messageRunId] = [...(childMessagesByRun[messageRunId] ?? []), message]
+        } else {
+          mainMessages.push(message)
+        }
+      }
+
       const nextMessagesBySession = {
         ...state.messagesBySession,
-        [action.sessionId]: mergeManyByIdChronologically(action.messages, state.messagesBySession[action.sessionId] ?? [])
+        [action.sessionId]: mergeManyByIdChronologically(mainMessages, state.messagesBySession[action.sessionId] ?? [])
+      }
+      const nextChildMessagesByRun = { ...state.childMessagesByRun }
+      for (const [runId, messages] of Object.entries(childMessagesByRun)) {
+        nextChildMessagesByRun[runId] = mergeManyByIdChronologically(messages, nextChildMessagesByRun[runId] ?? [])
       }
       const nextStepsByRun = { ...state.stepsByRun }
       const nextRunSessionIds = { ...state.runSessionIds }
@@ -243,9 +276,10 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         nextStepsByRun[runId] = mergeManyByIdChronologically(steps, nextStepsByRun[runId] ?? [])
       }
 
-      const latestPersistedRunId = action.runs.at(-1)?.id
+      const latestPersistedRunId = action.runs.filter((run) => !run.parentRunId).at(-1)?.id
       const currentLatestRunId = state.latestRunIdBySession[action.sessionId]
-      const shouldKeepCurrentLatest = currentLatestRunId ? state.streamingByRun[currentLatestRunId] !== undefined : false
+      const currentLatestRun = currentLatestRunId ? state.runsById[currentLatestRunId] : undefined
+      const shouldKeepCurrentLatest = Boolean(currentLatestRun && currentLatestRun.parentRunId === undefined && currentLatestRunId && state.streamingByRun[currentLatestRunId] !== undefined)
       const nextLatestRunIdBySession = shouldKeepCurrentLatest || !latestPersistedRunId
         ? state.latestRunIdBySession
         : { ...state.latestRunIdBySession, [action.sessionId]: latestPersistedRunId }
@@ -253,10 +287,43 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return {
         ...state,
         messagesBySession: nextMessagesBySession,
+        childMessagesByRun: nextChildMessagesByRun,
         stepsByRun: nextStepsByRun,
         runSessionIds: nextRunSessionIds,
         runsById: nextRunsById,
         latestRunIdBySession: nextLatestRunIdBySession
+      }
+    }
+    case 'worker.history.loaded': {
+      const nextWorkerInvocationsById = { ...state.workerInvocationsById }
+      const nextWorkerInvocationIdsByParentRun = { ...state.workerInvocationIdsByParentRun }
+      const nextWorkerInvocationIdByParentStepId = { ...state.workerInvocationIdByParentStepId }
+      const nextStepsByRun = { ...state.stepsByRun }
+      const nextChildMessagesByRun = { ...state.childMessagesByRun }
+
+      for (const invocation of action.invocations) {
+        nextWorkerInvocationsById[invocation.id] = invocation
+        nextWorkerInvocationIdsByParentRun[invocation.parentRunId] = appendUniqueString(nextWorkerInvocationIdsByParentRun[invocation.parentRunId], invocation.id)
+        if (invocation.parentStepId) {
+          nextWorkerInvocationIdByParentStepId[invocation.parentStepId] = invocation.id
+        }
+      }
+
+      for (const [runId, steps] of Object.entries(action.stepsByRun)) {
+        nextStepsByRun[runId] = mergeManyByIdChronologically(steps, nextStepsByRun[runId] ?? [])
+      }
+
+      for (const [runId, messages] of Object.entries(action.messagesByRun)) {
+        nextChildMessagesByRun[runId] = mergeManyByIdChronologically(messages, nextChildMessagesByRun[runId] ?? [])
+      }
+
+      return {
+        ...state,
+        stepsByRun: nextStepsByRun,
+        childMessagesByRun: nextChildMessagesByRun,
+        workerInvocationsById: nextWorkerInvocationsById,
+        workerInvocationIdsByParentRun: nextWorkerInvocationIdsByParentRun,
+        workerInvocationIdByParentStepId: nextWorkerInvocationIdByParentStepId
       }
     }
     case 'message.optimistic': {
@@ -296,6 +363,21 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const { event } = action
       switch (event.type) {
         case 'run.created': {
+          const nextRunSessionIds = { ...state.runSessionIds, [event.run.id]: event.run.sessionId }
+          const nextRunsById = { ...state.runsById, [event.run.id]: event.run }
+          const nextStepsByRun = { ...state.stepsByRun, [event.run.id]: state.stepsByRun[event.run.id] ?? [] }
+          const nextStreamingByRun = { ...state.streamingByRun, [event.run.id]: state.streamingByRun[event.run.id] ?? '' }
+
+          if (event.run.parentRunId) {
+            return {
+              ...state,
+              runSessionIds: nextRunSessionIds,
+              runsById: nextRunsById,
+              stepsByRun: nextStepsByRun,
+              streamingByRun: nextStreamingByRun
+            }
+          }
+
           const currentMessages = state.messagesBySession[event.run.sessionId] ?? []
           const linkedMessages = linkLatestPendingUserMessage(currentMessages, event.run.id)
           const nextMessagesBySession = linkedMessages === currentMessages
@@ -305,11 +387,11 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           return {
             ...state,
             messagesBySession: nextMessagesBySession,
-            runSessionIds: { ...state.runSessionIds, [event.run.id]: event.run.sessionId },
-            runsById: { ...state.runsById, [event.run.id]: event.run },
+            runSessionIds: nextRunSessionIds,
+            runsById: nextRunsById,
             latestRunIdBySession: { ...state.latestRunIdBySession, [event.run.sessionId]: event.run.id },
-            stepsByRun: { ...state.stepsByRun, [event.run.id]: state.stepsByRun[event.run.id] ?? [] },
-            streamingByRun: { ...state.streamingByRun, [event.run.id]: state.streamingByRun[event.run.id] ?? '' }
+            stepsByRun: nextStepsByRun,
+            streamingByRun: nextStreamingByRun
           }
         }
         case 'step.created':
@@ -320,6 +402,23 @@ export function appReducer(state: AppState, action: AppAction): AppState {
               ...state.stepsByRun,
               [event.step.runId]: mergeByIdChronologically(state.stepsByRun[event.step.runId] ?? [], event.step)
             }
+          }
+        }
+        case 'worker.invocation.created':
+        case 'worker.invocation.updated': {
+          return {
+            ...state,
+            workerInvocationsById: {
+              ...state.workerInvocationsById,
+              [event.invocation.id]: event.invocation
+            },
+            workerInvocationIdsByParentRun: {
+              ...state.workerInvocationIdsByParentRun,
+              [event.invocation.parentRunId]: appendUniqueString(state.workerInvocationIdsByParentRun[event.invocation.parentRunId], event.invocation.id)
+            },
+            workerInvocationIdByParentStepId: event.invocation.parentStepId
+              ? { ...state.workerInvocationIdByParentStepId, [event.invocation.parentStepId]: event.invocation.id }
+              : state.workerInvocationIdByParentStepId
           }
         }
         case 'message.delta': {
@@ -335,6 +434,18 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           const nextStreamingByRun = { ...state.streamingByRun }
           if (event.message.runId) {
             delete nextStreamingByRun[event.message.runId]
+          }
+
+          const completedRun = event.message.runId ? state.runsById[event.message.runId] : undefined
+          if (event.message.runId && completedRun?.parentRunId) {
+            return {
+              ...state,
+              childMessagesByRun: {
+                ...state.childMessagesByRun,
+                [event.message.runId]: mergeByIdChronologically(state.childMessagesByRun[event.message.runId] ?? [], event.message)
+              },
+              streamingByRun: nextStreamingByRun
+            }
           }
 
           return {

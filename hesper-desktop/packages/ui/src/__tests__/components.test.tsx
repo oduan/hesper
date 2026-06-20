@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import type { AgentRun, Message, RunStep, Session } from '@hesper/shared'
+import type { AgentRun, Message, RunStep, Session, WorkerAgentInvocation } from '@hesper/shared'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppShell } from '../layout/AppShell'
 import { Composer } from '../conversation/Composer'
@@ -1278,5 +1278,94 @@ describe('ui components', () => {
     expect(inputBlock).toHaveTextContent('"purpose": "搜索 Hesper 是什么"')
     expect(outputBlock).toHaveTextContent('"content": "fetched html"')
     expect(outputBlock).toHaveTextContent('"status": 200')
+  })
+
+  it('opens Worker Agent execution details for worker tool steps and renders worker history', async () => {
+    const user = userEvent.setup()
+    const workerInvocation = {
+      id: 'worker-invocation-1',
+      parentRunId: 'run-parent',
+      parentStepId: 'step-worker',
+      childRunId: 'run-child',
+      task: 'Review the diff and explain the risk.',
+      contextSummary: 'Inspect README before summarising the worker result.',
+      expectedOutput: 'A concise risk summary with action items.',
+      roleId: 'worker-reviewer',
+      allowedToolIds: ['filesystem.read-file', 'git.status'],
+      status: 'running',
+      createdAt: now
+    } satisfies WorkerAgentInvocation
+    const childRun = {
+      id: 'run-child',
+      sessionId: 'session-1',
+      parentRunId: 'run-parent',
+      workerAgentInvocationId: 'worker-invocation-1',
+      status: 'running',
+      modelId: 'mock/hesper-fast',
+      retryCount: 0,
+      maxRetries: 2,
+      startedAt: now
+    }
+    const childStep = {
+      id: 'step-child-tool',
+      runId: 'run-child',
+      type: 'tool_call',
+      status: 'succeeded',
+      title: 'Read File',
+      summary: 'Inspect README',
+      detail: JSON.stringify({ kind: 'tool_call', toolId: 'filesystem.read-file', toolIcon: '📖', input: { path: 'README.md' }, output: 'ok' }),
+      createdAt: '2026-06-10T03:00:01.000Z'
+    }
+    const childMessage = {
+      id: 'message-child-final',
+      sessionId: 'session-1',
+      role: 'assistant',
+      content: 'final worker answer',
+      contentType: 'markdown',
+      runId: 'run-child',
+      createdAt: '2026-06-10T03:00:03.000Z'
+    }
+
+    render(
+      <RunSteps
+        steps={[
+          {
+            id: 'step-worker',
+            runId: 'run-parent',
+            type: 'tool_call',
+            status: 'running',
+            title: 'Spawn Worker Agent',
+            summary: 'Spawn worker to review the diff',
+            detail: JSON.stringify({ kind: 'tool_call', toolId: 'agent.spawn-worker-agent', input: { task: workerInvocation.task }, output: 'accepted' }),
+            createdAt: now
+          }
+        ]}
+        workerAgentView={{
+          invocationsByParentStepId: { 'step-worker': workerInvocation },
+          runsById: { 'run-child': childRun },
+          stepsByRun: { 'run-child': [childStep] },
+          messagesByRun: { 'run-child': [childMessage] },
+          streamingByRun: { 'run-child': 'streaming child output' }
+        } as any}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { expanded: false }))
+    const item = screen.getByRole('listitem')
+    await user.click(within(item).getByRole('button', { name: /查看步骤详情/ }))
+
+    const dialog = screen.getByRole('dialog', { name: 'Worker Agent 执行详情' })
+    expect(within(dialog).getByText('Review the diff and explain the risk.')).toBeInTheDocument()
+    expect(within(dialog).getByText('Inspect README before summarising the worker result.')).toBeInTheDocument()
+    expect(within(dialog).getByText('A concise risk summary with action items.')).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: '查看步骤详情：Read File' })).toHaveTextContent('Inspect README')
+    expect(within(dialog).getByText('worker-reviewer')).toBeInTheDocument()
+    expect(within(dialog).getByText('filesystem.read-file')).toBeInTheDocument()
+    expect(within(dialog).getByText('git.status')).toBeInTheDocument()
+    expect(within(dialog).getByText('streaming child output')).toBeInTheDocument()
+    expect(within(dialog).getByText('final worker answer')).toBeInTheDocument()
+    expect(within(dialog).queryByText('Input')).not.toBeInTheDocument()
+    fireEvent.keyDown(dialog, { key: 'Escape', bubbles: true, cancelable: true })
+    expect(screen.queryByRole('dialog', { name: 'Worker Agent 执行详情' })).not.toBeInTheDocument()
   })
 })

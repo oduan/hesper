@@ -5,7 +5,7 @@ import { Composer, type ModelOptionGroup } from './Composer'
 import { MessageBubble } from './MessageBubble'
 import { OutputBlock } from './OutputBlock'
 import type { NavigationItem } from './RightNavigation'
-import { RunSteps } from './RunSteps'
+import { RunSteps, type WorkerAgentView } from './RunSteps'
 
 export type ConversationShortcutCommand =
   | { type: 'send'; nonce: number }
@@ -20,6 +20,7 @@ export type ConversationViewProps = {
   runsById?: Record<string, AgentRun>
   streamingText: string
   streamingByRun?: Record<string, string>
+  workerAgentView?: WorkerAgentView | undefined
   modelId: string
   modelOptions?: string[]
   modelOptionGroups?: ModelOptionGroup[]
@@ -186,6 +187,7 @@ export function ConversationView({
   runsById,
   streamingText,
   streamingByRun,
+  workerAgentView,
   modelId,
   modelOptions,
   modelOptionGroups,
@@ -518,6 +520,7 @@ export function ConversationView({
                       autoExpanded={message.role === 'user' && (!message.runId || !finalOutputRunIds.has(message.runId))}
                       runStartedAt={message.createdAt}
                       runEndedAt={getMessageRunEndedAt(message)}
+                      workerAgentView={workerAgentView}
                       getStepProps={(step) => {
                         const stepAnchorId = createStepAnchorId(step.id)
                         return {
@@ -558,6 +561,7 @@ export function ConversationView({
               autoExpanded
               runStartedAt={fallbackStepsRun?.startedAt ?? orderedSteps[0]?.createdAt}
               runEndedAt={fallbackStepsRun?.endedAt}
+              workerAgentView={workerAgentView}
               getStepProps={(step) => {
                 const stepAnchorId = createStepAnchorId(step.id)
                 return {
