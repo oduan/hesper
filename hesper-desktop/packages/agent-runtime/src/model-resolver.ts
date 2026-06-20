@@ -36,6 +36,10 @@ const knownProviderByKind: Partial<Record<ModelProviderKind, KnownProvider>> = {
   anthropic: 'anthropic'
 }
 
+function piKnownProvider(provider: ModelProviderConfig): KnownProvider | undefined {
+  return provider.kind === 'pi' ? provider.piAuthProvider as KnownProvider | undefined : knownProviderByKind[provider.kind]
+}
+
 const defaultCost = {
   input: 0,
   output: 0,
@@ -143,6 +147,9 @@ async function assertProviderKey(options: RegistryModelResolverOptions, provider
 
   const apiKey = await options.readProviderApiKey(provider.id)
   if (!apiKey) {
+    if (provider.authType === 'oauth') {
+      throw new Error(`Model provider needs OAuth authorization: ${provider.id}`)
+    }
     throw new Error(`Model provider needs an API key: ${provider.id}`)
   }
 }
@@ -157,11 +164,19 @@ function createModelForProvider(
     return createFauxModel(provider, model)
   }
 
+  if (provider.kind === 'pi') {
+    const knownProvider = piKnownProvider(provider)
+    if (!knownProvider) {
+      throw new Error(`Unsupported Pi auth provider: ${provider.piAuthProvider ?? 'missing'}`)
+    }
+    return mergeRegistryModel(getPiModel(knownProvider, model.modelName), provider, model)
+  }
+
   if (provider.kind === 'openai-compatible' || provider.kind === 'custom') {
     return createOpenAICompatibleModel(provider, model)
   }
 
-  const knownProvider = knownProviderByKind[provider.kind]
+  const knownProvider = piKnownProvider(provider)
   if (!knownProvider) {
     throw new Error(`Unsupported model provider kind: ${provider.kind}`)
   }
@@ -193,6 +208,7 @@ export function createRegistryModelResolver(options: RegistryModelResolverOption
       const apiKeyProviderAliases = new Set([
         provider.id,
         provider.kind,
+        ...(provider.piAuthProvider ? [provider.piAuthProvider] : []),
         ...(provider.kind === 'openai-compatible' || provider.kind === 'custom' ? ['openai'] : [])
       ])
 
