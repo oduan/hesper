@@ -29,6 +29,14 @@ const WORKER_AGENT_TOOL_IDS = new Set([
   'agent.cancel-worker-agent'
 ])
 
+const WORKER_AGENT_STATUSES = new Set<WorkerAgentInvocation['status']>([
+  'queued',
+  'running',
+  'succeeded',
+  'failed',
+  'cancelled'
+])
+
 export type SpawnWorkerAgentInput = {
   task: string
   roleId: string
@@ -81,6 +89,7 @@ type PromptAssemblyLike = {
     tools: ToolDefinition[]
     task: string
     expectedOutput?: string
+    contextSummary?: string
     allowedToolIds: string[]
     depth: number
     maxDepth: number
@@ -117,6 +126,16 @@ type FinalizedChildRunState = {
   endedAt: string
 }
 
+type SpawnPreparation = {
+  parsed: SpawnWorkerAgentInput
+  invocation: WorkerAgentInvocation
+  childRun: AgentRun
+  activeWorker: ActiveWorker
+  role: Role
+  session: Session
+  effectiveAllowedToolIds: string[]
+}
+
 export type WorkerAgentServiceOptions = {
   persistence: Persistence
   adapter: AgentAdapter
@@ -144,6 +163,11 @@ function currentNow(options: WorkerAgentServiceOptions): string {
 
 function createWorkerAgentId(): string {
   return `worker-agent-${randomUUID()}`
+}
+
+function composeWorkerPrompt(task: string, contextSummary?: string): string {
+  if (!contextSummary) return task
+  return `Context summary:\n${contextSummary}\n\nTask:\n${task}`
 }
 
 function boundedTimeoutMs(value: number | undefined): number {
@@ -198,11 +222,17 @@ function parseCancelInput(input: Record<string, unknown>): CancelWorkerAgentInpu
   }
 }
 
+function parseWorkerAgentStatus(value: unknown): WorkerAgentInvocation['status'] {
+  if (typeof value !== 'string' || !WORKER_AGENT_STATUSES.has(value as WorkerAgentInvocation['status'])) {
+    throw new Error(`Worker Agent status is invalid: ${String(value)}`)
+  }
+  return value as WorkerAgentInvocation['status']
+}
+
 function parseListInput(input: Record<string, unknown>): ListWorkerAgentsInput {
-  const status = input.status
   return {
     ...(typeof input.parentRunId === 'string' && input.parentRunId.trim() ? { parentRunId: input.parentRunId } : {}),
-    ...(typeof status === 'string' && status.trim() ? { status: status as WorkerAgentInvocation['status'] } : {})
+    ...(input.status !== undefined ? { status: parseWorkerAgentStatus(input.status) } : {})
   }
 }
 
@@ -261,6 +291,27 @@ export function createWorkerAgentService(options: WorkerAgentServiceOptions): Wo
   const activeWorkers = new Map<string, ActiveWorker>()
   const childRunIdToInvocationId = new Map<string, string>()
   const finalizedChildRuns = new Map<string, FinalizedChildRunState>()
+  const spawnChains = new Map<string, Promise<void>>()
+
+  async function withSpawnLock<T>(parentRunId: string, task: () => Promise<T>): Promise<T> {
+    const previous = spawnChains.get(parentRunId) ?? Promise.resolve()
+    let release!: () => void
+    const current = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const chained = previous.then(() => current)
+    spawnChains.set(parentRunId, chained)
+
+    await previous
+    try {
+      return await task()
+    } finally {
+      release()
+      if (spawnChains.get(parentRunId) === chained) {
+        spawnChains.delete(parentRunId)
+      }
+    }
+  }
 
   function getParentRunId(input: ListWorkerAgentsInput, context: ToolExecutionContext): string {
     return input.parentRunId ?? context.runId
@@ -487,6 +538,7 @@ export function createWorkerAgentService(options: WorkerAgentServiceOptions): Wo
         tools: options.tools.list(),
         task: input.task,
         ...(input.expectedOutput !== undefined ? { expectedOutput: input.expectedOutput } : {}),
+        ...(input.contextSummary !== undefined ? { contextSummary: input.contextSummary } : {}),
         allowedToolIds: effectiveAllowedToolIds,
         depth: childRun.depth ?? 1,
         maxDepth: session.maxWorkerAgentDepth ?? 1,
@@ -497,7 +549,7 @@ export function createWorkerAgentService(options: WorkerAgentServiceOptions): Wo
         {
           runId: childRun.id,
           sessionId: childRun.sessionId,
-          prompt: input.task,
+          prompt: composeWorkerPrompt(input.task, input.contextSummary),
           modelId: childRun.modelId,
           ...(prompt.systemPrompt ? { systemPrompt: prompt.systemPrompt } : {}),
           enabledToolIds: effectiveAllowedToolIds,
@@ -545,84 +597,101 @@ export function createWorkerAgentService(options: WorkerAgentServiceOptions): Wo
     const parsed = parseSpawnInput(input)
     const { parentRun, session } = await loadParentRunAndSession(context.runId, context.sessionId)
 
-    const maxWorkerAgentsPerRun = session.maxWorkerAgentsPerRun ?? 3
-    const existingInvocations = await options.persistence.workerAgentInvocations.listByParentRun(parentRun.id)
-    if (existingInvocations.length >= maxWorkerAgentsPerRun) {
-      throw createLimitError(`Worker Agent invocation limit exceeded: ${existingInvocations.length} >= ${maxWorkerAgentsPerRun}`)
-    }
+    const prepared = await withSpawnLock(parentRun.id, async (): Promise<SpawnPreparation> => {
+      const maxWorkerAgentsPerRun = session.maxWorkerAgentsPerRun ?? 3
+      const existingInvocations = await options.persistence.workerAgentInvocations.listByParentRun(parentRun.id)
+      if (existingInvocations.length >= maxWorkerAgentsPerRun) {
+        throw createLimitError(`Worker Agent invocation limit exceeded: ${existingInvocations.length} >= ${maxWorkerAgentsPerRun}`)
+      }
 
-    const role = ensureWorkerRole(session, options.roles.getRole(parsed.roleId), parsed.roleId)
-    const depth = (parentRun.depth ?? 0) + 1
-    const maxDepth = session.maxWorkerAgentDepth ?? 1
-    if (depth > maxDepth) {
-      throw createLimitError(`Worker Agent depth limit exceeded: ${depth} > ${maxDepth}`)
-    }
+      const role = ensureWorkerRole(session, options.roles.getRole(parsed.roleId), parsed.roleId)
+      const depth = (parentRun.depth ?? 0) + 1
+      const maxDepth = session.maxWorkerAgentDepth ?? 1
+      if (depth > maxDepth) {
+        throw createLimitError(`Worker Agent depth limit exceeded: ${depth} > ${maxDepth}`)
+      }
 
-    const effectiveAllowedToolIds = await resolveEffectiveAllowedToolIds(parsed.allowedToolIds, context.allowedToolIds, role.defaultToolIds)
-    if (effectiveAllowedToolIds.length === 0) {
-      throw createLimitError('Worker Agent has no allowed tools after filtering')
-    }
+      const effectiveAllowedToolIds = await resolveEffectiveAllowedToolIds(parsed.allowedToolIds, context.allowedToolIds, role.defaultToolIds)
+      if (effectiveAllowedToolIds.length === 0) {
+        throw createLimitError('Worker Agent has no allowed tools after filtering')
+      }
 
-    const invocationId = createWorkerAgentId()
-    const childRunId = createId('run')
-    const createdAt = currentNow(options)
-    const startedAt = createdAt
-    const invocation: WorkerAgentInvocation = {
-      id: invocationId,
-      parentRunId: parentRun.id,
-      childRunId,
-      ...(context.parentStepId !== undefined ? { parentStepId: context.parentStepId } : {}),
-      ...(context.toolCallId !== undefined ? { parentToolCallId: context.toolCallId } : {}),
-      task: parsed.task,
-      roleId: role.id,
-      allowedToolIds: effectiveAllowedToolIds,
-      ...(role.defaultModelRef ? { modelRef: role.defaultModelRef } : {}),
-      ...(parsed.expectedOutput !== undefined ? { expectedOutput: parsed.expectedOutput } : {}),
-      ...(parsed.contextSummary !== undefined ? { contextSummary: parsed.contextSummary } : {}),
-      status: 'running',
-      lastEventAt: createdAt,
-      createdAt
-    }
+      const invocationId = createWorkerAgentId()
+      const childRunId = createId('run')
+      const createdAt = currentNow(options)
+      const startedAt = createdAt
+      const invocation: WorkerAgentInvocation = {
+        id: invocationId,
+        parentRunId: parentRun.id,
+        childRunId,
+        ...(context.parentStepId !== undefined ? { parentStepId: context.parentStepId } : {}),
+        ...(context.toolCallId !== undefined ? { parentToolCallId: context.toolCallId } : {}),
+        task: parsed.task,
+        roleId: role.id,
+        allowedToolIds: effectiveAllowedToolIds,
+        ...(role.defaultModelRef ? { modelRef: role.defaultModelRef } : {}),
+        ...(parsed.expectedOutput !== undefined ? { expectedOutput: parsed.expectedOutput } : {}),
+        ...(parsed.contextSummary !== undefined ? { contextSummary: parsed.contextSummary } : {}),
+        status: 'running',
+        lastEventAt: createdAt,
+        createdAt
+      }
 
-    const childRunWorkspacePath = parentRun.workspacePath ?? session.workspacePath
-    const childRun: AgentRun = {
-      id: childRunId,
-      sessionId: session.id,
-      parentRunId: parentRun.id,
-      workerAgentInvocationId: invocation.id,
-      depth,
-      status: 'running',
-      modelId: role.defaultModelId ?? role.defaultModelRef?.modelId ?? parentRun.modelId,
-      retryCount: 0,
-      maxRetries: 0,
-      ...(childRunWorkspacePath !== undefined ? { workspacePath: childRunWorkspacePath } : {}),
-      startedAt
-    }
+      const childRunWorkspacePath = parentRun.workspacePath ?? session.workspacePath
+      const childRun: AgentRun = {
+        id: childRunId,
+        sessionId: session.id,
+        parentRunId: parentRun.id,
+        workerAgentInvocationId: invocation.id,
+        depth,
+        status: 'running',
+        modelId: role.defaultModelId ?? role.defaultModelRef?.modelId ?? parentRun.modelId,
+        retryCount: 0,
+        maxRetries: 0,
+        ...(childRunWorkspacePath !== undefined ? { workspacePath: childRunWorkspacePath } : {}),
+        startedAt
+      }
+      const activeWorker: ActiveWorker = {
+        invocationId,
+        childRunId,
+        controller: new AbortController(),
+        promise: Promise.resolve(),
+        startedAt,
+        lastEventAt: createdAt
+      }
 
-    await saveInvocation(invocation)
-    await options.persistence.runs.save(childRun)
-    childRunIdToInvocationId.set(childRunId, invocationId)
-    await emitInvocationCreated(invocation)
-    await broadcastEvent({ type: 'run.created', run: childRun })
+      try {
+        await saveInvocation(invocation)
+        await options.persistence.runs.save(childRun)
+        childRunIdToInvocationId.set(childRunId, invocationId)
+        activeWorkers.set(invocationId, activeWorker)
+        await emitInvocationCreated(invocation)
+        await broadcastEvent({ type: 'run.created', run: childRun })
+        return { parsed, invocation, childRun, activeWorker, role, session, effectiveAllowedToolIds }
+      } catch (error) {
+        activeWorkers.delete(invocationId)
+        childRunIdToInvocationId.delete(childRunId)
+        throw error
+      }
+    })
 
-    const activeWorker: ActiveWorker = {
-      invocationId,
-      childRunId,
-      controller: new AbortController(),
-      promise: Promise.resolve(),
-      startedAt,
-      lastEventAt: createdAt
-    }
-    activeWorkers.set(invocationId, activeWorker)
-    const childExecution = executeChildRun(invocation, childRun, parsed, effectiveAllowedToolIds, role, session, activeWorker.controller)
-    activeWorker.promise = childExecution
+    const childExecution = executeChildRun(
+      prepared.invocation,
+      prepared.childRun,
+      prepared.parsed,
+      prepared.effectiveAllowedToolIds,
+      prepared.role,
+      prepared.session,
+      prepared.activeWorker.controller
+    )
+    prepared.activeWorker.promise = childExecution
     void childExecution.catch(() => undefined)
 
-    if (parsed.wait === false) {
-      return { ...invocation, invocationId: invocation.id, childRunId }
+    if (prepared.parsed.wait === false) {
+      return { ...prepared.invocation, invocationId: prepared.invocation.id, childRunId: prepared.childRun.id }
     }
 
-    return wait({ invocationId, timeoutMs: parsed.timeoutMs, cancelOnTimeout: parsed.cancelOnTimeout }, context)
+    return wait({ invocationId: prepared.invocation.id, timeoutMs: prepared.parsed.timeoutMs, cancelOnTimeout: prepared.parsed.cancelOnTimeout }, context)
   }
 
   async function list(input: Record<string, unknown>, context: ToolExecutionContext): Promise<WorkerAgentInvocation[]> {

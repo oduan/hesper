@@ -35,6 +35,10 @@ function withTimeout(promise: Promise<any>, label: string, timeoutMs = 1500): Pr
   ])
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 const defaultSession: Session = {
   id: 'session-1',
   title: 'Worker service',
@@ -268,7 +272,7 @@ async function createHarness(options: CreateHarnessOptions = {}): Promise<any> {
     promptAssembly: {
       assembleWorkerAgentPrompt(input) {
         return {
-          systemPrompt: `worker-system:${input.role.id}:${input.task}`,
+          systemPrompt: `worker-system:${input.role.id}:${input.task}${input.contextSummary ? `\nContext summary: ${input.contextSummary}` : ''}`,
           toolManifest: 'tools',
           skillManifest: 'skills',
           roleManifest: 'roles',
@@ -375,6 +379,48 @@ describe('worker agent service', () => {
     expect(await service.list({ status: 'running' }, createContext())).toHaveLength(2)
     expect(await persistence.workerAgentInvocations.listByParentRun('run-parent')).toHaveLength(2)
     expect(events.map((event: AgentRuntimeEvent) => event.type)).toEqual(expect.arrayContaining(['worker.invocation.created', 'run.created']))
+  })
+
+  it('passes contextSummary through to the worker prompt and adapter input', async () => {
+    const { service, adapter, createContext } = await createHarness({ adapter: new BlockingAdapter() })
+    const context = createContext({ toolCallId: 'tool-context', parentStepId: 'step-run-parent-tool-tool-context' })
+
+    const spawned = await withTimeout(
+      service.spawn(
+        { task: 'review with context', roleId: 'reviewer', allowedToolIds: ['filesystem.read-file'], contextSummary: 'Parent context', wait: false },
+        context
+      ),
+      'spawn timed out'
+    )
+
+    await vi.waitFor(() => expect(adapter.startedRunIds).toHaveLength(1))
+    expect(spawned.status).toBe('running')
+    expect(adapter.inputs[0]?.systemPrompt).toContain('Parent context')
+    expect(adapter.inputs[0]?.prompt).toContain('Parent context')
+  })
+
+  it('serializes concurrent spawn attempts for the same parent run', async () => {
+    const { service, persistence, adapter, createContext } = await createHarness({
+      adapter: new BlockingAdapter(),
+      session: { ...defaultSession, maxWorkerAgentsPerRun: 1 }
+    })
+    const originalListByParentRun = persistence.workerAgentInvocations.listByParentRun.bind(persistence.workerAgentInvocations)
+    persistence.workerAgentInvocations.listByParentRun = async (parentRunId: string) => {
+      await delay(25)
+      return originalListByParentRun(parentRunId)
+    }
+
+    const context = createContext()
+    const results = await Promise.allSettled([
+      service.spawn({ task: 'first parallel', roleId: 'reviewer', allowedToolIds: ['filesystem.read-file'], wait: false }, context),
+      service.spawn({ task: 'second parallel', roleId: 'reviewer', allowedToolIds: ['filesystem.read-file'], wait: false }, context)
+    ])
+
+    expect(results.map((result) => result.status).sort()).toEqual(['fulfilled', 'rejected'])
+    const rejection = results.find((result): result is PromiseRejectedResult => result.status === 'rejected')
+    expect(String(rejection?.reason ?? '')).toContain('limit')
+    await vi.waitFor(() => expect(adapter.startedRunIds).toHaveLength(1))
+    await expect(persistence.workerAgentInvocations.listByParentRun('run-parent')).resolves.toHaveLength(1)
   })
 
   it('returns a bounded wait diagnosis without cancelling by default', async () => {
