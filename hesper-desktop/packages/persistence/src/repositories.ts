@@ -48,6 +48,7 @@ export type SessionRepository = {
 export type MessageRepository = {
   save(message: Message): Promise<void>
   listBySession(sessionId: string): Promise<Message[]>
+  listByRun(runId: string): Promise<Message[]>
 }
 
 export type RunRepository = {
@@ -573,7 +574,24 @@ export function createRepositories(db: Database): Persistence {
         ], message.id)
       },
       async listBySession(sessionId) {
-        return fetchAll('SELECT * FROM messages WHERE session_id = ? ORDER BY sort_seq ASC, id ASC', [sessionId]).map(toMessage)
+        return fetchAll(
+          `SELECT * FROM messages
+           WHERE session_id = ?
+             AND (
+               run_id IS NULL
+               OR EXISTS (
+                 SELECT 1
+                 FROM agent_runs
+                 WHERE agent_runs.id = messages.run_id
+                   AND agent_runs.parent_run_id IS NULL
+               )
+             )
+           ORDER BY sort_seq ASC, id ASC`,
+          [sessionId]
+        ).map(toMessage)
+      },
+      async listByRun(runId) {
+        return fetchAll('SELECT * FROM messages WHERE run_id = ? ORDER BY sort_seq ASC, id ASC', [runId]).map(toMessage)
       }
     },
     runs: {

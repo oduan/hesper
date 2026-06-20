@@ -195,6 +195,7 @@ const migrationColumns: Record<string, string[]> = {
     'worker_agent_invocation_id TEXT',
     'depth INTEGER'
   ],
+  // Keep worker-agent metadata columns available on legacy databases.
   worker_agent_invocations: [
     'parent_step_id TEXT',
     'parent_tool_call_id TEXT',

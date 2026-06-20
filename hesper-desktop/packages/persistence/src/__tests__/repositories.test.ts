@@ -307,11 +307,13 @@ describe('persistence repositories', () => {
     expect((await db.roles.list()).map((role) => role.id)).not.toContain('role-to-delete')
   })
 
-  it('round-trips session agent configuration defaults and Worker Agent invocations', async () => {
+  it('round-trips session agent configuration defaults, Worker Agent invocations and child message isolation', async () => {
     const db = await createInMemoryPersistence()
+    const now = '2026-06-20T05:30:00.000Z'
+
     await db.sessions.save({
-      id: 'session-1',
-      title: 'Build hesper',
+      id: 'session-worker-ui',
+      title: 'Worker UI',
       status: 'active',
       outputMode: 'markdown',
       providerId: 'provider-deepseek',
@@ -325,26 +327,46 @@ describe('persistence repositories', () => {
       createdAt: now,
       updatedAt: now
     })
-    await db.runs.save({ id: 'run-parent', sessionId: 'session-1', status: 'running', modelId: 'deepseek-chat', retryCount: 0, maxRetries: 3, depth: 0 })
+
+    await db.runs.save({ id: 'run-parent', sessionId: 'session-worker-ui', status: 'running', modelId: 'deepseek-chat', retryCount: 0, maxRetries: 3, depth: 0 })
     await db.workerAgentInvocations.save({
       id: 'worker-agent-1',
       parentRunId: 'run-parent',
       childRunId: 'run-child',
-      parentStepId: 'step-parent',
-      parentToolCallId: 'tool-call-parent',
+      parentStepId: 'step-run-parent-tool-tool-1',
+      parentToolCallId: 'tool-1',
       task: 'Review the staged diff.',
       roleId: 'reviewer',
       allowedToolIds: ['filesystem.read-file', 'git.status'],
       modelRef: { providerId: 'provider-deepseek', modelId: 'deepseek-chat' },
-      expectedOutput: 'Findings with evidence.',
-      contextSummary: 'Summarized review context.',
+      expectedOutput: 'PASS or NEEDS_CHANGES.',
+      contextSummary: 'Parent run is preparing a release.',
       status: 'running',
       createdAt: now,
       lastEventAt: now
     })
-    await db.runs.save({ id: 'run-child', sessionId: 'session-1', parentRunId: 'run-parent', workerAgentInvocationId: 'worker-agent-1', status: 'queued', modelId: 'deepseek-chat', retryCount: 0, maxRetries: 3, depth: 1 })
+    await db.runs.save({ id: 'run-child', sessionId: 'session-worker-ui', parentRunId: 'run-parent', workerAgentInvocationId: 'worker-agent-1', status: 'succeeded', modelId: 'deepseek-chat', retryCount: 0, maxRetries: 3, depth: 1, startedAt: now, endedAt: now })
 
-    expect(await db.sessions.get('session-1')).toMatchObject({
+    await db.messages.save({
+      id: 'message-root',
+      sessionId: 'session-worker-ui',
+      role: 'assistant',
+      content: 'Main answer',
+      contentType: 'markdown',
+      runId: 'run-parent',
+      createdAt: now
+    })
+    await db.messages.save({
+      id: 'message-child',
+      sessionId: 'session-worker-ui',
+      role: 'assistant',
+      content: 'Worker result',
+      contentType: 'markdown',
+      runId: 'run-child',
+      createdAt: now
+    })
+
+    await expect(db.sessions.get('session-worker-ui')).resolves.toMatchObject({
       providerId: 'provider-deepseek',
       modelId: 'deepseek-chat',
       roleId: 'coding',
@@ -352,16 +374,22 @@ describe('persistence repositories', () => {
       allowedWorkerAgentRoleIds: ['reviewer'],
       maxWorkerAgentDepth: 1
     })
-    expect(await db.runs.get('run-child')).toMatchObject({ parentRunId: 'run-parent', workerAgentInvocationId: 'worker-agent-1', depth: 1 })
-    expect(await db.workerAgentInvocations.listByParentRun('run-parent')).toMatchObject([
+    await expect(db.runs.get('run-child')).resolves.toMatchObject({ parentRunId: 'run-parent', workerAgentInvocationId: 'worker-agent-1', depth: 1 })
+    await expect(db.workerAgentInvocations.listByParentRun('run-parent')).resolves.toMatchObject([
       { id: 'worker-agent-1', childRunId: 'run-child', roleId: 'reviewer', allowedToolIds: ['filesystem.read-file', 'git.status'] }
     ])
-    expect(await db.workerAgentInvocations.get('worker-agent-1')).toMatchObject({
-      parentStepId: 'step-parent',
-      parentToolCallId: 'tool-call-parent',
-      contextSummary: 'Summarized review context.',
+    await expect(db.workerAgentInvocations.get('worker-agent-1')).resolves.toMatchObject({
+      parentStepId: 'step-run-parent-tool-tool-1',
+      parentToolCallId: 'tool-1',
+      contextSummary: 'Parent run is preparing a release.',
       lastEventAt: now
     })
+    await expect(db.messages.listBySession('session-worker-ui')).resolves.toEqual([
+      expect.objectContaining({ id: 'message-root', content: 'Main answer' })
+    ])
+    await expect(db.messages.listByRun('run-child')).resolves.toEqual([
+      expect.objectContaining({ id: 'message-child', content: 'Worker result' })
+    ])
   })
 
   it('fails fast instead of silently rewriting corrupted JSON configuration fields', async () => {
