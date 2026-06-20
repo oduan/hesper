@@ -75,6 +75,14 @@ export const generateSessionTitleInputSchema = z.object({
 
 export const sessionIdInputSchema = nonEmptyStringSchema
 export const runIdInputSchema = nonEmptyStringSchema
+export const conversationMessagesByRunInputSchema = z.object({
+  sessionId: nonEmptyStringSchema,
+  runId: nonEmptyStringSchema
+}).strict()
+export const workerInvocationsListByParentRunInputSchema = z.object({
+  sessionId: nonEmptyStringSchema,
+  parentRunId: nonEmptyStringSchema
+}).strict()
 export const conversationMessagesResultSchema = z.array(messageSchema)
 export const conversationMessagesByRunResultSchema = z.array(messageSchema)
 export const conversationRunsResultSchema = z.array(agentRunSchema)
@@ -295,6 +303,8 @@ export type MessageDto = z.infer<typeof messageSchema>
 export type AgentRunDto = z.infer<typeof agentRunSchema>
 export type RunStepDto = z.infer<typeof runStepSchema>
 export type WorkerAgentInvocationDto = z.infer<typeof workerAgentInvocationSchema>
+export type ConversationMessagesByRunInput = z.infer<typeof conversationMessagesByRunInputSchema>
+export type WorkerInvocationsListByParentRunInput = z.infer<typeof workerInvocationsListByParentRunInputSchema>
 export type ModelProviderDto = z.infer<typeof modelProviderConfigSchema>
 export type ModelDto = z.infer<typeof modelConfigSchema>
 
@@ -313,12 +323,12 @@ export type HesperDesktopApi = {
   }
   conversation: {
     listMessages(sessionId: string): Promise<MessageDto[]>
-    listMessagesByRun?(runId: string): Promise<MessageDto[]>
+    listMessagesByRun(input: ConversationMessagesByRunInput): Promise<MessageDto[]>
     listRuns(sessionId: string): Promise<AgentRunDto[]>
     listSteps(runId: string): Promise<RunStepDto[]>
   }
-  workerAgents?: {
-    listByParentRun(parentRunId: string): Promise<WorkerAgentInvocationDto[]>
+  workerAgents: {
+    listByParentRun(input: WorkerInvocationsListByParentRunInput): Promise<WorkerAgentInvocationDto[]>
   }
   agent: {
     enqueue(input: AgentEnqueueInput): Promise<{ runId: string }>

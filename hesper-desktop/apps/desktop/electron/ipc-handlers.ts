@@ -5,6 +5,7 @@ import {
   agentEnqueueInputSchema,
   agentStopResultSchema,
   appSettingsSchema,
+  conversationMessagesByRunInputSchema,
   conversationMessagesByRunResultSchema,
   conversationMessagesResultSchema,
   conversationRunsResultSchema,
@@ -24,6 +25,7 @@ import {
   providerIdInputSchema,
   saveModelInputSchema,
   saveModelProviderInputSchema,
+  workerInvocationsListByParentRunInputSchema,
   workerInvocationsResultSchema,
   saveProviderApiKeyInputSchema,
   runIdInputSchema,
@@ -184,16 +186,8 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       }
       target.send(ipcEvents.agentEvent, validateEvent(runtimeEvent))
     })
-    const workerUnsubscribe = options.container.workerAgentService.subscribe(async (runtimeEvent) => {
-      if (target.isDestroyed()) {
-        unsubscribeSender(senderId)
-        return
-      }
-      target.send(ipcEvents.agentEvent, validateEvent(runtimeEvent))
-    })
     subscriptions.set(senderId, () => {
       agentUnsubscribe()
-      workerUnsubscribe()
     })
   }
 
@@ -272,7 +266,14 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       return conversationMessagesResultSchema.parse(await options.container.conversationService.listMessages(sessionId))
     },
     [ipcChannels.conversationListMessagesByRun]: async (_event, payload) => {
-      const runId = runIdInputSchema.parse(payload)
+      const { sessionId, runId } = conversationMessagesByRunInputSchema.parse(payload)
+      const run = await options.container.persistence.runs.get(runId)
+      if (!run) {
+        throw new Error(`Run not found: ${runId}`)
+      }
+      if (run.sessionId !== sessionId) {
+        throw new Error(`Run access denied: ${runId}`)
+      }
       return conversationMessagesByRunResultSchema.parse(await options.container.conversationService.listMessagesByRun(runId))
     },
     [ipcChannels.conversationListRuns]: async (_event, payload) => {
@@ -284,8 +285,8 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       return conversationStepsResultSchema.parse(await options.container.conversationService.listSteps(runId))
     },
     [ipcChannels.workerInvocationsListByParentRun]: async (_event, payload) => {
-      const parentRunId = runIdInputSchema.parse(payload)
-      return workerInvocationsResultSchema.parse(await options.container.persistence.workerAgentInvocations.listByParentRun(parentRunId))
+      const { sessionId, parentRunId } = workerInvocationsListByParentRunInputSchema.parse(payload)
+      return workerInvocationsResultSchema.parse(await options.container.workerAgentService.list({ parentRunId }, { runId: parentRunId, sessionId, allowedToolIds: [] }))
     },
     [ipcChannels.dialogSelectDirectory]: async () => {
       const result = await options.dialog.showOpenDialog({ properties: ['openDirectory'] })

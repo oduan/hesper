@@ -222,6 +222,7 @@ describe('registerIpcHandlers', () => {
     const dialog = {
       showOpenDialog: vi.fn(async () => ({ canceled: false, filePaths: ['C:/workspace'] }))
     }
+    const workerSubscribeSpy = vi.spyOn(container.workerAgentService, 'subscribe')
 
     const dispose = registerIpcHandlers({ ipcMain, dialog, container, savePersistence, schedulePersistenceSave })
 
@@ -230,6 +231,7 @@ describe('registerIpcHandlers', () => {
     expect(ipcMain.handle).toHaveBeenCalledWith(ipcChannels.agentEventsUnsubscribe, expect.any(Function))
 
     await handles.get(ipcChannels.agentEventsSubscribe)?.({ sender })
+    expect(workerSubscribeSpy).toHaveBeenCalledTimes(1)
     const session = (await handles.get(ipcChannels.sessionsCreate)?.({ sender }, { title: 'IPC created' })) as { id: string }
     const enqueueResult = await handles.get(ipcChannels.agentEnqueue)?.({ sender }, { sessionId: session.id, prompt: 'Ping', modelId: 'mock/hesper-fast', messageId: 'message-client-1', messageCreatedAt: '2026-06-10T03:00:01.000Z' }) as { runId: string }
     await container.agentRuntime.waitForIdle(session.id)
@@ -619,10 +621,10 @@ describe('registerIpcHandlers', () => {
     await expect(handles.get(ipcChannels.conversationListMessages)?.({ sender: { id: 1 } }, session.id)).resolves.not.toEqual(expect.arrayContaining([
       expect.objectContaining({ id: 'message-child' })
     ]))
-    await expect(handles.get(ipcChannels.conversationListMessagesByRun)?.({ sender: { id: 1 } }, 'run-child')).resolves.toEqual([
+    await expect(handles.get(ipcChannels.conversationListMessagesByRun)?.({ sender: { id: 1 } }, { sessionId: session.id, runId: 'run-child' })).resolves.toEqual([
       expect.objectContaining({ id: 'message-child', content: 'worker answer' })
     ])
-    await expect(handles.get(ipcChannels.workerInvocationsListByParentRun)?.({ sender: { id: 1 } }, 'run-restored')).resolves.toEqual([
+    await expect(handles.get(ipcChannels.workerInvocationsListByParentRun)?.({ sender: { id: 1 } }, { sessionId: session.id, parentRunId: 'run-restored' })).resolves.toEqual([
       expect.objectContaining({ id: 'worker-agent-1', childRunId: 'run-child' })
     ])
     await expect(handles.get(ipcChannels.conversationListRuns)?.({ sender: { id: 1 } }, session.id)).resolves.toEqual(expect.arrayContaining([
@@ -632,6 +634,30 @@ describe('registerIpcHandlers', () => {
     await expect(handles.get(ipcChannels.conversationListSteps)?.({ sender: { id: 1 } }, 'run-restored')).resolves.toEqual([
       expect.objectContaining({ id: 'step-restored', runId: 'run-restored' })
     ])
+  })
+
+  it('rejects cross-session run-based history requests', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock' })
+    const handles = new Map<string, (event: any, ...args: any[]) => Promise<unknown> | unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (event: any, ...args: any[]) => Promise<unknown> | unknown) => {
+        handles.set(channel, handler)
+      }),
+      removeHandler: vi.fn()
+    }
+    const dialog = {
+      showOpenDialog: vi.fn(async () => ({ canceled: false, filePaths: ['C:/workspace'] }))
+    }
+
+    const session = await container.sessionService.createSession({ title: 'History source' })
+    const otherSession = await container.sessionService.createSession({ title: 'Other session' })
+    await persistence.runs.save({ id: 'run-source', sessionId: session.id, status: 'running', modelId: 'mock/hesper-fast', retryCount: 0, maxRetries: 2 })
+
+    registerIpcHandlers({ ipcMain, dialog, container })
+
+    await expect(handles.get(ipcChannels.conversationListMessagesByRun)?.({ sender: { id: 1 } }, { sessionId: otherSession.id, runId: 'run-source' })).rejects.toThrow('access denied')
+    await expect(handles.get(ipcChannels.workerInvocationsListByParentRun)?.({ sender: { id: 1 } }, { sessionId: otherSession.id, parentRunId: 'run-source' })).rejects.toThrow('access denied')
   })
 
   it('validates agent enqueue input before invoking the runtime', async () => {

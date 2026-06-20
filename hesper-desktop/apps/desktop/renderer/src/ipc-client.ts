@@ -12,6 +12,7 @@ import type {
   ModelProviderDto,
   RunStepDto,
   SessionDto,
+  WorkerAgentInvocationDto,
   SetSessionModelInput,
   SetSessionOutputModeInput,
   SetSessionWorkspaceInput,
@@ -138,8 +139,12 @@ export function createFallbackHesperApi(): HesperDesktopApi {
     },
     conversation: {
       listMessages: async (sessionId: string) => messagesBySession[sessionId] ?? [],
+      listMessagesByRun: async (input: { sessionId: string; runId: string }) => Object.values(messagesBySession).flat().filter((message) => message.runId === input.runId),
       listRuns: async (sessionId: string) => runsBySession[sessionId] ?? [],
       listSteps: async (runId: string) => stepsByRun[runId] ?? []
+    },
+    workerAgents: {
+      listByParentRun: async (_input: { sessionId: string; parentRunId: string }) => [] as WorkerAgentInvocationDto[]
     },
     agent: {
       enqueue: async (_input: AgentEnqueueInput) => ({ runId: `run-fallback-${nextRunNumber++}` }),

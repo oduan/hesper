@@ -86,12 +86,12 @@ const hesperApi = {
   },
   conversation: {
     listMessages: (sessionId) => ipcRenderer.invoke(ipcChannels.conversationListMessages, sessionId),
-    listMessagesByRun: (runId) => ipcRenderer.invoke(ipcChannels.conversationListMessagesByRun, runId),
+    listMessagesByRun: (input) => ipcRenderer.invoke(ipcChannels.conversationListMessagesByRun, input),
     listRuns: (sessionId) => ipcRenderer.invoke(ipcChannels.conversationListRuns, sessionId),
     listSteps: (runId) => ipcRenderer.invoke(ipcChannels.conversationListSteps, runId)
   },
   workerAgents: {
-    listByParentRun: (parentRunId) => ipcRenderer.invoke(ipcChannels.workerInvocationsListByParentRun, parentRunId)
+    listByParentRun: (input) => ipcRenderer.invoke(ipcChannels.workerInvocationsListByParentRun, input)
   },
   agent: {
     enqueue: (input) => ipcRenderer.invoke(ipcChannels.agentEnqueue, input),
