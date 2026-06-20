@@ -1,7 +1,7 @@
 import { createInMemoryPersistence, exportDatabaseBytes } from '@hesper/persistence'
 import { describe, expect, it, vi } from 'vitest'
 import { createCredentialVaultService, type CredentialVaultCodec } from '../credential-vault-service'
-import { createModelProviderService } from '../model-provider-service'
+import { codexOAuthAccessTokenFromCredential, createModelProviderService } from '../model-provider-service'
 
 const now = '2026-06-10T03:00:00.000Z'
 
@@ -21,6 +21,27 @@ function createMockCodec(): CredentialVaultCodec {
 }
 
 describe('createModelProviderService', () => {
+  it('does not unwrap expired structured Codex OAuth credentials for runtime use', () => {
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(new Date(now))
+      expect(codexOAuthAccessTokenFromCredential(JSON.stringify({
+        type: 'codex_oauth',
+        accessToken: 'expired-codex-oauth-access-token',
+        refreshToken: 'codex-oauth-refresh-token',
+        expiresAt: Date.parse(now) - 1000
+      }))).toBeUndefined()
+      expect(codexOAuthAccessTokenFromCredential(JSON.stringify({
+        type: 'codex_oauth',
+        accessToken: 'valid-codex-oauth-access-token',
+        expiresAt: Date.parse(now) + 1000
+      }))).toBe('valid-codex-oauth-access-token')
+      expect(codexOAuthAccessTokenFromCredential('legacy-codex-oauth-access-token')).toBe('legacy-codex-oauth-access-token')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('creates builtin providers and models while preserving the mock baseline', async () => {
     const persistence = await createInMemoryPersistence()
     const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
@@ -543,6 +564,31 @@ describe('createModelProviderService', () => {
       status: 'needs_api_key',
       hasApiKey: false,
       message: expect.stringContaining('重新授权')
+    })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('requires reauthorization for expired Codex OAuth credentials even when a refresh token exists', async () => {
+    const persistence = await createInMemoryPersistence()
+    const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
+    const fetchMock = vi.fn()
+    const service = createModelProviderService({ persistence, credentialVaultService, now: () => now, fetch: fetchMock as unknown as typeof fetch })
+
+    await service.saveProvider({ id: 'chatgpt-codex', name: 'ChatGPT Codex', kind: 'pi', authType: 'oauth', piAuthProvider: 'openai-codex', enabled: true, defaultModelId: 'pi/gpt-5.5' })
+    await credentialVaultService.saveProviderApiKey({
+      providerId: 'chatgpt-codex',
+      apiKey: JSON.stringify({
+        type: 'codex_oauth',
+        accessToken: 'expired-access-token',
+        refreshToken: 'refresh-token-without-refresh-implementation',
+        expiresAt: Date.parse(now) - 1000
+      })
+    })
+
+    await expect(service.testProviderConnection({ providerId: 'chatgpt-codex' })).resolves.toMatchObject({
+      status: 'needs_api_key',
+      hasApiKey: false,
+      message: 'Codex 授权已过期，请重新授权'
     })
     expect(fetchMock).not.toHaveBeenCalled()
   })

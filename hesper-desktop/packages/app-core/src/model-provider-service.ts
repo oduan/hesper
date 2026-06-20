@@ -135,8 +135,14 @@ export function parseCodexOAuthCredential(value: string | undefined): CodexOAuth
   }
 }
 
-export function codexOAuthAccessTokenFromCredential(value: string | undefined): string | undefined {
-  return parseCodexOAuthCredential(value)?.accessToken
+function isExpiredCodexOAuthCredential(credential: CodexOAuthCredential, nowMs: number): boolean {
+  return credential.expiresAt !== undefined && credential.expiresAt <= nowMs
+}
+
+export function codexOAuthAccessTokenFromCredential(value: string | undefined, nowMs = Date.now()): string | undefined {
+  const credential = parseCodexOAuthCredential(value)
+  if (!credential || isExpiredCodexOAuthCredential(credential, nowMs)) return undefined
+  return credential.accessToken
 }
 
 function serializeCodexOAuthCredential(input: { accessToken: string; refreshToken?: string; expiresAt?: number }): string {
@@ -681,7 +687,7 @@ export function createModelProviderService(options: {
         }
         const currentTime = Date.parse(now())
         const nowMs = Number.isFinite(currentTime) ? currentTime : Date.now()
-        if (credential.expiresAt !== undefined && credential.expiresAt <= nowMs && !credential.refreshToken) {
+        if (isExpiredCodexOAuthCredential(credential, nowMs)) {
           return { providerId: provider.id, status: 'needs_api_key', hasApiKey: false, message: 'Codex 授权已过期，请重新授权' }
         }
         return { providerId: provider.id, status: 'ok', hasApiKey: true, message: 'Codex 授权可用' }

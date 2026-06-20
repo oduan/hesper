@@ -97,12 +97,16 @@ function isCodexOAuthProvider(provider: ModelProviderConfig): boolean {
   return provider.kind === 'pi' && provider.authType === 'oauth' && provider.piAuthProvider === 'openai-codex'
 }
 
-function accessTokenFromCodexOAuthCredential(rawCredential: string | undefined): string | undefined {
+function accessTokenFromCodexOAuthCredential(rawCredential: string | undefined, nowMs = Date.now()): string | undefined {
   const trimmed = rawCredential?.trim()
   if (!trimmed) return undefined
   try {
     const parsed = JSON.parse(trimmed) as unknown
     if (typeof parsed !== 'object' || parsed === null || (parsed as { type?: unknown }).type !== 'codex_oauth') {
+      return undefined
+    }
+    const expiresAt = (parsed as { expiresAt?: unknown }).expiresAt
+    if (typeof expiresAt === 'number' && Number.isFinite(expiresAt) && expiresAt <= nowMs) {
       return undefined
     }
     const accessToken = (parsed as { accessToken?: unknown }).accessToken

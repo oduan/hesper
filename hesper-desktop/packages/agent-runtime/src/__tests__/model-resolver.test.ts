@@ -296,6 +296,35 @@ describe('ModelResolver', () => {
     await expect(resolved.getApiKey?.('chatgpt-codex')).resolves.toBe('codex-oauth-access-token')
   })
 
+  it('fails with an OAuth authorization error when Codex structured credentials are expired', async () => {
+    const codexProvider = provider({
+      id: 'chatgpt-codex',
+      name: 'ChatGPT Codex',
+      kind: 'pi',
+      authType: 'oauth',
+      piAuthProvider: 'openai-codex',
+      defaultModelId: 'pi/gpt-5.5'
+    })
+    const codexModel = model({
+      id: 'pi/gpt-5.5',
+      providerId: 'chatgpt-codex',
+      modelName: 'gpt-5.5',
+      displayName: 'GPT-5.5',
+      capabilities: ['streaming', 'toolCalls', 'reasoning']
+    })
+
+    await expect(createRegistryModelResolver({
+      registry: registry({ providers: [codexProvider], models: [codexModel] }),
+      readProviderApiKey: vi.fn(async () => JSON.stringify({
+        type: 'codex_oauth',
+        accessToken: 'expired-codex-oauth-access-token',
+        refreshToken: 'codex-oauth-refresh-token',
+        expiresAt: Date.now() - 1000
+      })),
+      getPiModel: vi.fn(() => piModel())
+    }).resolve({ modelId: 'pi/gpt-5.5' })).rejects.toThrow('Model provider needs OAuth authorization: chatgpt-codex')
+  })
+
   it('fails with an OAuth authorization error when Codex Pi credentials are missing', async () => {
     const codexProvider = provider({
       id: 'chatgpt-codex',
