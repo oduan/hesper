@@ -468,6 +468,21 @@ export function createRepositories(db: Database): Persistence {
       finalValues
     )
   }
+  const tableColumns = (table: string): Set<string> => {
+    const stmt = db.prepare(`PRAGMA table_info(${table})`)
+    try {
+      const columns = new Set<string>()
+      while (stmt.step()) {
+        const row = stmt.getAsObject() as { name?: unknown }
+        if (typeof row.name === 'string') columns.add(row.name)
+      }
+      return columns
+    } finally {
+      stmt.free()
+    }
+  }
+  const roleColumns = tableColumns('roles')
+  const hasLegacyRoleSubagentColumn = roleColumns.has('can_be_subagent')
 
   return {
     settings: {
@@ -689,7 +704,8 @@ export function createRepositories(db: Database): Persistence {
     },
     roles: {
       async save(role) {
-        upsert('roles', ['id', 'name', 'description', 'default_model_id', 'default_model_ref_json', 'system_prompt', 'allowed_skill_ids_json', 'default_skill_ids_json', 'default_tool_ids_json', 'can_be_main_agent', 'can_be_worker_agent', 'can_be_assigned_to_worker_agent', 'worker_agent_guidance', 'sort_seq'], [
+        const columns = ['id', 'name', 'description', 'default_model_id', 'default_model_ref_json', 'system_prompt', 'allowed_skill_ids_json', 'default_skill_ids_json', 'default_tool_ids_json', 'can_be_main_agent', 'can_be_worker_agent', 'can_be_assigned_to_worker_agent', 'worker_agent_guidance']
+        const values: unknown[] = [
           role.id,
           role.name,
           role.description,
@@ -702,9 +718,15 @@ export function createRepositories(db: Database): Persistence {
           role.canBeMainAgent ? 1 : 0,
           role.canBeWorkerAgent ? 1 : 0,
           role.canBeAssignedToWorkerAgent === undefined ? undefined : role.canBeAssignedToWorkerAgent ? 1 : 0,
-          role.workerAgentGuidance,
-          nextSeq()
-        ], role.id)
+          role.workerAgentGuidance
+        ]
+        if (hasLegacyRoleSubagentColumn) {
+          columns.push('can_be_subagent')
+          values.push(role.canBeWorkerAgent ? 1 : 0)
+        }
+        columns.push('sort_seq')
+        values.push(nextSeq())
+        upsert('roles', columns, values, role.id)
       },
       async get(id) {
         const row = fetchAll('SELECT * FROM roles WHERE id = ?', [id])[0]

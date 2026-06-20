@@ -234,7 +234,13 @@ export function migrateDatabaseSchema(db: Database): void {
       const name = columnName(definition)
       if (!existing.has(name)) {
         db.run(`ALTER TABLE ${table} ADD COLUMN ${definition}`)
+        existing.add(name)
       }
     }
+  }
+
+  const roleColumns = tableColumns(db, 'roles')
+  if (roleColumns.has('can_be_subagent') && roleColumns.has('can_be_worker_agent')) {
+    db.run('UPDATE roles SET can_be_worker_agent = can_be_subagent WHERE can_be_subagent IS NOT NULL')
   }
 }

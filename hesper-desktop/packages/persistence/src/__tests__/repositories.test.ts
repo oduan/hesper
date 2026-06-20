@@ -27,9 +27,10 @@ VALUES ('bad-role-ref', 'Bad Role Ref', NULL, NULL, '{"providerId":"provider-1"}
   return db.export()
 }
 
-async function createLegacyRoleDatabaseBytes(): Promise<Uint8Array> {
+async function createLegacyRoleDatabaseBytes(options: { includeLegacySubagentColumn?: boolean, legacySubagentValue?: 0 | 1 } = {}): Promise<Uint8Array> {
   const SQL = await initSqlJs()
   const db = new SQL.Database()
+  const legacySubagentValue = options.legacySubagentValue ?? 0
   db.run(`
 CREATE TABLE roles (
   id TEXT PRIMARY KEY,
@@ -38,10 +39,11 @@ CREATE TABLE roles (
   allowed_skill_ids_json TEXT NOT NULL,
   default_tool_ids_json TEXT,
   can_be_main_agent INTEGER NOT NULL,
+  ${options.includeLegacySubagentColumn ? 'can_be_subagent INTEGER NOT NULL,' : ''}
   sort_seq INTEGER NOT NULL
 );
-INSERT INTO roles (id, name, system_prompt, allowed_skill_ids_json, default_tool_ids_json, can_be_main_agent, sort_seq)
-VALUES ('legacy-role', 'Legacy Role', 'Legacy prompt', '[]', '["filesystem.read-file"]', 1, 1);
+INSERT INTO roles (id, name, system_prompt, allowed_skill_ids_json, default_tool_ids_json, can_be_main_agent, ${options.includeLegacySubagentColumn ? 'can_be_subagent, ' : ''}sort_seq)
+VALUES ('legacy-role', 'Legacy Role', 'Legacy prompt', '[]', '["filesystem.read-file"]', 1, ${options.includeLegacySubagentColumn ? `${legacySubagentValue}, ` : ''}1);
 `)
   return db.export()
 }
@@ -379,6 +381,41 @@ describe('persistence repositories', () => {
         name: 'New Role',
         canBeWorkerAgent: false,
         canBeAssignedToWorkerAgent: false
+      })
+    } finally {
+      fs.rmSync(tempFile, { force: true })
+    }
+  })
+
+  it('saves roles in databases with legacy can_be_subagent constraints', async () => {
+    const tempFile = path.join(os.tmpdir(), `hesper-legacy-role-subagent-${Date.now()}.sqlite`)
+    fs.writeFileSync(tempFile, await createLegacyRoleDatabaseBytes({ includeLegacySubagentColumn: true, legacySubagentValue: 1 }))
+
+    try {
+      const migrated = await createFilePersistence(tempFile)
+
+      await expect(migrated.roles.get('legacy-role')).resolves.toMatchObject({
+        id: 'legacy-role',
+        canBeWorkerAgent: true
+      })
+
+      await migrated.roles.save({
+        id: 'subagent-compatible-role',
+        name: 'Subagent Compatible Role',
+        description: 'Created after migration',
+        systemPrompt: 'New prompt',
+        allowedSkillIds: [],
+        defaultSkillIds: [],
+        defaultToolIds: ['filesystem.read-file'],
+        canBeMainAgent: true,
+        canBeWorkerAgent: true,
+        canBeAssignedToWorkerAgent: false
+      })
+
+      await expect(migrated.roles.get('subagent-compatible-role')).resolves.toMatchObject({
+        id: 'subagent-compatible-role',
+        name: 'Subagent Compatible Role',
+        canBeWorkerAgent: true
       })
     } finally {
       fs.rmSync(tempFile, { force: true })
