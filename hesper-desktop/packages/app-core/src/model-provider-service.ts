@@ -304,33 +304,11 @@ export function createModelProviderService(options: {
   const connectionTestFetch = options.fetch ?? globalThis.fetch
   const oauthGateway = options.oauthGateway
   const oauthSessions = new Map<string, { provider: PiAuthProvider; connectionName: string }>()
-  const providerMetadata = new Map<string, { authType?: ModelProviderConfig['authType']; piAuthProvider?: ModelProviderConfig['piAuthProvider'] }>()
-
-  const rememberProviderMetadata = (provider: ModelProviderConfig): void => {
-    if (provider.authType === undefined && provider.piAuthProvider === undefined) {
-      providerMetadata.delete(provider.id)
-      return
-    }
-    providerMetadata.set(provider.id, {
-      ...(provider.authType !== undefined ? { authType: provider.authType } : {}),
-      ...(provider.piAuthProvider !== undefined ? { piAuthProvider: provider.piAuthProvider } : {})
-    })
-  }
-
-  const hydrateProviderMetadata = (provider: ModelProviderConfig): ModelProviderConfig => {
-    const metadata = providerMetadata.get(provider.id)
-    return {
-      ...provider,
-      ...(provider.authType !== undefined ? { authType: provider.authType } : metadata?.authType !== undefined ? { authType: metadata.authType } : {}),
-      ...(provider.piAuthProvider !== undefined ? { piAuthProvider: provider.piAuthProvider } : metadata?.piAuthProvider !== undefined ? { piAuthProvider: metadata.piAuthProvider } : {})
-    }
-  }
 
   const withCredentialStatus = async (provider: ModelProviderConfig): Promise<ModelProviderConfig> => {
-    const hydratedProvider = hydrateProviderMetadata(provider)
     const credentialStatus = await options.credentialVaultService.getProviderApiKeyStatus({ providerId: provider.id })
     return {
-      ...hydratedProvider,
+      ...provider,
       apiKeyRef: credentialStatus.apiKeyRef,
       hasApiKey: credentialStatus.hasApiKey
     }
@@ -340,10 +318,8 @@ export function createModelProviderService(options: {
     assertId(input.id)
     assertId(input.name, 'name')
     const existing = await options.persistence.modelProviders.get(input.id)
-    const hydratedExisting = existing ? hydrateProviderMetadata(existing) : undefined
     const credentialStatus = await options.credentialVaultService.getProviderApiKeyStatus({ providerId: input.id })
-    const provider = mergeProvider(hydratedExisting, input, now(), credentialStatus.hasApiKey)
-    rememberProviderMetadata(provider)
+    const provider = mergeProvider(existing, input, now(), credentialStatus.hasApiKey)
     await options.persistence.modelProviders.save(provider)
     return withCredentialStatus(provider)
   }
@@ -405,9 +381,8 @@ export function createModelProviderService(options: {
     },
     async disableProvider(id) {
       assertId(id)
-      const existingRaw = await options.persistence.modelProviders.get(id)
-      if (!existingRaw) throw new Error(`Model provider not found: ${id}`)
-      const existing = hydrateProviderMetadata(existingRaw)
+      const existing = await options.persistence.modelProviders.get(id)
+      if (!existing) throw new Error(`Model provider not found: ${id}`)
       const provider = await this.saveProvider({
         id: existing.id,
         name: existing.name,
@@ -428,7 +403,6 @@ export function createModelProviderService(options: {
       await options.persistence.models.deleteByProvider(id)
       await options.credentialVaultService.deleteProviderApiKey({ providerId: id })
       await options.persistence.modelProviders.delete(id)
-      providerMetadata.delete(id)
       return undefined
     },
     async listModels(providerId) {
@@ -493,8 +467,7 @@ export function createModelProviderService(options: {
       const testInput = connectionTestInput(input)
       const providerId = trimOptional(testInput.providerId)
       await ensureBuiltinProviders()
-      const existingRaw = providerId ? await options.persistence.modelProviders.get(providerId) : undefined
-      const existing = existingRaw ? hydrateProviderMetadata(existingRaw) : undefined
+      const existing = providerId ? await options.persistence.modelProviders.get(providerId) : undefined
       if (!existing && !testInput.kind) {
         return { providerId: providerId ?? 'unknown', status: 'not_found', hasApiKey: false, message: `Model provider not found: ${providerId ?? 'unknown'}` }
       }

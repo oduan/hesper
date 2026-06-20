@@ -75,6 +75,8 @@ CREATE TABLE IF NOT EXISTS model_providers (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   kind TEXT NOT NULL,
+  auth_type TEXT,
+  pi_auth_provider TEXT,
   base_url TEXT,
   api_key_ref TEXT,
   has_api_key INTEGER,
@@ -194,6 +196,10 @@ const migrationColumns: Record<string, string[]> = {
   agent_runs: [
     'worker_agent_invocation_id TEXT',
     'depth INTEGER'
+  ],
+  model_providers: [
+    'auth_type TEXT',
+    'pi_auth_provider TEXT'
   ],
   // Keep worker-agent metadata columns available on legacy databases.
   worker_agent_invocations: [

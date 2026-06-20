@@ -272,6 +272,8 @@ function toModelProvider(row: any): ModelProviderConfig {
     id: row.id,
     name: row.name,
     kind: row.kind,
+    authType: row.auth_type ?? undefined,
+    piAuthProvider: row.pi_auth_provider ?? undefined,
     baseUrl: row.base_url ?? undefined,
     apiKeyRef: row.api_key_ref ?? undefined,
     hasApiKey: optionalBoolean(row.has_api_key),
@@ -649,10 +651,12 @@ export function createRepositories(db: Database): Persistence {
     },
     modelProviders: {
       async save(provider) {
-        upsert('model_providers', ['id', 'name', 'kind', 'base_url', 'api_key_ref', 'has_api_key', 'enabled', 'default_model_id', 'created_at', 'updated_at', 'sort_seq'], [
+        upsert('model_providers', ['id', 'name', 'kind', 'auth_type', 'pi_auth_provider', 'base_url', 'api_key_ref', 'has_api_key', 'enabled', 'default_model_id', 'created_at', 'updated_at', 'sort_seq'], [
           provider.id,
           provider.name,
           provider.kind,
+          provider.authType,
+          provider.piAuthProvider,
           provider.baseUrl,
           provider.apiKeyRef,
           provider.hasApiKey === undefined ? undefined : provider.hasApiKey ? 1 : 0,

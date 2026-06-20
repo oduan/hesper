@@ -298,6 +298,41 @@ describe('createModelProviderService', () => {
     expect(Buffer.from(exportDatabaseBytes(persistence)).toString('latin1')).not.toContain('codex-oauth-access-token')
   })
 
+  it('keeps Codex OAuth provider metadata after rebuilding the service', async () => {
+    const persistence = await createInMemoryPersistence()
+    const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
+    const oauthGateway = {
+      startAuthorization: vi.fn(async () => ({
+        sessionId: 'oauth-session-1',
+        authorizationUrl: 'https://auth.craft.do/oauth/openai-codex?state=oauth-session-1'
+      })),
+      getAuthorizationStatus: vi.fn(async () => ({ status: 'authorized' as const, message: '授权成功' })),
+      consumeAuthorization: vi.fn(async () => ({
+        accessToken: 'codex-oauth-access-token',
+        models: [
+          { id: 'pi/gpt-5.5', modelName: 'gpt-5.5', displayName: 'GPT-5.5', capabilities: ['streaming', 'toolCalls', 'reasoning'] as any, contextWindow: 272000 }
+        ],
+        defaultModelId: 'pi/gpt-5.5'
+      }))
+    }
+    const service = createModelProviderService({ persistence, credentialVaultService, now: () => now, oauthGateway })
+
+    await service.startOAuthAuthorization({ provider: 'openai-codex', connectionName: 'ChatGPT Codex' })
+    await service.saveOAuthConnection({ sessionId: 'oauth-session-1', connectionName: 'ChatGPT Codex' })
+
+    const fetchMock = vi.fn()
+    const rebuiltService = createModelProviderService({ persistence, credentialVaultService, now: () => now, fetch: fetchMock as unknown as typeof fetch })
+
+    await expect(rebuiltService.getProvider('chatgpt-codex')).resolves.toMatchObject({
+      id: 'chatgpt-codex',
+      authType: 'oauth',
+      piAuthProvider: 'openai-codex',
+      hasApiKey: true
+    })
+    await expect(rebuiltService.testProviderConnection({ providerId: 'chatgpt-codex' })).resolves.toMatchObject({ status: 'ok', hasApiKey: true, message: 'Codex 授权可用' })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it('tests Codex OAuth providers by credential status instead of chat completions probe', async () => {
     const persistence = await createInMemoryPersistence()
     const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })

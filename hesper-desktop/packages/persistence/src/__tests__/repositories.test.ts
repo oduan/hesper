@@ -48,6 +48,27 @@ VALUES ('legacy-role', 'Legacy Role', 'Legacy prompt', '[]', '["filesystem.read-
   return db.export()
 }
 
+async function createLegacyModelProviderDatabaseBytes(): Promise<Uint8Array> {
+  const SQL = await initSqlJs()
+  const db = new SQL.Database()
+  db.run(`
+CREATE TABLE model_providers (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  base_url TEXT,
+  api_key_ref TEXT,
+  has_api_key INTEGER,
+  enabled INTEGER NOT NULL,
+  default_model_id TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  sort_seq INTEGER NOT NULL
+);
+`)
+  return db.export()
+}
+
 async function createLegacyDatabaseBytes(): Promise<Uint8Array> {
   const SQL = await initSqlJs()
   const db = new SQL.Database()
@@ -243,6 +264,41 @@ describe('persistence repositories', () => {
     })
     expect(JSON.stringify(await db.modelProviders.list())).not.toContain('sk-')
     expect((await db.models.listByProvider('provider-deepseek')).map((model) => model.id)).toEqual(['deepseek-chat'])
+  })
+
+  it('migrates and reopens Codex OAuth provider metadata', async () => {
+    const tempFile = path.join(os.tmpdir(), `hesper-codex-provider-${Date.now()}.sqlite`)
+    fs.writeFileSync(tempFile, await createLegacyModelProviderDatabaseBytes())
+
+    try {
+      const db = await createFilePersistence(tempFile)
+      await db.modelProviders.save({
+        id: 'chatgpt-codex',
+        name: 'ChatGPT Codex',
+        kind: 'pi',
+        authType: 'oauth',
+        piAuthProvider: 'openai-codex',
+        apiKeyRef: 'provider:chatgpt-codex:api-key',
+        hasApiKey: true,
+        enabled: true,
+        defaultModelId: 'pi/gpt-5.5',
+        createdAt: now,
+        updatedAt: now
+      })
+      fs.writeFileSync(tempFile, exportDatabaseBytes(db))
+
+      const reopened = await createFilePersistence(tempFile)
+      expect(await reopened.modelProviders.get('chatgpt-codex')).toMatchObject({
+        id: 'chatgpt-codex',
+        kind: 'pi',
+        authType: 'oauth',
+        piAuthProvider: 'openai-codex',
+        defaultModelId: 'pi/gpt-5.5',
+        hasApiKey: true
+      })
+    } finally {
+      fs.rmSync(tempFile, { force: true })
+    }
   })
 
   it('round-trips skills, roles and tool permission policies', async () => {
