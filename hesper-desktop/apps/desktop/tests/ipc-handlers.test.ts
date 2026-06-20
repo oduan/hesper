@@ -1098,6 +1098,66 @@ describe('registerIpcHandlers', () => {
     expect(openExternal).not.toHaveBeenCalled()
   })
 
+  it('cancels Codex OAuth authorization if opening the external browser fails', async () => {
+    const persistence = await createInMemoryPersistence()
+    const oauthGateway = {
+      startAuthorization: vi.fn()
+        .mockResolvedValueOnce({
+          sessionId: 'oauth-session-open-fail',
+          authorizationUrl: 'https://auth.craft.do/oauth/openai-codex?state=oauth-session-open-fail'
+        })
+        .mockResolvedValueOnce({
+          sessionId: 'oauth-session-open-ok',
+          authorizationUrl: 'https://auth.craft.do/oauth/openai-codex?state=oauth-session-open-ok'
+        }),
+      getAuthorizationStatus: vi.fn(async () => ({ status: 'pending' as const, message: '等待浏览器授权' })),
+      consumeAuthorization: vi.fn(async () => ({ accessToken: 'codex-oauth-access-token', models: [], defaultModelId: 'pi/gpt-5.5' })),
+      cancelAuthorization: vi.fn(async () => {})
+    }
+    const container = createServiceContainer({
+      persistence,
+      agentMode: 'mock',
+      credentialCodec: createMockCredentialCodec(),
+      oauthGateway
+    })
+    const openExternal = vi.fn()
+      .mockRejectedValueOnce(new Error('browser unavailable'))
+      .mockResolvedValueOnce(undefined)
+    const handles = new Map<string, (event: any, ...args: any[]) => Promise<unknown> | unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (event: any, ...args: any[]) => Promise<unknown> | unknown) => {
+        handles.set(channel, handler)
+      }),
+      removeHandler: vi.fn()
+    }
+    const dialog = {
+      showOpenDialog: vi.fn(async () => ({ canceled: false, filePaths: ['C:/workspace'] }))
+    }
+
+    registerIpcHandlers({ ipcMain, dialog, container, openExternal })
+
+    await expect(handles.get(ipcChannels.providersStartOAuthAuthorization)?.(
+      { sender: { id: 1 } },
+      { provider: 'openai-codex', connectionName: 'ChatGPT Codex' }
+    )).rejects.toThrow('browser unavailable')
+    expect(oauthGateway.cancelAuthorization).toHaveBeenCalledWith({ sessionId: 'oauth-session-open-fail' })
+    await expect(handles.get(ipcChannels.providersGetOAuthAuthorizationStatus)?.(
+      { sender: { id: 1 } },
+      { sessionId: 'oauth-session-open-fail' }
+    )).resolves.toEqual({
+      provider: 'openai-codex',
+      sessionId: 'oauth-session-open-fail',
+      status: 'failed',
+      message: '授权会话不存在'
+    })
+
+    await expect(handles.get(ipcChannels.providersStartOAuthAuthorization)?.(
+      { sender: { id: 1 } },
+      { provider: 'openai-codex', connectionName: 'ChatGPT Codex' }
+    )).resolves.toMatchObject({ sessionId: 'oauth-session-open-ok', status: 'pending' })
+    expect(openExternal).toHaveBeenLastCalledWith('https://auth.craft.do/oauth/openai-codex?state=oauth-session-open-ok')
+  })
+
   it('gets and saves Codex OAuth connections through IPC with the container gateway', async () => {
     const persistence = await createInMemoryPersistence()
     const oauthGateway = {
@@ -1112,7 +1172,8 @@ describe('registerIpcHandlers', () => {
           { id: 'pi/gpt-5.5', modelName: 'gpt-5.5', displayName: 'GPT-5.5', capabilities: ['streaming', 'toolCalls', 'reasoning'] as any, contextWindow: 272000 }
         ],
         defaultModelId: 'pi/gpt-5.5'
-      }))
+      })),
+      cancelAuthorization: vi.fn(async () => {})
     }
     const container = createServiceContainer({
       persistence,

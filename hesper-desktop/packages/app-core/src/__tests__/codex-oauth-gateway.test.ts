@@ -3,6 +3,8 @@ import { createCodexOAuthGateway } from '../codex-oauth-gateway'
 
 const callbackPort = 14655
 
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
 describe('createCodexOAuthGateway', () => {
   it('starts a PKCE authorization flow, handles the localhost callback, and consumes only the access token', async () => {
     const tokenFetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({
@@ -61,5 +63,73 @@ describe('createCodexOAuthGateway', () => {
       ]
     })
     expect(JSON.stringify(consumed)).not.toContain('do-not-return')
+  })
+
+  it('ignores wrong-state callbacks and keeps the matching authorization flow usable', async () => {
+    const port = callbackPort + 1
+    const tokenFetch = vi.fn(async () => new Response(JSON.stringify({ access_token: 'codex-oauth-access-token' }), { status: 200 }))
+    const gateway = createCodexOAuthGateway({ fetch: tokenFetch as unknown as typeof fetch, callbackPort: port })
+    const started = await gateway.startAuthorization({ provider: 'openai-codex', connectionName: 'ChatGPT Codex' })
+    const state = new URL(started.authorizationUrl).searchParams.get('state')
+
+    const wrongStateResponse = await fetch(`http://localhost:${port}/auth/callback?state=wrong-state&code=ignored-code`)
+    expect(wrongStateResponse.status).toBe(400)
+    await expect(wrongStateResponse.text()).resolves.toContain('Codex authorization failed')
+    await expect(gateway.getAuthorizationStatus({ sessionId: started.sessionId })).resolves.toEqual({
+      status: 'pending',
+      message: '等待浏览器授权'
+    })
+
+    const callbackResponse = await fetch(`http://localhost:${port}/auth/callback?state=${state}&code=codex-code`)
+    expect(callbackResponse.status).toBe(200)
+    await expect(gateway.getAuthorizationStatus({ sessionId: started.sessionId })).resolves.toEqual({
+      status: 'authorized',
+      message: '授权成功'
+    })
+    await expect(gateway.consumeAuthorization({ sessionId: started.sessionId })).resolves.toMatchObject({
+      accessToken: 'codex-oauth-access-token'
+    })
+  })
+
+  it('cancels authorization flows and closes the callback server', async () => {
+    const port = callbackPort + 2
+    const tokenFetch = vi.fn(async () => new Response(JSON.stringify({ access_token: 'codex-oauth-access-token' }), { status: 200 }))
+    const gateway = createCodexOAuthGateway({ fetch: tokenFetch as unknown as typeof fetch, callbackPort: port })
+    const started = await gateway.startAuthorization({ provider: 'openai-codex', connectionName: 'ChatGPT Codex' })
+    const state = new URL(started.authorizationUrl).searchParams.get('state')
+
+    try {
+      await gateway.cancelAuthorization({ sessionId: started.sessionId })
+      await expect(gateway.getAuthorizationStatus({ sessionId: started.sessionId })).resolves.toEqual({
+        status: 'failed',
+        message: '授权会话不存在'
+      })
+      await expect(fetch(`http://localhost:${port}/auth/callback?state=${state}&code=codex-code`)).rejects.toThrow()
+      expect(tokenFetch).not.toHaveBeenCalled()
+    } finally {
+      await fetch(`http://localhost:${port}/auth/callback?state=${state}&code=cleanup-code`).catch(() => undefined)
+    }
+  })
+
+  it('times out pending authorization flows and releases the callback port', async () => {
+    const port = callbackPort + 3
+    const tokenFetch = vi.fn(async () => new Response(JSON.stringify({ access_token: 'codex-oauth-access-token' }), { status: 200 }))
+    const gateway = createCodexOAuthGateway({ fetch: tokenFetch as unknown as typeof fetch, callbackPort: port, flowTtlMs: 20 })
+    const started = await gateway.startAuthorization({ provider: 'openai-codex', connectionName: 'ChatGPT Codex' })
+    const state = new URL(started.authorizationUrl).searchParams.get('state')
+
+    try {
+      await delay(50)
+      await expect(gateway.getAuthorizationStatus({ sessionId: started.sessionId })).resolves.toEqual({
+        status: 'failed',
+        message: '授权超时，请重新开始 Codex 授权'
+      })
+      await expect(fetch(`http://localhost:${port}/auth/callback?state=${state}&code=too-late`)).rejects.toThrow()
+
+      const restarted = await gateway.startAuthorization({ provider: 'openai-codex', connectionName: 'ChatGPT Codex' })
+      await gateway.cancelAuthorization({ sessionId: restarted.sessionId })
+    } finally {
+      await fetch(`http://localhost:${port}/auth/callback?state=${state}&code=cleanup-code`).catch(() => undefined)
+    }
   })
 })

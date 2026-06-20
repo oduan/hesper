@@ -273,7 +273,8 @@ describe('createModelProviderService', () => {
           { id: 'pi/gpt-5.4-mini', modelName: 'gpt-5.4-mini', displayName: 'GPT-5.4 Mini', capabilities: ['streaming', 'toolCalls', 'reasoning'] as any, contextWindow: 272000 }
         ],
         defaultModelId: 'pi/gpt-5.5'
-      }))
+      })),
+      cancelAuthorization: vi.fn(async () => {})
     }
     const service = createModelProviderService({ persistence, credentialVaultService, now: () => now, oauthGateway })
 
@@ -298,6 +299,40 @@ describe('createModelProviderService', () => {
     expect(Buffer.from(exportDatabaseBytes(persistence)).toString('latin1')).not.toContain('codex-oauth-access-token')
   })
 
+  it('cancels Codex OAuth authorization sessions through the gateway', async () => {
+    const persistence = await createInMemoryPersistence()
+    const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
+    const oauthGateway = {
+      startAuthorization: vi.fn(async () => ({
+        sessionId: 'oauth-session-cancel',
+        authorizationUrl: 'https://auth.craft.do/oauth/openai-codex?state=oauth-session-cancel'
+      })),
+      getAuthorizationStatus: vi.fn(async () => ({ status: 'pending' as const, message: '等待浏览器授权' })),
+      consumeAuthorization: vi.fn(async () => ({
+        accessToken: 'codex-oauth-access-token',
+        models: [],
+        defaultModelId: 'pi/gpt-5.5'
+      })),
+      cancelAuthorization: vi.fn(async () => {})
+    }
+    const service = createModelProviderService({ persistence, credentialVaultService, now: () => now, oauthGateway })
+
+    await service.startOAuthAuthorization({ provider: 'openai-codex', connectionName: 'ChatGPT Codex' })
+
+    await expect(service.cancelOAuthAuthorization({ sessionId: 'oauth-session-cancel' })).resolves.toEqual({
+      cancelled: true,
+      sessionId: 'oauth-session-cancel'
+    })
+    expect(oauthGateway.cancelAuthorization).toHaveBeenCalledWith({ sessionId: 'oauth-session-cancel' })
+    await expect(service.getOAuthAuthorizationStatus({ sessionId: 'oauth-session-cancel' })).resolves.toEqual({
+      provider: 'openai-codex',
+      sessionId: 'oauth-session-cancel',
+      status: 'failed',
+      message: '授权会话不存在'
+    })
+    await expect(service.saveOAuthConnection({ sessionId: 'oauth-session-cancel', connectionName: 'ChatGPT Codex' })).rejects.toThrow('授权会话不存在')
+  })
+
   it('keeps Codex OAuth provider metadata after rebuilding the service', async () => {
     const persistence = await createInMemoryPersistence()
     const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
@@ -313,7 +348,8 @@ describe('createModelProviderService', () => {
           { id: 'pi/gpt-5.5', modelName: 'gpt-5.5', displayName: 'GPT-5.5', capabilities: ['streaming', 'toolCalls', 'reasoning'] as any, contextWindow: 272000 }
         ],
         defaultModelId: 'pi/gpt-5.5'
-      }))
+      })),
+      cancelAuthorization: vi.fn(async () => {})
     }
     const service = createModelProviderService({ persistence, credentialVaultService, now: () => now, oauthGateway })
 
@@ -354,7 +390,8 @@ describe('createModelProviderService', () => {
           { id: 'pi/gpt-5.5', modelName: 'gpt-5.5', displayName: 'GPT-5.5', capabilities: ['streaming', 'toolCalls', 'reasoning'] as any, contextWindow: 272000 }
         ],
         defaultModelId: 'pi/gpt-5.5'
-      }))
+      })),
+      cancelAuthorization: vi.fn(async () => {})
     }
     const service = createModelProviderService({ persistence, credentialVaultService: failingCredentialVaultService, now: () => now, oauthGateway })
 
@@ -389,7 +426,8 @@ describe('createModelProviderService', () => {
             { id: 'pi/gpt-5.5', modelName: 'gpt-5.5', displayName: 'GPT-5.5', capabilities: ['streaming', 'toolCalls', 'reasoning'] as any, contextWindow: 272000 }
           ],
           defaultModelId: 'pi/gpt-5.5'
-        })
+        }),
+      cancelAuthorization: vi.fn(async () => {})
     }
     const service = createModelProviderService({ persistence, credentialVaultService, now: () => now, oauthGateway })
 

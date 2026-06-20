@@ -4,6 +4,8 @@ import type { ProviderOAuthGateway, PiAuthProvider, ProviderOAuthStatus } from '
 
 const codexOAuthClientId = 'app_EMoamEEZ73f0CkXaXp7hrann'
 const defaultCallbackPort = 1455
+const defaultFlowTtlMs = 10 * 60 * 1000
+const timeoutMessage = '授权超时，请重新开始 Codex 授权'
 const callbackPath = '/auth/callback'
 const authorizationEndpoint = 'https://auth.openai.com/oauth/authorize'
 const tokenEndpoint = 'https://auth.openai.com/oauth/token'
@@ -23,11 +25,13 @@ type CodexOAuthFlow = {
   message: string
   code?: string
   server?: Server | undefined
+  timeout?: ReturnType<typeof setTimeout> | undefined
 }
 
 export type CodexOAuthGatewayOptions = {
   fetch?: typeof fetch
   callbackPort?: number
+  flowTtlMs?: number
 }
 
 function randomUrlSafeString(byteLength: number): string {
@@ -56,15 +60,27 @@ function writeHtml(response: ServerResponse, statusCode: number, title: string, 
   response.end(htmlPage(title, message), onDone)
 }
 
-function closeFlowServer(flow: CodexOAuthFlow): void {
+function clearFlowTimeout(flow: CodexOAuthFlow): void {
+  if (!flow.timeout) return
+  clearTimeout(flow.timeout)
+  flow.timeout = undefined
+}
+
+function closeFlowServer(flow: CodexOAuthFlow): Promise<void> {
   const server = flow.server
-  if (!server) return
+  if (!server) return Promise.resolve()
   flow.server = undefined
-  try {
-    server.close(() => undefined)
-  } catch {
-    // Ignore close races when listen failed or the callback already closed the server.
-  }
+  return new Promise((resolve) => {
+    try {
+      if (!server.listening) {
+        resolve()
+        return
+      }
+      server.close(() => resolve())
+    } catch {
+      resolve()
+    }
+  })
 }
 
 function listen(server: Server, port: number): Promise<void> {
@@ -102,8 +118,36 @@ function tokenFromPayload(payload: unknown): string | undefined {
 export function createCodexOAuthGateway(options: CodexOAuthGatewayOptions = {}): ProviderOAuthGateway {
   const fetchImpl = options.fetch ?? globalThis.fetch
   const callbackPort = options.callbackPort ?? defaultCallbackPort
+  const flowTtlMs = options.flowTtlMs ?? defaultFlowTtlMs
   const redirectUri = `http://localhost:${callbackPort}${callbackPath}`
   const flows = new Map<string, CodexOAuthFlow>()
+
+  const failFlow = (flow: CodexOAuthFlow, message: string): void => {
+    flow.status = 'failed'
+    flow.message = message
+    clearFlowTimeout(flow)
+    void closeFlowServer(flow)
+  }
+
+  const deleteFlow = async (sessionId: string): Promise<void> => {
+    const flow = flows.get(sessionId)
+    if (!flow) return
+    flows.delete(sessionId)
+    clearFlowTimeout(flow)
+    await closeFlowServer(flow)
+  }
+
+  const cancelPendingFlows = async (): Promise<void> => {
+    await Promise.all([...flows.values()]
+      .filter((flow) => flow.status === 'pending')
+      .map(async (flow) => {
+        flows.delete(flow.sessionId)
+        flow.status = 'failed'
+        flow.message = '授权已被新的授权请求替换'
+        clearFlowTimeout(flow)
+        await closeFlowServer(flow)
+      }))
+  }
 
   const handleCallback = (flow: CodexOAuthFlow, request: IncomingMessage, response: ServerResponse): void => {
     const requestUrl = new URL(request.url ?? '/', redirectUri)
@@ -113,14 +157,14 @@ export function createCodexOAuthGateway(options: CodexOAuthGatewayOptions = {}):
     }
 
     const finish = (statusCode: number, title: string, message: string) => {
-      writeHtml(response, statusCode, title, message, () => closeFlowServer(flow))
+      writeHtml(response, statusCode, title, message, () => {
+        void closeFlowServer(flow)
+      })
     }
 
     const receivedState = requestUrl.searchParams.get('state')
     if (receivedState !== flow.state) {
-      flow.status = 'failed'
-      flow.message = 'OAuth state mismatch'
-      finish(400, 'Codex authorization failed', flow.message)
+      writeHtml(response, 400, 'Codex authorization failed', 'OAuth state mismatch', () => undefined)
       return
     }
 
@@ -128,6 +172,7 @@ export function createCodexOAuthGateway(options: CodexOAuthGatewayOptions = {}):
     if (error) {
       flow.status = 'failed'
       flow.message = requestUrl.searchParams.get('error_description') ?? error
+      clearFlowTimeout(flow)
       finish(400, 'Codex authorization failed', flow.message)
       return
     }
@@ -136,6 +181,7 @@ export function createCodexOAuthGateway(options: CodexOAuthGatewayOptions = {}):
     if (!code) {
       flow.status = 'failed'
       flow.message = 'OAuth callback did not include an authorization code'
+      clearFlowTimeout(flow)
       finish(400, 'Codex authorization failed', flow.message)
       return
     }
@@ -143,12 +189,14 @@ export function createCodexOAuthGateway(options: CodexOAuthGatewayOptions = {}):
     flow.status = 'authorized'
     flow.message = '授权成功'
     flow.code = code
+    clearFlowTimeout(flow)
     finish(200, 'Codex authorization complete', 'Authorization succeeded. You can close this window and return to hesper.')
   }
 
   return {
     async startAuthorization(input) {
       if ((input.provider as string) !== 'openai-codex') throw new Error(`Unsupported OAuth provider: ${input.provider}`)
+      await cancelPendingFlows()
       const sessionId = randomUrlSafeString(24)
       const codeVerifier = randomUrlSafeString(32)
       const flow: CodexOAuthFlow = {
@@ -169,9 +217,16 @@ export function createCodexOAuthGateway(options: CodexOAuthGatewayOptions = {}):
         await listen(server, callbackPort)
       } catch (error) {
         flows.delete(sessionId)
-        closeFlowServer(flow)
+        clearFlowTimeout(flow)
+        await closeFlowServer(flow)
         throw error
       }
+
+      flow.timeout = setTimeout(() => {
+        if (flow.status === 'pending') {
+          failFlow(flow, timeoutMessage)
+        }
+      }, Math.max(0, flowTtlMs))
 
       const authorizationUrl = new URL(authorizationEndpoint)
       authorizationUrl.searchParams.set('client_id', codexOAuthClientId)
@@ -190,6 +245,9 @@ export function createCodexOAuthGateway(options: CodexOAuthGatewayOptions = {}):
       const flow = flows.get(input.sessionId)
       if (!flow) return { status: 'failed', message: '授权会话不存在' }
       return { status: flow.status, message: flow.message }
+    },
+    async cancelAuthorization(input) {
+      await deleteFlow(input.sessionId)
     },
     async consumeAuthorization(input) {
       if (!fetchImpl) throw new Error('OAuth token exchange requires fetch')
@@ -218,8 +276,7 @@ export function createCodexOAuthGateway(options: CodexOAuthGatewayOptions = {}):
         throw new Error('Codex OAuth token response did not include an access token')
       }
 
-      flows.delete(input.sessionId)
-      closeFlowServer(flow)
+      await deleteFlow(input.sessionId)
       return {
         accessToken,
         defaultModelId: 'pi/gpt-5.5',

@@ -8,6 +8,7 @@ export type ProviderOAuthStatus = 'pending' | 'authorized' | 'failed'
 export type ProviderOAuthGateway = {
   startAuthorization(input: { provider: PiAuthProvider; connectionName: string }): Promise<{ sessionId: string; authorizationUrl: string }>
   getAuthorizationStatus(input: { sessionId: string }): Promise<{ status: ProviderOAuthStatus; message: string }>
+  cancelAuthorization(input: { sessionId: string }): Promise<void>
   consumeAuthorization(input: { sessionId: string }): Promise<{
     accessToken: string
     models: Array<{ id: string; modelName: string; displayName: string; capabilities: ModelConfig['capabilities']; contextWindow?: number }>
@@ -63,6 +64,7 @@ export type ModelProviderService = {
   saveModel(input: SaveModelInput): Promise<ModelConfig>
   startOAuthAuthorization(input: { provider: PiAuthProvider; connectionName: string }): Promise<{ provider: PiAuthProvider; sessionId: string; authorizationUrl: string; status: ProviderOAuthStatus; message: string }>
   getOAuthAuthorizationStatus(input: { sessionId: string }): Promise<{ provider: PiAuthProvider; sessionId: string; status: ProviderOAuthStatus; message: string }>
+  cancelOAuthAuthorization(input: { sessionId: string }): Promise<{ cancelled: true; sessionId: string }>
   saveOAuthConnection(input: { sessionId: string; connectionName: string }): Promise<ModelProviderConfig>
   testProviderConnection(input: string | ProviderConnectionTestInput): Promise<ProviderConnectionTestResult>
   ensureBuiltinProviders(): Promise<void>
@@ -434,7 +436,18 @@ export function createModelProviderService(options: {
         return { provider: 'openai-codex', sessionId: input.sessionId, status: 'failed', message: '授权会话不存在' }
       }
       const status = await requireOAuthGateway().getAuthorizationStatus({ sessionId: input.sessionId })
+      if (status.status === 'failed') {
+        oauthSessions.delete(input.sessionId)
+      }
       return { provider: session.provider, sessionId: input.sessionId, ...status }
+    },
+    async cancelOAuthAuthorization(input) {
+      assertId(input.sessionId, 'sessionId')
+      oauthSessions.delete(input.sessionId)
+      if (oauthGateway) {
+        await oauthGateway.cancelAuthorization({ sessionId: input.sessionId })
+      }
+      return { cancelled: true as const, sessionId: input.sessionId }
     },
     async saveOAuthConnection(input) {
       assertId(input.sessionId, 'sessionId')
@@ -444,6 +457,9 @@ export function createModelProviderService(options: {
       const gateway = requireOAuthGateway()
       const authorizationStatus = await gateway.getAuthorizationStatus({ sessionId: input.sessionId })
       if (authorizationStatus.status !== 'authorized') {
+        if (authorizationStatus.status === 'failed') {
+          oauthSessions.delete(input.sessionId)
+        }
         throw new Error(authorizationStatus.message || '授权尚未完成')
       }
       const consumed = await gateway.consumeAuthorization({ sessionId: input.sessionId })
