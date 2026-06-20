@@ -387,9 +387,13 @@ describe('renderer App', () => {
   })
 
   it('renders the roles management section instead of a placeholder', async () => {
-    listRoles.mockResolvedValueOnce([
-      { id: 'role-1', name: '运维助手', description: '执行命令', systemPrompt: '你是运维助手。', defaultToolIds: ['filesystem.read-file'] }
-    ] as any)
+    listRoles
+      .mockResolvedValueOnce([
+        { id: 'role-1', name: '运维助手', description: '执行命令', systemPrompt: '你是运维助手。', defaultToolIds: ['filesystem.read-file'] }
+      ] as any)
+      .mockResolvedValueOnce([
+        { id: 'role-1', name: '运维助手', description: '执行命令', systemPrompt: '你是运维助手。', defaultToolIds: ['filesystem.read-file'] }
+      ] as any)
 
     render(<App />)
 
@@ -398,6 +402,27 @@ describe('renderer App', () => {
     expect(await screen.findByRole('button', { name: /运维助手/ })).toBeInTheDocument()
     expect(screen.queryByText('Roles 即将支持')).not.toBeInTheDocument()
     expect(screen.getByLabelText('角色名称')).toHaveValue('运维助手')
+  })
+
+  it('refreshes roles when opening the roles section', async () => {
+    const user = userEvent.setup()
+    const agentCreatedRole = {
+      id: 'role-agent-created',
+      name: 'Agent 创建的角色',
+      description: '后台创建',
+      systemPrompt: '你是后台创建的角色。',
+      defaultToolIds: ['filesystem.read-file']
+    }
+    listRoles.mockResolvedValueOnce([]).mockResolvedValueOnce([agentCreatedRole] as any)
+
+    render(<App />)
+
+    await waitFor(() => expect(listRoles).toHaveBeenCalledTimes(1))
+    await user.click(screen.getByRole('button', { name: '角色' }))
+
+    await waitFor(() => expect(listRoles).toHaveBeenCalledTimes(2))
+    expect(await screen.findByRole('button', { name: /Agent 创建的角色/ })).toBeInTheDocument()
+    expect(screen.getByLabelText('角色名称')).toHaveValue('Agent 创建的角色')
   })
 
   it('blocks role creation until the initial roles load completes', async () => {
@@ -435,7 +460,7 @@ describe('renderer App', () => {
       systemPrompt: '你是部署助手。',
       defaultToolIds: ['filesystem.read-file']
     }
-    listRoles.mockResolvedValueOnce([]).mockResolvedValueOnce([createdRole] as any)
+    listRoles.mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([createdRole] as any)
     createRole.mockResolvedValueOnce(createdRole)
 
     render(<App />)
@@ -467,7 +492,7 @@ describe('renderer App', () => {
       systemPrompt: '你是部署助手。',
       defaultToolIds: ['filesystem.read-file']
     }
-    listRoles.mockResolvedValueOnce([]).mockRejectedValueOnce(new Error('refresh failed'))
+    listRoles.mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockRejectedValueOnce(new Error('refresh failed'))
     createRole.mockResolvedValueOnce(createdRole)
 
     render(<App />)
@@ -501,7 +526,7 @@ describe('renderer App', () => {
       name: '高级运维助手',
       defaultToolIds: ['filesystem.read-file', 'web.fetch-url']
     }
-    listRoles.mockResolvedValueOnce([existingRole] as any).mockResolvedValueOnce([updatedRole] as any)
+    listRoles.mockResolvedValueOnce([existingRole] as any).mockResolvedValueOnce([existingRole] as any).mockResolvedValueOnce([updatedRole] as any)
     updateRole.mockResolvedValueOnce(updatedRole)
 
     render(<App />)
@@ -541,7 +566,7 @@ describe('renderer App', () => {
       defaultToolIds: ['web.fetch-url']
     }
     vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
-    listRoles.mockResolvedValueOnce([firstRole, remainingRole] as any).mockResolvedValueOnce([remainingRole] as any)
+    listRoles.mockResolvedValueOnce([firstRole, remainingRole] as any).mockResolvedValueOnce([firstRole, remainingRole] as any).mockResolvedValueOnce([remainingRole] as any)
 
     render(<App />)
 
@@ -564,7 +589,7 @@ describe('renderer App', () => {
       defaultToolIds: []
     }
     vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
-    listRoles.mockResolvedValueOnce([role] as any).mockRejectedValueOnce(new Error('refresh failed'))
+    listRoles.mockResolvedValueOnce([role] as any).mockResolvedValueOnce([role] as any).mockRejectedValueOnce(new Error('refresh failed'))
 
     render(<App />)
 
@@ -595,7 +620,7 @@ describe('renderer App', () => {
       systemPrompt: '你是搜索专家。',
       defaultToolIds: []
     }
-    listRoles.mockResolvedValueOnce([firstRole, secondRole] as any).mockResolvedValueOnce([firstRole, secondRole] as any)
+    listRoles.mockResolvedValueOnce([firstRole, secondRole] as any).mockResolvedValueOnce([firstRole, secondRole] as any).mockResolvedValueOnce([firstRole, secondRole] as any)
     updateRole.mockReturnValueOnce(updateDeferred.promise)
 
     render(<App />)
@@ -656,7 +681,7 @@ describe('renderer App', () => {
       systemPrompt: '',
       defaultToolIds: []
     }
-    listRoles.mockRejectedValueOnce(new Error('initial failed')).mockResolvedValueOnce([newRole] as any)
+    listRoles.mockRejectedValueOnce(new Error('initial failed')).mockRejectedValueOnce(new Error('initial failed')).mockResolvedValueOnce([newRole] as any)
     createRole.mockResolvedValueOnce(newRole)
 
     render(<App />)

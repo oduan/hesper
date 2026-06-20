@@ -310,8 +310,8 @@ function AppContent() {
     let cancelled = false
     setRolesLoading(true)
 
-    void loadRoles({ isCancelled: () => cancelled }).finally(() => {
-      if (!cancelled) {
+    void loadRoles({ isCancelled: () => cancelled }).then(({ requestId }) => {
+      if (!cancelled && isLatestRolesRequest(requestId)) {
         setRolesLoading(false)
       }
     })
@@ -320,6 +320,23 @@ function AppContent() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    if (state.activeSection !== 'roles' || rolesLoading) return undefined
+
+    let cancelled = false
+    setRolesLoading(true)
+
+    void loadRoles({ isCancelled: () => cancelled }).then(({ requestId }) => {
+      if (!cancelled && isLatestRolesRequest(requestId)) {
+        setRolesLoading(false)
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [state.activeSection])
 
   useEffect(() => {
     if (creatingRole) return
