@@ -282,6 +282,10 @@ Runtime events remain the observable contract for the UI.
 - `run.retrying`
 - `run.failed`
 - `run.succeeded`
+- `worker.invocation.created`
+- `worker.invocation.updated`
+
+Worker invocation events link a parent tool step to a Worker Agent child run. They are session-scoped through the parent run and allow the renderer to open a Worker Agent execution viewer before the parent tool call returns.
 
 Child run events should extend this contract without breaking the existing surface.
 

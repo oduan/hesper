@@ -9,6 +9,8 @@ hesper renderer subscribes to `AgentRuntimeEvent` records instead of waiting on 
 - `message.delta` is temporary streaming state and must not be treated as final history.
 - `message.completed` is the only event that creates the final assistant message.
 - `step.created` and `step.updated` drive the visible run step timeline.
+- `worker.invocation.created` and `worker.invocation.updated` link a parent tool step to a Worker Agent child run.
+- Worker invocation events are session-scoped through the parent run so the renderer can open the Worker Agent execution viewer before the parent tool call returns.
 - `run.retrying` is visible in the UI and persisted with retry metadata.
 - `run.failed` preserves the failed run and enables retry by creating a new run.
 - `run.succeeded` closes the active run after final message persistence.
@@ -26,5 +28,7 @@ hesper renderer subscribes to `AgentRuntimeEvent` records instead of waiting on 
 - `run.retrying`
 - `run.failed`
 - `run.succeeded`
+- `worker.invocation.created`
+- `worker.invocation.updated`
 
-This event contract keeps Electron IPC and renderer state updates small while leaving room for future child-run, skill and richer tool event expansion.
+This event contract keeps Electron IPC and renderer state updates small while leaving room for future skill and richer tool event expansion.
