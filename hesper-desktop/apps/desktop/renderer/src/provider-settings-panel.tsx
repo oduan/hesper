@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
 import type {
   ModelDto,
   ModelProviderDto,
@@ -467,6 +467,93 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
   )
 }
 
+const dialogFocusableSelector = [
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  'a[href]',
+  '[tabindex]:not([tabindex="-1"])'
+].join(',')
+
+function getFocusableDialogElements(container: HTMLElement): HTMLElement[] {
+  return Array.from(container.querySelectorAll<HTMLElement>(dialogFocusableSelector))
+    .filter((element) => element.getAttribute('aria-hidden') !== 'true' && element.tabIndex >= 0)
+}
+
+function FullWindowDialogShell({
+  ariaLabel,
+  children,
+  onClose,
+  initialFocusRef
+}: {
+  ariaLabel: string
+  children: ReactNode
+  onClose: () => void
+  initialFocusRef?: RefObject<HTMLElement | null>
+}) {
+  const dialogRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    const focusTarget = initialFocusRef?.current ?? dialogRef.current
+    focusTarget?.focus()
+  }, [initialFocusRef])
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      event.stopPropagation()
+      onClose()
+      return
+    }
+
+    if (event.key !== 'Tab') return
+
+    const dialog = dialogRef.current
+    if (!dialog) return
+
+    const focusableElements = getFocusableDialogElements(dialog)
+    if (focusableElements.length === 0) {
+      event.preventDefault()
+      dialog.focus()
+      return
+    }
+
+    const firstFocusable = focusableElements[0]!
+    const lastFocusable = focusableElements[focusableElements.length - 1]!
+    const activeElement = document.activeElement
+    const focusIsOutsideDialog = !activeElement || !dialog.contains(activeElement)
+
+    if (event.shiftKey) {
+      if (activeElement === firstFocusable || activeElement === dialog || focusIsOutsideDialog) {
+        event.preventDefault()
+        lastFocusable.focus()
+      }
+      return
+    }
+
+    if (activeElement === lastFocusable || activeElement === dialog || focusIsOutsideDialog) {
+      event.preventDefault()
+      firstFocusable.focus()
+    }
+  }
+
+  return (
+    <div
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label={ariaLabel}
+      tabIndex={-1}
+      onKeyDown={handleKeyDown}
+      style={fullWindowOverlayStyle}
+    >
+      <button type="button" aria-label={`关闭 ${ariaLabel}`} onClick={onClose} style={overlayCloseStyle}>×</button>
+      {children}
+    </div>
+  )
+}
+
 function ConnectionTypePicker({
   onSelectCodex,
   onSelectCustom,
@@ -477,8 +564,7 @@ function ConnectionTypePicker({
   onCancel: () => void
 }) {
   return (
-    <div role="dialog" aria-modal="true" aria-label="Add connection" style={fullWindowOverlayStyle}>
-      <button type="button" aria-label="关闭 Add connection" onClick={onCancel} style={overlayCloseStyle}>×</button>
+    <FullWindowDialogShell ariaLabel="Add connection" onClose={onCancel}>
       <div style={connectionTypePickerPanelStyle}>
         <header style={{ textAlign: 'center', marginBottom: 6 }}>
           <h2 style={{ margin: 0, fontSize: bodyFontSize }}>Add connection</h2>
@@ -498,7 +584,7 @@ function ConnectionTypePicker({
           <button type="button" onClick={onCancel} style={secondaryActionStyle}>Back</button>
         </footer>
       </div>
-    </div>
+    </FullWindowDialogShell>
   )
 }
 
@@ -510,8 +596,7 @@ function CodexConnectionPlaceholder({
   onCancel: () => void
 }) {
   return (
-    <div role="dialog" aria-modal="true" aria-label="Codex 授权" style={fullWindowOverlayStyle}>
-      <button type="button" aria-label="关闭 Codex 授权" onClick={onCancel} style={overlayCloseStyle}>×</button>
+    <FullWindowDialogShell ariaLabel="Codex 授权" onClose={onCancel}>
       <div style={overlayFormStyle}>
         <header style={{ textAlign: 'center', marginBottom: 6 }}>
           <h2 style={{ margin: 0, fontSize: bodyFontSize }}>Codex 授权</h2>
@@ -523,7 +608,7 @@ function CodexConnectionPlaceholder({
           <button type="button" onClick={onBack} style={secondaryActionStyle}>Back</button>
         </footer>
       </div>
-    </div>
+    </FullWindowDialogShell>
   )
 }
 
@@ -544,8 +629,7 @@ function ConnectionDialog({
 }) {
   const hasSavedKey = state.mode === 'edit'
   return (
-    <div role="dialog" aria-modal="true" aria-label="API 配置" style={fullWindowOverlayStyle}>
-      <button type="button" aria-label="关闭 API 配置" onClick={onCancel} style={overlayCloseStyle}>×</button>
+    <FullWindowDialogShell ariaLabel="API 配置" onClose={onCancel}>
       <div style={overlayFormStyle}>
         <header style={{ textAlign: 'center', marginBottom: 24 }}>
           <h2 style={{ margin: 0, fontSize: bodyFontSize }}>API 配置</h2>
@@ -621,7 +705,7 @@ function ConnectionDialog({
           <button type="button" onClick={onSave} style={primaryActionStyle}>Save</button>
         </footer>
       </div>
-    </div>
+    </FullWindowDialogShell>
   )
 }
 

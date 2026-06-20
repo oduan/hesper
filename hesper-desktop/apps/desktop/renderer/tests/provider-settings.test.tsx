@@ -321,6 +321,105 @@ describe('provider settings panel', () => {
     })
   })
 
+  it('navigates the Codex placeholder route and returns to the picker', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: '设置' }))
+    await user.click(await screen.findByRole('button', { name: '+ 添加连接' }))
+
+    await user.click(await screen.findByRole('button', { name: /Codex 授权/ }))
+    const codexDialog = await screen.findByRole('dialog', { name: 'Codex 授权' })
+    expect(codexDialog).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'API 配置' })).not.toBeInTheDocument()
+
+    await user.click(within(codexDialog).getByRole('button', { name: 'Back' }))
+    expect(await screen.findByRole('dialog', { name: 'Add connection' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /Codex 授权/ }))
+    const escapeDialog = await screen.findByRole('dialog', { name: 'Codex 授权' })
+    await waitFor(() => expect(escapeDialog).toHaveFocus())
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: 'Codex 授权' })).not.toBeInTheDocument()
+  })
+
+  it('closes and reopens the picker from Back, close, and Escape', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: '设置' }))
+    await user.click(await screen.findByRole('button', { name: '+ 添加连接' }))
+    let picker = await screen.findByRole('dialog', { name: 'Add connection' })
+
+    await user.click(within(picker).getByRole('button', { name: 'Back' }))
+    expect(screen.queryByRole('dialog', { name: 'Add connection' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '+ 添加连接' }))
+    picker = await screen.findByRole('dialog', { name: 'Add connection' })
+    await user.click(within(picker).getByRole('button', { name: '关闭 Add connection' }))
+    expect(screen.queryByRole('dialog', { name: 'Add connection' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '+ 添加连接' }))
+    picker = await screen.findByRole('dialog', { name: 'Add connection' })
+    await waitFor(() => expect(picker).toHaveFocus())
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: 'Add connection' })).not.toBeInTheDocument()
+  })
+
+  it('clears custom dialog state when canceled before reopening the picker', async () => {
+    const user = userEvent.setup()
+    testConnection.mockResolvedValueOnce({ providerId: 'custom-api-example-com', status: 'ok', hasApiKey: true, message: '连接成功' })
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: '设置' }))
+    await user.click(await screen.findByRole('button', { name: '+ 添加连接' }))
+    await user.click(await screen.findByRole('button', { name: /Custom/ }))
+
+    await user.type(await screen.findByLabelText('添加连接 API key'), 'sk-custom-value')
+    await user.type(screen.getByLabelText('添加连接 Endpoint'), 'https://api.example.com')
+    await user.type(screen.getByLabelText('添加连接默认模型'), 'gpt-4o')
+    await user.click(screen.getByRole('button', { name: 'Test' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('连接成功')
+
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    await user.click(screen.getByRole('button', { name: '+ 添加连接' }))
+
+    const picker = await screen.findByRole('dialog', { name: 'Add connection' })
+    expect(screen.queryByRole('dialog', { name: 'API 配置' })).not.toBeInTheDocument()
+    expect(screen.queryByDisplayValue('sk-custom-value')).not.toBeInTheDocument()
+    expect(screen.queryByText('连接成功')).not.toBeInTheDocument()
+
+    await user.click(within(picker).getByRole('button', { name: /Custom/ }))
+    const apiDialog = await screen.findByRole('dialog', { name: 'API 配置' })
+    expect(screen.getByLabelText('添加连接 API key')).toHaveValue('')
+    expect(screen.queryByText('连接成功')).not.toBeInTheDocument()
+
+    await user.click(within(apiDialog).getByRole('button', { name: '关闭 API 配置' }))
+    await user.click(screen.getByRole('button', { name: '+ 添加连接' }))
+    expect(await screen.findByRole('dialog', { name: 'Add connection' })).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'API 配置' })).not.toBeInTheDocument()
+  })
+
+  it('keeps keyboard focus inside the full-window picker while tabbing', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: '设置' }))
+    await user.click(await screen.findByRole('button', { name: '+ 添加连接' }))
+
+    const picker = await screen.findByRole('dialog', { name: 'Add connection' })
+    await waitFor(() => expect(picker).toHaveFocus())
+
+    const closeButton = within(picker).getByRole('button', { name: '关闭 Add connection' })
+    const backButton = within(picker).getByRole('button', { name: 'Back' })
+    backButton.focus()
+    await user.keyboard('{Tab}')
+    expect(closeButton).toHaveFocus()
+
+    await user.keyboard('{Shift>}{Tab}{/Shift}')
+    expect(backButton).toHaveFocus()
+  })
+
   it('adds a custom AI connection from the API configuration dialog', async () => {
     const user = userEvent.setup()
     testConnection.mockResolvedValueOnce({ providerId: 'custom-api-example-com', status: 'ok', hasApiKey: true, message: '连接成功' })
