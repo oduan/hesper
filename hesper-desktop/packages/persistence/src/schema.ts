@@ -191,6 +191,19 @@ const migrationColumns: Record<string, string[]> = {
     'worker_agent_invocation_id TEXT',
     'depth INTEGER'
   ],
+  roles: [
+    'description TEXT',
+    'default_model_id TEXT',
+    'default_model_ref_json TEXT',
+    'system_prompt TEXT',
+    "allowed_skill_ids_json TEXT NOT NULL DEFAULT '[]'",
+    'default_skill_ids_json TEXT',
+    'default_tool_ids_json TEXT',
+    'can_be_main_agent INTEGER NOT NULL DEFAULT 1',
+    'can_be_worker_agent INTEGER NOT NULL DEFAULT 0',
+    'can_be_assigned_to_worker_agent INTEGER',
+    'worker_agent_guidance TEXT'
+  ],
   app_settings: [
     'font_size INTEGER NOT NULL DEFAULT 14'
   ]

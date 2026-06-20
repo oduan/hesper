@@ -27,6 +27,25 @@ VALUES ('bad-role-ref', 'Bad Role Ref', NULL, NULL, '{"providerId":"provider-1"}
   return db.export()
 }
 
+async function createLegacyRoleDatabaseBytes(): Promise<Uint8Array> {
+  const SQL = await initSqlJs()
+  const db = new SQL.Database()
+  db.run(`
+CREATE TABLE roles (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  system_prompt TEXT,
+  allowed_skill_ids_json TEXT NOT NULL,
+  default_tool_ids_json TEXT,
+  can_be_main_agent INTEGER NOT NULL,
+  sort_seq INTEGER NOT NULL
+);
+INSERT INTO roles (id, name, system_prompt, allowed_skill_ids_json, default_tool_ids_json, can_be_main_agent, sort_seq)
+VALUES ('legacy-role', 'Legacy Role', 'Legacy prompt', '[]', '["filesystem.read-file"]', 1, 1);
+`)
+  return db.export()
+}
+
 async function createLegacyDatabaseBytes(): Promise<Uint8Array> {
   const SQL = await initSqlJs()
   const db = new SQL.Database()
@@ -321,6 +340,46 @@ describe('persistence repositories', () => {
       await expect(corrupted.models.get('bad-model-capability')).rejects.toThrow(/Invalid model capability/)
       await expect(corrupted.roles.get('bad-role-array')).rejects.toThrow(/roles\.allowed_skill_ids_json/)
       await expect(corrupted.roles.get('bad-role-ref')).rejects.toThrow()
+    } finally {
+      fs.rmSync(tempFile, { force: true })
+    }
+  })
+
+  it('migrates legacy role tables before saving user-defined roles', async () => {
+    const tempFile = path.join(os.tmpdir(), `hesper-legacy-roles-${Date.now()}.sqlite`)
+    fs.writeFileSync(tempFile, await createLegacyRoleDatabaseBytes())
+
+    try {
+      const migrated = await createFilePersistence(tempFile)
+
+      await expect(migrated.roles.get('legacy-role')).resolves.toMatchObject({
+        id: 'legacy-role',
+        name: 'Legacy Role',
+        systemPrompt: 'Legacy prompt',
+        defaultToolIds: ['filesystem.read-file'],
+        canBeMainAgent: true,
+        canBeWorkerAgent: false
+      })
+
+      await migrated.roles.save({
+        id: 'new-role',
+        name: 'New Role',
+        description: 'Created after migration',
+        systemPrompt: 'New prompt',
+        allowedSkillIds: [],
+        defaultSkillIds: [],
+        defaultToolIds: ['filesystem.read-file'],
+        canBeMainAgent: true,
+        canBeWorkerAgent: false,
+        canBeAssignedToWorkerAgent: false
+      })
+
+      await expect(migrated.roles.get('new-role')).resolves.toMatchObject({
+        id: 'new-role',
+        name: 'New Role',
+        canBeWorkerAgent: false,
+        canBeAssignedToWorkerAgent: false
+      })
     } finally {
       fs.rmSync(tempFile, { force: true })
     }
