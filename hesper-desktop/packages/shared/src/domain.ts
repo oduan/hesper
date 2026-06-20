@@ -12,7 +12,9 @@ export type RunError = {
   retryable: boolean
 }
 
-export type ModelProviderKind = 'mock' | 'openai' | 'deepseek' | 'openai-compatible' | 'anthropic' | 'custom'
+export type ModelProviderKind = 'mock' | 'openai' | 'deepseek' | 'openai-compatible' | 'anthropic' | 'custom' | 'pi'
+export type ModelProviderAuthType = 'api_key' | 'oauth' | 'none'
+export type PiAuthProvider = 'openai-codex'
 export type ModelCapability = 'streaming' | 'toolCalls' | 'jsonOutput' | 'reasoning'
 export type ToolPermissionMode = 'allow' | 'deny' | 'ask'
 export type ToolPermissionScope = 'global' | 'session' | 'role' | 'worker-agent'
@@ -28,6 +30,8 @@ export type ModelProviderConfig = {
   id: string
   name: string
   kind: ModelProviderKind
+  authType?: ModelProviderAuthType
+  piAuthProvider?: PiAuthProvider
   baseUrl?: string
   apiKeyRef?: string
   hasApiKey?: boolean

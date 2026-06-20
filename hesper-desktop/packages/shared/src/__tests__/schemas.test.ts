@@ -143,6 +143,41 @@ describe('shared schemas', () => {
     expect('apiKey' in parsed).toBe(false)
   })
 
+  it('accepts Codex OAuth Pi provider metadata without an API endpoint', () => {
+    const parsed = modelProviderConfigSchema.parse({
+      id: 'chatgpt-codex',
+      name: 'ChatGPT Codex',
+      kind: 'pi',
+      authType: 'oauth',
+      piAuthProvider: 'openai-codex',
+      hasApiKey: true,
+      enabled: true,
+      defaultModelId: 'pi/gpt-5.5',
+      createdAt: '2026-06-20T15:20:00.000Z',
+      updatedAt: '2026-06-20T15:20:00.000Z'
+    })
+
+    expect(parsed).toMatchObject({
+      kind: 'pi',
+      authType: 'oauth',
+      piAuthProvider: 'openai-codex',
+      hasApiKey: true
+    })
+  })
+
+  it('rejects unsupported Pi OAuth provider names', () => {
+    expect(() => modelProviderConfigSchema.parse({
+      id: 'bad-oauth',
+      name: 'Bad OAuth',
+      kind: 'pi',
+      authType: 'oauth',
+      piAuthProvider: 'not-codex',
+      enabled: true,
+      createdAt: '2026-06-20T15:20:00.000Z',
+      updatedAt: '2026-06-20T15:20:00.000Z'
+    })).toThrow()
+  })
+
   it('validates model capabilities and provider linkage', () => {
     const parsed = modelConfigSchema.parse({
       id: 'deepseek-chat',

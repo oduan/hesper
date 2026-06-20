@@ -53,7 +53,9 @@ export const modelRefSchema = modelRefBaseSchema.transform((value) => value)
 const modelProviderConfigBaseSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
-  kind: z.enum(['mock', 'openai', 'deepseek', 'openai-compatible', 'anthropic', 'custom']),
+  kind: z.enum(['mock', 'openai', 'deepseek', 'openai-compatible', 'anthropic', 'custom', 'pi']),
+  authType: z.enum(['api_key', 'oauth', 'none']).optional(),
+  piAuthProvider: z.enum(['openai-codex']).optional(),
   baseUrl: z.string().url().optional(),
   apiKeyRef: z.string().min(1).optional(),
   hasApiKey: z.boolean().optional(),
@@ -61,6 +63,13 @@ const modelProviderConfigBaseSchema = z.object({
   defaultModelId: z.string().min(1).optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime()
+}).superRefine((provider, ctx) => {
+  if (provider.piAuthProvider && provider.kind !== 'pi') {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['piAuthProvider'], message: 'piAuthProvider requires kind pi' })
+  }
+  if (provider.authType === 'oauth' && provider.piAuthProvider !== 'openai-codex') {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['piAuthProvider'], message: 'Codex OAuth requires openai-codex' })
+  }
 })
 
 export const modelProviderConfigSchema = modelProviderConfigBaseSchema.transform(stripUndefined)

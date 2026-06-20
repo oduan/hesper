@@ -32,6 +32,9 @@ export const ipcChannels = {
   providersDisable: 'providers:disable',
   providersDelete: 'providers:delete',
   providersTestConnection: 'providers:testConnection',
+  providersStartOAuthAuthorization: 'providers:startOAuthAuthorization',
+  providersGetOAuthAuthorizationStatus: 'providers:getOAuthAuthorizationStatus',
+  providersSaveOAuthConnection: 'providers:saveOAuthConnection',
   modelsList: 'models:list',
   modelsSave: 'models:save',
   toolsList: 'tools:list',
@@ -200,6 +203,38 @@ export const providerConnectionTestInputSchema = z.object({
   message: 'providerId or kind is required'
 })
 
+export const piAuthProviderSchema = z.enum(['openai-codex'])
+export const providerOAuthStatusSchema = z.enum(['pending', 'authorized', 'failed'])
+
+export const providerOAuthStartInputSchema = z.object({
+  provider: piAuthProviderSchema,
+  connectionName: nonEmptyStringSchema
+}).strict()
+
+export const providerOAuthStartResultSchema = z.object({
+  provider: piAuthProviderSchema,
+  sessionId: nonEmptyStringSchema,
+  authorizationUrl: z.string().url(),
+  status: providerOAuthStatusSchema,
+  message: z.string().min(1)
+}).strict()
+
+export const providerOAuthStatusInputSchema = z.object({
+  sessionId: nonEmptyStringSchema
+}).strict()
+
+export const providerOAuthStatusResultSchema = z.object({
+  provider: piAuthProviderSchema,
+  sessionId: nonEmptyStringSchema,
+  status: providerOAuthStatusSchema,
+  message: z.string().min(1)
+}).strict()
+
+export const providerOAuthSaveInputSchema = z.object({
+  sessionId: nonEmptyStringSchema,
+  connectionName: nonEmptyStringSchema
+}).strict()
+
 export const listModelsInputSchema = z.object({
   providerId: nonEmptyStringSchema.optional()
 }).strict()
@@ -289,6 +324,11 @@ export type ProviderCredentialStatus = z.infer<typeof providerCredentialStatusSc
 export type SaveModelProviderInput = z.infer<typeof saveModelProviderInputSchema>
 export type ProviderIdInput = z.infer<typeof providerIdInputSchema>
 export type ProviderConnectionTestInput = z.infer<typeof providerConnectionTestInputSchema>
+export type ProviderOAuthStartInput = z.infer<typeof providerOAuthStartInputSchema>
+export type ProviderOAuthStartResult = z.infer<typeof providerOAuthStartResultSchema>
+export type ProviderOAuthStatusInput = z.infer<typeof providerOAuthStatusInputSchema>
+export type ProviderOAuthStatusResult = z.infer<typeof providerOAuthStatusResultSchema>
+export type ProviderOAuthSaveInput = z.infer<typeof providerOAuthSaveInputSchema>
 export type ListModelsInput = z.infer<typeof listModelsInputSchema>
 export type SaveModelInput = z.infer<typeof saveModelInputSchema>
 export type ToolDto = z.infer<typeof toolDtoSchema>
@@ -354,6 +394,9 @@ export type HesperDesktopApi = {
     disable(input: ProviderIdInput): Promise<ModelProviderDto>
     delete(input: ProviderIdInput): Promise<{ deleted: true; providerId: string; provider?: ModelProviderDto }>
     testConnection(input: ProviderConnectionTestInput): Promise<ProviderConnectionTestResult>
+    startOAuthAuthorization(input: ProviderOAuthStartInput): Promise<ProviderOAuthStartResult>
+    getOAuthAuthorizationStatus(input: ProviderOAuthStatusInput): Promise<ProviderOAuthStatusResult>
+    saveOAuthConnection(input: ProviderOAuthSaveInput): Promise<ModelProviderDto>
   }
   models: {
     list(input?: ListModelsInput): Promise<ModelDto[]>
