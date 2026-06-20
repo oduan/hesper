@@ -330,13 +330,17 @@ describe('persistence repositories', () => {
       id: 'worker-agent-1',
       parentRunId: 'run-parent',
       childRunId: 'run-child',
+      parentStepId: 'step-parent',
+      parentToolCallId: 'tool-call-parent',
       task: 'Review the staged diff.',
       roleId: 'reviewer',
       allowedToolIds: ['filesystem.read-file', 'git.status'],
       modelRef: { providerId: 'provider-deepseek', modelId: 'deepseek-chat' },
       expectedOutput: 'Findings with evidence.',
+      contextSummary: 'Summarized review context.',
       status: 'running',
-      createdAt: now
+      createdAt: now,
+      lastEventAt: now
     })
     await db.runs.save({ id: 'run-child', sessionId: 'session-1', parentRunId: 'run-parent', workerAgentInvocationId: 'worker-agent-1', status: 'queued', modelId: 'deepseek-chat', retryCount: 0, maxRetries: 3, depth: 1 })
 
@@ -352,6 +356,12 @@ describe('persistence repositories', () => {
     expect(await db.workerAgentInvocations.listByParentRun('run-parent')).toMatchObject([
       { id: 'worker-agent-1', childRunId: 'run-child', roleId: 'reviewer', allowedToolIds: ['filesystem.read-file', 'git.status'] }
     ])
+    expect(await db.workerAgentInvocations.get('worker-agent-1')).toMatchObject({
+      parentStepId: 'step-parent',
+      parentToolCallId: 'tool-call-parent',
+      contextSummary: 'Summarized review context.',
+      lastEventAt: now
+    })
   })
 
   it('fails fast instead of silently rewriting corrupted JSON configuration fields', async () => {

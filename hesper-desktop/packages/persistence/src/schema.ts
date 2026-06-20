@@ -144,13 +144,17 @@ CREATE TABLE IF NOT EXISTS worker_agent_invocations (
   id TEXT PRIMARY KEY,
   parent_run_id TEXT NOT NULL,
   child_run_id TEXT,
+  parent_step_id TEXT,
+  parent_tool_call_id TEXT,
   task TEXT NOT NULL,
   role_id TEXT NOT NULL,
   allowed_tool_ids_json TEXT NOT NULL,
   model_ref_json TEXT,
   expected_output TEXT,
+  context_summary TEXT,
   status TEXT NOT NULL,
   created_at TEXT NOT NULL,
+  last_event_at TEXT,
   completed_at TEXT,
   error_json TEXT,
   sort_seq INTEGER NOT NULL
@@ -190,6 +194,12 @@ const migrationColumns: Record<string, string[]> = {
   agent_runs: [
     'worker_agent_invocation_id TEXT',
     'depth INTEGER'
+  ],
+  worker_agent_invocations: [
+    'parent_step_id TEXT',
+    'parent_tool_call_id TEXT',
+    'context_summary TEXT',
+    'last_event_at TEXT'
   ],
   roles: [
     'description TEXT',

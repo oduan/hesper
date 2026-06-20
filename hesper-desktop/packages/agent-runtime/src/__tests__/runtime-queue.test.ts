@@ -121,6 +121,40 @@ class AbortableAdapter implements AgentAdapter {
   }
 }
 
+class DelayedWorkerInvocationAdapter implements AgentAdapter {
+  private releaseStarted!: () => void
+  private releaseFinish!: () => void
+  readonly started = new Promise<void>((resolve) => {
+    this.releaseStarted = resolve
+  })
+  readonly canFinish = new Promise<void>((resolve) => {
+    this.releaseFinish = resolve
+  })
+
+  finish(): void {
+    this.releaseFinish()
+  }
+
+  async run(input: AgentPromptInput, emit: (event: AgentRuntimeEvent) => void | Promise<void>): Promise<void> {
+    this.releaseStarted()
+    await this.canFinish
+    await emit({
+      type: 'worker.invocation.created',
+      invocation: {
+        id: 'worker-agent-1',
+        parentRunId: input.runId,
+        childRunId: 'child-run-1',
+        task: 'Review the staged diff.',
+        roleId: 'reviewer',
+        allowedToolIds: ['filesystem.read-file'],
+        status: 'running',
+        createdAt: '2026-06-10T06:00:00.000Z',
+        lastEventAt: '2026-06-10T06:00:00.000Z'
+      }
+    })
+  }
+}
+
 type RuntimeInternals = {
   enqueueChains: Map<string, Promise<void>>
   sessionStates: Map<string, unknown>
@@ -282,6 +316,23 @@ describe('AgentRuntime queue', () => {
     expect(runtimeEvents.map((event) => event.type)).not.toContain('run.succeeded')
     expect(await persistence.messages.listBySession('session-compensated-backoff')).toEqual([])
     expect(getRuntimeInternals(runtime).terminatedRuns.size).toBe(0)
+  })
+
+  it('ignores worker invocation events for terminated child runs', async () => {
+    const persistence = await createInMemoryPersistence()
+    await persistence.sessions.save({ ...session, id: 'session-worker-event-filter' })
+
+    const adapter = new DelayedWorkerInvocationAdapter()
+    const runtime = new AgentRuntime({ persistence, adapter })
+
+    await runtime.enqueue({ sessionId: 'session-worker-event-filter', prompt: 'parent', modelId: 'mock/hesper-fast' })
+    await adapter.started
+
+    getRuntimeInternals(runtime).terminatedRuns.set('child-run-1', new Error('child terminated'))
+    adapter.finish()
+    await runtime.waitForIdle('session-worker-event-filter')
+
+    expect(await persistence.events.listByRun('child-run-1')).toEqual([])
   })
 
   it('runs the first prompt immediately and queues the second prompt', async () => {

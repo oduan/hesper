@@ -346,13 +346,17 @@ function toWorkerAgentInvocation(row: any): WorkerAgentInvocation {
     id: row.id,
     parentRunId: row.parent_run_id,
     childRunId: row.child_run_id ?? undefined,
+    parentStepId: row.parent_step_id ?? undefined,
+    parentToolCallId: row.parent_tool_call_id ?? undefined,
     task: row.task,
     roleId: row.role_id,
     allowedToolIds: parseStringArrayJson(row.allowed_tool_ids_json, 'worker_agent_invocations.allowed_tool_ids_json'),
     modelRef: parseOptionalModelRef(row.model_ref_json, 'worker_agent_invocations.model_ref_json'),
     expectedOutput: row.expected_output ?? undefined,
+    contextSummary: row.context_summary ?? undefined,
     status: row.status,
     createdAt: row.created_at,
+    lastEventAt: row.last_event_at ?? undefined,
     completedAt: row.completed_at ?? undefined,
     error
   }) as WorkerAgentInvocation
@@ -774,17 +778,21 @@ export function createRepositories(db: Database): Persistence {
     },
     workerAgentInvocations: {
       async save(invocation) {
-        upsert('worker_agent_invocations', ['id', 'parent_run_id', 'child_run_id', 'task', 'role_id', 'allowed_tool_ids_json', 'model_ref_json', 'expected_output', 'status', 'created_at', 'completed_at', 'error_json', 'sort_seq'], [
+        upsert('worker_agent_invocations', ['id', 'parent_run_id', 'child_run_id', 'parent_step_id', 'parent_tool_call_id', 'task', 'role_id', 'allowed_tool_ids_json', 'model_ref_json', 'expected_output', 'context_summary', 'status', 'created_at', 'last_event_at', 'completed_at', 'error_json', 'sort_seq'], [
           invocation.id,
           invocation.parentRunId,
           invocation.childRunId,
+          invocation.parentStepId,
+          invocation.parentToolCallId,
           invocation.task,
           invocation.roleId,
           JSON.stringify(invocation.allowedToolIds),
           json(invocation.modelRef),
           invocation.expectedOutput,
+          invocation.contextSummary,
           invocation.status,
           invocation.createdAt,
+          invocation.lastEventAt,
           invocation.completedAt,
           invocation.error ? JSON.stringify(invocation.error) : undefined,
           nextSeq()

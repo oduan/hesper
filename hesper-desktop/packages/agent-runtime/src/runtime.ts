@@ -42,6 +42,9 @@ function createMissingSessionError(sessionId: string): Error {
 function runIdFromEvent(event: AgentRuntimeEvent): string | undefined {
   if (event.type === 'run.created') return event.run.id
   if (event.type === 'step.created' || event.type === 'step.updated') return event.step.runId
+  if (event.type === 'worker.invocation.created' || event.type === 'worker.invocation.updated') {
+    return event.invocation.childRunId ?? event.invocation.parentRunId
+  }
   if (event.type === 'message.completed') return event.message.runId
   if ('runId' in event && typeof event.runId === 'string') return event.runId
   return undefined
