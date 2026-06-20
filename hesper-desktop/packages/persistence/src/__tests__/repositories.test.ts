@@ -136,6 +136,28 @@ describe('persistence repositories', () => {
     expect(await db.events.listByRun('run-1')).toHaveLength(4)
   })
 
+  it('persists Worker Agent invocation runtime events under the child run when available', async () => {
+    const db = await createInMemoryPersistence()
+    const now = '2026-06-20T05:31:00.000Z'
+    const invocation = {
+      id: 'worker-agent-1',
+      parentRunId: 'run-parent',
+      childRunId: 'run-child',
+      task: 'Review the staged diff.',
+      roleId: 'reviewer',
+      allowedToolIds: ['filesystem.read-file'],
+      status: 'running' as const,
+      createdAt: now,
+      lastEventAt: now
+    }
+
+    await db.events.append({ type: 'worker.invocation.created', invocation })
+
+    await expect(db.events.listByRun('run-child')).resolves.toEqual([
+      expect.objectContaining({ type: 'worker.invocation.created' })
+    ])
+  })
+
   it('exports and reopens persisted application settings', async () => {
     const original = await createInMemoryPersistence()
     await original.settings.save({

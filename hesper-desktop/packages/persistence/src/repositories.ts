@@ -406,6 +406,9 @@ function extractRunId(event: RuntimeEventRecord): string {
     case 'step.created':
     case 'step.updated':
       return event.step.runId
+    case 'worker.invocation.created':
+    case 'worker.invocation.updated':
+      return event.invocation.childRunId ?? event.invocation.parentRunId
     case 'message.completed': {
       const runId = event.message.runId
       if (!runId) throw new Error('message.completed event must include message.runId')
