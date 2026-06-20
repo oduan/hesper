@@ -60,6 +60,9 @@ export function createDefaultRoleService(): RoleService {
         'agent.get-worker-agent',
         'agent.wait-worker-agent',
         'agent.cancel-worker-agent',
+        'time.current',
+        'time.sleep',
+        'time.wait-until',
         'system.execute-command',
         'system.show-notification'
       ],

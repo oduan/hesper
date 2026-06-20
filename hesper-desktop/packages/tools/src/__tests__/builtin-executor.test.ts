@@ -502,6 +502,64 @@ describe('createBuiltinToolExecutor', () => {
     }
   })
 
+  it('returns the current time and timezone', async () => {
+    const executor = createBuiltinToolExecutor({ now: () => '2026-06-20T13:00:00.000Z' })
+
+    const result = await executor.execute(tool('time.current'), {}, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['time.current']
+    })
+
+    const parsed = JSON.parse(result.content)
+    expect(parsed).toMatchObject({
+      now: '2026-06-20T13:00:00.000Z',
+      localTime: expect.any(String),
+      timezone: expect.any(String),
+      utcOffset: expect.stringMatching(/^[+-]\d{2}:\d{2}$/),
+      utcOffsetMinutes: expect.any(Number)
+    })
+    expect(result.details).toMatchObject({ toolId: 'time.current', now: '2026-06-20T13:00:00.000Z' })
+  })
+
+  it('sleeps for the requested number of seconds through the injectable sleeper', async () => {
+    const sleep = vi.fn(async () => undefined)
+    const executor = createBuiltinToolExecutor({ now: () => '2026-06-20T13:00:00.000Z', sleep })
+    const controller = new AbortController()
+
+    const result = await executor.execute(tool('time.sleep'), { seconds: 1.25 }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['time.sleep'],
+      signal: controller.signal
+    })
+
+    expect(sleep).toHaveBeenCalledWith(1250, { signal: controller.signal })
+    expect(JSON.parse(result.content)).toMatchObject({ status: 'completed', seconds: 1.25, durationMs: 1250 })
+  })
+
+  it('waits until an absolute wake time through the injectable sleeper', async () => {
+    const now = vi.fn()
+      .mockReturnValueOnce('2026-06-20T13:00:00.000Z')
+      .mockReturnValueOnce('2026-06-20T13:02:00.000Z')
+    const sleep = vi.fn(async () => undefined)
+    const executor = createBuiltinToolExecutor({ now, sleep })
+
+    const result = await executor.execute(tool('time.wait-until'), { wakeAt: '2026-06-20T13:02:00.000Z' }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['time.wait-until']
+    })
+
+    expect(sleep).toHaveBeenCalledWith(120000, {})
+    expect(JSON.parse(result.content)).toMatchObject({
+      status: 'completed',
+      wakeAt: '2026-06-20T13:02:00.000Z',
+      targetTime: '2026-06-20T13:02:00.000Z',
+      waitedMs: 120000
+    })
+  })
+
   it('returns a controlled error when notifications are not available', async () => {
     const executor = createBuiltinToolExecutor()
 

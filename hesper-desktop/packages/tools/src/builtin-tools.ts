@@ -361,6 +361,42 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
       }
     },
     {
+      id: 'time.current',
+      name: 'Current Time',
+      description: 'Get the current date, time, timezone, and UTC offset for this desktop runtime.',
+      category: 'system',
+      icon: '🕒',
+      inputSchema: { type: 'object', properties: {} }
+    },
+    {
+      id: 'time.sleep',
+      name: 'Sleep',
+      description: 'Pause the Agent for a specified number of seconds before continuing. Use this to wait briefly before checking again.',
+      category: 'system',
+      icon: '💤',
+      inputSchema: {
+        type: 'object',
+        required: ['seconds'],
+        properties: {
+          seconds: { type: 'number', description: 'Number of seconds to sleep. Decimals are allowed; must be >= 0.' }
+        }
+      }
+    },
+    {
+      id: 'time.wait-until',
+      name: 'Wait Until Time',
+      description: 'Pause the Agent until a specific wake-up time, then return success. Provide an ISO 8601 timestamp with timezone, for example 2026-06-20T21:30:00+08:00.',
+      category: 'system',
+      icon: '⏰',
+      inputSchema: {
+        type: 'object',
+        required: ['wakeAt'],
+        properties: {
+          wakeAt: { type: 'string', description: 'Wake-up timestamp. Prefer ISO 8601 with timezone, e.g. 2026-06-20T21:30:00+08:00.' }
+        }
+      }
+    },
+    {
       id: 'system.execute-command',
       name: 'Execute Command',
       description: `Execute one complete shell command from the selected workspace. ${currentCommandRuntimeDescription()} The command is run after changing to the workspace directory.`,

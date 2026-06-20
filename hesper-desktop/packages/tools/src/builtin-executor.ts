@@ -42,6 +42,10 @@ export type WorkerAgentToolHandlers = {
   cancel(input: Record<string, unknown>, context: ToolExecutionContext): Promise<unknown>
 }
 
+export type SleepOptions = {
+  signal?: AbortSignal
+}
+
 export type BuiltinToolExecutorOptions = {
   maxReadBytes?: number
   gitTimeoutMs?: number
@@ -53,6 +57,7 @@ export type BuiltinToolExecutorOptions = {
   roleTools?: RoleToolHandlers
   workerAgentTools?: WorkerAgentToolHandlers
   now?: () => string
+  sleep?: (durationMs: number, options?: SleepOptions) => Promise<void>
 }
 
 const defaultMaxReadBytes = 256 * 1024
@@ -63,6 +68,7 @@ const defaultTinyFishFetchPerUrlTimeoutMs = 45_000
 const defaultSearchMaxFileBytes = 256 * 1024
 const tinyFishFetchEndpoint = 'https://api.fetch.tinyfish.ai'
 const tinyFishSearchEndpoint = 'https://api.search.tinyfish.ai'
+const maxTimerMs = 2_147_483_647
 
 function argsObject(args: unknown): Record<string, unknown> {
   if (!args || typeof args !== 'object' || Array.isArray(args)) {
@@ -97,6 +103,16 @@ function booleanArg(args: unknown, key: string, fallback = false): boolean {
 function numberArg(args: unknown, key: string, fallback: number, options: { min?: number; max?: number; integer?: boolean } = {}): number {
   const value = argsObject(args)[key]
   if (value === undefined) return fallback
+  if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`Tool argument must be a finite number: ${key}`)
+  const normalized = options.integer ? Math.floor(value) : value
+  if (options.min !== undefined && normalized < options.min) throw new Error(`Tool argument ${key} must be >= ${options.min}`)
+  if (options.max !== undefined && normalized > options.max) throw new Error(`Tool argument ${key} must be <= ${options.max}`)
+  return normalized
+}
+
+function requiredNumberArg(args: unknown, key: string, options: { min?: number; max?: number; integer?: boolean } = {}): number {
+  const value = argsObject(args)[key]
+  if (value === undefined) throw new Error(`Tool argument is required: ${key}`)
   if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`Tool argument must be a finite number: ${key}`)
   const normalized = options.integer ? Math.floor(value) : value
   if (options.min !== undefined && normalized < options.min) throw new Error(`Tool argument ${key} must be >= ${options.min}`)
@@ -1108,6 +1124,110 @@ async function tinyFishSearch(tool: ToolDefinition, args: unknown, context: Tool
   }
 }
 
+function padDatePart(value: number, length = 2): string {
+  return String(value).padStart(length, '0')
+}
+
+function formatUtcOffset(offsetMinutes: number): string {
+  const sign = offsetMinutes >= 0 ? '+' : '-'
+  const absolute = Math.abs(offsetMinutes)
+  const hours = Math.floor(absolute / 60)
+  const minutes = absolute % 60
+  return `${sign}${padDatePart(hours)}:${padDatePart(minutes)}`
+}
+
+function formatLocalIsoWithOffset(date: Date): string {
+  const offsetMinutes = -date.getTimezoneOffset()
+  return [
+    `${padDatePart(date.getFullYear(), 4)}-${padDatePart(date.getMonth() + 1)}-${padDatePart(date.getDate())}`,
+    `T${padDatePart(date.getHours())}:${padDatePart(date.getMinutes())}:${padDatePart(date.getSeconds())}.${padDatePart(date.getMilliseconds(), 3)}`,
+    formatUtcOffset(offsetMinutes)
+  ].join('')
+}
+
+function createDateFromNow(now: () => string): Date {
+  const value = now()
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) throw new Error(`Current time provider returned an invalid timestamp: ${value}`)
+  return date
+}
+
+function timezoneName(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown'
+}
+
+async function defaultSleep(durationMs: number, options: SleepOptions = {}): Promise<void> {
+  let remainingMs = Math.max(0, Math.ceil(durationMs))
+  while (remainingMs > 0) {
+    if (options.signal?.aborted) throw new Error('Tool execution was aborted')
+    const chunkMs = Math.min(remainingMs, maxTimerMs)
+    await new Promise<void>((resolvePromise, reject) => {
+      let timeout: ReturnType<typeof setTimeout> | undefined
+      let abort: (() => void) | undefined
+      const cleanup = () => {
+        if (timeout) clearTimeout(timeout)
+        if (abort) options.signal?.removeEventListener('abort', abort)
+      }
+      abort = () => {
+        cleanup()
+        reject(new Error('Tool execution was aborted'))
+      }
+      timeout = setTimeout(() => {
+        cleanup()
+        resolvePromise()
+      }, chunkMs)
+      options.signal?.addEventListener('abort', abort, { once: true })
+    })
+    remainingMs -= chunkMs
+  }
+}
+
+function currentTimeTool(tool: ToolDefinition, now: () => string): ToolExecutionResult {
+  const date = createDateFromNow(now)
+  const utcOffsetMinutes = -date.getTimezoneOffset()
+  const output = {
+    now: date.toISOString(),
+    localTime: formatLocalIsoWithOffset(date),
+    timezone: timezoneName(),
+    utcOffset: formatUtcOffset(utcOffsetMinutes),
+    utcOffsetMinutes
+  }
+  return { content: jsonContent(output), details: { toolId: tool.id, ...output } }
+}
+
+function sleepOptions(context: ToolExecutionContext): SleepOptions {
+  return context.signal ? { signal: context.signal } : {}
+}
+
+async function sleepTool(tool: ToolDefinition, args: unknown, context: ToolExecutionContext, now: () => string, sleep: (durationMs: number, options?: SleepOptions) => Promise<void>): Promise<ToolExecutionResult> {
+  const seconds = requiredNumberArg(args, 'seconds', { min: 0 })
+  const durationMs = Math.ceil(seconds * 1000)
+  const startedAt = createDateFromNow(now).toISOString()
+  await sleep(durationMs, sleepOptions(context))
+  const wokeAt = createDateFromNow(now).toISOString()
+  const output = { status: 'completed', seconds, durationMs, startedAt, wokeAt }
+  return { content: jsonContent(output), details: { toolId: tool.id, ...output } }
+}
+
+async function waitUntilTool(tool: ToolDefinition, args: unknown, context: ToolExecutionContext, now: () => string, sleep: (durationMs: number, options?: SleepOptions) => Promise<void>): Promise<ToolExecutionResult> {
+  const wakeAt = stringArg(args, 'wakeAt')
+  const target = new Date(wakeAt)
+  if (Number.isNaN(target.getTime())) throw new Error(`Tool argument wakeAt must be a valid timestamp: ${wakeAt}`)
+  const startedDate = createDateFromNow(now)
+  const waitMs = Math.max(0, target.getTime() - startedDate.getTime())
+  await sleep(waitMs, sleepOptions(context))
+  const wokeAt = createDateFromNow(now).toISOString()
+  const output = {
+    status: 'completed',
+    wakeAt,
+    targetTime: target.toISOString(),
+    waitedMs: waitMs,
+    startedAt: startedDate.toISOString(),
+    wokeAt
+  }
+  return { content: jsonContent(output), details: { toolId: tool.id, ...output } }
+}
+
 async function showNotification(tool: ToolDefinition, args: unknown, showNotificationImpl: ((message: string) => Promise<void> | void) | undefined): Promise<ToolExecutionResult> {
   const message = stringArg(args, 'message')
   if (!showNotificationImpl) {
@@ -1131,6 +1251,7 @@ export function createBuiltinToolExecutor(options: BuiltinToolExecutorOptions = 
   const runGitStatus = options.runGitStatus ?? defaultRunGitStatus
   const fetchImpl = options.fetch ?? globalThis.fetch
   const now = options.now ?? (() => new Date().toISOString())
+  const sleep = options.sleep ?? defaultSleep
 
   return {
     async execute(tool, args, context) {
@@ -1167,6 +1288,12 @@ export function createBuiltinToolExecutor(options: BuiltinToolExecutorOptions = 
           return createRoleTool(tool, args, options.roleTools)
         case 'roles.update':
           return updateRoleTool(tool, args, options.roleTools)
+        case 'time.current':
+          return currentTimeTool(tool, now)
+        case 'time.sleep':
+          return sleepTool(tool, args, context, now, sleep)
+        case 'time.wait-until':
+          return waitUntilTool(tool, args, context, now, sleep)
         case 'system.execute-command':
           return executeCommand(tool, args, context)
         case 'system.show-notification':

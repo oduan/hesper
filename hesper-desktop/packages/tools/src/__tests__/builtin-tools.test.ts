@@ -4,7 +4,7 @@ import { createBuiltinToolDefinitions } from '../builtin-tools'
 describe('builtin tools', () => {
   it('contains the builtin tool set including Worker Agent management tools', () => {
     const tools = createBuiltinToolDefinitions()
-    expect(tools).toHaveLength(23)
+    expect(tools).toHaveLength(26)
     expect(tools.map((tool) => tool.id)).toEqual(
       expect.arrayContaining([
         'agent.spawn-worker-agent',
@@ -42,6 +42,9 @@ describe('builtin tools', () => {
         'agent.get-worker-agent',
         'agent.wait-worker-agent',
         'agent.cancel-worker-agent',
+        'time.current',
+        'time.sleep',
+        'time.wait-until',
         'system.execute-command',
         'system.show-notification'
       ])
@@ -244,6 +247,31 @@ describe('builtin tools', () => {
         properties: {
           invocationId: expect.objectContaining({ type: 'string' }),
           reason: expect.objectContaining({ type: 'string' })
+        }
+      }
+    })
+
+    expect(tools.find((tool) => tool.id === 'time.current')).toMatchObject({
+      category: 'system',
+      inputSchema: { type: 'object', properties: {} }
+    })
+    expect(tools.find((tool) => tool.id === 'time.sleep')).toMatchObject({
+      category: 'system',
+      inputSchema: {
+        type: 'object',
+        required: ['seconds'],
+        properties: {
+          seconds: expect.objectContaining({ type: 'number' })
+        }
+      }
+    })
+    expect(tools.find((tool) => tool.id === 'time.wait-until')).toMatchObject({
+      category: 'system',
+      inputSchema: {
+        type: 'object',
+        required: ['wakeAt'],
+        properties: {
+          wakeAt: expect.objectContaining({ type: 'string' })
         }
       }
     })

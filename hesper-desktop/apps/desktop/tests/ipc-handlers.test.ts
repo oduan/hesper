@@ -348,7 +348,7 @@ describe('registerIpcHandlers', () => {
 
     await expect(handles.get(ipcChannels.agentEnqueue)?.({ sender: { id: 1 } }, { sessionId: session.id, prompt: 'Use assembled prompt', modelId: 'mock/hesper-fast', messageId: 'message-client-1', messageCreatedAt: '2026-06-10T03:00:02.000Z' })).resolves.toEqual({ runId: 'run-assembled' })
 
-    const expectedDefaultEnabledTools = ['filesystem.read-file', 'filesystem.write-file', 'filesystem.edit-file', 'filesystem.delete-file', 'filesystem.delete-directory', 'filesystem.list-directory', 'filesystem.find', 'filesystem.search', 'git.status', 'git.run', 'roles.list', 'roles.find', 'roles.create', 'roles.update', 'agent.spawn-worker-agent', 'agent.list-worker-agents', 'agent.get-worker-agent', 'agent.wait-worker-agent', 'agent.cancel-worker-agent', 'system.execute-command', 'system.show-notification']
+    const expectedDefaultEnabledTools = ['filesystem.read-file', 'filesystem.write-file', 'filesystem.edit-file', 'filesystem.delete-file', 'filesystem.delete-directory', 'filesystem.list-directory', 'filesystem.find', 'filesystem.search', 'git.status', 'git.run', 'roles.list', 'roles.find', 'roles.create', 'roles.update', 'agent.spawn-worker-agent', 'agent.list-worker-agents', 'agent.get-worker-agent', 'agent.wait-worker-agent', 'agent.cancel-worker-agent', 'time.current', 'time.sleep', 'time.wait-until', 'system.execute-command', 'system.show-notification']
     expect(promptSpy).toHaveBeenCalledWith(expect.objectContaining({
       session: expect.objectContaining({
         id: session.id,
@@ -459,7 +459,7 @@ describe('registerIpcHandlers', () => {
       { sessionId: session.id, prompt: 'Do not expose disabled web fetch', modelId: 'mock/hesper-fast' }
     )).resolves.toEqual({ runId: 'run-global-filter' })
 
-    const expectedEnabledTools = ['filesystem.read-file', 'filesystem.write-file', 'filesystem.edit-file', 'filesystem.delete-file', 'filesystem.delete-directory', 'filesystem.list-directory', 'filesystem.find', 'filesystem.search', 'git.status', 'git.run', 'roles.list', 'roles.find', 'roles.create', 'roles.update', 'agent.spawn-worker-agent', 'agent.list-worker-agents', 'agent.get-worker-agent', 'agent.wait-worker-agent', 'agent.cancel-worker-agent', 'system.execute-command']
+    const expectedEnabledTools = ['filesystem.read-file', 'filesystem.write-file', 'filesystem.edit-file', 'filesystem.delete-file', 'filesystem.delete-directory', 'filesystem.list-directory', 'filesystem.find', 'filesystem.search', 'git.status', 'git.run', 'roles.list', 'roles.find', 'roles.create', 'roles.update', 'agent.spawn-worker-agent', 'agent.list-worker-agents', 'agent.get-worker-agent', 'agent.wait-worker-agent', 'agent.cancel-worker-agent', 'time.current', 'time.sleep', 'time.wait-until', 'system.execute-command']
     expect(promptSpy).toHaveBeenLastCalledWith(expect.objectContaining({
       session: expect.objectContaining({ enabledToolIds: expectedEnabledTools })
     }))
