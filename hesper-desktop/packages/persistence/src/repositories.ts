@@ -575,18 +575,16 @@ export function createRepositories(db: Database): Persistence {
       },
       async listBySession(sessionId) {
         return fetchAll(
-          `SELECT * FROM messages
-           WHERE session_id = ?
+          `SELECT messages.*
+           FROM messages
+           LEFT JOIN agent_runs ON agent_runs.id = messages.run_id
+           WHERE messages.session_id = ?
              AND (
-               run_id IS NULL
-               OR EXISTS (
-                 SELECT 1
-                 FROM agent_runs
-                 WHERE agent_runs.id = messages.run_id
-                   AND agent_runs.parent_run_id IS NULL
-               )
+               messages.run_id IS NULL
+               OR agent_runs.id IS NULL
+               OR agent_runs.parent_run_id IS NULL
              )
-           ORDER BY sort_seq ASC, id ASC`,
+           ORDER BY messages.sort_seq ASC, messages.id ASC`,
           [sessionId]
         ).map(toMessage)
       },

@@ -392,6 +392,32 @@ describe('persistence repositories', () => {
     ])
   })
 
+  it('keeps messages with missing runs visible in session history', async () => {
+    const db = await createInMemoryPersistence()
+
+    await db.sessions.save({
+      id: 'session-missing-run',
+      title: 'Missing run',
+      status: 'active',
+      outputMode: 'markdown',
+      createdAt: now,
+      updatedAt: now
+    })
+    await db.messages.save({
+      id: 'message-missing-run',
+      sessionId: 'session-missing-run',
+      role: 'assistant',
+      content: 'Still visible',
+      contentType: 'markdown',
+      runId: 'run-missing',
+      createdAt: now
+    })
+
+    await expect(db.messages.listBySession('session-missing-run')).resolves.toEqual([
+      expect.objectContaining({ id: 'message-missing-run', content: 'Still visible' })
+    ])
+  })
+
   it('fails fast instead of silently rewriting corrupted JSON configuration fields', async () => {
     const tempFile = path.join(os.tmpdir(), `hesper-corrupt-config-${Date.now()}.sqlite`)
     fs.writeFileSync(tempFile, await createCorruptConfigDatabaseBytes())
