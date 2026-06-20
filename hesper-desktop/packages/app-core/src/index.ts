@@ -1,3 +1,4 @@
+export * from './codex-oauth-gateway'
 export * from './conversation-service'
 export * from './credential-vault-service'
 export * from './model-provider-service'

@@ -1,5 +1,6 @@
 import { AgentRuntime, MockAgentAdapter, PiCoreAgentAdapter, createPiAgentTools, createRegistryModelResolver, createSessionTitleGenerator, createWorkerAgentService } from '@hesper/agent-runtime'
 import {
+  createCodexOAuthGateway,
   createConversationService,
   createCredentialVaultService,
   createDefaultRoleService,
@@ -11,7 +12,8 @@ import {
   createSettingsService,
   createToolCatalogService,
   createToolSettingsService,
-  type CredentialVaultCodec
+  type CredentialVaultCodec,
+  type ProviderOAuthGateway
 } from '@hesper/app-core'
 import type { Persistence } from '@hesper/persistence'
 import type { Role } from '@hesper/shared'
@@ -25,6 +27,7 @@ export type ServiceContainerOptions = {
   agentMode: AgentMode
   credentialCodec?: CredentialVaultCodec
   connectionTestFetch?: typeof fetch
+  oauthGateway?: ProviderOAuthGateway
 }
 
 export type ServiceContainer = ReturnType<typeof createServiceContainer>
@@ -47,7 +50,8 @@ export function createServiceContainer(options: ServiceContainerOptions) {
   const modelProviderService = createModelProviderService({
     persistence: options.persistence,
     credentialVaultService,
-    ...(options.connectionTestFetch ? { fetch: options.connectionTestFetch } : {})
+    ...(options.connectionTestFetch ? { fetch: options.connectionTestFetch } : {}),
+    ...(options.oauthGateway ? { oauthGateway: options.oauthGateway } : { oauthGateway: createCodexOAuthGateway() })
   })
   void modelProviderService.ensureBuiltinProviders()
   const modelResolver = createRegistryModelResolver({

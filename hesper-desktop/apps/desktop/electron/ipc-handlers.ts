@@ -452,10 +452,10 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
     },
     [ipcChannels.providersStartOAuthAuthorization]: async (_event, payload) => {
       const input = providerOAuthStartInputSchema.parse(payload)
-      const result = await options.container.modelProviderService.startOAuthAuthorization(input)
+      const result = providerOAuthStartResultSchema.parse(await options.container.modelProviderService.startOAuthAuthorization(input))
       assertTrustedOAuthAuthorizationUrl(result.authorizationUrl)
       await openExternal(result.authorizationUrl)
-      return providerOAuthStartResultSchema.parse(result)
+      return result
     },
     [ipcChannels.providersGetOAuthAuthorizationStatus]: async (_event, payload) => {
       const input = providerOAuthStatusInputSchema.parse(payload)
