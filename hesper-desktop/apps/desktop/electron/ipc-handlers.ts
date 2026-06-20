@@ -21,6 +21,11 @@ import {
   providerConnectionTestInputSchema,
   providerConnectionTestResultSchema,
   providerCredentialInputSchema,
+  providerOAuthSaveInputSchema,
+  providerOAuthStartInputSchema,
+  providerOAuthStartResultSchema,
+  providerOAuthStatusInputSchema,
+  providerOAuthStatusResultSchema,
   providerCredentialStatusSchema,
   providerIdInputSchema,
   saveModelInputSchema,
@@ -54,6 +59,7 @@ export type RegisterIpcHandlersOptions = {
   container: ServiceContainer
   savePersistence?: () => Promise<void>
   schedulePersistenceSave?: () => void
+  openExternal?: (url: string) => Promise<void>
   getWindowForEvent?: (event: IpcMainInvokeEvent) => WindowControlTarget | undefined
 }
 
@@ -75,6 +81,7 @@ const mutatingChannels = [
   ipcChannels.providersSave,
   ipcChannels.providersDisable,
   ipcChannels.providersDelete,
+  ipcChannels.providersSaveOAuthConnection,
   ipcChannels.modelsSave,
   ipcChannels.toolsSetEnabled,
   ipcChannels.toolsSaveApiKey,
@@ -98,9 +105,32 @@ function toError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error))
 }
 
+const trustedOAuthAuthorizationHosts = new Set([
+  'auth.craft.do',
+  'agents.craft.do',
+  'chatgpt.com',
+  'auth.openai.com'
+])
+
+function assertTrustedOAuthAuthorizationUrl(authorizationUrl: string): void {
+  let parsedUrl: URL
+  try {
+    parsedUrl = new URL(authorizationUrl)
+  } catch {
+    throw new Error('Refusing to open untrusted OAuth authorization URL')
+  }
+
+  if (parsedUrl.protocol !== 'https:' || !trustedOAuthAuthorizationHosts.has(parsedUrl.hostname.toLowerCase())) {
+    throw new Error('Refusing to open untrusted OAuth authorization URL')
+  }
+}
+
 export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => void {
   const savePersistence = options.savePersistence ?? (async () => {})
   const schedulePersistenceSave = options.schedulePersistenceSave ?? (() => {})
+  const openExternal = options.openExternal ?? (async () => {
+    throw new Error('External browser opener is not configured')
+  })
   const subscriptions = new Map<number, () => void>()
   const getWindowForEvent = options.getWindowForEvent ?? ((event: IpcMainInvokeEvent) => BrowserWindow.fromWebContents(event.sender) ?? undefined)
 
@@ -419,6 +449,23 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
     [ipcChannels.providersTestConnection]: async (_event, payload) => {
       const result = await options.container.modelProviderService.testProviderConnection(providerConnectionTestInputSchema.parse(payload))
       return providerConnectionTestResultSchema.parse(result)
+    },
+    [ipcChannels.providersStartOAuthAuthorization]: async (_event, payload) => {
+      const input = providerOAuthStartInputSchema.parse(payload)
+      const result = await options.container.modelProviderService.startOAuthAuthorization(input)
+      assertTrustedOAuthAuthorizationUrl(result.authorizationUrl)
+      await openExternal(result.authorizationUrl)
+      return providerOAuthStartResultSchema.parse(result)
+    },
+    [ipcChannels.providersGetOAuthAuthorizationStatus]: async (_event, payload) => {
+      const input = providerOAuthStatusInputSchema.parse(payload)
+      const result = await options.container.modelProviderService.getOAuthAuthorizationStatus(input)
+      return providerOAuthStatusResultSchema.parse(result)
+    },
+    [ipcChannels.providersSaveOAuthConnection]: async (_event, payload) => {
+      const provider = await options.container.modelProviderService.saveOAuthConnection(providerOAuthSaveInputSchema.parse(payload))
+      await savePersistence()
+      return modelProviderConfigSchema.parse(provider)
     },
     [ipcChannels.modelsList]: async (_event, payload) => {
       const input = listModelsInputSchema.parse(payload ?? {})

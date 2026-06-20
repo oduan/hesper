@@ -31,6 +31,9 @@ const ipcChannels = {
   providersDisable: 'providers:disable',
   providersDelete: 'providers:delete',
   providersTestConnection: 'providers:testConnection',
+  providersStartOAuthAuthorization: 'providers:startOAuthAuthorization',
+  providersGetOAuthAuthorizationStatus: 'providers:getOAuthAuthorizationStatus',
+  providersSaveOAuthConnection: 'providers:saveOAuthConnection',
   modelsList: 'models:list',
   modelsSave: 'models:save',
   toolsList: 'tools:list',
@@ -129,7 +132,10 @@ const hesperApi = {
     save: (input) => ipcRenderer.invoke(ipcChannels.providersSave, input),
     disable: (input) => ipcRenderer.invoke(ipcChannels.providersDisable, input),
     delete: (input) => ipcRenderer.invoke(ipcChannels.providersDelete, input),
-    testConnection: (input) => ipcRenderer.invoke(ipcChannels.providersTestConnection, input)
+    testConnection: (input) => ipcRenderer.invoke(ipcChannels.providersTestConnection, input),
+    startOAuthAuthorization: (input) => ipcRenderer.invoke(ipcChannels.providersStartOAuthAuthorization, input),
+    getOAuthAuthorizationStatus: (input) => ipcRenderer.invoke(ipcChannels.providersGetOAuthAuthorizationStatus, input),
+    saveOAuthConnection: (input) => ipcRenderer.invoke(ipcChannels.providersSaveOAuthConnection, input)
   },
   models: {
     list: (input) => ipcRenderer.invoke(ipcChannels.modelsList, input),

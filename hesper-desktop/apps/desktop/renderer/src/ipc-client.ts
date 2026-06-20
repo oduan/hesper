@@ -230,6 +230,18 @@ export function createFallbackHesperApi(): HesperDesktopApi {
           hasApiKey: false,
           message: providerId === 'mock' ? 'Mock provider is available.' : 'Provider needs an API key.'
         }
+      },
+      startOAuthAuthorization: async () => {
+        throw new Error('Codex OAuth is only available in the desktop shell')
+      },
+      getOAuthAuthorizationStatus: async (input) => ({
+        provider: 'openai-codex',
+        sessionId: input.sessionId,
+        status: 'failed',
+        message: 'Codex OAuth is only available in the desktop shell'
+      }),
+      saveOAuthConnection: async () => {
+        throw new Error('Codex OAuth is only available in the desktop shell')
       }
     },
     models: {

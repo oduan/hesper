@@ -956,6 +956,115 @@ describe('registerIpcHandlers', () => {
     expect(savePersistence).toHaveBeenCalled()
   })
 
+  it('starts Codex OAuth through strict IPC and opens only trusted authorization URLs', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock', credentialCodec: createMockCredentialCodec() })
+    const handles = new Map<string, (event: any, ...args: any[]) => Promise<unknown> | unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (event: any, ...args: any[]) => Promise<unknown> | unknown) => {
+        handles.set(channel, handler)
+      }),
+      removeHandler: vi.fn()
+    }
+    const dialog = {
+      showOpenDialog: vi.fn(async () => ({ canceled: false, filePaths: ['C:/workspace'] }))
+    }
+    const openExternal = vi.fn(async (_url: string) => {})
+    const authorizationUrl = 'https://auth.craft.do/oauth/authorize?session=oauth-session-1'
+    const startSpy = vi.spyOn(container.modelProviderService, 'startOAuthAuthorization').mockResolvedValueOnce({
+      provider: 'openai-codex',
+      sessionId: 'oauth-session-1',
+      authorizationUrl,
+      status: 'pending',
+      message: '等待浏览器授权'
+    })
+
+    registerIpcHandlers({ ipcMain, dialog, container, openExternal })
+
+    await expect(
+      handles.get(ipcChannels.providersStartOAuthAuthorization)?.(
+        { sender: { id: 1 } },
+        { provider: 'openai-codex', connectionName: 'ChatGPT Codex' }
+      )
+    ).resolves.toEqual({
+      provider: 'openai-codex',
+      sessionId: 'oauth-session-1',
+      authorizationUrl,
+      status: 'pending',
+      message: '等待浏览器授权'
+    })
+    expect(startSpy).toHaveBeenCalledWith({ provider: 'openai-codex', connectionName: 'ChatGPT Codex' })
+    expect(openExternal).toHaveBeenCalledTimes(1)
+    expect(openExternal).toHaveBeenCalledWith(authorizationUrl)
+  })
+
+  it('rejects unsupported Codex OAuth providers before opening a browser', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock', credentialCodec: createMockCredentialCodec() })
+    const handles = new Map<string, (event: any, ...args: any[]) => Promise<unknown> | unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (event: any, ...args: any[]) => Promise<unknown> | unknown) => {
+        handles.set(channel, handler)
+      }),
+      removeHandler: vi.fn()
+    }
+    const dialog = {
+      showOpenDialog: vi.fn(async () => ({ canceled: false, filePaths: ['C:/workspace'] }))
+    }
+    const openExternal = vi.fn(async (_url: string) => {})
+    const startSpy = vi.spyOn(container.modelProviderService, 'startOAuthAuthorization')
+
+    registerIpcHandlers({ ipcMain, dialog, container, openExternal })
+
+    await expect(
+      handles.get(ipcChannels.providersStartOAuthAuthorization)?.(
+        { sender: { id: 1 } },
+        { provider: 'github-copilot', connectionName: 'GitHub Copilot' }
+      )
+    ).rejects.toThrow()
+    await expect(
+      handles.get(ipcChannels.providersStartOAuthAuthorization)?.(
+        { sender: { id: 1 } },
+        { provider: 'unknown-oauth', connectionName: 'Unknown' }
+      )
+    ).rejects.toThrow()
+    expect(startSpy).not.toHaveBeenCalled()
+    expect(openExternal).not.toHaveBeenCalled()
+  })
+
+  it('rejects untrusted Codex OAuth authorization URLs before opening a browser', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock', credentialCodec: createMockCredentialCodec() })
+    const handles = new Map<string, (event: any, ...args: any[]) => Promise<unknown> | unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (event: any, ...args: any[]) => Promise<unknown> | unknown) => {
+        handles.set(channel, handler)
+      }),
+      removeHandler: vi.fn()
+    }
+    const dialog = {
+      showOpenDialog: vi.fn(async () => ({ canceled: false, filePaths: ['C:/workspace'] }))
+    }
+    const openExternal = vi.fn(async (_url: string) => {})
+    vi.spyOn(container.modelProviderService, 'startOAuthAuthorization').mockResolvedValueOnce({
+      provider: 'openai-codex',
+      sessionId: 'oauth-session-evil',
+      authorizationUrl: 'http://evil.test/oauth',
+      status: 'pending',
+      message: '等待浏览器授权'
+    })
+
+    registerIpcHandlers({ ipcMain, dialog, container, openExternal })
+
+    await expect(
+      handles.get(ipcChannels.providersStartOAuthAuthorization)?.(
+        { sender: { id: 1 } },
+        { provider: 'openai-codex', connectionName: 'ChatGPT Codex' }
+      )
+    ).rejects.toThrow(/untrusted|trusted|authorization/i)
+    expect(openExternal).not.toHaveBeenCalled()
+  })
+
   it('rejects unknown provider/model IPC fields at the boundary', async () => {
     const persistence = await createInMemoryPersistence()
     const container = createServiceContainer({ persistence, agentMode: 'mock', credentialCodec: createMockCredentialCodec() })
