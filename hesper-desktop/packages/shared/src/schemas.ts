@@ -206,12 +206,16 @@ const workerAgentInvocationBaseSchema = z.object({
   id: z.string().min(1),
   parentRunId: z.string().min(1),
   childRunId: z.string().min(1).optional(),
+  parentStepId: z.string().min(1).optional(),
+  parentToolCallId: z.string().min(1).optional(),
   task: z.string().min(1),
   roleId: z.string().min(1),
   allowedToolIds: z.array(z.string().min(1)),
   modelRef: modelRefSchema.optional(),
   expectedOutput: z.string().optional(),
+  contextSummary: z.string().optional(),
   status: z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled']),
+  lastEventAt: z.string().datetime().optional(),
   createdAt: z.string().datetime(),
   completedAt: z.string().datetime().optional(),
   error: runErrorSchema.optional()
@@ -277,6 +281,16 @@ const runCancelledEventSchema = z.object({
   endedAt: z.string().datetime().optional()
 }).transform(stripUndefined)
 
+const workerInvocationCreatedEventSchema = z.object({
+  type: z.literal('worker.invocation.created'),
+  invocation: workerAgentInvocationSchema
+})
+
+const workerInvocationUpdatedEventSchema = z.object({
+  type: z.literal('worker.invocation.updated'),
+  invocation: workerAgentInvocationSchema
+})
+
 export const agentRuntimeEventSchema = z.union([
   runCreatedEventSchema,
   runStartedEventSchema,
@@ -287,7 +301,9 @@ export const agentRuntimeEventSchema = z.union([
   runRetryingEventSchema,
   runFailedEventSchema,
   runSucceededEventSchema,
-  runCancelledEventSchema
+  runCancelledEventSchema,
+  workerInvocationCreatedEventSchema,
+  workerInvocationUpdatedEventSchema
 ])
 
 // Compile-time contract checks

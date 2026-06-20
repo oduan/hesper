@@ -160,12 +160,16 @@ export type WorkerAgentInvocation = {
   id: string
   parentRunId: string
   childRunId?: string
+  parentStepId?: string
+  parentToolCallId?: string
   task: string
   roleId: string
   allowedToolIds: string[]
   modelRef?: ModelRef
   expectedOutput?: string
+  contextSummary?: string
   status: WorkerAgentInvocationStatus
+  lastEventAt?: string
   createdAt: string
   completedAt?: string
   error?: RunError

@@ -1,4 +1,4 @@
-import type { AgentRun, Message, RunError, RunStep } from './domain'
+import type { AgentRun, Message, RunError, RunStep, WorkerAgentInvocation } from './domain'
 
 export type AgentRuntimeEvent =
   | { type: 'run.created'; run: AgentRun }
@@ -11,3 +11,5 @@ export type AgentRuntimeEvent =
   | { type: 'run.failed'; runId: string; error: RunError; endedAt?: string }
   | { type: 'run.succeeded'; runId: string; endedAt?: string }
   | { type: 'run.cancelled'; runId: string; endedAt?: string }
+  | { type: 'worker.invocation.created'; invocation: WorkerAgentInvocation }
+  | { type: 'worker.invocation.updated'; invocation: WorkerAgentInvocation }

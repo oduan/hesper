@@ -209,4 +209,54 @@ describe('shared schemas', () => {
     expect(parsed.roleId).toBe('reviewer')
     expect(parsed.allowedToolIds).toEqual(['filesystem.read-file', 'git.status'])
   })
+
+  it('validates Worker Agent invocation UI and diagnosis metadata', () => {
+    const parsed = workerAgentInvocationSchema.parse({
+      id: 'worker-agent-1',
+      parentRunId: 'run-parent',
+      childRunId: 'run-child',
+      parentStepId: 'step-run-parent-tool-tool-1',
+      parentToolCallId: 'tool-1',
+      task: 'Review the staged diff.',
+      roleId: 'reviewer',
+      allowedToolIds: ['filesystem.read-file', 'git.status'],
+      modelRef: { providerId: 'provider-deepseek', modelId: 'deepseek-chat' },
+      expectedOutput: 'Findings with evidence.',
+      contextSummary: 'The parent run is validating a refactor.',
+      status: 'running',
+      lastEventAt: now,
+      createdAt: now
+    })
+
+    expect(parsed.parentStepId).toBe('step-run-parent-tool-tool-1')
+    expect(parsed.parentToolCallId).toBe('tool-1')
+    expect(parsed.contextSummary).toBe('The parent run is validating a refactor.')
+    expect(parsed.lastEventAt).toBe(now)
+  })
+
+  it('parses Worker Agent invocation runtime events', () => {
+    const invocation = workerAgentInvocationSchema.parse({
+      id: 'worker-agent-1',
+      parentRunId: 'run-parent',
+      childRunId: 'run-child',
+      parentStepId: 'step-run-parent-tool-tool-1',
+      parentToolCallId: 'tool-1',
+      task: 'Review the staged diff.',
+      roleId: 'reviewer',
+      allowedToolIds: ['filesystem.read-file'],
+      status: 'running',
+      createdAt: now,
+      lastEventAt: now
+    })
+
+    expect(agentRuntimeEventSchema.parse({
+      type: 'worker.invocation.created',
+      invocation
+    })).toMatchObject({ type: 'worker.invocation.created', invocation: { id: 'worker-agent-1' } })
+
+    expect(agentRuntimeEventSchema.parse({
+      type: 'worker.invocation.updated',
+      invocation: { ...invocation, status: 'succeeded', completedAt: now }
+    })).toMatchObject({ type: 'worker.invocation.updated', invocation: { status: 'succeeded' } })
+  })
 })
