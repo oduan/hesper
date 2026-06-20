@@ -1,11 +1,21 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest'
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../src/App'
 
 const now = '2026-06-10T03:00:00.000Z'
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((nextResolve, nextReject) => {
+    resolve = nextResolve
+    reject = nextReject
+  })
+  return { promise, resolve, reject }
+}
 
 const baseProviders = [
   {
@@ -498,6 +508,192 @@ describe('provider settings panel', () => {
     expect(screen.getByRole('dialog', { name: 'Codex 授权' })).toBeInTheDocument()
     expect(openBrowserButton).toBeEnabled()
     expect(checkStatusButton).toBeDisabled()
+  })
+
+  it('prevents duplicate Codex OAuth starts while the browser launch is pending', async () => {
+    const user = userEvent.setup()
+    const startDeferred = createDeferred<any>()
+    startOAuthAuthorization.mockImplementationOnce(() => startDeferred.promise)
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: '设置' }))
+    await user.click(await screen.findByRole('button', { name: '+ 添加连接' }))
+    await user.click(await screen.findByRole('button', { name: /Codex 授权/ }))
+
+    const codexDialog = await screen.findByRole('dialog', { name: 'Codex 授权' })
+    const openBrowserButton = within(codexDialog).getByRole('button', { name: 'Open Browser' })
+    await user.click(openBrowserButton)
+
+    await waitFor(() => expect(openBrowserButton).toBeDisabled())
+    await user.click(openBrowserButton)
+    expect(startOAuthAuthorization).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      startDeferred.resolve({
+        provider: 'openai-codex',
+        sessionId: 'oauth-session-starting',
+        authorizationUrl: 'https://auth.craft.do/oauth/openai-codex?state=oauth-session-starting',
+        status: 'pending',
+        message: '等待浏览器授权'
+      })
+      await startDeferred.promise
+    })
+
+    expect(await within(codexDialog).findByRole('status')).toHaveTextContent('等待浏览器授权')
+    expect(openBrowserButton).toBeEnabled()
+  })
+
+  it('prevents duplicate Codex OAuth saves while saving is pending', async () => {
+    const user = userEvent.setup()
+    const saveDeferred = createDeferred<any>()
+    startOAuthAuthorization.mockResolvedValueOnce({
+      provider: 'openai-codex',
+      sessionId: 'oauth-session-saving',
+      authorizationUrl: 'https://auth.craft.do/oauth/openai-codex?state=oauth-session-saving',
+      status: 'pending',
+      message: '等待浏览器授权'
+    })
+    getOAuthAuthorizationStatus.mockResolvedValueOnce({
+      provider: 'openai-codex',
+      sessionId: 'oauth-session-saving',
+      status: 'authorized',
+      message: '授权成功'
+    })
+    saveOAuthConnection.mockImplementationOnce(() => saveDeferred.promise)
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: '设置' }))
+    await user.click(await screen.findByRole('button', { name: '+ 添加连接' }))
+    await user.click(await screen.findByRole('button', { name: /Codex 授权/ }))
+
+    const codexDialog = await screen.findByRole('dialog', { name: 'Codex 授权' })
+    await user.click(within(codexDialog).getByRole('button', { name: 'Open Browser' }))
+    await user.click(await within(codexDialog).findByRole('button', { name: 'Check Status' }))
+    const saveButton = within(codexDialog).getByRole('button', { name: 'Save' })
+    await waitFor(() => expect(saveButton).toBeEnabled())
+
+    await user.click(saveButton)
+    await waitFor(() => expect(saveButton).toBeDisabled())
+    await user.click(saveButton)
+    expect(saveOAuthConnection).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      saveDeferred.resolve({
+        id: 'chatgpt-codex',
+        name: 'ChatGPT Codex',
+        kind: 'pi',
+        authType: 'oauth',
+        piAuthProvider: 'openai-codex',
+        defaultModelId: 'pi/gpt-5.5',
+        hasApiKey: true,
+        enabled: true,
+        apiKeyRef: 'provider:chatgpt-codex:api-key',
+        createdAt: now,
+        updatedAt: now
+      })
+      await saveDeferred.promise
+    })
+
+    expect(await screen.findByRole('status')).toHaveTextContent('已添加连接：ChatGPT Codex')
+  })
+
+  it('keeps the Codex dialog open with retry enabled when saving fails', async () => {
+    const user = userEvent.setup()
+    startOAuthAuthorization.mockResolvedValueOnce({
+      provider: 'openai-codex',
+      sessionId: 'oauth-session-save-failure',
+      authorizationUrl: 'https://auth.craft.do/oauth/openai-codex?state=oauth-session-save-failure',
+      status: 'pending',
+      message: '等待浏览器授权'
+    })
+    getOAuthAuthorizationStatus.mockResolvedValueOnce({
+      provider: 'openai-codex',
+      sessionId: 'oauth-session-save-failure',
+      status: 'authorized',
+      message: '授权成功'
+    })
+    saveOAuthConnection
+      .mockRejectedValueOnce(new Error('vault unavailable'))
+      .mockResolvedValueOnce({
+        id: 'chatgpt-codex',
+        name: 'ChatGPT Codex',
+        kind: 'pi',
+        authType: 'oauth',
+        piAuthProvider: 'openai-codex',
+        defaultModelId: 'pi/gpt-5.5',
+        hasApiKey: true,
+        enabled: true,
+        apiKeyRef: 'provider:chatgpt-codex:api-key',
+        createdAt: now,
+        updatedAt: now
+      })
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: '设置' }))
+    await user.click(await screen.findByRole('button', { name: '+ 添加连接' }))
+    await user.click(await screen.findByRole('button', { name: /Codex 授权/ }))
+
+    const codexDialog = await screen.findByRole('dialog', { name: 'Codex 授权' })
+    await user.click(within(codexDialog).getByRole('button', { name: 'Open Browser' }))
+    await user.click(await within(codexDialog).findByRole('button', { name: 'Check Status' }))
+    const saveButton = within(codexDialog).getByRole('button', { name: 'Save' })
+    await waitFor(() => expect(saveButton).toBeEnabled())
+
+    await user.click(saveButton)
+    expect(await within(codexDialog).findByRole('alert')).toHaveTextContent('vault unavailable')
+    expect(screen.getByRole('dialog', { name: 'Codex 授权' })).toBeInTheDocument()
+    expect(saveButton).toBeEnabled()
+
+    await user.click(saveButton)
+    await waitFor(() => expect(saveOAuthConnection).toHaveBeenCalledTimes(2))
+    expect(await screen.findByRole('status')).toHaveTextContent('已添加连接：ChatGPT Codex')
+  })
+
+  it('shows a visible warning when a saved Codex OAuth connection cannot refresh providers', async () => {
+    const user = userEvent.setup()
+    startOAuthAuthorization.mockResolvedValueOnce({
+      provider: 'openai-codex',
+      sessionId: 'oauth-session-reload-failure',
+      authorizationUrl: 'https://auth.craft.do/oauth/openai-codex?state=oauth-session-reload-failure',
+      status: 'pending',
+      message: '等待浏览器授权'
+    })
+    getOAuthAuthorizationStatus.mockResolvedValueOnce({
+      provider: 'openai-codex',
+      sessionId: 'oauth-session-reload-failure',
+      status: 'authorized',
+      message: '授权成功'
+    })
+    saveOAuthConnection.mockResolvedValueOnce({
+      id: 'chatgpt-codex',
+      name: 'ChatGPT Codex',
+      kind: 'pi',
+      authType: 'oauth',
+      piAuthProvider: 'openai-codex',
+      defaultModelId: 'pi/gpt-5.5',
+      hasApiKey: true,
+      enabled: true,
+      apiKeyRef: 'provider:chatgpt-codex:api-key',
+      createdAt: now,
+      updatedAt: now
+    })
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: '设置' }))
+    await user.click(await screen.findByRole('button', { name: '+ 添加连接' }))
+    await user.click(await screen.findByRole('button', { name: /Codex 授权/ }))
+
+    const codexDialog = await screen.findByRole('dialog', { name: 'Codex 授权' })
+    await user.click(within(codexDialog).getByRole('button', { name: 'Open Browser' }))
+    await user.click(await within(codexDialog).findByRole('button', { name: 'Check Status' }))
+    await waitFor(() => expect(within(codexDialog).getByRole('button', { name: 'Save' })).toBeEnabled())
+    listProviders.mockRejectedValueOnce(new Error('reload failed'))
+
+    await user.click(within(codexDialog).getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('连接已保存，但刷新模型列表失败：reload failed')
+    expect(screen.queryByRole('dialog', { name: 'Codex 授权' })).not.toBeInTheDocument()
+    expect(screen.queryByText('已添加连接：ChatGPT Codex')).not.toBeInTheDocument()
   })
 
   it('closes and reopens the picker from Back, close, and Escape', async () => {

@@ -26,11 +26,15 @@ type ConnectionDialogState = {
   form: ConnectionFormState
 }
 
+type CodexOAuthAction = 'starting' | 'checking' | 'saving'
+
 type CodexOAuthState = {
   connectionName: string
   sessionId?: string
   status: 'idle' | 'pending' | 'authorized' | 'failed'
   message?: string
+  errorMessage?: string
+  action?: CodexOAuthAction
 }
 
 const initialCodexOAuthState: CodexOAuthState = { connectionName: 'ChatGPT Codex', status: 'idle' }
@@ -57,6 +61,21 @@ function createConnectionForm(provider?: ModelProviderDto, models: ModelDto[] = 
 
 function formatUnknownError(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback
+}
+
+function withoutCodexAction(state: CodexOAuthState): CodexOAuthState {
+  const { action: _action, ...nextState } = state
+  return nextState
+}
+
+function withoutCodexError(state: CodexOAuthState): CodexOAuthState {
+  const { errorMessage: _errorMessage, ...nextState } = state
+  return nextState
+}
+
+function withoutCodexActionAndError(state: CodexOAuthState): CodexOAuthState {
+  const { action: _action, errorMessage: _errorMessage, ...nextState } = state
+  return nextState
 }
 
 function slugFromEndpoint(endpoint: string): string {
@@ -134,6 +153,7 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
   const [error, setError] = useState<string>()
   const mountedRef = useRef(true)
   const loadRequestIdRef = useRef(0)
+  const codexOAuthRequestIdRef = useRef(0)
   const renameInputRef = useRef<HTMLInputElement | null>(null)
 
   const visibleProviders = useMemo(() => providers.filter((provider) => provider.enabled !== false), [providers])
@@ -176,6 +196,7 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
   }, [renamingProviderId])
 
   const resetCodexOAuthState = () => {
+    codexOAuthRequestIdRef.current += 1
     setCodexOAuthState({ ...initialCodexOAuthState })
   }
 
@@ -234,79 +255,110 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
   }
 
   const startCodexOAuth = async () => {
+    if (codexOAuthState.action) return
+
     const connectionName = codexOAuthState.connectionName.trim() || initialCodexOAuthState.connectionName
+    const requestId = codexOAuthRequestIdRef.current + 1
+    codexOAuthRequestIdRef.current = requestId
     setError(undefined)
     setMessage(undefined)
-    setCodexOAuthState({ connectionName, status: 'idle' })
+    setCodexOAuthState({ connectionName, status: 'idle', action: 'starting' })
 
     try {
       const result = await hesperApi.providers.startOAuthAuthorization({ provider: 'openai-codex', connectionName })
-      if (!mountedRef.current) return
-      setCodexOAuthState((current) => ({
-        ...current,
+      if (!mountedRef.current || requestId !== codexOAuthRequestIdRef.current) return
+      setCodexOAuthState({
         connectionName,
         sessionId: result.sessionId,
         status: result.status,
         message: result.message
-      }))
+      })
     } catch (startError) {
-      if (!mountedRef.current) return
-      setCodexOAuthState((current) => ({
-        ...current,
+      if (!mountedRef.current || requestId !== codexOAuthRequestIdRef.current) return
+      setCodexOAuthState({
+        connectionName,
         status: 'failed',
-        message: formatUnknownError(startError, 'Codex 授权启动失败')
-      }))
+        errorMessage: formatUnknownError(startError, 'Codex 授权启动失败')
+      })
+    } finally {
+      if (mountedRef.current && requestId === codexOAuthRequestIdRef.current) {
+        setCodexOAuthState((current) => withoutCodexAction(current))
+      }
     }
   }
 
   const checkCodexOAuthStatus = async () => {
     const sessionId = codexOAuthState.sessionId
-    if (!sessionId) return
+    if (!sessionId || codexOAuthState.action) return
 
+    const requestId = codexOAuthRequestIdRef.current + 1
+    codexOAuthRequestIdRef.current = requestId
     setError(undefined)
     setMessage(undefined)
+    setCodexOAuthState((current) => ({ ...withoutCodexError(current), action: 'checking' }))
     try {
       const result = await hesperApi.providers.getOAuthAuthorizationStatus({ sessionId })
-      if (!mountedRef.current) return
+      if (!mountedRef.current || requestId !== codexOAuthRequestIdRef.current) return
       setCodexOAuthState((current) => ({
-        ...current,
+        ...withoutCodexActionAndError(current),
         sessionId: result.sessionId,
         status: result.status,
         message: result.message
       }))
     } catch (statusError) {
-      if (!mountedRef.current) return
+      if (!mountedRef.current || requestId !== codexOAuthRequestIdRef.current) return
       setCodexOAuthState((current) => ({
-        ...current,
+        ...withoutCodexAction(current),
         status: 'failed',
-        message: formatUnknownError(statusError, 'Codex 授权状态检查失败')
+        errorMessage: formatUnknownError(statusError, 'Codex 授权状态检查失败')
       }))
+    } finally {
+      if (mountedRef.current && requestId === codexOAuthRequestIdRef.current) {
+        setCodexOAuthState((current) => withoutCodexAction(current))
+      }
     }
   }
 
   const saveCodexOAuthConnection = async () => {
     const sessionId = codexOAuthState.sessionId
-    if (!sessionId) return
+    if (!sessionId || codexOAuthState.status !== 'authorized' || codexOAuthState.action) return
 
     const connectionName = codexOAuthState.connectionName.trim() || initialCodexOAuthState.connectionName
+    const requestId = codexOAuthRequestIdRef.current + 1
+    codexOAuthRequestIdRef.current = requestId
     setError(undefined)
     setMessage(undefined)
+    setCodexOAuthState((current) => ({ ...withoutCodexError(current), action: 'saving' }))
 
     try {
       const provider = await hesperApi.providers.saveOAuthConnection({ sessionId, connectionName })
-      if (!mountedRef.current) return
+      if (!mountedRef.current || requestId !== codexOAuthRequestIdRef.current) return
+
+      try {
+        await loadProviderSettings()
+        await onModelRegistryChanged?.()
+      } catch (reloadError) {
+        if (!mountedRef.current || requestId !== codexOAuthRequestIdRef.current) return
+        setAddConnectionFlow(undefined)
+        resetCodexOAuthState()
+        setError(`连接已保存，但刷新模型列表失败：${formatUnknownError(reloadError, '未知错误')}`)
+        return
+      }
+
+      if (!mountedRef.current || requestId !== codexOAuthRequestIdRef.current) return
       setAddConnectionFlow(undefined)
       resetCodexOAuthState()
       setMessage(`已添加连接：${provider.name}`)
-      await loadProviderSettings()
-      await onModelRegistryChanged?.()
     } catch (saveError) {
-      if (!mountedRef.current) return
+      if (!mountedRef.current || requestId !== codexOAuthRequestIdRef.current) return
       setCodexOAuthState((current) => ({
-        ...current,
-        status: 'failed',
-        message: formatUnknownError(saveError, 'Codex 连接保存失败')
+        ...withoutCodexAction(current),
+        errorMessage: formatUnknownError(saveError, 'Codex 连接保存失败')
       }))
+    } finally {
+      if (mountedRef.current && requestId === codexOAuthRequestIdRef.current) {
+        setCodexOAuthState((current) => withoutCodexAction(current))
+      }
     }
   }
 
@@ -725,9 +777,14 @@ function CodexAuthorizationPage({
   onSave: () => void
 }) {
   const hasSession = Boolean(state.sessionId)
+  const hasActiveAction = Boolean(state.action)
+  const inputDisabled = state.action === 'starting' || state.action === 'saving'
+  const startDisabled = hasActiveAction
+  const checkDisabled = !hasSession || hasActiveAction
   const canSave = state.status === 'authorized'
-  const feedbackIsError = state.status === 'failed'
-  const feedbackText = state.message ? `${state.status}: ${state.message}` : undefined
+  const saveDisabled = !canSave || hasActiveAction
+  const feedbackIsError = Boolean(state.errorMessage) || state.status === 'failed'
+  const feedbackText = state.errorMessage ?? (state.message ? `${state.status}: ${state.message}` : undefined)
 
   return (
     <FullWindowDialogShell ariaLabel="Codex 授权" onClose={onCancel}>
@@ -744,6 +801,7 @@ function CodexAuthorizationPage({
             aria-label="Codex 连接名称"
             value={state.connectionName}
             onChange={(event) => onConnectionNameChange(event.target.value)}
+            disabled={inputDisabled}
             style={inputStyle}
           />
         </label>
@@ -757,20 +815,27 @@ function CodexAuthorizationPage({
         ) : null}
         <footer style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10, marginTop: 22 }}>
           <button type="button" onClick={onBack} style={secondaryActionStyle}>Back</button>
-          <button type="button" onClick={onStart} style={secondaryActionStyle}>Open Browser</button>
+          <button
+            type="button"
+            onClick={onStart}
+            disabled={startDisabled}
+            style={{ ...secondaryActionStyle, ...(startDisabled ? disabledActionStyle : {}) }}
+          >
+            Open Browser
+          </button>
           <button
             type="button"
             onClick={onCheckStatus}
-            disabled={!hasSession}
-            style={{ ...secondaryActionStyle, ...(!hasSession ? disabledActionStyle : {}) }}
+            disabled={checkDisabled}
+            style={{ ...secondaryActionStyle, ...(checkDisabled ? disabledActionStyle : {}) }}
           >
             Check Status
           </button>
           <button
             type="button"
             onClick={onSave}
-            disabled={!canSave}
-            style={{ ...primaryActionStyle, ...(!canSave ? disabledActionStyle : {}) }}
+            disabled={saveDisabled}
+            style={{ ...primaryActionStyle, ...(saveDisabled ? disabledActionStyle : {}) }}
           >
             Save
           </button>
