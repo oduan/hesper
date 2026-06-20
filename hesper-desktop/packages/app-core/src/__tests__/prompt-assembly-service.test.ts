@@ -118,6 +118,33 @@ describe('PromptAssemblyService', () => {
     expect(output.systemPrompt).not.toMatch(/api[_ -]?key/i)
   })
 
+  it('keeps custom Worker roles discoverable by role tools instead of listing them by default', () => {
+    const service = createPromptAssemblyService()
+    const { allowedWorkerAgentRoleIds: _allowedWorkerAgentRoleIds, ...sessionWithoutExplicitWorkerRoles } = session
+    const builtinWorkerRole: Role = {
+      id: 'worker-agent',
+      name: 'Worker Agent',
+      allowedSkillIds: ['skill:notes'],
+      defaultToolIds: ['filesystem.read-file'],
+      canBeMainAgent: false,
+      canBeWorkerAgent: true
+    }
+
+    const output = service.assembleMainPrompt({
+      session: sessionWithoutExplicitWorkerRoles,
+      role: mainRole,
+      skills,
+      tools,
+      assignableWorkerAgentRoles: [builtinWorkerRole, reviewerRole]
+    })
+
+    expect(output.roleManifest).toContain('worker-agent')
+    expect(output.roleManifest).not.toContain('reviewer')
+    expect(output.workerAgentRules).toContain('roles.list or roles.find')
+    expect(output.workerAgentRules).toContain('discover custom Worker Agent roles')
+    expect(output.workerAgentRules).toContain('Assignable roleIds: "worker-agent"')
+  })
+
   it('includes write file when it is enabled for the run', () => {
     const service = createPromptAssemblyService()
 

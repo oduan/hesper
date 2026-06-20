@@ -135,14 +135,15 @@ function filterSkills(skills: Skill[], role: Role | undefined, enabledSkillIds: 
   }))
 }
 
+const DEFAULT_PROMPT_WORKER_ROLE_IDS = new Set(['worker-agent'])
+
 function filterAssignableRoles(roles: Role[], allowedRoleIds: string[] | undefined): Role[] {
-  if (!allowedRoleIds) return []
-  const allowed = new Set(allowedRoleIds)
+  const allowed = allowedRoleIds ? new Set(allowedRoleIds) : undefined
   return byId(roles.filter((role) => {
     const assignable = role.canBeAssignedToWorkerAgent ?? role.canBeWorkerAgent
     if (!assignable) return false
-    if (!allowed.has(role.id)) return false
-    return true
+    if (allowed) return allowed.has(role.id)
+    return DEFAULT_PROMPT_WORKER_ROLE_IDS.has(role.id)
   }))
 }
 
@@ -209,6 +210,7 @@ function renderMainWorkerAgentRules(input: MainPromptAssemblyInput, roles: Role[
     '- Use wait:false when spawning multiple independent Worker Agents, then call wait/get for each invocation id.',
     '- A wait timeout means the Worker Agent is still running, not failed; inspect the diagnosis before cancelling.',
     '- Worker Agent management tools default to the current parent run and must not be used across sessions.',
+    '- If a suitable roleId is not listed, call roles.list or roles.find to discover custom Worker Agent roles before spawning.',
     '- Use a Worker Agent only for independent research, review, long-context analysis, or parallelizable work.',
     '- Do not use a Worker Agent for simple one-step tasks or when user confirmation is required.',
     '- Every Worker Agent call must include task, roleId, allowedToolIds, and expectedOutput.',

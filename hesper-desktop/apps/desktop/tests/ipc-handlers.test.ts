@@ -344,6 +344,7 @@ describe('registerIpcHandlers', () => {
 
     registerIpcHandlers({ ipcMain, dialog, container, savePersistence, schedulePersistenceSave })
     const session = await container.sessionService.createSession({ title: 'Prompt assembly IPC', workspacePath: 'C:/workspace' })
+    const customRole = await container.roleManagementService.createRole({ name: 'Custom Worker', defaultToolIds: ['filesystem.read-file'] })
 
     await expect(handles.get(ipcChannels.agentEnqueue)?.({ sender: { id: 1 } }, { sessionId: session.id, prompt: 'Use assembled prompt', modelId: 'mock/hesper-fast', messageId: 'message-client-1', messageCreatedAt: '2026-06-10T03:00:02.000Z' })).resolves.toEqual({ runId: 'run-assembled' })
 
@@ -359,6 +360,12 @@ describe('registerIpcHandlers', () => {
       tools: expect.any(Array),
       assignableWorkerAgentRoles: expect.any(Array)
     }))
+    const promptInput = promptSpy.mock.calls[0]![0]
+    expect(promptInput.session).not.toHaveProperty('allowedWorkerAgentRoleIds')
+    expect(promptInput.assignableWorkerAgentRoles).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'worker-agent' }),
+      expect.objectContaining({ id: customRole.id })
+    ]))
     expect(enqueueSpy).toHaveBeenCalledWith(expect.objectContaining({
       sessionId: session.id,
       prompt: 'Use assembled prompt',

@@ -162,12 +162,13 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
     const requestedToolIdSet = requestedEnabledToolIds === undefined ? undefined : new Set(requestedEnabledToolIds)
     const enabledToolIdsBeforeGlobalFilter = requestedToolIdSet ? configuredToolIds.filter((toolId) => requestedToolIdSet.has(toolId)) : configuredToolIds
     const enabledToolIds = await options.container.toolSettingsService.filterEnabledToolIds(enabledToolIdsBeforeGlobalFilter)
+    const { allowedWorkerAgentRoleIds, ...sessionWithoutWorkerRoleDefaults } = session
     const sessionForPrompt = {
-      ...session,
+      ...sessionWithoutWorkerRoleDefaults,
       ...(resolvedWorkspacePath !== undefined ? { workspacePath: resolvedWorkspacePath } : {}),
       enabledSkillIds: session.enabledSkillIds?.length ? session.enabledSkillIds : role?.defaultSkillIds ?? role?.allowedSkillIds ?? [],
       enabledToolIds,
-      allowedWorkerAgentRoleIds: session.allowedWorkerAgentRoleIds?.length ? session.allowedWorkerAgentRoleIds : assignableWorkerAgentRoles.map((candidate) => candidate.id),
+      ...(allowedWorkerAgentRoleIds?.length ? { allowedWorkerAgentRoleIds } : {}),
       maxWorkerAgentDepth: session.maxWorkerAgentDepth ?? 1,
       maxWorkerAgentsPerRun: session.maxWorkerAgentsPerRun ?? 3
     }
