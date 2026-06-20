@@ -35,6 +35,21 @@ function cloneRole(role: ManagedRoleDto): ManagedRoleDto {
   }
 }
 
+function sameToolIds(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) return false
+  const sortedLeft = [...left].sort()
+  const sortedRight = [...right].sort()
+  return sortedLeft.every((id, index) => id === sortedRight[index])
+}
+
+function roleDraftChanged(draft: ManagedRoleDto, selectedRole: ManagedRoleDto | undefined): boolean {
+  if (!selectedRole) return true
+  return draft.name.trim() !== selectedRole.name.trim()
+    || draft.description.trim() !== selectedRole.description.trim()
+    || draft.systemPrompt.trim() !== selectedRole.systemPrompt.trim()
+    || !sameToolIds(draft.defaultToolIds, selectedRole.defaultToolIds)
+}
+
 export function RolesPanel({
   roles,
   selectedRole,
@@ -52,6 +67,8 @@ export function RolesPanel({
   const isExistingRole = Boolean(selectedRole && !creating)
   const canEdit = creating || Boolean(selectedRole)
   const trimmedName = draft.name.trim()
+  const hasDraftChanges = creating || roleDraftChanged(draft, selectedRole)
+  const canSave = Boolean(trimmedName) && !pending && hasDraftChanges
 
   useEffect(() => {
     if (selectedRole && !creating) {
@@ -78,7 +95,7 @@ export function RolesPanel({
   }
 
   const saveDraft = () => {
-    if (!trimmedName || pending) return
+    if (!canSave) return
     onSave?.({
       id: draft.id,
       name: trimmedName,
@@ -213,7 +230,7 @@ export function RolesPanel({
             删除角色
           </button>
         ) : <span />}
-        <button type="button" onClick={saveDraft} disabled={pending || !trimmedName} style={primaryButtonStyle}>
+        <button type="button" onClick={saveDraft} disabled={!canSave} style={canSave ? primaryButtonStyle : disabledButtonStyle}>
           {creating ? '创建角色' : '保存修改'}
         </button>
       </footer>
@@ -378,6 +395,13 @@ const primaryButtonStyle: CSSProperties = {
   color: '#ffffff'
 }
 
+const disabledButtonStyle: CSSProperties = {
+  ...buttonBaseStyle,
+  background: 'var(--hesper-color-surface-muted, #24283b)',
+  color: 'var(--hesper-color-text-muted, #737aa2)',
+  cursor: 'not-allowed'
+}
+
 const secondaryButtonStyle: CSSProperties = {
   ...buttonBaseStyle,
   border: '1px solid var(--hesper-color-border, #414868)',
@@ -387,6 +411,9 @@ const secondaryButtonStyle: CSSProperties = {
 
 const dangerButtonStyle: CSSProperties = {
   ...buttonBaseStyle,
-  background: 'rgba(239, 68, 68, 0.16)',
-  color: '#fca5a5'
+  borderWidth: 1,
+  borderStyle: 'solid',
+  borderColor: 'var(--hesper-color-danger, #ef4444)',
+  background: 'var(--hesper-color-danger-soft, rgba(220, 38, 38, 0.20))',
+  color: 'var(--hesper-color-danger-strong, #dc2626)'
 }

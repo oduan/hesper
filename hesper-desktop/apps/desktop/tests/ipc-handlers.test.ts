@@ -44,6 +44,25 @@ describe('desktop service container', () => {
     expect(result.isError).not.toBe(true)
     const created = JSON.parse(result.content) as { id: string; name: string }
     expect(created).toMatchObject({ id: expect.stringMatching(/^role-/), name: 'Tool-created role' })
+
+    const listed = await container.toolRunner.run(container.toolCatalogService.get('roles.list')!, {}, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['roles.list']
+    })
+    expect(JSON.parse(listed.content)).toEqual([
+      expect.objectContaining({ id: created.id, name: 'Tool-created role' })
+    ])
+
+    const found = await container.toolRunner.run(container.toolCatalogService.get('roles.find')!, { query: 'created' }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['roles.find']
+    })
+    expect(JSON.parse(found.content)).toEqual([
+      expect.objectContaining({ id: created.id, name: 'Tool-created role' })
+    ])
+
     await expect(persistence.roles.list()).resolves.toEqual([
       expect.objectContaining({ id: created.id, name: 'Tool-created role' })
     ])
@@ -254,7 +273,7 @@ describe('registerIpcHandlers', () => {
 
     await expect(handles.get(ipcChannels.agentEnqueue)?.({ sender: { id: 1 } }, { sessionId: session.id, prompt: 'Use assembled prompt', modelId: 'mock/hesper-fast', messageId: 'message-client-1', messageCreatedAt: '2026-06-10T03:00:02.000Z' })).resolves.toEqual({ runId: 'run-assembled' })
 
-    const expectedDefaultEnabledTools = ['filesystem.read-file', 'filesystem.write-file', 'filesystem.edit-file', 'filesystem.delete-file', 'filesystem.delete-directory', 'filesystem.list-directory', 'filesystem.find', 'filesystem.search', 'git.status', 'git.run', 'roles.create', 'roles.update', 'system.execute-command', 'system.show-notification']
+    const expectedDefaultEnabledTools = ['filesystem.read-file', 'filesystem.write-file', 'filesystem.edit-file', 'filesystem.delete-file', 'filesystem.delete-directory', 'filesystem.list-directory', 'filesystem.find', 'filesystem.search', 'git.status', 'git.run', 'roles.list', 'roles.find', 'roles.create', 'roles.update', 'system.execute-command', 'system.show-notification']
     expect(promptSpy).toHaveBeenCalledWith(expect.objectContaining({
       session: expect.objectContaining({
         id: session.id,
@@ -359,7 +378,7 @@ describe('registerIpcHandlers', () => {
       { sessionId: session.id, prompt: 'Do not expose disabled web fetch', modelId: 'mock/hesper-fast' }
     )).resolves.toEqual({ runId: 'run-global-filter' })
 
-    const expectedEnabledTools = ['filesystem.read-file', 'filesystem.write-file', 'filesystem.edit-file', 'filesystem.delete-file', 'filesystem.delete-directory', 'filesystem.list-directory', 'filesystem.find', 'filesystem.search', 'git.status', 'git.run', 'roles.create', 'roles.update', 'system.execute-command']
+    const expectedEnabledTools = ['filesystem.read-file', 'filesystem.write-file', 'filesystem.edit-file', 'filesystem.delete-file', 'filesystem.delete-directory', 'filesystem.list-directory', 'filesystem.find', 'filesystem.search', 'git.status', 'git.run', 'roles.list', 'roles.find', 'roles.create', 'roles.update', 'system.execute-command']
     expect(promptSpy).toHaveBeenLastCalledWith(expect.objectContaining({
       session: expect.objectContaining({ enabledToolIds: expectedEnabledTools })
     }))

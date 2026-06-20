@@ -404,10 +404,30 @@ describe('createBuiltinToolExecutor', () => {
     })).rejects.toThrow('TinyFish API key is required')
   })
 
-  it('creates and updates roles through injected role handlers', async () => {
+  it('lists, finds, creates and updates roles through injected role handlers', async () => {
+    const roles = [
+      { id: 'role-ops', name: '运维助手', description: '部署与命令', systemPrompt: '负责生产部署和命令执行。', defaultToolIds: ['git.status'] },
+      { id: 'role-search', name: '搜索专家', description: '查找资料', systemPrompt: '负责检索上下文。', defaultToolIds: ['web.search'] }
+    ]
+    const listRoles = vi.fn(async () => roles)
     const createRole = vi.fn(async (input) => ({ id: 'role-1', description: '', systemPrompt: '', defaultToolIds: [], ...input }))
     const updateRole = vi.fn(async (input) => ({ id: input.id, name: input.name ?? 'Existing', description: input.description ?? '', systemPrompt: input.systemPrompt ?? '', defaultToolIds: input.defaultToolIds ?? [] }))
-    const executor = createBuiltinToolExecutor({ roleTools: { createRole, updateRole } })
+    const executor = createBuiltinToolExecutor({ roleTools: { listRoles, createRole, updateRole } })
+
+    const listed = await executor.execute(tool('roles.list'), {}, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['roles.list']
+    })
+    expect(listRoles).toHaveBeenCalledTimes(1)
+    expect(JSON.parse(listed.content)).toEqual(roles)
+
+    const found = await executor.execute(tool('roles.find'), { query: '部署' }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['roles.find']
+    })
+    expect(JSON.parse(found.content)).toEqual([roles[0]])
 
     const created = await executor.execute(tool('roles.create'), { name: '运维助手', defaultToolIds: ['git.status'] }, {
       runId: 'run-1',
@@ -427,9 +447,10 @@ describe('createBuiltinToolExecutor', () => {
   })
 
   it('does not forward unsupported create role fields', async () => {
+    const listRoles = vi.fn(async () => [])
     const createRole = vi.fn(async (input) => ({ id: 'role-1', ...input }))
     const updateRole = vi.fn(async (input) => input)
-    const executor = createBuiltinToolExecutor({ roleTools: { createRole, updateRole } })
+    const executor = createBuiltinToolExecutor({ roleTools: { listRoles, createRole, updateRole } })
 
     await executor.execute(tool('roles.create'), {
       id: 'unexpected',
@@ -453,9 +474,10 @@ describe('createBuiltinToolExecutor', () => {
   })
 
   it('rejects invalid optional role string fields', async () => {
+    const listRoles = vi.fn(async () => [])
     const createRole = vi.fn(async (input) => input)
     const updateRole = vi.fn(async (input) => input)
-    const executor = createBuiltinToolExecutor({ roleTools: { createRole, updateRole } })
+    const executor = createBuiltinToolExecutor({ roleTools: { listRoles, createRole, updateRole } })
 
     await expect(executor.execute(tool('roles.update'), { id: 'role-1', description: 123 }, {
       runId: 'run-1',
@@ -468,22 +490,16 @@ describe('createBuiltinToolExecutor', () => {
   it('returns a controlled error when role tools are unavailable', async () => {
     const executor = createBuiltinToolExecutor()
 
-    await expect(executor.execute(tool('roles.create'), { name: '角色' }, {
-      runId: 'run-1',
-      sessionId: 'session-1',
-      allowedToolIds: ['roles.create']
-    })).resolves.toMatchObject({
-      isError: true,
-      details: { code: 'not_available', toolId: 'roles.create' }
-    })
-    await expect(executor.execute(tool('roles.update'), { id: 'role-1' }, {
-      runId: 'run-1',
-      sessionId: 'session-1',
-      allowedToolIds: ['roles.update']
-    })).resolves.toMatchObject({
-      isError: true,
-      details: { code: 'not_available', toolId: 'roles.update' }
-    })
+    for (const roleToolId of ['roles.list', 'roles.find', 'roles.create', 'roles.update']) {
+      await expect(executor.execute(tool(roleToolId), roleToolId === 'roles.find' ? { query: '角色' } : roleToolId === 'roles.create' ? { name: '角色' } : roleToolId === 'roles.update' ? { id: 'role-1' } : {}, {
+        runId: 'run-1',
+        sessionId: 'session-1',
+        allowedToolIds: [roleToolId]
+      })).resolves.toMatchObject({
+        isError: true,
+        details: { code: 'not_available', toolId: roleToolId }
+      })
+    }
   })
 
   it('returns a controlled error when notifications are not available', async () => {

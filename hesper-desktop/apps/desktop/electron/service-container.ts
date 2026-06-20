@@ -78,6 +78,7 @@ export function createServiceContainer(options: ServiceContainerOptions) {
         new Notification({ title: 'hesper', body: message }).show()
       },
       roleTools: {
+        listRoles: () => roleManagementService.listRoles(),
         createRole: (input) => roleManagementService.createRole(input),
         updateRole: (input) => roleManagementService.updateRole(input)
       }

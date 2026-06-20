@@ -20,7 +20,16 @@ type RoleToolInput = {
   defaultToolIds?: string[]
 }
 
+type RoleToolRecord = {
+  id: string
+  name: string
+  description: string
+  systemPrompt: string
+  defaultToolIds: string[]
+}
+
 export type RoleToolHandlers = {
+  listRoles(): Promise<RoleToolRecord[]>
   createRole(input: Omit<RoleToolInput, 'id'> & { name: string }): Promise<unknown>
   updateRole(input: RoleToolInput & { id: string }): Promise<unknown>
 }
@@ -142,12 +151,43 @@ function updateRoleToolInput(args: unknown): RoleToolInput & { id: string } {
   }
 }
 
+function roleFindInput(args: unknown): { query: string; limit: number } {
+  return {
+    query: stringArg(args, 'query').trim(),
+    limit: numberArg(args, 'limit', 20, { min: 1, max: 100, integer: true })
+  }
+}
+
+function normalizeSearchText(value: string): string {
+  return value.toLocaleLowerCase()
+}
+
+function roleMatchesQuery(role: RoleToolRecord, query: string): boolean {
+  const normalizedQuery = normalizeSearchText(query)
+  const haystacks = [role.id, role.name, role.description, role.systemPrompt, ...role.defaultToolIds]
+  return haystacks.some((value) => normalizeSearchText(value).includes(normalizedQuery))
+}
+
 function roleToolsUnavailable(tool: ToolDefinition): ToolExecutionResult {
   return {
     content: 'Role management tools are not available in this runtime.',
     details: { code: 'not_available', toolId: tool.id },
     isError: true
   }
+}
+
+async function listRolesTool(tool: ToolDefinition, roleTools: RoleToolHandlers | undefined): Promise<ToolExecutionResult> {
+  if (!roleTools) return roleToolsUnavailable(tool)
+  const roles = await roleTools.listRoles()
+  return { content: jsonContent(roles), details: { toolId: tool.id, roles, count: roles.length } }
+}
+
+async function findRolesTool(tool: ToolDefinition, args: unknown, roleTools: RoleToolHandlers | undefined): Promise<ToolExecutionResult> {
+  if (!roleTools) return roleToolsUnavailable(tool)
+  const { query, limit } = roleFindInput(args)
+  const roles = await roleTools.listRoles()
+  const matches = roles.filter((role) => roleMatchesQuery(role, query)).slice(0, limit)
+  return { content: jsonContent(matches), details: { toolId: tool.id, query, roles: matches, count: matches.length } }
 }
 
 async function createRoleTool(tool: ToolDefinition, args: unknown, roleTools: RoleToolHandlers | undefined): Promise<ToolExecutionResult> {
@@ -1096,6 +1136,10 @@ export function createBuiltinToolExecutor(options: BuiltinToolExecutorOptions = 
           return tinyFishFetchUrl(tool, args, context, fetchImpl, options.readToolApiKey, now)
         case 'web.search':
           return tinyFishSearch(tool, args, context, fetchImpl, options.readToolApiKey, fetchTimeoutMs, now)
+        case 'roles.list':
+          return listRolesTool(tool, options.roleTools)
+        case 'roles.find':
+          return findRolesTool(tool, args, options.roleTools)
         case 'roles.create':
           return createRoleTool(tool, args, options.roleTools)
         case 'roles.update':

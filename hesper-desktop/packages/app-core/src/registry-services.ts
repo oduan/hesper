@@ -51,6 +51,8 @@ export function createDefaultRoleService(): RoleService {
         'git.run',
         'web.fetch-url',
         'web.search',
+        'roles.list',
+        'roles.find',
         'roles.create',
         'roles.update',
         'system.execute-command',

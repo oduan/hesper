@@ -4,7 +4,7 @@ import { createBuiltinToolDefinitions } from '../builtin-tools'
 describe('builtin tools', () => {
   it('contains the builtin tool set without exposing legacy worker execution', () => {
     const tools = createBuiltinToolDefinitions()
-    expect(tools).toHaveLength(16)
+    expect(tools).toHaveLength(18)
     expect(tools.map((tool) => tool.id)).not.toContain('agent.spawn-worker-agent')
     expect(tools.every((tool) => typeof tool.icon === 'string' && tool.icon.length > 0)).toBe(true)
   })
@@ -25,6 +25,8 @@ describe('builtin tools', () => {
         'git.run',
         'web.fetch-url',
         'web.search',
+        'roles.list',
+        'roles.find',
         'roles.create',
         'roles.update',
         'system.execute-command',
@@ -131,6 +133,21 @@ describe('builtin tools', () => {
     })
 
     expect(tools.find((tool) => tool.id === 'agent.spawn-worker-agent')).toBeUndefined()
+
+    expect(tools.find((tool) => tool.id === 'roles.list')).toMatchObject({
+      category: 'agent',
+      inputSchema: { type: 'object', properties: {} }
+    })
+    expect(tools.find((tool) => tool.id === 'roles.find')).toMatchObject({
+      category: 'agent',
+      inputSchema: {
+        type: 'object',
+        required: ['query'],
+        properties: {
+          query: expect.objectContaining({ type: 'string' })
+        }
+      }
+    })
 
     expect(tools.find((tool) => tool.id === 'roles.create')).toMatchObject({
       category: 'agent',

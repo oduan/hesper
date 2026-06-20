@@ -223,6 +223,29 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
       }
     },
     {
+      id: 'roles.list',
+      name: 'List Roles',
+      description: 'List all user-defined roles with their id, name, description, full prompt, and default tools.',
+      category: 'agent',
+      icon: '🎭',
+      inputSchema: { type: 'object', properties: {} }
+    },
+    {
+      id: 'roles.find',
+      name: 'Find Roles',
+      description: 'Fuzzy search user-defined roles by id, name, description, prompt text, or default tool IDs.',
+      category: 'agent',
+      icon: '🎭',
+      inputSchema: {
+        type: 'object',
+        required: ['query'],
+        properties: {
+          query: { type: 'string', description: 'Case-insensitive fuzzy search text.' },
+          limit: { type: 'number', description: 'Maximum matching roles to return. Defaults to 20, maximum 100.' }
+        }
+      }
+    },
+    {
       id: 'roles.create',
       name: 'Create Role',
       description: 'Create a user-defined role with a name, description, full prompt, and default tools.',

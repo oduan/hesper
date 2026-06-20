@@ -627,6 +627,7 @@ describe('renderer App', () => {
 
     await user.click(screen.getByRole('button', { name: '角色' }))
     expect(await screen.findByLabelText('角色名称')).toHaveValue('运维助手')
+    await user.type(screen.getByLabelText('角色简介'), ' updated')
     await user.click(screen.getByRole('button', { name: '保存修改' }))
     await waitFor(() => expect(updateRole).toHaveBeenCalled())
 
