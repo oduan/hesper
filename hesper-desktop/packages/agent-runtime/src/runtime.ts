@@ -3,6 +3,7 @@ import { createId, nowIso, type AgentRun, type AgentRuntimeEvent, type Message, 
 import type { AgentAdapter } from './adapters'
 import { normalizeUnknownError } from './adapters'
 import { clearPiEventRunState } from './map-pi-event'
+import { clearPiToolRunState } from './pi-tools'
 import { defaultRetryPolicy, getRetryDelayMs, isRetryableRunError, type RetryPolicy } from './retry-policy'
 
 export type EnqueueRunInput = {
@@ -148,6 +149,7 @@ export class AgentRuntime {
 
     const failedRun = await this.persistFailedRun(existing, normalized)
     clearPiEventRunState(runId)
+    clearPiToolRunState(runId)
     await this.emitAndPersist({ type: 'run.failed', runId, error: normalized, ...(failedRun.endedAt ? { endedAt: failedRun.endedAt } : {}) })
 
     if (!this.isActiveRun(runId)) {
@@ -171,6 +173,7 @@ export class AgentRuntime {
 
     const cancelledRun = await this.persistCancelledRun(existing)
     clearPiEventRunState(runId)
+    clearPiToolRunState(runId)
     await this.emitAndPersist({ type: 'run.cancelled', runId, ...(cancelledRun.endedAt ? { endedAt: cancelledRun.endedAt } : {}) })
     this.activeControllers.get(runId)?.abort()
 
@@ -288,6 +291,7 @@ export class AgentRuntime {
       await this.persistCancelledRun(latest)
     }
     clearPiEventRunState(runId)
+    clearPiToolRunState(runId)
     return true
   }
 
@@ -300,6 +304,7 @@ export class AgentRuntime {
       await this.persistFailedRun(latest, error)
     }
     clearPiEventRunState(runId)
+    clearPiToolRunState(runId)
     return true
   }
 
@@ -356,6 +361,7 @@ export class AgentRuntime {
             return
           }
           clearPiEventRunState(latestRun.id)
+          clearPiToolRunState(latestRun.id)
           await this.emitAndPersist({ type: 'run.succeeded', runId: latestRun.id, ...(latestRun.endedAt ? { endedAt: latestRun.endedAt } : {}) })
           return
         } catch (error) {
@@ -393,6 +399,7 @@ export class AgentRuntime {
           } satisfies AgentRun
           await this.persistence.runs.save(latestRun)
           clearPiEventRunState(latestRun.id)
+          clearPiToolRunState(latestRun.id)
           await this.emitAndPersist({ type: 'run.failed', runId: latestRun.id, error: normalized, ...(latestRun.endedAt ? { endedAt: latestRun.endedAt } : {}) })
           return
         } finally {

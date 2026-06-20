@@ -1,7 +1,7 @@
 import type { ToolDefinition } from '@hesper/shared'
 import type { ToolRunner } from '@hesper/tools'
-import { describe, expect, it, vi } from 'vitest'
-import { createPiAgentTools } from '../pi-tools'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { clearPiToolRunState, createPiAgentTools } from '../pi-tools'
 
 const readTool: ToolDefinition = {
   id: 'filesystem.read-file',
@@ -11,6 +11,28 @@ const readTool: ToolDefinition = {
   icon: '📖',
   inputSchema: { type: 'object', required: ['path'], properties: { path: { type: 'string' } } }
 }
+
+const workerTool: ToolDefinition = {
+  id: 'agent.spawn-worker-agent',
+  name: 'Spawn Worker Agent',
+  description: 'Spawn',
+  category: 'agent',
+  inputSchema: { type: 'object', properties: {} }
+}
+
+const trackedRunIds = ['run-1', 'run-parent', 'run-other']
+
+beforeEach(() => {
+  for (const runId of trackedRunIds) {
+    clearPiToolRunState(runId)
+  }
+})
+
+afterEach(() => {
+  for (const runId of trackedRunIds) {
+    clearPiToolRunState(runId)
+  }
+})
 
 describe('createPiAgentTools', () => {
   it('maps Hesper tool definitions to pi AgentTool metadata', () => {
@@ -66,7 +88,7 @@ describe('createPiAgentTools', () => {
   it('passes toolCallId and parentStepId to ToolRunner context', async () => {
     const run = vi.fn(async () => ({ content: 'ok' }))
     const [tool] = createPiAgentTools({
-      tools: [{ id: 'agent.spawn-worker-agent', name: 'Spawn Worker Agent', description: 'Spawn', category: 'agent', inputSchema: { type: 'object', properties: {} } }],
+      tools: [workerTool],
       runner: { run },
       context: { runId: 'run-parent', sessionId: 'session-1', allowedToolIds: ['agent.spawn-worker-agent'] }
     })
@@ -82,7 +104,7 @@ describe('createPiAgentTools', () => {
   it('disambiguates repeated toolCallId parent step ids within a run', async () => {
     const run = vi.fn(async () => ({ content: 'ok' }))
     const [tool] = createPiAgentTools({
-      tools: [{ id: 'agent.spawn-worker-agent', name: 'Spawn Worker Agent', description: 'Spawn', category: 'agent', inputSchema: { type: 'object', properties: {} } }],
+      tools: [workerTool],
       runner: { run },
       context: { runId: 'run-parent', sessionId: 'session-1', allowedToolIds: ['agent.spawn-worker-agent'] }
     })
@@ -99,6 +121,36 @@ describe('createPiAgentTools', () => {
     expect(secondCall[2]).toMatchObject({
       parentStepId: 'step-run-parent-tool-tool-1-2'
     })
+  })
+
+  it('keeps repeated toolCallId parent step ids across recreated tools for the same run', async () => {
+    const run = vi.fn(async () => ({ content: 'ok' }))
+    const toolInput = {
+      tools: [workerTool],
+      runner: { run },
+      context: { runId: 'run-parent', sessionId: 'session-1', allowedToolIds: ['agent.spawn-worker-agent'] }
+    }
+
+    const [firstTool] = createPiAgentTools(toolInput)
+    await firstTool!.execute('tool-1', { purpose: 'delegate work' }, new AbortController().signal)
+
+    const [secondTool] = createPiAgentTools(toolInput)
+    await secondTool!.execute('tool-1', { purpose: 'delegate work again' }, new AbortController().signal)
+
+    const [otherTool] = createPiAgentTools({
+      tools: [workerTool],
+      runner: { run },
+      context: { runId: 'run-other', sessionId: 'session-1', allowedToolIds: ['agent.spawn-worker-agent'] }
+    })
+    await otherTool!.execute('tool-1', { purpose: 'delegate work elsewhere' }, new AbortController().signal)
+
+    const firstCall = run.mock.calls[0] as unknown as [unknown, unknown, { parentStepId: string }]
+    const secondCall = run.mock.calls[1] as unknown as [unknown, unknown, { parentStepId: string }]
+    const thirdCall = run.mock.calls[2] as unknown as [unknown, unknown, { parentStepId: string }]
+
+    expect(firstCall[2]).toMatchObject({ parentStepId: 'step-run-parent-tool-tool-1' })
+    expect(secondCall[2]).toMatchObject({ parentStepId: 'step-run-parent-tool-tool-1-2' })
+    expect(thirdCall[2]).toMatchObject({ parentStepId: 'step-run-other-tool-tool-1' })
   })
 
   it('throws with structured details when ToolRunner returns an error result', async () => {

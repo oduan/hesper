@@ -45,20 +45,22 @@ function normalizePiToolName(toolId: string): string {
   return normalized || 'tool'
 }
 
+const toolCallCountsByRunId = new Map<string, Map<string, number>>()
+
 function parentStepIdForToolCall(runId: string, toolCallId: string, occurrence: number): string {
   return occurrence === 1 ? `step-${runId}-tool-${toolCallId}` : `step-${runId}-tool-${toolCallId}-${occurrence}`
 }
 
-function createParentStepIdResolver(): (runId: string, toolCallId: string) => string {
-  const countsByRunId = new Map<string, Map<string, number>>()
+export function clearPiToolRunState(runId: string): void {
+  toolCallCountsByRunId.delete(runId)
+}
 
-  return (runId, toolCallId) => {
-    const toolCounts = countsByRunId.get(runId) ?? new Map<string, number>()
-    const nextCount = (toolCounts.get(toolCallId) ?? 0) + 1
-    toolCounts.set(toolCallId, nextCount)
-    countsByRunId.set(runId, toolCounts)
-    return parentStepIdForToolCall(runId, toolCallId, nextCount)
-  }
+function nextParentStepIdForToolCall(runId: string, toolCallId: string): string {
+  const toolCounts = toolCallCountsByRunId.get(runId) ?? new Map<string, number>()
+  const nextCount = (toolCounts.get(toolCallId) ?? 0) + 1
+  toolCounts.set(toolCallId, nextCount)
+  toolCallCountsByRunId.set(runId, toolCounts)
+  return parentStepIdForToolCall(runId, toolCallId, nextCount)
 }
 
 function toPiToolResult(tool: ToolDefinition, toolCallId: string, result: Awaited<ReturnType<ToolRunner['run']>>): AgentToolResult<unknown> {
@@ -75,8 +77,6 @@ function toPiToolResult(tool: ToolDefinition, toolCallId: string, result: Awaite
 }
 
 export function createPiAgentTools(input: PiToolAdapterInput): AgentTool<any>[] {
-  const nextParentStepIdForToolCall = createParentStepIdResolver()
-
   return input.tools.map((tool) => ({
     name: normalizePiToolName(tool.id),
     label: tool.name,
