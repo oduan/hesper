@@ -1,4 +1,4 @@
-import { AgentRuntime, MockAgentAdapter, PiCoreAgentAdapter, createPiAgentTools, createRegistryModelResolver, createSessionTitleGenerator } from '@hesper/agent-runtime'
+import { AgentRuntime, MockAgentAdapter, PiCoreAgentAdapter, createPiAgentTools, createRegistryModelResolver, createSessionTitleGenerator, createWorkerAgentService } from '@hesper/agent-runtime'
 import {
   createConversationService,
   createCredentialVaultService,
@@ -58,6 +58,7 @@ export function createServiceContainer(options: ServiceContainerOptions) {
     readProviderApiKey: (providerId) => credentialVaultService.readProviderApiKey(providerId)
   })
   const allowlistPolicy = createAllowlistPermissionPolicy()
+  let workerAgentService!: ReturnType<typeof createWorkerAgentService>
   const toolRunner = createToolRunner({
     policy: {
       async evaluate(tool, args, context) {
@@ -81,6 +82,13 @@ export function createServiceContainer(options: ServiceContainerOptions) {
         listRoles: () => roleManagementService.listRoles(),
         createRole: (input) => roleManagementService.createRole(input),
         updateRole: (input) => roleManagementService.updateRole(input)
+      },
+      workerAgentTools: {
+        spawn: (input, context) => workerAgentService.spawn(input, context),
+        list: (input, context) => workerAgentService.list(input, context),
+        get: (input, context) => workerAgentService.get(input, context),
+        wait: (input, context) => workerAgentService.wait(input, context),
+        cancel: (input, context) => workerAgentService.cancel(input, context)
       }
     })
   })
@@ -108,6 +116,17 @@ export function createServiceContainer(options: ServiceContainerOptions) {
       })
     : new MockAgentAdapter({ delayMs: 0 })
   const agentRuntime = new AgentRuntime({ persistence: options.persistence, adapter })
+  workerAgentService = createWorkerAgentService({
+    persistence: options.persistence,
+    adapter,
+    promptAssembly: promptAssemblyService,
+    roles: roleService,
+    skills: {
+      list: () => skillService.listSkills()
+    },
+    tools: toolCatalogService,
+    filterEnabledToolIds: (toolIds) => toolSettingsService.filterEnabledToolIds(toolIds)
+  })
 
   return {
     persistence: options.persistence,
@@ -124,6 +143,7 @@ export function createServiceContainer(options: ServiceContainerOptions) {
     credentialVaultService,
     modelProviderService,
     sessionTitleGenerator,
-    agentRuntime
+    agentRuntime,
+    workerAgentService
   }
 }

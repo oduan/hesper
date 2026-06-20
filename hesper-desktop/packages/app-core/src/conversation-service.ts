@@ -21,6 +21,7 @@ export type ConversationService = {
   createUserMessage(input: CreateUserMessageInput): Promise<Message>
   createAssistantMessage(input: CreateAssistantMessageInput): Promise<Message>
   listMessages(sessionId: string): Promise<Message[]>
+  listMessagesByRun(runId: string): Promise<Message[]>
   listRuns(sessionId: string): Promise<Awaited<ReturnType<Persistence['runs']['listBySession']>>>
   listSteps(runId: string): Promise<RunStep[]>
   appendRuntimeEvent(event: AgentRuntimeEvent): Promise<AgentRuntimeEvent>
@@ -82,6 +83,10 @@ export function createConversationService(persistence: Persistence): Conversatio
     },
     async listMessages(sessionId) {
       return persistence.messages.listBySession(sessionId)
+    },
+    async listMessagesByRun(runId) {
+      await ensureRunExists(persistence, runId)
+      return persistence.messages.listByRun(runId)
     },
     async listRuns(sessionId) {
       return persistence.runs.listBySession(sessionId)

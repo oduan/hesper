@@ -205,6 +205,10 @@ function renderMainWorkerAgentRules(input: MainPromptAssemblyInput, roles: Role[
     '- agent.spawn-worker-agent available: yes',
     `- max depth: ${maxDepth}`,
     `- max worker agents per run: ${maxCount}`,
+    '- All Worker Agent waits are bounded; never expect agent.wait-worker-agent or spawn wait:true to wait forever.',
+    '- Use wait:false when spawning multiple independent Worker Agents, then call wait/get for each invocation id.',
+    '- A wait timeout means the Worker Agent is still running, not failed; inspect the diagnosis before cancelling.',
+    '- Worker Agent management tools default to the current parent run and must not be used across sessions.',
     '- Use a Worker Agent only for independent research, review, long-context analysis, or parallelizable work.',
     '- Do not use a Worker Agent for simple one-step tasks or when user confirmation is required.',
     '- Every Worker Agent call must include task, roleId, allowedToolIds, and expectedOutput.',
@@ -221,6 +225,7 @@ function renderWorkerAgentRules(input: WorkerAgentPromptAssemblyInput): string {
     `- max worker agents per run: ${input.maxWorkerAgentsPerRun}`,
     '- Use only the tools listed in this prompt.',
     '- Do not access tools, skills, roles, files, or workspace areas that are not explicitly listed.',
+    '- Do not call Worker Agent management tools from a Worker Agent in this version.',
     '- Do not spawn another Worker Agent unless explicitly allowed by the parent task and depth remains available.',
     ...(input.maxWorkerAgentsPerRun <= 0 || input.depth >= input.maxDepth ? ['- Do not spawn another Worker Agent.'] : []),
     '- Return summary, findings, evidence, recommendations, and status.'

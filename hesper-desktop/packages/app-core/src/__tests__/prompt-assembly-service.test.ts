@@ -111,6 +111,10 @@ describe('PromptAssemblyService', () => {
     expect(output.workerAgentRules).toContain('allowedToolIds')
     expect(output.workerAgentRules).toContain('max depth: 1')
     expect(output.workerAgentRules).toContain('max worker agents per run: 2')
+    expect(output.workerAgentRules).toContain('All Worker Agent waits are bounded')
+    expect(output.workerAgentRules).toContain('Use wait:false when spawning multiple independent Worker Agents')
+    expect(output.workerAgentRules).toContain('A wait timeout means the Worker Agent is still running, not failed')
+    expect(output.workerAgentRules).toContain('Worker Agent management tools default to the current parent run and must not be used across sessions')
     expect(output.systemPrompt).not.toMatch(/api[_ -]?key/i)
   })
 
@@ -173,6 +177,7 @@ describe('PromptAssemblyService', () => {
     expect(output.toolManifest).not.toContain('agent.spawn-worker-agent')
     expect(output.toolManifest).not.toContain('filesystem.write-file')
     expect(output.workerAgentRules).toContain('Do not spawn another Worker Agent')
+    expect(output.workerAgentRules).toContain('Do not call Worker Agent management tools from a Worker Agent in this version')
     expect(output.workerAgentRules).toContain('depth: 1 / 1')
     expect(output.skillManifest).toContain('skill:notes')
     expect(output.skillManifest).not.toContain('skill:secret')

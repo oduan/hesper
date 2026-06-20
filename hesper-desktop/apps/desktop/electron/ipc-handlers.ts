@@ -5,6 +5,7 @@ import {
   agentEnqueueInputSchema,
   agentStopResultSchema,
   appSettingsSchema,
+  conversationMessagesByRunResultSchema,
   conversationMessagesResultSchema,
   conversationRunsResultSchema,
   conversationStepsResultSchema,
@@ -23,6 +24,7 @@ import {
   providerIdInputSchema,
   saveModelInputSchema,
   saveModelProviderInputSchema,
+  workerInvocationsResultSchema,
   saveProviderApiKeyInputSchema,
   runIdInputSchema,
   sessionIdInputSchema,
@@ -130,6 +132,9 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       schedulePersistenceSave()
     }
   })
+  const detachWorkerPersistence = options.container.workerAgentService.subscribe(async () => {
+    schedulePersistenceSave()
+  })
 
   const unsubscribeSender = (senderId: number) => {
     subscriptions.get(senderId)?.()
@@ -171,15 +176,25 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
     const senderId = event.sender.id
     unsubscribeSender(senderId)
     event.sender.once('destroyed', () => unsubscribeSender(senderId))
-    const unsubscribe = options.container.agentRuntime.subscribe(async (runtimeEvent) => {
-      const target = event.sender
+    const target = event.sender
+    const agentUnsubscribe = options.container.agentRuntime.subscribe(async (runtimeEvent) => {
       if (target.isDestroyed()) {
         unsubscribeSender(senderId)
         return
       }
       target.send(ipcEvents.agentEvent, validateEvent(runtimeEvent))
     })
-    subscriptions.set(senderId, unsubscribe)
+    const workerUnsubscribe = options.container.workerAgentService.subscribe(async (runtimeEvent) => {
+      if (target.isDestroyed()) {
+        unsubscribeSender(senderId)
+        return
+      }
+      target.send(ipcEvents.agentEvent, validateEvent(runtimeEvent))
+    })
+    subscriptions.set(senderId, () => {
+      agentUnsubscribe()
+      workerUnsubscribe()
+    })
   }
 
   const getRequiredWindow = (event: IpcMainInvokeEvent) => {
@@ -256,6 +271,10 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       const sessionId = sessionIdInputSchema.parse(payload)
       return conversationMessagesResultSchema.parse(await options.container.conversationService.listMessages(sessionId))
     },
+    [ipcChannels.conversationListMessagesByRun]: async (_event, payload) => {
+      const runId = runIdInputSchema.parse(payload)
+      return conversationMessagesByRunResultSchema.parse(await options.container.conversationService.listMessagesByRun(runId))
+    },
     [ipcChannels.conversationListRuns]: async (_event, payload) => {
       const sessionId = sessionIdInputSchema.parse(payload)
       return conversationRunsResultSchema.parse(await options.container.conversationService.listRuns(sessionId))
@@ -263,6 +282,10 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
     [ipcChannels.conversationListSteps]: async (_event, payload) => {
       const runId = runIdInputSchema.parse(payload)
       return conversationStepsResultSchema.parse(await options.container.conversationService.listSteps(runId))
+    },
+    [ipcChannels.workerInvocationsListByParentRun]: async (_event, payload) => {
+      const parentRunId = runIdInputSchema.parse(payload)
+      return workerInvocationsResultSchema.parse(await options.container.persistence.workerAgentInvocations.listByParentRun(parentRunId))
     },
     [ipcChannels.dialogSelectDirectory]: async () => {
       const result = await options.dialog.showOpenDialog({ properties: ['openDirectory'] })
@@ -420,6 +443,7 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
 
   return () => {
     detachRuntimePersistence()
+    detachWorkerPersistence()
     for (const senderId of subscriptions.keys()) unsubscribeSender(senderId)
     for (const channel of Object.keys(handlers)) options.ipcMain.removeHandler(channel)
   }

@@ -12,8 +12,10 @@ const ipcChannels = {
   sessionsSetOutputMode: 'sessions:setOutputMode',
   sessionsMarkViewed: 'sessions:markViewed',
   conversationListMessages: 'conversation:listMessages',
+  conversationListMessagesByRun: 'conversation:listMessagesByRun',
   conversationListRuns: 'conversation:listRuns',
   conversationListSteps: 'conversation:listSteps',
+  workerInvocationsListByParentRun: 'workerInvocations:listByParentRun',
   dialogSelectDirectory: 'dialog:selectDirectory',
   agentEnqueue: 'agent:enqueue',
   agentStop: 'agent:stop',
@@ -84,8 +86,12 @@ const hesperApi = {
   },
   conversation: {
     listMessages: (sessionId) => ipcRenderer.invoke(ipcChannels.conversationListMessages, sessionId),
+    listMessagesByRun: (runId) => ipcRenderer.invoke(ipcChannels.conversationListMessagesByRun, runId),
     listRuns: (sessionId) => ipcRenderer.invoke(ipcChannels.conversationListRuns, sessionId),
     listSteps: (runId) => ipcRenderer.invoke(ipcChannels.conversationListSteps, runId)
+  },
+  workerAgents: {
+    listByParentRun: (parentRunId) => ipcRenderer.invoke(ipcChannels.workerInvocationsListByParentRun, parentRunId)
   },
   agent: {
     enqueue: (input) => ipcRenderer.invoke(ipcChannels.agentEnqueue, input),

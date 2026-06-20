@@ -77,6 +77,19 @@ describe('createConversationService', () => {
     ])
   })
 
+  it('lists messages by run for Worker Agent viewer history', async () => {
+    const persistence = await createInMemoryPersistence()
+    const conversation = createConversationService(persistence)
+    const now = '2026-06-20T06:00:00.000Z'
+    await persistence.sessions.save({ id: 'session-1', title: 'Worker history', status: 'active', outputMode: 'markdown', createdAt: now, updatedAt: now })
+    await persistence.runs.save({ id: 'run-child', sessionId: 'session-1', parentRunId: 'run-parent', status: 'succeeded', modelId: 'mock/hesper-fast', retryCount: 0, maxRetries: 0 })
+    await persistence.messages.save({ id: 'message-child', sessionId: 'session-1', role: 'assistant', content: 'Worker result', contentType: 'markdown', runId: 'run-child', createdAt: now })
+
+    await expect(conversation.listMessagesByRun('run-child')).resolves.toEqual([
+      expect.objectContaining({ id: 'message-child', content: 'Worker result' })
+    ])
+  })
+
   it('rejects messages for missing sessions', async () => {
     const persistence = await createInMemoryPersistence()
     const conversation = createConversationService(persistence)

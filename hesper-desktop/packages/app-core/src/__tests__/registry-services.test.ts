@@ -25,9 +25,18 @@ describe('registry services', () => {
       'roles.find',
       'roles.create',
       'roles.update',
+      'agent.spawn-worker-agent',
+      'agent.list-worker-agents',
+      'agent.get-worker-agent',
+      'agent.wait-worker-agent',
+      'agent.cancel-worker-agent',
       'system.execute-command',
       'system.show-notification'
     ])
+    expect(roles.find((role) => role.id === 'worker-agent')?.defaultToolIds).not.toEqual(expect.arrayContaining([
+      'agent.spawn-worker-agent',
+      'agent.wait-worker-agent'
+    ]))
     expect(roles.find((role) => role.id === 'worker-agent')?.defaultToolIds).not.toContain('roles.list')
     expect(roles.find((role) => role.id === 'worker-agent')?.defaultToolIds).not.toContain('roles.find')
     expect(roles.find((role) => role.id === 'worker-agent')?.defaultToolIds).not.toContain('roles.create')
@@ -41,7 +50,6 @@ describe('registry services', () => {
       'web.fetch-url',
       'web.search'
     ])
-    expect(roles.find((role) => role.id === 'main-agent')?.defaultToolIds).not.toContain('agent.spawn-worker-agent')
     expect(skills.map((skill) => skill.id)).toEqual([
       'builtin:notes',
       'workspace:notes',

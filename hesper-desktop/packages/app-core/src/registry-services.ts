@@ -55,6 +55,11 @@ export function createDefaultRoleService(): RoleService {
         'roles.find',
         'roles.create',
         'roles.update',
+        'agent.spawn-worker-agent',
+        'agent.list-worker-agents',
+        'agent.get-worker-agent',
+        'agent.wait-worker-agent',
+        'agent.cancel-worker-agent',
         'system.execute-command',
         'system.show-notification'
       ],

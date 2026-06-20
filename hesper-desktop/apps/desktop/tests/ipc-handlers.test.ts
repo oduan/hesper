@@ -68,6 +68,43 @@ describe('desktop service container', () => {
     ])
   })
 
+  it('delegates Worker Agent tools to the worker service when allowed', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock' })
+    const workerAgentService = (container as any).workerAgentService as { spawn: ReturnType<typeof vi.fn> }
+    const spawnSpy = vi.spyOn(workerAgentService, 'spawn').mockResolvedValueOnce({
+      invocationId: 'worker-agent-1',
+      childRunId: 'run-child',
+      status: 'running'
+    })
+
+    const result = await container.toolRunner.run(container.toolCatalogService.get('agent.spawn-worker-agent')!, {
+      task: 'Review the staged diff.',
+      roleId: 'reviewer',
+      allowedToolIds: ['filesystem.read-file'],
+      wait: false
+    }, {
+      runId: 'run-parent',
+      sessionId: 'session-1',
+      allowedToolIds: ['agent.spawn-worker-agent']
+    })
+
+    expect(spawnSpy).toHaveBeenCalledWith(
+      {
+        task: 'Review the staged diff.',
+        roleId: 'reviewer',
+        allowedToolIds: ['filesystem.read-file'],
+        wait: false
+      },
+      expect.objectContaining({ runId: 'run-parent', sessionId: 'session-1', allowedToolIds: ['agent.spawn-worker-agent'] })
+    )
+    expect(JSON.parse(result.content)).toEqual({
+      invocationId: 'worker-agent-1',
+      childRunId: 'run-child',
+      status: 'running'
+    })
+  })
+
   it('seeds builtin providers for an empty desktop persistence store', async () => {
     const persistence = await createInMemoryPersistence()
     const container = createServiceContainer({ persistence, agentMode: 'mock', credentialCodec: createMockCredentialCodec() })
@@ -273,7 +310,7 @@ describe('registerIpcHandlers', () => {
 
     await expect(handles.get(ipcChannels.agentEnqueue)?.({ sender: { id: 1 } }, { sessionId: session.id, prompt: 'Use assembled prompt', modelId: 'mock/hesper-fast', messageId: 'message-client-1', messageCreatedAt: '2026-06-10T03:00:02.000Z' })).resolves.toEqual({ runId: 'run-assembled' })
 
-    const expectedDefaultEnabledTools = ['filesystem.read-file', 'filesystem.write-file', 'filesystem.edit-file', 'filesystem.delete-file', 'filesystem.delete-directory', 'filesystem.list-directory', 'filesystem.find', 'filesystem.search', 'git.status', 'git.run', 'roles.list', 'roles.find', 'roles.create', 'roles.update', 'system.execute-command', 'system.show-notification']
+    const expectedDefaultEnabledTools = ['filesystem.read-file', 'filesystem.write-file', 'filesystem.edit-file', 'filesystem.delete-file', 'filesystem.delete-directory', 'filesystem.list-directory', 'filesystem.find', 'filesystem.search', 'git.status', 'git.run', 'roles.list', 'roles.find', 'roles.create', 'roles.update', 'agent.spawn-worker-agent', 'agent.list-worker-agents', 'agent.get-worker-agent', 'agent.wait-worker-agent', 'agent.cancel-worker-agent', 'system.execute-command', 'system.show-notification']
     expect(promptSpy).toHaveBeenCalledWith(expect.objectContaining({
       session: expect.objectContaining({
         id: session.id,
@@ -378,7 +415,7 @@ describe('registerIpcHandlers', () => {
       { sessionId: session.id, prompt: 'Do not expose disabled web fetch', modelId: 'mock/hesper-fast' }
     )).resolves.toEqual({ runId: 'run-global-filter' })
 
-    const expectedEnabledTools = ['filesystem.read-file', 'filesystem.write-file', 'filesystem.edit-file', 'filesystem.delete-file', 'filesystem.delete-directory', 'filesystem.list-directory', 'filesystem.find', 'filesystem.search', 'git.status', 'git.run', 'roles.list', 'roles.find', 'roles.create', 'roles.update', 'system.execute-command']
+    const expectedEnabledTools = ['filesystem.read-file', 'filesystem.write-file', 'filesystem.edit-file', 'filesystem.delete-file', 'filesystem.delete-directory', 'filesystem.list-directory', 'filesystem.find', 'filesystem.search', 'git.status', 'git.run', 'roles.list', 'roles.find', 'roles.create', 'roles.update', 'agent.spawn-worker-agent', 'agent.list-worker-agents', 'agent.get-worker-agent', 'agent.wait-worker-agent', 'agent.cancel-worker-agent', 'system.execute-command']
     expect(promptSpy).toHaveBeenLastCalledWith(expect.objectContaining({
       session: expect.objectContaining({ enabledToolIds: expectedEnabledTools })
     }))
@@ -544,19 +581,54 @@ describe('registerIpcHandlers', () => {
       title: 'Restored thinking',
       createdAt: '2026-06-10T03:00:02.000Z'
     })
+    await persistence.runs.save({ id: 'run-child', sessionId: session.id, parentRunId: 'run-restored', workerAgentInvocationId: 'worker-agent-1', status: 'succeeded', modelId: 'mock/hesper-fast', retryCount: 0, maxRetries: 2 })
+    await persistence.messages.save({
+      id: 'message-child',
+      sessionId: session.id,
+      role: 'assistant',
+      content: 'worker answer',
+      contentType: 'plain',
+      runId: 'run-child',
+      createdAt: '2026-06-10T03:00:03.000Z'
+    })
+    await persistence.workerAgentInvocations.save({
+      id: 'worker-agent-1',
+      parentRunId: 'run-restored',
+      childRunId: 'run-child',
+      parentStepId: 'step-run-restored-tool-1',
+      parentToolCallId: 'tool-1',
+      task: 'Review the diff',
+      roleId: 'reviewer',
+      allowedToolIds: ['filesystem.read-file'],
+      status: 'running',
+      createdAt: '2026-06-10T03:00:04.000Z',
+      lastEventAt: '2026-06-10T03:00:04.000Z'
+    })
 
     registerIpcHandlers({ ipcMain, dialog, container })
 
     expect(ipcMain.handle).toHaveBeenCalledWith(ipcChannels.conversationListMessages, expect.any(Function))
+    expect(ipcMain.handle).toHaveBeenCalledWith(ipcChannels.conversationListMessagesByRun, expect.any(Function))
     expect(ipcMain.handle).toHaveBeenCalledWith(ipcChannels.conversationListRuns, expect.any(Function))
     expect(ipcMain.handle).toHaveBeenCalledWith(ipcChannels.conversationListSteps, expect.any(Function))
+    expect(ipcMain.handle).toHaveBeenCalledWith(ipcChannels.workerInvocationsListByParentRun, expect.any(Function))
 
     await expect(handles.get(ipcChannels.conversationListMessages)?.({ sender: { id: 1 } }, session.id)).resolves.toEqual([
       expect.objectContaining({ id: 'message-restored-user', content: 'persisted question' })
     ])
-    await expect(handles.get(ipcChannels.conversationListRuns)?.({ sender: { id: 1 } }, session.id)).resolves.toEqual([
-      expect.objectContaining({ id: 'run-restored', sessionId: session.id })
+    await expect(handles.get(ipcChannels.conversationListMessages)?.({ sender: { id: 1 } }, session.id)).resolves.not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'message-child' })
+    ]))
+    await expect(handles.get(ipcChannels.conversationListMessagesByRun)?.({ sender: { id: 1 } }, 'run-child')).resolves.toEqual([
+      expect.objectContaining({ id: 'message-child', content: 'worker answer' })
     ])
+    await expect(handles.get(ipcChannels.workerInvocationsListByParentRun)?.({ sender: { id: 1 } }, 'run-restored')).resolves.toEqual([
+      expect.objectContaining({ id: 'worker-agent-1', childRunId: 'run-child' })
+    ])
+    await expect(handles.get(ipcChannels.conversationListRuns)?.({ sender: { id: 1 } }, session.id)).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'run-restored', sessionId: session.id }),
+      expect.objectContaining({ id: 'run-child', parentRunId: 'run-restored' })
+    ]))
     await expect(handles.get(ipcChannels.conversationListSteps)?.({ sender: { id: 1 } }, 'run-restored')).resolves.toEqual([
       expect.objectContaining({ id: 'step-restored', runId: 'run-restored' })
     ])

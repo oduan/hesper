@@ -1,4 +1,4 @@
-import { agentRunSchema, agentRuntimeEventSchema, messageSchema, modelConfigSchema, modelProviderConfigSchema, runStepSchema, sessionSchema, toolDefinitionBaseSchema } from '@hesper/shared'
+import { agentRunSchema, agentRuntimeEventSchema, messageSchema, modelConfigSchema, modelProviderConfigSchema, runStepSchema, sessionSchema, toolDefinitionBaseSchema, workerAgentInvocationSchema } from '@hesper/shared'
 import { z } from 'zod'
 
 export const ipcChannels = {
@@ -13,8 +13,10 @@ export const ipcChannels = {
   sessionsSetOutputMode: 'sessions:setOutputMode',
   sessionsMarkViewed: 'sessions:markViewed',
   conversationListMessages: 'conversation:listMessages',
+  conversationListMessagesByRun: 'conversation:listMessagesByRun',
   conversationListRuns: 'conversation:listRuns',
   conversationListSteps: 'conversation:listSteps',
+  workerInvocationsListByParentRun: 'workerInvocations:listByParentRun',
   dialogSelectDirectory: 'dialog:selectDirectory',
   agentEnqueue: 'agent:enqueue',
   agentStop: 'agent:stop',
@@ -74,8 +76,10 @@ export const generateSessionTitleInputSchema = z.object({
 export const sessionIdInputSchema = nonEmptyStringSchema
 export const runIdInputSchema = nonEmptyStringSchema
 export const conversationMessagesResultSchema = z.array(messageSchema)
+export const conversationMessagesByRunResultSchema = z.array(messageSchema)
 export const conversationRunsResultSchema = z.array(agentRunSchema)
 export const conversationStepsResultSchema = z.array(runStepSchema)
+export const workerInvocationsResultSchema = z.array(workerAgentInvocationSchema)
 
 export const setSessionWorkspaceInputSchema = z.object({
   id: nonEmptyStringSchema,
@@ -290,6 +294,7 @@ export type SessionDto = z.infer<typeof sessionSchema>
 export type MessageDto = z.infer<typeof messageSchema>
 export type AgentRunDto = z.infer<typeof agentRunSchema>
 export type RunStepDto = z.infer<typeof runStepSchema>
+export type WorkerAgentInvocationDto = z.infer<typeof workerAgentInvocationSchema>
 export type ModelProviderDto = z.infer<typeof modelProviderConfigSchema>
 export type ModelDto = z.infer<typeof modelConfigSchema>
 
@@ -308,8 +313,12 @@ export type HesperDesktopApi = {
   }
   conversation: {
     listMessages(sessionId: string): Promise<MessageDto[]>
+    listMessagesByRun?(runId: string): Promise<MessageDto[]>
     listRuns(sessionId: string): Promise<AgentRunDto[]>
     listSteps(runId: string): Promise<RunStepDto[]>
+  }
+  workerAgents?: {
+    listByParentRun(parentRunId: string): Promise<WorkerAgentInvocationDto[]>
   }
   agent: {
     enqueue(input: AgentEnqueueInput): Promise<{ runId: string }>
