@@ -70,6 +70,9 @@ const modelProviderConfigBaseSchema = z.object({
   if (provider.authType === 'oauth' && provider.piAuthProvider !== 'openai-codex') {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['piAuthProvider'], message: 'Codex OAuth requires openai-codex' })
   }
+  if (provider.piAuthProvider && provider.authType !== 'oauth') {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['authType'], message: 'piAuthProvider requires oauth authType' })
+  }
 })
 
 export const modelProviderConfigSchema = modelProviderConfigBaseSchema.transform(stripUndefined)

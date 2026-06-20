@@ -178,6 +178,44 @@ describe('shared schemas', () => {
     })).toThrow()
   })
 
+  it('rejects Pi OAuth provider metadata without an auth provider', () => {
+    expect(() => modelProviderConfigSchema.parse({
+      id: 'missing-codex-oauth',
+      name: 'Missing Codex OAuth',
+      kind: 'pi',
+      authType: 'oauth',
+      enabled: true,
+      createdAt: '2026-06-20T15:20:00.000Z',
+      updatedAt: '2026-06-20T15:20:00.000Z'
+    })).toThrow()
+  })
+
+  it('rejects Pi auth provider metadata on non-Pi providers', () => {
+    expect(() => modelProviderConfigSchema.parse({
+      id: 'openai-codex-oauth',
+      name: 'OpenAI with Codex OAuth',
+      kind: 'openai',
+      authType: 'oauth',
+      piAuthProvider: 'openai-codex',
+      enabled: true,
+      createdAt: '2026-06-20T15:20:00.000Z',
+      updatedAt: '2026-06-20T15:20:00.000Z'
+    })).toThrow()
+  })
+
+  it('rejects Pi auth provider metadata without OAuth auth type', () => {
+    expect(() => modelProviderConfigSchema.parse({
+      id: 'codex-api-key',
+      name: 'Codex API Key',
+      kind: 'pi',
+      authType: 'api_key',
+      piAuthProvider: 'openai-codex',
+      enabled: true,
+      createdAt: '2026-06-20T15:20:00.000Z',
+      updatedAt: '2026-06-20T15:20:00.000Z'
+    })).toThrow()
+  })
+
   it('validates model capabilities and provider linkage', () => {
     const parsed = modelConfigSchema.parse({
       id: 'deepseek-chat',

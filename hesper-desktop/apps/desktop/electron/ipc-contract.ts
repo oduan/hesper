@@ -180,14 +180,29 @@ export const providerCredentialStatusSchema = z.object({
   updatedAt: z.string().datetime().optional()
 }).strict()
 
+export const piAuthProviderSchema = z.enum(['openai-codex'])
+export const providerOAuthStatusSchema = z.enum(['pending', 'authorized', 'failed'])
+
 export const saveModelProviderInputSchema = z.object({
   id: nonEmptyStringSchema,
   name: nonEmptyStringSchema,
-  kind: z.enum(['mock', 'openai', 'deepseek', 'openai-compatible', 'anthropic', 'custom']),
+  kind: z.enum(['mock', 'openai', 'deepseek', 'openai-compatible', 'anthropic', 'custom', 'pi']),
+  authType: z.enum(['api_key', 'oauth', 'none']).optional(),
+  piAuthProvider: piAuthProviderSchema.optional(),
   baseUrl: z.string().url().optional(),
   enabled: z.boolean().optional(),
   defaultModelId: z.string().min(1).optional()
-}).strict()
+}).strict().superRefine((provider, ctx) => {
+  if (provider.piAuthProvider && provider.kind !== 'pi') {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['piAuthProvider'], message: 'piAuthProvider requires kind pi' })
+  }
+  if (provider.authType === 'oauth' && provider.piAuthProvider !== 'openai-codex') {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['piAuthProvider'], message: 'Codex OAuth requires openai-codex' })
+  }
+  if (provider.piAuthProvider && provider.authType !== 'oauth') {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['authType'], message: 'piAuthProvider requires oauth authType' })
+  }
+})
 
 export const providerIdInputSchema = z.object({
   providerId: nonEmptyStringSchema
@@ -195,16 +210,13 @@ export const providerIdInputSchema = z.object({
 
 export const providerConnectionTestInputSchema = z.object({
   providerId: nonEmptyStringSchema.optional(),
-  kind: z.enum(['mock', 'openai', 'deepseek', 'openai-compatible', 'anthropic', 'custom']).optional(),
+  kind: z.enum(['mock', 'openai', 'deepseek', 'openai-compatible', 'anthropic', 'custom', 'pi']).optional(),
   baseUrl: z.string().optional(),
   apiKey: z.string().optional(),
   modelId: z.string().optional()
 }).strict().refine((input) => input.providerId !== undefined || input.kind !== undefined, {
   message: 'providerId or kind is required'
 })
-
-export const piAuthProviderSchema = z.enum(['openai-codex'])
-export const providerOAuthStatusSchema = z.enum(['pending', 'authorized', 'failed'])
 
 export const providerOAuthStartInputSchema = z.object({
   provider: piAuthProviderSchema,
