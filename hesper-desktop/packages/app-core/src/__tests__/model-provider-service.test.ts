@@ -268,6 +268,8 @@ describe('createModelProviderService', () => {
       getAuthorizationStatus: vi.fn(async () => ({ status: 'authorized' as const, message: '授权成功' })),
       consumeAuthorization: vi.fn(async () => ({
         accessToken: 'codex-oauth-access-token',
+        refreshToken: 'codex-oauth-refresh-token',
+        expiresAt: Date.parse(now) + 3600_000,
         models: [
           { id: 'pi/gpt-5.5', modelName: 'gpt-5.5', displayName: 'GPT-5.5', capabilities: ['streaming', 'toolCalls', 'reasoning'] as any, contextWindow: 272000 },
           { id: 'pi/gpt-5.4-mini', modelName: 'gpt-5.4-mini', displayName: 'GPT-5.4 Mini', capabilities: ['streaming', 'toolCalls', 'reasoning'] as any, contextWindow: 272000 }
@@ -296,7 +298,9 @@ describe('createModelProviderService', () => {
     })
     expect((await service.listModels('chatgpt-codex')).map((model) => model.id)).toEqual(['pi/gpt-5.5', 'pi/gpt-5.4-mini'])
     expect(JSON.stringify(saved)).not.toContain('codex-oauth-access-token')
+    expect(JSON.stringify(saved)).not.toContain('codex-oauth-refresh-token')
     expect(Buffer.from(exportDatabaseBytes(persistence)).toString('latin1')).not.toContain('codex-oauth-access-token')
+    expect(Buffer.from(exportDatabaseBytes(persistence)).toString('latin1')).not.toContain('codex-oauth-refresh-token')
   })
 
   it('cancels Codex OAuth authorization sessions through the gateway', async () => {
@@ -333,6 +337,58 @@ describe('createModelProviderService', () => {
     await expect(service.saveOAuthConnection({ sessionId: 'oauth-session-cancel', connectionName: 'ChatGPT Codex' })).rejects.toThrow('授权会话不存在')
   })
 
+  it('rejects editing a Codex OAuth provider through generic custom API save and keeps persisted metadata intact', async () => {
+    const persistence = await createInMemoryPersistence()
+    const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
+    const oauthGateway = {
+      startAuthorization: vi.fn(async () => ({
+        sessionId: 'oauth-session-1',
+        authorizationUrl: 'https://auth.craft.do/oauth/openai-codex?state=oauth-session-1'
+      })),
+      getAuthorizationStatus: vi.fn(async () => ({ status: 'authorized' as const, message: '授权成功' })),
+      consumeAuthorization: vi.fn(async () => ({
+        accessToken: 'codex-oauth-access-token',
+        models: [
+          { id: 'pi/gpt-5.5', modelName: 'gpt-5.5', displayName: 'GPT-5.5', capabilities: ['streaming', 'toolCalls', 'reasoning'] as any, contextWindow: 272000 }
+        ],
+        defaultModelId: 'pi/gpt-5.5'
+      })),
+      cancelAuthorization: vi.fn(async () => {})
+    }
+    const service = createModelProviderService({ persistence, credentialVaultService, now: () => now, oauthGateway })
+
+    await service.startOAuthAuthorization({ provider: 'openai-codex', connectionName: 'ChatGPT Codex' })
+    await service.saveOAuthConnection({ sessionId: 'oauth-session-1', connectionName: 'ChatGPT Codex' })
+
+    await expect(service.saveProvider({
+      id: 'chatgpt-codex',
+      name: 'Broken',
+      kind: 'openai-compatible',
+      baseUrl: 'https://api.example.com'
+    })).rejects.toThrow('Codex OAuth providers cannot be edited as custom API providers')
+
+    await expect(service.getProvider('chatgpt-codex')).resolves.toMatchObject({
+      id: 'chatgpt-codex',
+      name: 'ChatGPT Codex',
+      kind: 'pi',
+      authType: 'oauth',
+      piAuthProvider: 'openai-codex'
+    })
+
+    await expect(service.saveProvider({
+      id: 'chatgpt-codex',
+      name: 'Renamed Codex',
+      kind: 'pi',
+      enabled: true,
+      defaultModelId: 'pi/gpt-5.5'
+    })).resolves.toMatchObject({
+      name: 'Renamed Codex',
+      kind: 'pi',
+      authType: 'oauth',
+      piAuthProvider: 'openai-codex'
+    })
+  })
+
   it('keeps Codex OAuth provider metadata after rebuilding the service', async () => {
     const persistence = await createInMemoryPersistence()
     const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
@@ -367,6 +423,36 @@ describe('createModelProviderService', () => {
     })
     await expect(rebuiltService.testProviderConnection({ providerId: 'chatgpt-codex' })).resolves.toMatchObject({ status: 'ok', hasApiKey: true, message: 'Codex 授权可用' })
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects invalid Codex OAuth consumed models before saving any provider or credential state', async () => {
+    const persistence = await createInMemoryPersistence()
+    const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
+    const saveProviderApiKeySpy = vi.spyOn(credentialVaultService, 'saveProviderApiKey')
+    const saveProviderSpy = vi.spyOn(persistence.modelProviders, 'save')
+    const oauthGateway = {
+      startAuthorization: vi.fn(async () => ({
+        sessionId: 'oauth-session-invalid-models',
+        authorizationUrl: 'https://auth.craft.do/oauth/openai-codex?state=oauth-session-invalid-models'
+      })),
+      getAuthorizationStatus: vi.fn(async () => ({ status: 'authorized' as const, message: '授权成功' })),
+      consumeAuthorization: vi.fn(async () => ({
+        accessToken: 'codex-oauth-access-token',
+        models: [],
+        defaultModelId: 'pi/gpt-5.5'
+      })),
+      cancelAuthorization: vi.fn(async () => {})
+    }
+    const service = createModelProviderService({ persistence, credentialVaultService, now: () => now, oauthGateway })
+
+    await service.startOAuthAuthorization({ provider: 'openai-codex', connectionName: 'ChatGPT Codex' })
+    await expect(service.saveOAuthConnection({ sessionId: 'oauth-session-invalid-models', connectionName: 'ChatGPT Codex' })).rejects.toThrow(/model/i)
+
+    expect(saveProviderApiKeySpy).not.toHaveBeenCalled()
+    expect(saveProviderSpy).not.toHaveBeenCalled()
+    await expect(service.getProvider('chatgpt-codex')).resolves.toBeUndefined()
+    await expect(service.listModels('chatgpt-codex')).resolves.toEqual([])
+    expect(Buffer.from(exportDatabaseBytes(persistence)).toString('latin1')).not.toContain('codex-oauth-access-token')
   })
 
   it('does not leave a half-initialized Codex OAuth provider when credential save fails', async () => {
@@ -439,6 +525,26 @@ describe('createModelProviderService', () => {
     await service.saveOAuthConnection({ sessionId: 'oauth-session-2', connectionName: 'ChatGPT Codex' })
 
     expect((await service.listModels('chatgpt-codex')).map((model) => model.id)).toEqual(['pi/gpt-5.5'])
+  })
+
+  it('requires reauthorization for expired Codex OAuth credentials without a refresh token', async () => {
+    const persistence = await createInMemoryPersistence()
+    const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
+    const fetchMock = vi.fn()
+    const service = createModelProviderService({ persistence, credentialVaultService, now: () => now, fetch: fetchMock as unknown as typeof fetch })
+
+    await service.saveProvider({ id: 'chatgpt-codex', name: 'ChatGPT Codex', kind: 'pi', authType: 'oauth', piAuthProvider: 'openai-codex', enabled: true, defaultModelId: 'pi/gpt-5.5' })
+    await credentialVaultService.saveProviderApiKey({
+      providerId: 'chatgpt-codex',
+      apiKey: JSON.stringify({ type: 'codex_oauth', accessToken: 'expired-access-token', expiresAt: Date.parse(now) - 1000 })
+    })
+
+    await expect(service.testProviderConnection({ providerId: 'chatgpt-codex' })).resolves.toMatchObject({
+      status: 'needs_api_key',
+      hasApiKey: false,
+      message: expect.stringContaining('重新授权')
+    })
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('tests Codex OAuth providers by credential status instead of chat completions probe', async () => {

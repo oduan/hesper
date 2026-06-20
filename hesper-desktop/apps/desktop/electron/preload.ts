@@ -82,6 +82,7 @@ const hesperApi: HesperDesktopApi = {
     testConnection: (input) => ipcRenderer.invoke(ipcChannels.providersTestConnection, input),
     startOAuthAuthorization: (input) => ipcRenderer.invoke(ipcChannels.providersStartOAuthAuthorization, input),
     getOAuthAuthorizationStatus: (input) => ipcRenderer.invoke(ipcChannels.providersGetOAuthAuthorizationStatus, input),
+    cancelOAuthAuthorization: (input) => ipcRenderer.invoke(ipcChannels.providersCancelOAuthAuthorization, input),
     saveOAuthConnection: (input) => ipcRenderer.invoke(ipcChannels.providersSaveOAuthConnection, input)
   },
   models: {

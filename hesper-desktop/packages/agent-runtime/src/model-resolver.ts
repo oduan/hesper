@@ -93,6 +93,30 @@ function assertNonEmpty(value: string | undefined, message: string): string {
   return normalized
 }
 
+function isCodexOAuthProvider(provider: ModelProviderConfig): boolean {
+  return provider.kind === 'pi' && provider.authType === 'oauth' && provider.piAuthProvider === 'openai-codex'
+}
+
+function accessTokenFromCodexOAuthCredential(rawCredential: string | undefined): string | undefined {
+  const trimmed = rawCredential?.trim()
+  if (!trimmed) return undefined
+  try {
+    const parsed = JSON.parse(trimmed) as unknown
+    if (typeof parsed !== 'object' || parsed === null || (parsed as { type?: unknown }).type !== 'codex_oauth') {
+      return undefined
+    }
+    const accessToken = (parsed as { accessToken?: unknown }).accessToken
+    return typeof accessToken === 'string' && accessToken.trim() ? accessToken.trim() : undefined
+  } catch {
+    return trimmed
+  }
+}
+
+async function readResolvedProviderApiKey(options: RegistryModelResolverOptions, provider: ModelProviderConfig): Promise<string | undefined> {
+  const rawCredential = await options.readProviderApiKey(provider.id)
+  return isCodexOAuthProvider(provider) ? accessTokenFromCodexOAuthCredential(rawCredential) : rawCredential
+}
+
 function createOpenAICompatibleModel(provider: ModelProviderConfig, model: ModelConfig): Model<Api> {
   const baseUrl = assertNonEmpty(provider.baseUrl, `Model provider ${provider.id} requires a baseUrl`)
   const contextWindow = model.contextWindow ?? 128000
@@ -152,7 +176,7 @@ async function assertProviderKey(options: RegistryModelResolverOptions, provider
     return
   }
 
-  const apiKey = await options.readProviderApiKey(provider.id)
+  const apiKey = await readResolvedProviderApiKey(options, provider)
   if (!apiKey) {
     if (provider.authType === 'oauth') {
       throw new Error(`Model provider needs OAuth authorization: ${provider.id}`)
@@ -230,7 +254,7 @@ export function createRegistryModelResolver(options: RegistryModelResolverOption
                 if (!apiKeyProviderAliases.has(requestedProvider)) {
                   return undefined
                 }
-                return options.readProviderApiKey(provider.id)
+                return readResolvedProviderApiKey(options, provider)
               }
             })
       }

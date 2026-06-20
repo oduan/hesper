@@ -6,10 +6,11 @@ const callbackPort = 14655
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 describe('createCodexOAuthGateway', () => {
-  it('starts a PKCE authorization flow, handles the localhost callback, and consumes only the access token', async () => {
+  it('starts a PKCE authorization flow, handles the localhost callback, and consumes structured OAuth credentials', async () => {
     const tokenFetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({
       access_token: 'codex-oauth-access-token',
-      refresh_token: 'do-not-return-to-renderer',
+      refresh_token: 'codex-oauth-refresh-token',
+      expires_in: 3600,
       id_token: 'do-not-return-id-token'
     }), { status: 200 }))
     const gateway = createCodexOAuthGateway({ fetch: tokenFetch as unknown as typeof fetch, callbackPort })
@@ -56,13 +57,16 @@ describe('createCodexOAuthGateway', () => {
     expect(body.get('code_verifier')).toMatch(/^[A-Za-z0-9_-]+$/)
     expect(consumed).toMatchObject({
       accessToken: 'codex-oauth-access-token',
+      refreshToken: 'codex-oauth-refresh-token',
       defaultModelId: 'pi/gpt-5.5',
       models: [
         expect.objectContaining({ id: 'pi/gpt-5.5', modelName: 'gpt-5.5' }),
         expect.objectContaining({ id: 'pi/gpt-5.4-mini', modelName: 'gpt-5.4-mini' })
       ]
     })
-    expect(JSON.stringify(consumed)).not.toContain('do-not-return')
+    expect(consumed.expiresAt).toEqual(expect.any(Number))
+    expect(consumed.expiresAt!).toBeGreaterThan(Date.now())
+    expect(JSON.stringify(consumed)).not.toContain('do-not-return-id-token')
   })
 
   it('ignores wrong-state callbacks and keeps the matching authorization flow usable', async () => {
@@ -132,4 +136,76 @@ describe('createCodexOAuthGateway', () => {
       await fetch(`http://localhost:${port}/auth/callback?state=${state}&code=cleanup-code`).catch(() => undefined)
     }
   })
+
+
+  it('cleans up authorized flows that are never consumed after the terminal TTL', async () => {
+    const port = callbackPort + 4
+    const tokenFetch = vi.fn(async () => new Response(JSON.stringify({ access_token: 'codex-oauth-access-token' }), { status: 200 }))
+    const gateway = createCodexOAuthGateway({
+      fetch: tokenFetch as unknown as typeof fetch,
+      callbackPort: port,
+      flowTtlMs: 1_000,
+      terminalFlowRetentionMs: 20
+    })
+    const started = await gateway.startAuthorization({ provider: 'openai-codex', connectionName: 'ChatGPT Codex' })
+    const state = new URL(started.authorizationUrl).searchParams.get('state')
+
+    const callbackResponse = await fetch(`http://localhost:${port}/auth/callback?state=${state}&code=codex-code`)
+    expect(callbackResponse.status).toBe(200)
+    await expect(gateway.getAuthorizationStatus({ sessionId: started.sessionId })).resolves.toEqual({
+      status: 'authorized',
+      message: '授权成功'
+    })
+
+    await delay(60)
+    await expect(gateway.getAuthorizationStatus({ sessionId: started.sessionId })).resolves.toEqual({
+      status: 'failed',
+      message: '授权会话不存在'
+    })
+    await expect(gateway.consumeAuthorization({ sessionId: started.sessionId })).rejects.toThrow('授权会话不存在')
+  })
+
+  it('cleans all unconsumed old flows before starting a new authorization request', async () => {
+    const port = callbackPort + 5
+    const tokenFetch = vi.fn(async () => new Response(JSON.stringify({ access_token: 'codex-oauth-access-token' }), { status: 200 }))
+    const gateway = createCodexOAuthGateway({ fetch: tokenFetch as unknown as typeof fetch, callbackPort: port, flowTtlMs: 1_000 })
+    const first = await gateway.startAuthorization({ provider: 'openai-codex', connectionName: 'First Codex' })
+    const firstState = new URL(first.authorizationUrl).searchParams.get('state')
+    const firstCallbackResponse = await fetch(`http://localhost:${port}/auth/callback?state=${firstState}&code=first-code`)
+    expect(firstCallbackResponse.status).toBe(200)
+    await expect(gateway.getAuthorizationStatus({ sessionId: first.sessionId })).resolves.toMatchObject({ status: 'authorized' })
+
+    const second = await gateway.startAuthorization({ provider: 'openai-codex', connectionName: 'Second Codex' })
+    await expect(gateway.getAuthorizationStatus({ sessionId: first.sessionId })).resolves.toEqual({
+      status: 'failed',
+      message: '授权会话不存在'
+    })
+    await expect(gateway.consumeAuthorization({ sessionId: first.sessionId })).rejects.toThrow('授权会话不存在')
+
+    await gateway.cancelAuthorization({ sessionId: second.sessionId })
+  })
+
+  it('removes timed-out failed flows after the terminal retention TTL', async () => {
+    const port = callbackPort + 6
+    const tokenFetch = vi.fn(async () => new Response(JSON.stringify({ access_token: 'codex-oauth-access-token' }), { status: 200 }))
+    const gateway = createCodexOAuthGateway({
+      fetch: tokenFetch as unknown as typeof fetch,
+      callbackPort: port,
+      flowTtlMs: 20,
+      terminalFlowRetentionMs: 20
+    })
+    const started = await gateway.startAuthorization({ provider: 'openai-codex', connectionName: 'ChatGPT Codex' })
+
+    await delay(25)
+    await expect(gateway.getAuthorizationStatus({ sessionId: started.sessionId })).resolves.toEqual({
+      status: 'failed',
+      message: '授权超时，请重新开始 Codex 授权'
+    })
+    await delay(40)
+    await expect(gateway.getAuthorizationStatus({ sessionId: started.sessionId })).resolves.toEqual({
+      status: 'failed',
+      message: '授权会话不存在'
+    })
+  })
+
 })

@@ -34,6 +34,7 @@ export const ipcChannels = {
   providersTestConnection: 'providers:testConnection',
   providersStartOAuthAuthorization: 'providers:startOAuthAuthorization',
   providersGetOAuthAuthorizationStatus: 'providers:getOAuthAuthorizationStatus',
+  providersCancelOAuthAuthorization: 'providers:cancelOAuthAuthorization',
   providersSaveOAuthConnection: 'providers:saveOAuthConnection',
   modelsList: 'models:list',
   modelsSave: 'models:save',
@@ -242,6 +243,15 @@ export const providerOAuthStatusResultSchema = z.object({
   message: z.string().min(1)
 }).strict()
 
+export const providerOAuthCancelInputSchema = z.object({
+  sessionId: nonEmptyStringSchema
+}).strict()
+
+export const providerOAuthCancelResultSchema = z.object({
+  cancelled: z.literal(true),
+  sessionId: nonEmptyStringSchema
+}).strict()
+
 export const providerOAuthSaveInputSchema = z.object({
   sessionId: nonEmptyStringSchema,
   connectionName: nonEmptyStringSchema
@@ -342,6 +352,8 @@ export type ProviderOAuthStartInput = z.infer<typeof providerOAuthStartInputSche
 export type ProviderOAuthStartResult = z.infer<typeof providerOAuthStartResultSchema>
 export type ProviderOAuthStatusInput = z.infer<typeof providerOAuthStatusInputSchema>
 export type ProviderOAuthStatusResult = z.infer<typeof providerOAuthStatusResultSchema>
+export type ProviderOAuthCancelInput = z.infer<typeof providerOAuthCancelInputSchema>
+export type ProviderOAuthCancelResult = z.infer<typeof providerOAuthCancelResultSchema>
 export type ProviderOAuthSaveInput = z.infer<typeof providerOAuthSaveInputSchema>
 export type ListModelsInput = z.infer<typeof listModelsInputSchema>
 export type SaveModelInput = z.infer<typeof saveModelInputSchema>
@@ -410,6 +422,7 @@ export type HesperDesktopApi = {
     testConnection(input: ProviderConnectionTestInput): Promise<ProviderConnectionTestResult>
     startOAuthAuthorization(input: ProviderOAuthStartInput): Promise<ProviderOAuthStartResult>
     getOAuthAuthorizationStatus(input: ProviderOAuthStatusInput): Promise<ProviderOAuthStatusResult>
+    cancelOAuthAuthorization(input: ProviderOAuthCancelInput): Promise<ProviderOAuthCancelResult>
     saveOAuthConnection(input: ProviderOAuthSaveInput): Promise<ModelProviderDto>
   }
   models: {

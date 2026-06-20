@@ -21,6 +21,8 @@ import {
   providerConnectionTestInputSchema,
   providerConnectionTestResultSchema,
   providerCredentialInputSchema,
+  providerOAuthCancelInputSchema,
+  providerOAuthCancelResultSchema,
   providerOAuthSaveInputSchema,
   providerOAuthStartInputSchema,
   providerOAuthStartResultSchema,
@@ -466,6 +468,11 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       const input = providerOAuthStatusInputSchema.parse(payload)
       const result = await options.container.modelProviderService.getOAuthAuthorizationStatus(input)
       return providerOAuthStatusResultSchema.parse(result)
+    },
+    [ipcChannels.providersCancelOAuthAuthorization]: async (_event, payload) => {
+      const input = providerOAuthCancelInputSchema.parse(payload)
+      const result = await options.container.modelProviderService.cancelOAuthAuthorization(input)
+      return providerOAuthCancelResultSchema.parse(result)
     },
     [ipcChannels.providersSaveOAuthConnection]: async (_event, payload) => {
       const provider = await options.container.modelProviderService.saveOAuthConnection(providerOAuthSaveInputSchema.parse(payload))

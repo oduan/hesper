@@ -1,5 +1,6 @@
 import { AgentRuntime, MockAgentAdapter, PiCoreAgentAdapter, createPiAgentTools, createRegistryModelResolver, createSessionTitleGenerator, createWorkerAgentService } from '@hesper/agent-runtime'
 import {
+  codexOAuthAccessTokenFromCredential,
   createCodexOAuthGateway,
   createConversationService,
   createCredentialVaultService,
@@ -54,13 +55,17 @@ export function createServiceContainer(options: ServiceContainerOptions) {
     ...(options.oauthGateway ? { oauthGateway: options.oauthGateway } : { oauthGateway: createCodexOAuthGateway() })
   })
   void modelProviderService.ensureBuiltinProviders()
+  const readResolvedProviderApiKey = async (providerId: string): Promise<string | undefined> => {
+    const credential = await credentialVaultService.readProviderApiKey(providerId)
+    return codexOAuthAccessTokenFromCredential(credential) ?? credential
+  }
   const modelResolver = createRegistryModelResolver({
     registry: {
       ensureReady: () => modelProviderService.ensureBuiltinProviders(),
       getProvider: (id) => modelProviderService.getProvider(id),
       listModels: (providerId) => modelProviderService.listModels(providerId)
     },
-    readProviderApiKey: (providerId) => credentialVaultService.readProviderApiKey(providerId)
+    readProviderApiKey: readResolvedProviderApiKey
   })
   const allowlistPolicy = createAllowlistPermissionPolicy()
   let workerAgentService!: ReturnType<typeof createWorkerAgentService>

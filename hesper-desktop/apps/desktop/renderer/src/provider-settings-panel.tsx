@@ -39,6 +39,21 @@ type CodexOAuthState = {
 
 const initialCodexOAuthState: CodexOAuthState = { connectionName: 'ChatGPT Codex', status: 'idle' }
 
+function isCodexOAuthProvider(provider: ModelProviderDto): boolean {
+  return provider.kind === 'pi' && provider.authType === 'oauth' && provider.piAuthProvider === 'openai-codex'
+}
+
+function providerAuthStatusText(provider: ModelProviderDto): string {
+  if (provider.authType === 'oauth') {
+    return provider.hasApiKey ? '已授权' : '未授权'
+  }
+  return provider.hasApiKey ? '已保存 key' : '未保存 key'
+}
+
+function providerMetaText(provider: ModelProviderDto): string {
+  return `${provider.kind} · ${provider.baseUrl ?? '使用默认端点'} · ${providerAuthStatusText(provider)}`
+}
+
 export type ProviderSettingsPanelProps = {
   onModelRegistryChanged?: () => void | Promise<void>
 }
@@ -154,9 +169,28 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
   const mountedRef = useRef(true)
   const loadRequestIdRef = useRef(0)
   const codexOAuthRequestIdRef = useRef(0)
+  const codexOAuthSessionIdRef = useRef<string | undefined>(undefined)
   const renameInputRef = useRef<HTMLInputElement | null>(null)
 
   const visibleProviders = useMemo(() => providers.filter((provider) => provider.enabled !== false), [providers])
+
+  async function cancelCodexOAuthSession(sessionId: string): Promise<void> {
+    try {
+      await hesperApi.providers.cancelOAuthAuthorization({ sessionId })
+    } catch {
+      // Cancellation is best-effort UI cleanup; stale backend sessions will expire server-side.
+    }
+  }
+
+  const resetCodexOAuthState = (options: { cancel?: boolean; connectionName?: string } = {}) => {
+    codexOAuthRequestIdRef.current += 1
+    const sessionId = codexOAuthSessionIdRef.current
+    codexOAuthSessionIdRef.current = undefined
+    setCodexOAuthState({ connectionName: options.connectionName ?? initialCodexOAuthState.connectionName, status: 'idle' })
+    if (options.cancel && sessionId) {
+      void cancelCodexOAuthSession(sessionId)
+    }
+  }
 
   const loadProviderSettings = async () => {
     const requestId = loadRequestIdRef.current + 1
@@ -183,6 +217,12 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
     return () => {
       mountedRef.current = false
       loadRequestIdRef.current += 1
+      codexOAuthRequestIdRef.current += 1
+      const sessionId = codexOAuthSessionIdRef.current
+      codexOAuthSessionIdRef.current = undefined
+      if (sessionId) {
+        void cancelCodexOAuthSession(sessionId)
+      }
     }
   }, [])
 
@@ -195,18 +235,13 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
     return () => window.clearTimeout(timer)
   }, [renamingProviderId])
 
-  const resetCodexOAuthState = () => {
-    codexOAuthRequestIdRef.current += 1
-    setCodexOAuthState({ ...initialCodexOAuthState })
-  }
-
   const openAddConnection = () => {
     setError(undefined)
     setMessage(undefined)
     setConnectionResult(undefined)
     setOpenMenuProviderId(undefined)
     setDialogState(undefined)
-    resetCodexOAuthState()
+    resetCodexOAuthState({ cancel: true })
     setAddConnectionFlow('picker')
   }
 
@@ -215,29 +250,29 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
     setMessage(undefined)
     setConnectionResult(undefined)
     setOpenMenuProviderId(undefined)
-    resetCodexOAuthState()
+    resetCodexOAuthState({ cancel: true })
     setAddConnectionFlow('custom')
     setDialogState({ mode: 'add', form: createConnectionForm() })
   }
 
-  const openCodexConnection = () => {
+  const openCodexConnection = (connectionName = initialCodexOAuthState.connectionName) => {
     setError(undefined)
     setMessage(undefined)
     setConnectionResult(undefined)
     setOpenMenuProviderId(undefined)
     setDialogState(undefined)
-    resetCodexOAuthState()
+    resetCodexOAuthState({ cancel: true, connectionName })
     setAddConnectionFlow('codex')
   }
 
   const closeCodexConnection = () => {
-    resetCodexOAuthState()
+    resetCodexOAuthState({ cancel: true })
     setAddConnectionFlow(undefined)
   }
 
   const backFromCodexConnection = () => {
     setError(undefined)
-    resetCodexOAuthState()
+    resetCodexOAuthState({ cancel: true })
     setAddConnectionFlow('picker')
   }
 
@@ -260,6 +295,11 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
     const connectionName = codexOAuthState.connectionName.trim() || initialCodexOAuthState.connectionName
     const requestId = codexOAuthRequestIdRef.current + 1
     codexOAuthRequestIdRef.current = requestId
+    const previousSessionId = codexOAuthSessionIdRef.current
+    codexOAuthSessionIdRef.current = undefined
+    if (previousSessionId) {
+      void cancelCodexOAuthSession(previousSessionId)
+    }
     setError(undefined)
     setMessage(undefined)
     setCodexOAuthState({ connectionName, status: 'idle', action: 'starting' })
@@ -267,6 +307,7 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
     try {
       const result = await hesperApi.providers.startOAuthAuthorization({ provider: 'openai-codex', connectionName })
       if (!mountedRef.current || requestId !== codexOAuthRequestIdRef.current) return
+      codexOAuthSessionIdRef.current = result.sessionId
       setCodexOAuthState({
         connectionName,
         sessionId: result.sessionId,
@@ -332,6 +373,7 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
 
     try {
       const provider = await hesperApi.providers.saveOAuthConnection({ sessionId, connectionName })
+      codexOAuthSessionIdRef.current = undefined
       if (!mountedRef.current || requestId !== codexOAuthRequestIdRef.current) return
 
       try {
@@ -497,6 +539,29 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
     }
   }
 
+  const reauthorizeCodexConnection = (provider: ModelProviderDto) => {
+    openCodexConnection(provider.name)
+  }
+
+  const testSavedConnection = async (provider: ModelProviderDto) => {
+    setOpenMenuProviderId(undefined)
+    setError(undefined)
+    setMessage(undefined)
+    setConnectionResult(undefined)
+    try {
+      const result = await hesperApi.providers.testConnection({ providerId: provider.id })
+      if (!mountedRef.current) return
+      if (result.status === 'ok') {
+        setMessage(result.message)
+      } else {
+        setError(result.message)
+      }
+    } catch (testError) {
+      if (!mountedRef.current) return
+      setError(testError instanceof Error ? testError.message : '连接测试失败')
+    }
+  }
+
   return (
     <section aria-label="模型来源设置" style={settingsPanelStyle} onClick={() => setOpenMenuProviderId(undefined)}>
       <header style={settingsHeaderStyle}>
@@ -572,7 +637,7 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
                       )}
                     </span>
                     <span style={providerMetaStyle}>
-                      {provider.kind} · {provider.baseUrl ?? '使用默认端点'} · {provider.hasApiKey ? '已保存 key' : '未保存 key'}
+                      {providerMetaText(provider)}
                     </span>
                   </span>
                 </div>
@@ -589,7 +654,14 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
                 </button>
                 {openMenuProviderId === provider.id ? (
                   <div role="menu" aria-label={`${provider.name} 连接菜单`} style={connectionMenuStyle} onClick={(event) => event.stopPropagation()}>
-                    <button type="button" role="menuitem" style={connectionMenuItemStyle} onClick={() => openEditConnection(provider)}>编辑</button>
+                    {isCodexOAuthProvider(provider) ? (
+                      <>
+                        <button type="button" role="menuitem" style={connectionMenuItemStyle} onClick={() => reauthorizeCodexConnection(provider)}>重新授权</button>
+                        <button type="button" role="menuitem" style={connectionMenuItemStyle} onClick={() => void testSavedConnection(provider)}>验证连接</button>
+                      </>
+                    ) : (
+                      <button type="button" role="menuitem" style={connectionMenuItemStyle} onClick={() => openEditConnection(provider)}>编辑</button>
+                    )}
                     <button type="button" role="menuitem" style={{ ...connectionMenuItemStyle, color: dangerTextColor }} onClick={() => void deleteConnection(provider)}>删除</button>
                   </div>
                 ) : null}
@@ -602,7 +674,7 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
 
       {addConnectionFlow === 'picker' ? (
         <ConnectionTypePicker
-          onSelectCodex={openCodexConnection}
+          onSelectCodex={() => openCodexConnection()}
           onSelectCustom={openCustomConnection}
           onCancel={() => setAddConnectionFlow(undefined)}
         />

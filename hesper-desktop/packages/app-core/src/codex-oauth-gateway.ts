@@ -5,6 +5,7 @@ import type { ProviderOAuthGateway, PiAuthProvider, ProviderOAuthStatus } from '
 const codexOAuthClientId = 'app_EMoamEEZ73f0CkXaXp7hrann'
 const defaultCallbackPort = 1455
 const defaultFlowTtlMs = 10 * 60 * 1000
+const defaultTerminalFlowRetentionMs = 5 * 60 * 1000
 const timeoutMessage = '授权超时，请重新开始 Codex 授权'
 const callbackPath = '/auth/callback'
 const authorizationEndpoint = 'https://auth.openai.com/oauth/authorize'
@@ -26,12 +27,14 @@ type CodexOAuthFlow = {
   code?: string
   server?: Server | undefined
   timeout?: ReturnType<typeof setTimeout> | undefined
+  cleanupTimeout?: ReturnType<typeof setTimeout> | undefined
 }
 
 export type CodexOAuthGatewayOptions = {
   fetch?: typeof fetch
   callbackPort?: number
   flowTtlMs?: number
+  terminalFlowRetentionMs?: number
 }
 
 function randomUrlSafeString(byteLength: number): string {
@@ -64,6 +67,17 @@ function clearFlowTimeout(flow: CodexOAuthFlow): void {
   if (!flow.timeout) return
   clearTimeout(flow.timeout)
   flow.timeout = undefined
+}
+
+function clearFlowCleanupTimeout(flow: CodexOAuthFlow): void {
+  if (!flow.cleanupTimeout) return
+  clearTimeout(flow.cleanupTimeout)
+  flow.cleanupTimeout = undefined
+}
+
+function clearFailedFlowSensitiveState(flow: CodexOAuthFlow): void {
+  delete flow.code
+  flow.codeVerifier = ''
 }
 
 function closeFlowServer(flow: CodexOAuthFlow): Promise<void> {
@@ -109,44 +123,64 @@ async function readJson(response: Response): Promise<unknown> {
   }
 }
 
-function tokenFromPayload(payload: unknown): string | undefined {
-  if (typeof payload !== 'object' || payload === null) return undefined
+function tokenDetailsFromPayload(payload: unknown): { accessToken?: string; refreshToken?: string; expiresAt?: number } {
+  if (typeof payload !== 'object' || payload === null) return {}
   const accessToken = (payload as { access_token?: unknown }).access_token
-  return typeof accessToken === 'string' && accessToken.trim() ? accessToken.trim() : undefined
+  const refreshToken = (payload as { refresh_token?: unknown }).refresh_token
+  const expiresIn = (payload as { expires_in?: unknown }).expires_in
+  const normalizedAccessToken = typeof accessToken === 'string' && accessToken.trim() ? accessToken.trim() : undefined
+  const normalizedRefreshToken = typeof refreshToken === 'string' && refreshToken.trim() ? refreshToken.trim() : undefined
+  const normalizedExpiresIn = typeof expiresIn === 'number' ? expiresIn : typeof expiresIn === 'string' && expiresIn.trim() ? Number(expiresIn) : undefined
+  return {
+    ...(normalizedAccessToken ? { accessToken: normalizedAccessToken } : {}),
+    ...(normalizedRefreshToken ? { refreshToken: normalizedRefreshToken } : {}),
+    ...(normalizedExpiresIn !== undefined && Number.isFinite(normalizedExpiresIn) && normalizedExpiresIn > 0 ? { expiresAt: Date.now() + Math.floor(normalizedExpiresIn * 1000) } : {})
+  }
 }
 
 export function createCodexOAuthGateway(options: CodexOAuthGatewayOptions = {}): ProviderOAuthGateway {
   const fetchImpl = options.fetch ?? globalThis.fetch
   const callbackPort = options.callbackPort ?? defaultCallbackPort
   const flowTtlMs = options.flowTtlMs ?? defaultFlowTtlMs
+  const terminalFlowRetentionMs = options.terminalFlowRetentionMs ?? defaultTerminalFlowRetentionMs
   const redirectUri = `http://localhost:${callbackPort}${callbackPath}`
   const flows = new Map<string, CodexOAuthFlow>()
-
-  const failFlow = (flow: CodexOAuthFlow, message: string): void => {
-    flow.status = 'failed'
-    flow.message = message
-    clearFlowTimeout(flow)
-    void closeFlowServer(flow)
-  }
 
   const deleteFlow = async (sessionId: string): Promise<void> => {
     const flow = flows.get(sessionId)
     if (!flow) return
     flows.delete(sessionId)
     clearFlowTimeout(flow)
+    clearFlowCleanupTimeout(flow)
     await closeFlowServer(flow)
   }
 
-  const cancelPendingFlows = async (): Promise<void> => {
-    await Promise.all([...flows.values()]
-      .filter((flow) => flow.status === 'pending')
-      .map(async (flow) => {
-        flows.delete(flow.sessionId)
-        flow.status = 'failed'
-        flow.message = '授权已被新的授权请求替换'
-        clearFlowTimeout(flow)
-        await closeFlowServer(flow)
-      }))
+  const scheduleFlowDeletion = (flow: CodexOAuthFlow): void => {
+    clearFlowCleanupTimeout(flow)
+    flow.cleanupTimeout = setTimeout(() => {
+      void deleteFlow(flow.sessionId)
+    }, Math.max(0, terminalFlowRetentionMs))
+    flow.cleanupTimeout.unref?.()
+  }
+
+  const markFlowFailed = (flow: CodexOAuthFlow, message: string): void => {
+    flow.status = 'failed'
+    flow.message = message
+    clearFlowTimeout(flow)
+    clearFailedFlowSensitiveState(flow)
+    scheduleFlowDeletion(flow)
+  }
+
+  const cleanupUnconsumedFlows = async (): Promise<void> => {
+    await Promise.all([...flows.values()].map(async (flow) => {
+      flows.delete(flow.sessionId)
+      flow.status = 'failed'
+      flow.message = '授权已被新的授权请求替换'
+      clearFlowTimeout(flow)
+      clearFlowCleanupTimeout(flow)
+      clearFailedFlowSensitiveState(flow)
+      await closeFlowServer(flow)
+    }))
   }
 
   const handleCallback = (flow: CodexOAuthFlow, request: IncomingMessage, response: ServerResponse): void => {
@@ -170,18 +204,14 @@ export function createCodexOAuthGateway(options: CodexOAuthGatewayOptions = {}):
 
     const error = requestUrl.searchParams.get('error')
     if (error) {
-      flow.status = 'failed'
-      flow.message = requestUrl.searchParams.get('error_description') ?? error
-      clearFlowTimeout(flow)
+      markFlowFailed(flow, requestUrl.searchParams.get('error_description') ?? error)
       finish(400, 'Codex authorization failed', flow.message)
       return
     }
 
     const code = requestUrl.searchParams.get('code')
     if (!code) {
-      flow.status = 'failed'
-      flow.message = 'OAuth callback did not include an authorization code'
-      clearFlowTimeout(flow)
+      markFlowFailed(flow, 'OAuth callback did not include an authorization code')
       finish(400, 'Codex authorization failed', flow.message)
       return
     }
@@ -190,13 +220,14 @@ export function createCodexOAuthGateway(options: CodexOAuthGatewayOptions = {}):
     flow.message = '授权成功'
     flow.code = code
     clearFlowTimeout(flow)
+    scheduleFlowDeletion(flow)
     finish(200, 'Codex authorization complete', 'Authorization succeeded. You can close this window and return to hesper.')
   }
 
   return {
     async startAuthorization(input) {
       if ((input.provider as string) !== 'openai-codex') throw new Error(`Unsupported OAuth provider: ${input.provider}`)
-      await cancelPendingFlows()
+      await cleanupUnconsumedFlows()
       const sessionId = randomUrlSafeString(24)
       const codeVerifier = randomUrlSafeString(32)
       const flow: CodexOAuthFlow = {
@@ -224,9 +255,11 @@ export function createCodexOAuthGateway(options: CodexOAuthGatewayOptions = {}):
 
       flow.timeout = setTimeout(() => {
         if (flow.status === 'pending') {
-          failFlow(flow, timeoutMessage)
+          markFlowFailed(flow, timeoutMessage)
+          void closeFlowServer(flow)
         }
       }, Math.max(0, flowTtlMs))
+      flow.timeout.unref?.()
 
       const authorizationUrl = new URL(authorizationEndpoint)
       authorizationUrl.searchParams.set('client_id', codexOAuthClientId)
@@ -271,14 +304,16 @@ export function createCodexOAuthGateway(options: CodexOAuthGatewayOptions = {}):
       if (!response.ok) {
         throw new Error(`Codex OAuth token exchange failed with HTTP ${response.status}`)
       }
-      const accessToken = tokenFromPayload(payload)
-      if (!accessToken) {
+      const tokenDetails = tokenDetailsFromPayload(payload)
+      if (!tokenDetails.accessToken) {
         throw new Error('Codex OAuth token response did not include an access token')
       }
 
       await deleteFlow(input.sessionId)
       return {
-        accessToken,
+        accessToken: tokenDetails.accessToken,
+        ...(tokenDetails.refreshToken ? { refreshToken: tokenDetails.refreshToken } : {}),
+        ...(tokenDetails.expiresAt !== undefined ? { expiresAt: tokenDetails.expiresAt } : {}),
         defaultModelId: 'pi/gpt-5.5',
         models: defaultModels.map((model) => ({ ...model, capabilities: [...model.capabilities] }))
       }

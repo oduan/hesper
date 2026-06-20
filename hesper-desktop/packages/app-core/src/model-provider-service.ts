@@ -1,5 +1,5 @@
 import type { Persistence } from '@hesper/persistence'
-import { nowIso, type ModelConfig, type ModelProviderConfig, type ModelProviderKind } from '@hesper/shared'
+import { modelProviderConfigSchema, nowIso, type ModelConfig, type ModelProviderConfig, type ModelProviderKind } from '@hesper/shared'
 import { providerApiKeyRef, type CredentialVaultService } from './credential-vault-service'
 
 export type PiAuthProvider = 'openai-codex'
@@ -11,6 +11,8 @@ export type ProviderOAuthGateway = {
   cancelAuthorization(input: { sessionId: string }): Promise<void>
   consumeAuthorization(input: { sessionId: string }): Promise<{
     accessToken: string
+    refreshToken?: string
+    expiresAt?: number
     models: Array<{ id: string; modelName: string; displayName: string; capabilities: ModelConfig['capabilities']; contextWindow?: number }>
     defaultModelId: string
   }>
@@ -85,6 +87,71 @@ const modelPresets: SaveModelInput[] = [
 ]
 
 const builtinProviderIds = new Set(providerPresets.map((provider) => provider.id))
+const validModelCapabilities = new Set<ModelConfig['capabilities'][number]>(['streaming', 'toolCalls', 'jsonOutput', 'reasoning'])
+
+export type CodexOAuthCredential = {
+  type: 'codex_oauth'
+  accessToken: string
+  refreshToken?: string
+  expiresAt?: number
+}
+
+function stripUndefinedRecord<T extends Record<string, unknown>>(value: T): T {
+  return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined)) as T
+}
+
+export function parseCodexOAuthCredential(value: string | undefined): CodexOAuthCredential | undefined {
+  const trimmed = value?.trim()
+  if (!trimmed) return undefined
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown
+    if (typeof parsed !== 'object' || parsed === null || (parsed as { type?: unknown }).type !== 'codex_oauth') {
+      return undefined
+    }
+
+    const accessToken = typeof (parsed as { accessToken?: unknown }).accessToken === 'string'
+      ? (parsed as { accessToken: string }).accessToken.trim()
+      : ''
+    if (!accessToken) return undefined
+
+    const refreshToken = typeof (parsed as { refreshToken?: unknown }).refreshToken === 'string'
+      ? (parsed as { refreshToken: string }).refreshToken.trim()
+      : undefined
+    const expiresAt = typeof (parsed as { expiresAt?: unknown }).expiresAt === 'number' && Number.isFinite((parsed as { expiresAt: number }).expiresAt)
+      ? (parsed as { expiresAt: number }).expiresAt
+      : undefined
+
+    const credential: CodexOAuthCredential = { type: 'codex_oauth', accessToken }
+    if (refreshToken) {
+      credential.refreshToken = refreshToken
+    }
+    if (expiresAt !== undefined) {
+      credential.expiresAt = expiresAt
+    }
+    return credential
+  } catch {
+    return { type: 'codex_oauth', accessToken: trimmed }
+  }
+}
+
+export function codexOAuthAccessTokenFromCredential(value: string | undefined): string | undefined {
+  return parseCodexOAuthCredential(value)?.accessToken
+}
+
+function serializeCodexOAuthCredential(input: { accessToken: string; refreshToken?: string; expiresAt?: number }): string {
+  return JSON.stringify(stripUndefinedRecord({
+    type: 'codex_oauth' as const,
+    accessToken: input.accessToken,
+    refreshToken: input.refreshToken,
+    expiresAt: input.expiresAt
+  }))
+}
+
+function isCodexOAuthProvider(provider: ModelProviderConfig | undefined): provider is ModelProviderConfig & { kind: 'pi'; authType: 'oauth'; piAuthProvider: 'openai-codex' } {
+  return provider?.kind === 'pi' && provider.authType === 'oauth' && provider.piAuthProvider === 'openai-codex'
+}
+
 const connectionTestPrompt = 'Reply with only: hesper-ok'
 const connectionTestTimeoutMs = 15_000
 
@@ -92,8 +159,55 @@ function assertId(id: string, label = 'id'): void {
   if (!id.trim()) throw new Error(`${label} is required`)
 }
 
+type ConsumedCodexAuthorization = Awaited<ReturnType<ProviderOAuthGateway['consumeAuthorization']>>
+
+function validateConsumedCodexAuthorization(consumed: ConsumedCodexAuthorization): void {
+  assertId(consumed.accessToken, 'accessToken')
+  assertId(consumed.defaultModelId, 'defaultModelId')
+  if (!Array.isArray(consumed.models) || consumed.models.length === 0) {
+    throw new Error('Codex OAuth authorization did not return any models')
+  }
+
+  const modelIds = new Set<string>()
+  for (const [index, model] of consumed.models.entries()) {
+    assertId(model.id, `models[${index}].id`)
+    assertId(model.modelName, `models[${index}].modelName`)
+    assertId(model.displayName, `models[${index}].displayName`)
+    if (!Array.isArray(model.capabilities) || model.capabilities.length === 0) {
+      throw new Error(`models[${index}].capabilities is required`)
+    }
+    for (const capability of model.capabilities) {
+      if (!validModelCapabilities.has(capability)) {
+        throw new Error(`models[${index}].capabilities contains unsupported capability: ${capability as string}`)
+      }
+    }
+    if (model.contextWindow !== undefined && (!Number.isInteger(model.contextWindow) || model.contextWindow <= 0)) {
+      throw new Error(`models[${index}].contextWindow must be a positive integer`)
+    }
+    modelIds.add(model.id)
+  }
+
+  if (!modelIds.has(consumed.defaultModelId)) {
+    throw new Error('Codex OAuth defaultModelId must be one of the returned models')
+  }
+}
+
+function assertCodexOAuthGenericSaveAllowed(existing: ModelProviderConfig | undefined, input: SaveModelProviderInput): void {
+  if (!isCodexOAuthProvider(existing)) return
+
+  const changesCodexIdentity = input.kind !== 'pi'
+    || (input.authType !== undefined && input.authType !== 'oauth')
+    || (input.piAuthProvider !== undefined && input.piAuthProvider !== 'openai-codex')
+    || input.baseUrl !== undefined
+
+  if (changesCodexIdentity) {
+    throw new Error('Codex OAuth providers cannot be edited as custom API providers')
+  }
+}
+
 function mergeProvider(existing: ModelProviderConfig | undefined, input: SaveModelProviderInput, timestamp: string, hasApiKey: boolean): ModelProviderConfig {
-  return {
+  assertCodexOAuthGenericSaveAllowed(existing, input)
+  return modelProviderConfigSchema.parse({
     id: input.id,
     name: input.name,
     kind: input.kind,
@@ -106,7 +220,7 @@ function mergeProvider(existing: ModelProviderConfig | undefined, input: SaveMod
     ...(input.piAuthProvider !== undefined ? { piAuthProvider: input.piAuthProvider } : existing?.piAuthProvider !== undefined ? { piAuthProvider: existing.piAuthProvider } : {}),
     ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : existing?.baseUrl !== undefined ? { baseUrl: existing.baseUrl } : {}),
     ...(input.defaultModelId !== undefined ? { defaultModelId: input.defaultModelId } : existing?.defaultModelId !== undefined ? { defaultModelId: existing.defaultModelId } : {})
-  }
+  })
 }
 
 function mergeModel(existing: ModelConfig | undefined, input: SaveModelInput, timestamp: string): ModelConfig {
@@ -463,27 +577,61 @@ export function createModelProviderService(options: {
         throw new Error(authorizationStatus.message || '授权尚未完成')
       }
       const consumed = await gateway.consumeAuthorization({ sessionId: input.sessionId })
+      validateConsumedCodexAuthorization(consumed)
       const providerId = 'chatgpt-codex'
-      await options.credentialVaultService.saveProviderApiKey({ providerId, apiKey: consumed.accessToken })
-      const provider = await saveProviderInternal({
-        id: providerId,
-        name: input.connectionName.trim(),
-        kind: 'pi',
-        authType: 'oauth',
-        piAuthProvider: session.provider,
-        enabled: true,
-        defaultModelId: consumed.defaultModelId
-      })
-      await options.persistence.models.deleteByProvider(provider.id)
-      for (const model of consumed.models) {
-        await saveModelInternal({
-          ...model,
-          providerId: provider.id,
-          enabled: true
-        })
+      const previousProvider = await options.persistence.modelProviders.get(providerId)
+      const previousModels = await options.persistence.models.listByProvider(providerId)
+      const previousCredential = await options.persistence.credentialRecords.get(providerApiKeyRef(providerId))
+
+      const rollbackCodexConnection = async (): Promise<void> => {
+        await options.persistence.models.deleteByProvider(providerId)
+        for (const model of previousModels) {
+          await options.persistence.models.save(model)
+        }
+        if (previousProvider) {
+          await options.persistence.modelProviders.save(previousProvider)
+        } else {
+          await options.persistence.modelProviders.delete(providerId)
+        }
+        if (previousCredential) {
+          await options.persistence.credentialRecords.save(previousCredential)
+        } else {
+          await options.persistence.credentialRecords.delete(providerApiKeyRef(providerId))
+        }
       }
-      oauthSessions.delete(input.sessionId)
-      return withCredentialStatus(provider)
+
+      try {
+        await options.credentialVaultService.saveProviderApiKey({
+          providerId,
+          apiKey: serializeCodexOAuthCredential({
+            accessToken: consumed.accessToken,
+            ...(consumed.refreshToken !== undefined ? { refreshToken: consumed.refreshToken } : {}),
+            ...(consumed.expiresAt !== undefined ? { expiresAt: consumed.expiresAt } : {})
+          })
+        })
+        const provider = await saveProviderInternal({
+          id: providerId,
+          name: input.connectionName.trim(),
+          kind: 'pi',
+          authType: 'oauth',
+          piAuthProvider: session.provider,
+          enabled: true,
+          defaultModelId: consumed.defaultModelId
+        })
+        await options.persistence.models.deleteByProvider(provider.id)
+        for (const model of consumed.models) {
+          await saveModelInternal({
+            ...model,
+            providerId: provider.id,
+            enabled: true
+          })
+        }
+        oauthSessions.delete(input.sessionId)
+        return withCredentialStatus(provider)
+      } catch (error) {
+        await rollbackCodexConnection()
+        throw error
+      }
     },
     async testProviderConnection(input) {
       const testInput = connectionTestInput(input)
@@ -521,12 +669,22 @@ export function createModelProviderService(options: {
         return { providerId: provider.id, status: 'ok', hasApiKey: false, message: 'Mock provider is available.' }
       }
 
-      const isCodexOAuthProvider = provider.kind === 'pi' && provider.authType === 'oauth' && provider.piAuthProvider === 'openai-codex'
-      if (isCodexOAuthProvider) {
-        const credentialStatus = await options.credentialVaultService.getProviderApiKeyStatus({ providerId: provider.id })
-        return credentialStatus.hasApiKey
-          ? { providerId: provider.id, status: 'ok', hasApiKey: true, message: 'Codex 授权可用' }
-          : { providerId: provider.id, status: 'needs_api_key', hasApiKey: false, message: 'Codex 授权未完成' }
+      if (isCodexOAuthProvider(provider)) {
+        let credential: CodexOAuthCredential | undefined
+        try {
+          credential = parseCodexOAuthCredential(await options.credentialVaultService.readProviderApiKey(provider.id))
+        } catch (credentialError) {
+          return failedResult(provider, false, `Codex 授权凭据无法读取：${unknownToMessage(credentialError, undefined)}`)
+        }
+        if (!credential?.accessToken) {
+          return { providerId: provider.id, status: 'needs_api_key', hasApiKey: false, message: 'Codex 授权未完成' }
+        }
+        const currentTime = Date.parse(now())
+        const nowMs = Number.isFinite(currentTime) ? currentTime : Date.now()
+        if (credential.expiresAt !== undefined && credential.expiresAt <= nowMs && !credential.refreshToken) {
+          return { providerId: provider.id, status: 'needs_api_key', hasApiKey: false, message: 'Codex 授权已过期，请重新授权' }
+        }
+        return { providerId: provider.id, status: 'ok', hasApiKey: true, message: 'Codex 授权可用' }
       }
 
       const inlineApiKey = trimOptional(testInput.apiKey)

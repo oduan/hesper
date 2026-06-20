@@ -52,6 +52,19 @@ const baseProviders = [
     hasApiKey: false,
     createdAt: now,
     updatedAt: now
+  },
+  {
+    id: 'chatgpt-codex',
+    name: 'ChatGPT Codex',
+    kind: 'pi',
+    authType: 'oauth',
+    piAuthProvider: 'openai-codex',
+    enabled: true,
+    defaultModelId: 'pi/gpt-5.5',
+    apiKeyRef: 'provider:chatgpt-codex:api-key',
+    hasApiKey: true,
+    createdAt: now,
+    updatedAt: now
   }
 ] as any[]
 
@@ -99,6 +112,7 @@ const {
   startOAuthAuthorization,
   getOAuthAuthorizationStatus,
   saveOAuthConnection,
+  cancelOAuthAuthorization,
   listModels,
   saveModel,
   saveProviderApiKey,
@@ -118,6 +132,7 @@ const {
   startOAuthAuthorization: vi.fn(),
   getOAuthAuthorizationStatus: vi.fn(),
   saveOAuthConnection: vi.fn(),
+  cancelOAuthAuthorization: vi.fn(),
   listModels: vi.fn(),
   saveModel: vi.fn(),
   saveProviderApiKey: vi.fn(),
@@ -154,7 +169,8 @@ vi.mock('../src/ipc-client', () => ({
       testConnection,
       startOAuthAuthorization,
       getOAuthAuthorizationStatus,
-      saveOAuthConnection
+      saveOAuthConnection,
+      cancelOAuthAuthorization
     },
     models: {
       list: listModels,
@@ -219,6 +235,7 @@ function resetProviderMocks() {
     createdAt: now,
     updatedAt: now
   }))
+  cancelOAuthAuthorization.mockResolvedValue({ cancelled: true, sessionId: 'oauth-session-default' })
   saveModel.mockImplementation(async (input: any) => ({ ...baseModels[1], ...input, createdAt: now, updatedAt: now }))
   saveProviderApiKey.mockResolvedValue({ providerId: 'deepseek', apiKeyRef: 'provider:deepseek:api-key', hasApiKey: true, encryptionAvailable: true })
   listTools.mockResolvedValue([])
@@ -364,6 +381,94 @@ describe('provider settings panel', () => {
       position: 'fixed',
       top: '36px'
     })
+  })
+
+  it('shows Codex OAuth connection actions without opening the custom API editor', async () => {
+    const user = userEvent.setup()
+    testConnection.mockResolvedValueOnce({
+      providerId: 'chatgpt-codex',
+      status: 'ok',
+      hasApiKey: true,
+      message: 'Codex 授权可用'
+    })
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: '设置' }))
+
+    expect(screen.getByText('ChatGPT Codex')).toBeInTheDocument()
+    expect(screen.getByText(/pi · 使用默认端点 · 已授权/)).toBeInTheDocument()
+    expect(screen.queryByText(/chatgpt-codex.*已保存 key/)).not.toBeInTheDocument()
+
+    await user.click(await screen.findByRole('button', { name: '打开连接菜单 ChatGPT Codex' }))
+    const menu = await screen.findByRole('menu', { name: 'ChatGPT Codex 连接菜单' })
+    expect(within(menu).queryByRole('menuitem', { name: '编辑' })).not.toBeInTheDocument()
+    expect(within(menu).getByRole('menuitem', { name: '重新授权' })).toBeInTheDocument()
+    expect(within(menu).getByRole('menuitem', { name: '验证连接' })).toBeInTheDocument()
+    expect(within(menu).getByRole('menuitem', { name: '删除' })).toBeInTheDocument()
+
+    await user.click(within(menu).getByRole('menuitem', { name: '验证连接' }))
+    await waitFor(() => {
+      expect(testConnection).toHaveBeenCalledWith({ providerId: 'chatgpt-codex' })
+    })
+    expect(await screen.findByRole('status')).toHaveTextContent('Codex 授权可用')
+    expect(screen.queryByRole('dialog', { name: 'API 配置' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '打开连接菜单 ChatGPT Codex' }))
+    await user.click(await screen.findByRole('menuitem', { name: '重新授权' }))
+    const codexDialog = await screen.findByRole('dialog', { name: 'Codex 授权' })
+    expect(within(codexDialog).getByRole('textbox', { name: 'Codex 连接名称' })).toHaveValue('ChatGPT Codex')
+    expect(screen.queryByRole('dialog', { name: 'API 配置' })).not.toBeInTheDocument()
+  })
+
+  it('cancels an active Codex OAuth session from Back, close, and Escape', async () => {
+    const user = userEvent.setup()
+    startOAuthAuthorization
+      .mockResolvedValueOnce({
+        provider: 'openai-codex',
+        sessionId: 'oauth-session-back',
+        authorizationUrl: 'https://auth.craft.do/oauth/openai-codex?state=oauth-session-back',
+        status: 'pending',
+        message: '等待浏览器授权'
+      })
+      .mockResolvedValueOnce({
+        provider: 'openai-codex',
+        sessionId: 'oauth-session-close',
+        authorizationUrl: 'https://auth.craft.do/oauth/openai-codex?state=oauth-session-close',
+        status: 'pending',
+        message: '等待浏览器授权'
+      })
+      .mockResolvedValueOnce({
+        provider: 'openai-codex',
+        sessionId: 'oauth-session-escape',
+        authorizationUrl: 'https://auth.craft.do/oauth/openai-codex?state=oauth-session-escape',
+        status: 'pending',
+        message: '等待浏览器授权'
+      })
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: '设置' }))
+    await user.click(await screen.findByRole('button', { name: '+ 添加连接' }))
+    await user.click(await screen.findByRole('button', { name: /Codex 授权/ }))
+    let codexDialog = await screen.findByRole('dialog', { name: 'Codex 授权' })
+    await user.click(within(codexDialog).getByRole('button', { name: 'Open Browser' }))
+    await waitFor(() => expect(startOAuthAuthorization).toHaveBeenCalledTimes(1))
+    await user.click(within(codexDialog).getByRole('button', { name: 'Back' }))
+    await waitFor(() => expect(cancelOAuthAuthorization).toHaveBeenCalledWith({ sessionId: 'oauth-session-back' }))
+
+    await user.click(await screen.findByRole('button', { name: /Codex 授权/ }))
+    codexDialog = await screen.findByRole('dialog', { name: 'Codex 授权' })
+    await user.click(within(codexDialog).getByRole('button', { name: 'Open Browser' }))
+    await waitFor(() => expect(startOAuthAuthorization).toHaveBeenCalledTimes(2))
+    await user.click(within(codexDialog).getByRole('button', { name: '关闭 Codex 授权' }))
+    await waitFor(() => expect(cancelOAuthAuthorization).toHaveBeenCalledWith({ sessionId: 'oauth-session-close' }))
+
+    await user.click(screen.getByRole('button', { name: '+ 添加连接' }))
+    await user.click(await screen.findByRole('button', { name: /Codex 授权/ }))
+    codexDialog = await screen.findByRole('dialog', { name: 'Codex 授权' })
+    await user.click(within(codexDialog).getByRole('button', { name: 'Open Browser' }))
+    await waitFor(() => expect(startOAuthAuthorization).toHaveBeenCalledTimes(3))
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(cancelOAuthAuthorization).toHaveBeenCalledWith({ sessionId: 'oauth-session-escape' }))
   })
 
   it('navigates the Codex authorization route and returns to the picker', async () => {

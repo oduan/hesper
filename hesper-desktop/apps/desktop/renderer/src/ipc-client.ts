@@ -240,6 +240,7 @@ export function createFallbackHesperApi(): HesperDesktopApi {
         status: 'failed',
         message: 'Codex OAuth is only available in the desktop shell'
       }),
+      cancelOAuthAuthorization: async (input) => ({ cancelled: true as const, sessionId: input.sessionId }),
       saveOAuthConnection: async () => {
         throw new Error('Codex OAuth is only available in the desktop shell')
       }

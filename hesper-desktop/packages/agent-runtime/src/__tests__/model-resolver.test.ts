@@ -258,6 +258,44 @@ describe('ModelResolver', () => {
     expect(resolved.getApiKey?.('openai')).toBeUndefined()
   })
 
+  it('unwraps structured Codex OAuth JSON credentials before returning keys to pi-ai', async () => {
+    const readProviderApiKey = vi.fn(async () => JSON.stringify({
+      type: 'codex_oauth',
+      accessToken: 'codex-oauth-access-token',
+      refreshToken: 'codex-oauth-refresh-token',
+      expiresAt: Date.now() + 3600_000
+    }))
+    const getPiModel = vi.fn((_provider: KnownProvider, _modelName: string): Model<Api> => (
+      piModel({ id: 'gpt-5.5', name: 'GPT-5.5', provider: 'openai-codex', reasoning: true })
+    ))
+    const codexProvider = provider({
+      id: 'chatgpt-codex',
+      name: 'ChatGPT Codex',
+      kind: 'pi',
+      authType: 'oauth',
+      piAuthProvider: 'openai-codex',
+      defaultModelId: 'pi/gpt-5.5'
+    })
+    const codexModel = model({
+      id: 'pi/gpt-5.5',
+      providerId: 'chatgpt-codex',
+      modelName: 'gpt-5.5',
+      displayName: 'GPT-5.5',
+      capabilities: ['streaming', 'toolCalls', 'reasoning'],
+      contextWindow: 272000
+    })
+    const resolver = createRegistryModelResolver({
+      registry: registry({ providers: [codexProvider], models: [codexModel] }),
+      readProviderApiKey,
+      getPiModel
+    })
+
+    const resolved = await resolver.resolve({ modelId: 'pi/gpt-5.5' })
+
+    await expect(resolved.getApiKey?.('openai-codex')).resolves.toBe('codex-oauth-access-token')
+    await expect(resolved.getApiKey?.('chatgpt-codex')).resolves.toBe('codex-oauth-access-token')
+  })
+
   it('fails with an OAuth authorization error when Codex Pi credentials are missing', async () => {
     const codexProvider = provider({
       id: 'chatgpt-codex',
