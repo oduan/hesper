@@ -256,4 +256,59 @@ describe('createModelProviderService', () => {
     expect(result.message).not.toContain('响应预览：')
     expect(JSON.stringify(result)).not.toContain('sk-inline-secret')
   })
+
+  it('starts, authorizes, and saves a Codex OAuth provider without exposing tokens', async () => {
+    const persistence = await createInMemoryPersistence()
+    const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
+    const oauthGateway = {
+      startAuthorization: vi.fn(async () => ({
+        sessionId: 'oauth-session-1',
+        authorizationUrl: 'https://auth.craft.do/oauth/openai-codex?state=oauth-session-1'
+      })),
+      getAuthorizationStatus: vi.fn(async () => ({ status: 'authorized' as const, message: '授权成功' })),
+      consumeAuthorization: vi.fn(async () => ({
+        accessToken: 'codex-oauth-access-token',
+        models: [
+          { id: 'pi/gpt-5.5', modelName: 'gpt-5.5', displayName: 'GPT-5.5', capabilities: ['streaming', 'toolCalls', 'reasoning'] as any, contextWindow: 272000 },
+          { id: 'pi/gpt-5.4-mini', modelName: 'gpt-5.4-mini', displayName: 'GPT-5.4 Mini', capabilities: ['streaming', 'toolCalls', 'reasoning'] as any, contextWindow: 272000 }
+        ],
+        defaultModelId: 'pi/gpt-5.5'
+      }))
+    }
+    const service = createModelProviderService({ persistence, credentialVaultService, now: () => now, oauthGateway })
+
+    const started = await service.startOAuthAuthorization({ provider: 'openai-codex', connectionName: 'ChatGPT Codex' })
+    expect(started).toMatchObject({ provider: 'openai-codex', sessionId: 'oauth-session-1', status: 'pending' })
+
+    await expect(service.getOAuthAuthorizationStatus({ sessionId: 'oauth-session-1' })).resolves.toMatchObject({ status: 'authorized' })
+    const saved = await service.saveOAuthConnection({ sessionId: 'oauth-session-1', connectionName: 'ChatGPT Codex' })
+
+    expect(saved).toMatchObject({
+      id: 'chatgpt-codex',
+      name: 'ChatGPT Codex',
+      kind: 'pi',
+      authType: 'oauth',
+      piAuthProvider: 'openai-codex',
+      enabled: true,
+      defaultModelId: 'pi/gpt-5.5',
+      hasApiKey: true
+    })
+    expect((await service.listModels('chatgpt-codex')).map((model) => model.id)).toEqual(['pi/gpt-5.5', 'pi/gpt-5.4-mini'])
+    expect(JSON.stringify(saved)).not.toContain('codex-oauth-access-token')
+    expect(Buffer.from(exportDatabaseBytes(persistence)).toString('latin1')).not.toContain('codex-oauth-access-token')
+  })
+
+  it('tests Codex OAuth providers by credential status instead of chat completions probe', async () => {
+    const persistence = await createInMemoryPersistence()
+    const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
+    const fetchMock = vi.fn()
+    const service = createModelProviderService({ persistence, credentialVaultService, now: () => now, fetch: fetchMock as unknown as typeof fetch })
+
+    await service.saveProvider({ id: 'chatgpt-codex', name: 'ChatGPT Codex', kind: 'pi', authType: 'oauth', piAuthProvider: 'openai-codex', enabled: true, defaultModelId: 'pi/gpt-5.5' })
+    await expect(service.testProviderConnection({ providerId: 'chatgpt-codex' })).resolves.toMatchObject({ status: 'needs_api_key', hasApiKey: false })
+
+    await credentialVaultService.saveProviderApiKey({ providerId: 'chatgpt-codex', apiKey: 'codex-oauth-access-token' })
+    await expect(service.testProviderConnection({ providerId: 'chatgpt-codex' })).resolves.toMatchObject({ status: 'ok', hasApiKey: true, message: 'Codex 授权可用' })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
 })

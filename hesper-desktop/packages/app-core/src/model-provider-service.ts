@@ -2,10 +2,25 @@ import type { Persistence } from '@hesper/persistence'
 import { nowIso, type ModelConfig, type ModelProviderConfig, type ModelProviderKind } from '@hesper/shared'
 import { providerApiKeyRef, type CredentialVaultService } from './credential-vault-service'
 
+export type PiAuthProvider = 'openai-codex'
+export type ProviderOAuthStatus = 'pending' | 'authorized' | 'failed'
+
+export type ProviderOAuthGateway = {
+  startAuthorization(input: { provider: PiAuthProvider; connectionName: string }): Promise<{ sessionId: string; authorizationUrl: string }>
+  getAuthorizationStatus(input: { sessionId: string }): Promise<{ status: ProviderOAuthStatus; message: string }>
+  consumeAuthorization(input: { sessionId: string }): Promise<{
+    accessToken: string
+    models: Array<{ id: string; modelName: string; displayName: string; capabilities: ModelConfig['capabilities']; contextWindow?: number }>
+    defaultModelId: string
+  }>
+}
+
 export type SaveModelProviderInput = {
   id: string
   name: string
   kind: ModelProviderKind
+  authType?: ModelProviderConfig['authType']
+  piAuthProvider?: ModelProviderConfig['piAuthProvider']
   baseUrl?: string
   enabled?: boolean
   defaultModelId?: string
@@ -46,6 +61,9 @@ export type ModelProviderService = {
   deleteProvider(id: string): Promise<ModelProviderConfig | undefined>
   listModels(providerId?: string): Promise<ModelConfig[]>
   saveModel(input: SaveModelInput): Promise<ModelConfig>
+  startOAuthAuthorization(input: { provider: PiAuthProvider; connectionName: string }): Promise<{ provider: PiAuthProvider; sessionId: string; authorizationUrl: string; status: ProviderOAuthStatus; message: string }>
+  getOAuthAuthorizationStatus(input: { sessionId: string }): Promise<{ provider: PiAuthProvider; sessionId: string; status: ProviderOAuthStatus; message: string }>
+  saveOAuthConnection(input: { sessionId: string; connectionName: string }): Promise<ModelProviderConfig>
   testProviderConnection(input: string | ProviderConnectionTestInput): Promise<ProviderConnectionTestResult>
   ensureBuiltinProviders(): Promise<void>
 }
@@ -82,6 +100,8 @@ function mergeProvider(existing: ModelProviderConfig | undefined, input: SaveMod
     updatedAt: timestamp,
     apiKeyRef: providerApiKeyRef(input.id),
     hasApiKey,
+    ...(input.authType !== undefined ? { authType: input.authType } : existing?.authType !== undefined ? { authType: existing.authType } : {}),
+    ...(input.piAuthProvider !== undefined ? { piAuthProvider: input.piAuthProvider } : existing?.piAuthProvider !== undefined ? { piAuthProvider: existing.piAuthProvider } : {}),
     ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : existing?.baseUrl !== undefined ? { baseUrl: existing.baseUrl } : {}),
     ...(input.defaultModelId !== undefined ? { defaultModelId: input.defaultModelId } : existing?.defaultModelId !== undefined ? { defaultModelId: existing.defaultModelId } : {})
   }
@@ -278,14 +298,39 @@ export function createModelProviderService(options: {
   credentialVaultService: CredentialVaultService
   now?: () => string
   fetch?: typeof fetch
+  oauthGateway?: ProviderOAuthGateway
 }): ModelProviderService {
   const now = options.now ?? nowIso
   const connectionTestFetch = options.fetch ?? globalThis.fetch
+  const oauthGateway = options.oauthGateway
+  const oauthSessions = new Map<string, { provider: PiAuthProvider; connectionName: string }>()
+  const providerMetadata = new Map<string, { authType?: ModelProviderConfig['authType']; piAuthProvider?: ModelProviderConfig['piAuthProvider'] }>()
 
-  const withCredentialStatus = async (provider: ModelProviderConfig): Promise<ModelProviderConfig> => {
-    const credentialStatus = await options.credentialVaultService.getProviderApiKeyStatus({ providerId: provider.id })
+  const rememberProviderMetadata = (provider: ModelProviderConfig): void => {
+    if (provider.authType === undefined && provider.piAuthProvider === undefined) {
+      providerMetadata.delete(provider.id)
+      return
+    }
+    providerMetadata.set(provider.id, {
+      ...(provider.authType !== undefined ? { authType: provider.authType } : {}),
+      ...(provider.piAuthProvider !== undefined ? { piAuthProvider: provider.piAuthProvider } : {})
+    })
+  }
+
+  const hydrateProviderMetadata = (provider: ModelProviderConfig): ModelProviderConfig => {
+    const metadata = providerMetadata.get(provider.id)
     return {
       ...provider,
+      ...(provider.authType !== undefined ? { authType: provider.authType } : metadata?.authType !== undefined ? { authType: metadata.authType } : {}),
+      ...(provider.piAuthProvider !== undefined ? { piAuthProvider: provider.piAuthProvider } : metadata?.piAuthProvider !== undefined ? { piAuthProvider: metadata.piAuthProvider } : {})
+    }
+  }
+
+  const withCredentialStatus = async (provider: ModelProviderConfig): Promise<ModelProviderConfig> => {
+    const hydratedProvider = hydrateProviderMetadata(provider)
+    const credentialStatus = await options.credentialVaultService.getProviderApiKeyStatus({ providerId: provider.id })
+    return {
+      ...hydratedProvider,
       apiKeyRef: credentialStatus.apiKeyRef,
       hasApiKey: credentialStatus.hasApiKey
     }
@@ -295,8 +340,10 @@ export function createModelProviderService(options: {
     assertId(input.id)
     assertId(input.name, 'name')
     const existing = await options.persistence.modelProviders.get(input.id)
+    const hydratedExisting = existing ? hydrateProviderMetadata(existing) : undefined
     const credentialStatus = await options.credentialVaultService.getProviderApiKeyStatus({ providerId: input.id })
-    const provider = mergeProvider(existing, input, now(), credentialStatus.hasApiKey)
+    const provider = mergeProvider(hydratedExisting, input, now(), credentialStatus.hasApiKey)
+    rememberProviderMetadata(provider)
     await options.persistence.modelProviders.save(provider)
     return withCredentialStatus(provider)
   }
@@ -337,6 +384,11 @@ export function createModelProviderService(options: {
     return trimOptional(await options.credentialVaultService.readProviderApiKey(providerId))
   }
 
+  const requireOAuthGateway = (): ProviderOAuthGateway => {
+    if (!oauthGateway) throw new Error('OAuth gateway is not configured')
+    return oauthGateway
+  }
+
   return {
     async listProviders() {
       await ensureBuiltinProviders()
@@ -353,8 +405,9 @@ export function createModelProviderService(options: {
     },
     async disableProvider(id) {
       assertId(id)
-      const existing = await options.persistence.modelProviders.get(id)
-      if (!existing) throw new Error(`Model provider not found: ${id}`)
+      const existingRaw = await options.persistence.modelProviders.get(id)
+      if (!existingRaw) throw new Error(`Model provider not found: ${id}`)
+      const existing = hydrateProviderMetadata(existingRaw)
       const provider = await this.saveProvider({
         id: existing.id,
         name: existing.name,
@@ -375,6 +428,7 @@ export function createModelProviderService(options: {
       await options.persistence.models.deleteByProvider(id)
       await options.credentialVaultService.deleteProviderApiKey({ providerId: id })
       await options.persistence.modelProviders.delete(id)
+      providerMetadata.delete(id)
       return undefined
     },
     async listModels(providerId) {
@@ -384,11 +438,63 @@ export function createModelProviderService(options: {
     async saveModel(input) {
       return saveModelInternal(input)
     },
+    async startOAuthAuthorization(input) {
+      const gateway = requireOAuthGateway()
+      assertId(input.connectionName, 'connectionName')
+      const started = await gateway.startAuthorization(input)
+      oauthSessions.set(started.sessionId, { provider: input.provider, connectionName: input.connectionName })
+      return {
+        provider: input.provider,
+        sessionId: started.sessionId,
+        authorizationUrl: started.authorizationUrl,
+        status: 'pending',
+        message: '等待浏览器授权'
+      }
+    },
+    async getOAuthAuthorizationStatus(input) {
+      const session = oauthSessions.get(input.sessionId)
+      if (!session) {
+        return { provider: 'openai-codex', sessionId: input.sessionId, status: 'failed', message: '授权会话不存在' }
+      }
+      const status = await requireOAuthGateway().getAuthorizationStatus({ sessionId: input.sessionId })
+      return { provider: session.provider, sessionId: input.sessionId, ...status }
+    },
+    async saveOAuthConnection(input) {
+      const session = oauthSessions.get(input.sessionId)
+      if (!session) throw new Error('授权会话不存在')
+      assertId(input.connectionName, 'connectionName')
+      const gateway = requireOAuthGateway()
+      const authorizationStatus = await gateway.getAuthorizationStatus({ sessionId: input.sessionId })
+      if (authorizationStatus.status !== 'authorized') {
+        throw new Error(authorizationStatus.message || '授权尚未完成')
+      }
+      const consumed = await gateway.consumeAuthorization({ sessionId: input.sessionId })
+      const provider = await saveProviderInternal({
+        id: 'chatgpt-codex',
+        name: input.connectionName.trim(),
+        kind: 'pi',
+        authType: 'oauth',
+        piAuthProvider: session.provider,
+        enabled: true,
+        defaultModelId: consumed.defaultModelId
+      })
+      await options.credentialVaultService.saveProviderApiKey({ providerId: provider.id, apiKey: consumed.accessToken })
+      for (const model of consumed.models) {
+        await saveModelInternal({
+          ...model,
+          providerId: provider.id,
+          enabled: true
+        })
+      }
+      oauthSessions.delete(input.sessionId)
+      return withCredentialStatus(provider)
+    },
     async testProviderConnection(input) {
       const testInput = connectionTestInput(input)
       const providerId = trimOptional(testInput.providerId)
       await ensureBuiltinProviders()
-      const existing = providerId ? await options.persistence.modelProviders.get(providerId) : undefined
+      const existingRaw = providerId ? await options.persistence.modelProviders.get(providerId) : undefined
+      const existing = existingRaw ? hydrateProviderMetadata(existingRaw) : undefined
       if (!existing && !testInput.kind) {
         return { providerId: providerId ?? 'unknown', status: 'not_found', hasApiKey: false, message: `Model provider not found: ${providerId ?? 'unknown'}` }
       }
@@ -407,6 +513,8 @@ export function createModelProviderService(options: {
         enabled: existing?.enabled ?? true,
         createdAt: existing?.createdAt ?? timestamp,
         updatedAt: existing?.updatedAt ?? timestamp,
+        ...(existing?.authType !== undefined ? { authType: existing.authType } : {}),
+        ...(existing?.piAuthProvider !== undefined ? { piAuthProvider: existing.piAuthProvider } : {}),
         ...(providerBaseUrl ? { baseUrl: providerBaseUrl } : {}),
         ...(providerDefaultModelId ? { defaultModelId: providerDefaultModelId } : {})
       }
@@ -416,6 +524,14 @@ export function createModelProviderService(options: {
       }
       if (provider.kind === 'mock') {
         return { providerId: provider.id, status: 'ok', hasApiKey: false, message: 'Mock provider is available.' }
+      }
+
+      const isCodexOAuthProvider = provider.kind === 'pi' && provider.authType === 'oauth' && provider.piAuthProvider === 'openai-codex'
+      if (isCodexOAuthProvider) {
+        const credentialStatus = await options.credentialVaultService.getProviderApiKeyStatus({ providerId: provider.id })
+        return credentialStatus.hasApiKey
+          ? { providerId: provider.id, status: 'ok', hasApiKey: true, message: 'Codex 授权可用' }
+          : { providerId: provider.id, status: 'needs_api_key', hasApiKey: false, message: 'Codex 授权未完成' }
       }
 
       const inlineApiKey = trimOptional(testInput.apiKey)
