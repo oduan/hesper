@@ -251,7 +251,11 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
       }))
     } catch (startError) {
       if (!mountedRef.current) return
-      setError(formatUnknownError(startError, 'Codex 授权启动失败'))
+      setCodexOAuthState((current) => ({
+        ...current,
+        status: 'failed',
+        message: formatUnknownError(startError, 'Codex 授权启动失败')
+      }))
     }
   }
 
@@ -272,7 +276,11 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
       }))
     } catch (statusError) {
       if (!mountedRef.current) return
-      setError(formatUnknownError(statusError, 'Codex 授权状态检查失败'))
+      setCodexOAuthState((current) => ({
+        ...current,
+        status: 'failed',
+        message: formatUnknownError(statusError, 'Codex 授权状态检查失败')
+      }))
     }
   }
 
@@ -294,7 +302,11 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
       await onModelRegistryChanged?.()
     } catch (saveError) {
       if (!mountedRef.current) return
-      setError(formatUnknownError(saveError, 'Codex 连接保存失败'))
+      setCodexOAuthState((current) => ({
+        ...current,
+        status: 'failed',
+        message: formatUnknownError(saveError, 'Codex 连接保存失败')
+      }))
     }
   }
 

@@ -490,10 +490,14 @@ describe('provider settings panel', () => {
     await user.click(await screen.findByRole('button', { name: /Codex 授权/ }))
 
     const codexDialog = await screen.findByRole('dialog', { name: 'Codex 授权' })
-    await user.click(within(codexDialog).getByRole('button', { name: 'Open Browser' }))
+    const openBrowserButton = within(codexDialog).getByRole('button', { name: 'Open Browser' })
+    const checkStatusButton = within(codexDialog).getByRole('button', { name: 'Check Status' })
+    await user.click(openBrowserButton)
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('browser unavailable')
+    expect(await within(codexDialog).findByRole('alert')).toHaveTextContent('browser unavailable')
     expect(screen.getByRole('dialog', { name: 'Codex 授权' })).toBeInTheDocument()
+    expect(openBrowserButton).toBeEnabled()
+    expect(checkStatusButton).toBeDisabled()
   })
 
   it('closes and reopens the picker from Back, close, and Escape', async () => {
