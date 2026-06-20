@@ -214,7 +214,7 @@ function toSession(row: any): Session {
     enabledToolIds: parseStringArrayJson(row.enabled_tool_ids_json, 'sessions.enabled_tool_ids_json'),
     allowedWorkerAgentRoleIds: parseStringArrayJson(row.allowed_worker_agent_role_ids_json, 'sessions.allowed_worker_agent_role_ids_json'),
     maxWorkerAgentDepth: optionalNumber(row.max_worker_agent_depth) ?? 1,
-    maxWorkerAgentsPerRun: optionalNumber(row.max_worker_agents_per_run) ?? 3,
+    maxWorkerAgentsPerRun: optionalNumber(row.max_worker_agents_per_run) ?? 10,
     outputMode: row.output_mode,
     unreadCompletedAt: row.unread_completed_at ?? undefined,
     createdAt: row.created_at,

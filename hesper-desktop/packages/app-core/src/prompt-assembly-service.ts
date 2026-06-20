@@ -190,7 +190,7 @@ function renderRoleManifest(roles: Role[], options: { availableToolIds?: Set<str
 function renderMainWorkerAgentRules(input: MainPromptAssemblyInput, roles: Role[], tools: ToolDefinition[]): string {
   const spawnToolAvailable = tools.some((tool) => tool.id === 'agent.spawn-worker-agent')
   const maxDepth = input.session.maxWorkerAgentDepth ?? 1
-  const maxCount = input.session.maxWorkerAgentsPerRun ?? 3
+  const maxCount = input.session.maxWorkerAgentsPerRun ?? 10
 
   if (!spawnToolAvailable) {
     return [

@@ -554,7 +554,7 @@ export function createWorkerAgentService(options: WorkerAgentServiceOptions): Wo
         allowedToolIds: effectiveAllowedToolIds,
         depth: childRun.depth ?? 1,
         maxDepth: session.maxWorkerAgentDepth ?? 1,
-        maxWorkerAgentsPerRun: session.maxWorkerAgentsPerRun ?? 3
+        maxWorkerAgentsPerRun: session.maxWorkerAgentsPerRun ?? 10
       })
 
       await options.adapter.run(
@@ -610,7 +610,7 @@ export function createWorkerAgentService(options: WorkerAgentServiceOptions): Wo
     const { parentRun, session } = await loadParentRunAndSession(context.runId, context.sessionId)
 
     const prepared = await withSpawnLock(parentRun.id, async (): Promise<SpawnPreparation> => {
-      const maxWorkerAgentsPerRun = session.maxWorkerAgentsPerRun ?? 3
+      const maxWorkerAgentsPerRun = session.maxWorkerAgentsPerRun ?? 10
       const existingInvocations = await options.persistence.workerAgentInvocations.listByParentRun(parentRun.id)
       if (existingInvocations.length >= maxWorkerAgentsPerRun) {
         throw createLimitError(`Worker Agent invocation limit exceeded: ${existingInvocations.length} >= ${maxWorkerAgentsPerRun}`)

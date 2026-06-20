@@ -522,7 +522,7 @@ describe('persistence repositories', () => {
         enabledToolIds: [],
         allowedWorkerAgentRoleIds: [],
         maxWorkerAgentDepth: 1,
-        maxWorkerAgentsPerRun: 3
+        maxWorkerAgentsPerRun: 10
       })
       expect(session?.unreadCompletedAt).toBeUndefined()
 

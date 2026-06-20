@@ -986,7 +986,7 @@ const session: Session = {
   enabledToolIds: ['agent.spawn-worker-agent', 'agent.get-worker-agent', 'agent.wait-worker-agent', 'agent.cancel-worker-agent', 'filesystem.read-file'],
   allowedWorkerAgentRoleIds: ['reviewer'],
   maxWorkerAgentDepth: 1,
-  maxWorkerAgentsPerRun: 3,
+  maxWorkerAgentsPerRun: 10,
   createdAt: now,
   updatedAt: now
 }
@@ -1255,7 +1255,7 @@ Implement `spawn` with this order:
 1. Load parent run from `persistence.runs.get(context.runId)`.
 2. Load session from `persistence.sessions.get(context.sessionId)`.
 3. Require parent run session to match context session.
-4. Count existing invocations from `workerAgentInvocations.listByParentRun(parentRun.id)` and enforce `session.maxWorkerAgentsPerRun ?? 3`.
+4. Count existing invocations from `workerAgentInvocations.listByParentRun(parentRun.id)` and enforce `session.maxWorkerAgentsPerRun ?? 10`.
 5. Load role and require worker assignability.
 6. Resolve effective tool ids as requested ∩ context.allowedToolIds ∩ role.defaultToolIds ∩ global filter ∩ excluding Worker Agent tool ids.
 7. Create invocation and child run with `createId('worker-agent')` and `createId('run')`.

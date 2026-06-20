@@ -56,7 +56,7 @@ const defaultSession: Session = {
   ],
   allowedWorkerAgentRoleIds: ['reviewer'],
   maxWorkerAgentDepth: 1,
-  maxWorkerAgentsPerRun: 3,
+  maxWorkerAgentsPerRun: 10,
   createdAt: baseNow,
   updatedAt: baseNow
 }

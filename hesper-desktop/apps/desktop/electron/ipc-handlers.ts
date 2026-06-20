@@ -170,7 +170,7 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       enabledToolIds,
       ...(allowedWorkerAgentRoleIds?.length ? { allowedWorkerAgentRoleIds } : {}),
       maxWorkerAgentDepth: session.maxWorkerAgentDepth ?? 1,
-      maxWorkerAgentsPerRun: session.maxWorkerAgentsPerRun ?? 3
+      maxWorkerAgentsPerRun: session.maxWorkerAgentsPerRun ?? 10
     }
 
     const prompt = options.container.promptAssemblyService.assembleMainPrompt({
