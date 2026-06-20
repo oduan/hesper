@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useId, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import type { AgentRun, Message, RunStep, RunStepStatus, WorkerAgentInvocation } from '@hesper/shared'
 import { darkTheme } from '../theme'
 import { MarkdownOutput } from './MarkdownOutput'
@@ -238,6 +238,23 @@ function createStepMarkdown(step: RunStep): string {
   return step.detail?.trim() || step.summary?.trim() || step.title
 }
 
+const fullscreenDialogStack: string[] = []
+
+function pushFullscreenDialog(dialogId: string) {
+  fullscreenDialogStack.push(dialogId)
+}
+
+function removeFullscreenDialog(dialogId: string) {
+  const index = fullscreenDialogStack.lastIndexOf(dialogId)
+  if (index >= 0) {
+    fullscreenDialogStack.splice(index, 1)
+  }
+}
+
+function isTopFullscreenDialog(dialogId: string): boolean {
+  return fullscreenDialogStack[fullscreenDialogStack.length - 1] === dialogId
+}
+
 function ToolDetailBlock({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section aria-label={title} style={toolDetailBlockStyle}>
@@ -273,6 +290,7 @@ function ToolStepDetails({ step }: { step: RunStep }) {
 }
 
 function StepFullscreenDialog({ step, workerAgentView, onClose }: { step: RunStep; workerAgentView?: WorkerAgentView | undefined; onClose: () => void }) {
+  const dialogId = useId()
   const markdown = createStepMarkdown(step)
   const toolDetailPayload = getToolStepDetailPayload(step)
   const workerInvocation = step.type === 'tool_call' ? workerAgentView?.invocationsByParentStepId[step.id] : undefined
@@ -282,8 +300,13 @@ function StepFullscreenDialog({ step, workerAgentView, onClose }: { step: RunSte
   const workerStreamingText = workerInvocation?.childRunId ? workerAgentView?.streamingByRun[workerInvocation.childRunId] ?? '' : ''
 
   useEffect(() => {
+    pushFullscreenDialog(dialogId)
+    return () => removeFullscreenDialog(dialogId)
+  }, [dialogId])
+
+  useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
+      if (event.key !== 'Escape' || !isTopFullscreenDialog(dialogId)) return
 
       event.preventDefault()
       event.stopPropagation()
@@ -293,7 +316,7 @@ function StepFullscreenDialog({ step, workerAgentView, onClose }: { step: RunSte
 
     window.addEventListener('keydown', handleKeyDown, { capture: true })
     return () => window.removeEventListener('keydown', handleKeyDown, { capture: true })
-  }, [onClose])
+  }, [dialogId, onClose])
 
   return (
     <div

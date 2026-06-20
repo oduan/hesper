@@ -15,7 +15,7 @@ function createDeferred<T>() {
   return { promise, resolve, reject }
 }
 
-const { listSessions, createSession, updateTitle, deleteSession, generateTitle, markViewed, listRoles, createRole, updateRole, deleteRole, listMessages, listRuns, listSteps, enqueue, stopRun, onEvent, getSettings, updateSettings, listProviders, listModels, listTools, setToolEnabled, toolCredentialStatus, saveToolApiKey, deleteToolApiKey, minimizeWindow, toggleMaximizeWindow, closeWindow } = vi.hoisted(() => ({
+const { listSessions, createSession, updateTitle, deleteSession, generateTitle, markViewed, listRoles, createRole, updateRole, deleteRole, listMessages, listMessagesByRun, listRuns, listSteps, listWorkerInvocationsByParentRun, enqueue, stopRun, onEvent, getSettings, updateSettings, listProviders, listModels, listTools, setToolEnabled, toolCredentialStatus, saveToolApiKey, deleteToolApiKey, minimizeWindow, toggleMaximizeWindow, closeWindow } = vi.hoisted(() => ({
   listSessions: vi.fn(async () => []),
   createSession: vi.fn(async () => ({
     id: 'session-1',
@@ -62,8 +62,10 @@ const { listSessions, createSession, updateTitle, deleteSession, generateTitle, 
   updateRole: vi.fn(async (input) => ({ id: input.id, name: input.name ?? 'Role', description: input.description ?? '', systemPrompt: input.systemPrompt ?? '', defaultToolIds: input.defaultToolIds ?? [] })),
   deleteRole: vi.fn(async (id: string) => ({ deleted: true as const, id })),
   listMessages: vi.fn(async (_sessionId?: string) => []),
+  listMessagesByRun: vi.fn(async (_input?: { sessionId: string; runId: string }) => []),
   listRuns: vi.fn(async (_sessionId?: string) => []),
   listSteps: vi.fn(async (_runId?: string) => []),
+  listWorkerInvocationsByParentRun: vi.fn(async (_input?: { sessionId: string; parentRunId: string }) => []),
   enqueue: vi.fn(async () => ({ runId: 'run-1' })),
   stopRun: vi.fn(async (runId: string) => ({
     id: runId,
@@ -162,7 +164,8 @@ vi.mock('../src/ipc-client', () => ({
       generateTitle,
       markViewed
     },
-    conversation: { listMessages, listRuns, listSteps },
+    conversation: { listMessages, listMessagesByRun, listRuns, listSteps },
+    workerAgents: { listByParentRun: listWorkerInvocationsByParentRun },
     agent: { enqueue, stop: stopRun, onEvent },
     dialog: { selectDirectory: vi.fn() },
     settings: { get: getSettings, update: updateSettings },
@@ -205,8 +208,10 @@ describe('renderer App', () => {
     updateRole.mockClear()
     deleteRole.mockClear()
     listMessages.mockReset()
+    listMessagesByRun.mockReset()
     listRuns.mockReset()
     listSteps.mockReset()
+    listWorkerInvocationsByParentRun.mockReset()
     enqueue.mockReset()
     stopRun.mockReset()
     onEvent.mockReset()
@@ -225,8 +230,10 @@ describe('renderer App', () => {
     listSessions.mockResolvedValue([])
     listRoles.mockResolvedValue([])
     listMessages.mockResolvedValue([])
+    listMessagesByRun.mockResolvedValue([])
     listRuns.mockResolvedValue([])
     listSteps.mockResolvedValue([])
+    listWorkerInvocationsByParentRun.mockResolvedValue([])
     listProviders.mockResolvedValue([])
     listModels.mockResolvedValue([])
     listTools.mockResolvedValue([
@@ -836,6 +843,74 @@ describe('renderer App', () => {
       expect(listRuns).toHaveBeenCalledWith('session-1')
       expect(listSteps).toHaveBeenCalledWith('run-restored')
     })
+  })
+
+  it('retries loading worker history when the first attempt fails before a session is marked loaded', async () => {
+    const user = userEvent.setup()
+    listSessions.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        title: 'Root chat',
+        status: 'active',
+        outputMode: 'markdown',
+        createdAt: '2026-06-10T03:00:00.000Z',
+        updatedAt: '2026-06-10T03:00:00.000Z'
+      },
+      {
+        id: 'session-2',
+        title: 'Other chat',
+        status: 'archived',
+        outputMode: 'markdown',
+        createdAt: '2026-06-10T03:10:00.000Z',
+        updatedAt: '2026-06-10T03:10:00.000Z'
+      }
+    ] as any)
+    listMessages.mockImplementation(async (sessionId?: string) => (sessionId === 'session-1'
+      ? [
+          { id: 'message-root-user', sessionId: 'session-1', role: 'user', content: 'root prompt', contentType: 'plain', runId: 'run-root', createdAt: '2026-06-10T03:00:01.000Z' },
+          { id: 'message-root-assistant', sessionId: 'session-1', role: 'assistant', content: 'root response', contentType: 'markdown', runId: 'run-root', createdAt: '2026-06-10T03:00:02.000Z' }
+        ] as any
+      : [] as any))
+    listRuns.mockImplementation(async (sessionId?: string) => (sessionId === 'session-1'
+      ? [{ id: 'run-root', sessionId: 'session-1', status: 'succeeded', modelId: 'mock/hesper-fast', retryCount: 0, maxRetries: 2 }] as any
+      : [] as any))
+    listSteps.mockImplementation(async (runId?: string) => (runId === 'run-root'
+      ? [{ id: 'step-root', runId: 'run-root', type: 'thought', status: 'succeeded', title: 'Root thought', createdAt: '2026-06-10T03:00:01.500Z' }] as any
+      : runId === 'run-child'
+        ? [{ id: 'step-child', runId: 'run-child', type: 'thought', status: 'succeeded', title: 'Child thought', createdAt: '2026-06-10T03:00:02.500Z' }] as any
+        : [] as any))
+    listMessagesByRun.mockImplementation(async (input?: { sessionId: string; runId: string }) => (input?.runId === 'run-child'
+      ? [{ id: 'message-child', sessionId: 'session-1', role: 'assistant', content: 'child response', contentType: 'markdown', runId: 'run-child', createdAt: '2026-06-10T03:00:03.000Z' }] as any
+      : [] as any))
+    listWorkerInvocationsByParentRun.mockRejectedValueOnce(new Error('worker history unavailable'))
+    listWorkerInvocationsByParentRun.mockResolvedValueOnce([
+      {
+        id: 'worker-invocation-1',
+        parentRunId: 'run-root',
+        childRunId: 'run-child',
+        task: 'Review the diff.',
+        roleId: 'worker-reviewer',
+        allowedToolIds: ['filesystem.read-file'],
+        status: 'succeeded',
+        createdAt: '2026-06-10T03:00:02.000Z'
+      }
+    ] as any)
+
+    render(<App />)
+
+    expect(await screen.findByText('root prompt')).toBeInTheDocument()
+    expect(await screen.findByText('root response')).toBeInTheDocument()
+    await waitFor(() => expect(listWorkerInvocationsByParentRun).toHaveBeenCalledTimes(1))
+
+    await user.click(await screen.findByRole('button', { name: 'Other chat' }))
+    await user.click(await screen.findByRole('button', { name: 'Root chat' }))
+
+    await waitFor(() => {
+      expect(listMessages.mock.calls.filter(([sessionId]) => sessionId === 'session-1')).toHaveLength(2)
+      expect(listRuns.mock.calls.filter(([sessionId]) => sessionId === 'session-1')).toHaveLength(2)
+      expect(listWorkerInvocationsByParentRun.mock.calls.filter((args) => args[0]?.sessionId === 'session-1')).toHaveLength(2)
+    })
+    expect(screen.queryByText('历史加载失败：worker history unavailable')).not.toBeInTheDocument()
   })
 
   it('shows a minimal error state when initial sessions load fails', async () => {

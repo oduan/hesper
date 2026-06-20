@@ -421,49 +421,54 @@ function AppContent() {
         const stepEntries = await Promise.all(runs.map(async (run) => [run.id, await conversationApi.listSteps(run.id)] as const))
         const stepsByRun = Object.fromEntries(stepEntries) as Record<string, RunStep[]>
 
-        if (!cancelled) {
-          loadedHistorySessionIdsRef.current.add(sessionId)
-          setHistoryErrorsBySession((current) => clearSessionSendError(current, sessionId))
-          dispatch({ type: 'history.loaded', sessionId, messages, runs, stepsByRun })
+        if (cancelled) {
+          return
         }
+
+        dispatch({ type: 'history.loaded', sessionId, messages, runs, stepsByRun })
 
         const rootRuns = runs.filter((run) => !run.parentRunId)
         if (rootRuns.length > 0) {
           const workerHistoryResults = await Promise.all(rootRuns.map(async (run) => {
-            try {
-              const invocations = await hesperApi.workerAgents.listByParentRun({ sessionId, parentRunId: run.id })
-              const childRunEntries = await Promise.all(invocations
-                .filter((invocation) => invocation.childRunId)
-                .map(async (invocation) => {
-                  const childRunId = invocation.childRunId!
-                  const [childSteps, childMessages] = await Promise.all([
-                    conversationApi.listSteps(childRunId),
-                    conversationApi.listMessagesByRun({ sessionId, runId: childRunId })
-                  ])
-                  return [childRunId, { invocation, childSteps, childMessages }] as const
-                }))
+            const invocations = await hesperApi.workerAgents.listByParentRun({ sessionId, parentRunId: run.id })
+            const childRunEntries = await Promise.all(invocations
+              .filter((invocation) => invocation.childRunId)
+              .map(async (invocation) => {
+                const childRunId = invocation.childRunId!
+                const [childSteps, childMessages] = await Promise.all([
+                  conversationApi.listSteps(childRunId),
+                  conversationApi.listMessagesByRun({ sessionId, runId: childRunId })
+                ])
+                return [childRunId, { invocation, childSteps, childMessages }] as const
+              }))
 
-              return {
-                invocations,
-                stepsByRun: Object.fromEntries(childRunEntries.map(([childRunId, entry]) => [childRunId, entry.childSteps])) as Record<string, RunStep[]>,
-                messagesByRun: Object.fromEntries(childRunEntries.map(([childRunId, entry]) => [childRunId, entry.childMessages])) as Record<string, Message[]>
-              }
-            } catch (error) {
-              console.warn('Failed to load worker history for run', run.id, error)
-              return { invocations: [], stepsByRun: {}, messagesByRun: {} }
+            return {
+              invocations,
+              stepsByRun: Object.fromEntries(childRunEntries.map(([childRunId, entry]) => [childRunId, entry.childSteps])) as Record<string, RunStep[]>,
+              messagesByRun: Object.fromEntries(childRunEntries.map(([childRunId, entry]) => [childRunId, entry.childMessages])) as Record<string, Message[]>
             }
           }))
+
+          if (cancelled) {
+            return
+          }
 
           const invocations = workerHistoryResults.flatMap((result) => result.invocations)
           const childStepsByRun = Object.fromEntries(workerHistoryResults.flatMap((result) => Object.entries(result.stepsByRun))) as Record<string, RunStep[]>
           const childMessagesByRun = Object.fromEntries(workerHistoryResults.flatMap((result) => Object.entries(result.messagesByRun))) as Record<string, Message[]>
 
-          if (!cancelled) {
-            dispatch({ type: 'worker.history.loaded', invocations, stepsByRun: childStepsByRun, messagesByRun: childMessagesByRun } as any)
-          }
+          dispatch({ type: 'worker.history.loaded', invocations, stepsByRun: childStepsByRun, messagesByRun: childMessagesByRun })
         }
+
+        if (cancelled) {
+          return
+        }
+
+        loadedHistorySessionIdsRef.current.add(sessionId)
+        setHistoryErrorsBySession((current) => clearSessionSendError(current, sessionId))
       } catch (error) {
         if (!cancelled) {
+          console.warn('Failed to load worker history for session', sessionId, error)
           const message = error instanceof Error ? error.message : 'Unknown conversation history load error'
           setHistoryErrorsBySession((current) => ({ ...current, [sessionId]: message }))
         }

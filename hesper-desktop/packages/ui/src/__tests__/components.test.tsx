@@ -1365,7 +1365,15 @@ describe('ui components', () => {
     expect(within(dialog).getByText('streaming child output')).toBeInTheDocument()
     expect(within(dialog).getByText('final worker answer')).toBeInTheDocument()
     expect(within(dialog).queryByText('Input')).not.toBeInTheDocument()
-    fireEvent.keyDown(dialog, { key: 'Escape', bubbles: true, cancelable: true })
+
+    await user.click(within(dialog).getByRole('button', { name: '查看步骤详情：Read File' }))
+    const innerDialog = screen.getByRole('dialog', { name: '步骤全屏查看' })
+    fireEvent.keyDown(innerDialog, { key: 'Escape', bubbles: true, cancelable: true })
+    expect(screen.queryByRole('dialog', { name: '步骤全屏查看' })).not.toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Worker Agent 执行详情' })).toBeInTheDocument()
+
+    const outerDialog = screen.getByRole('dialog', { name: 'Worker Agent 执行详情' })
+    fireEvent.keyDown(outerDialog, { key: 'Escape', bubbles: true, cancelable: true })
     expect(screen.queryByRole('dialog', { name: 'Worker Agent 执行详情' })).not.toBeInTheDocument()
   })
 })
