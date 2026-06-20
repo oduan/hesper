@@ -1,4 +1,4 @@
-import { agentRuntimeEventSchema, modelConfigSchema, modelProviderConfigSchema } from '@hesper/shared'
+import { agentRuntimeEventSchema, modelConfigSchema, modelProviderConfigSchema, type Role } from '@hesper/shared'
 import { BrowserWindow, type Dialog, type IpcMain, type IpcMainInvokeEvent } from 'electron'
 import { z } from 'zod'
 import {
@@ -143,11 +143,20 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
     subscriptions.delete(senderId)
   }
 
+  const listRuntimeRoles = async (): Promise<Role[]> => {
+    const customRoles = await options.container.persistence.roles.list()
+    const customRoleIds = new Set(customRoles.map((role) => role.id))
+    return [
+      ...options.container.roleService.listRoles().filter((role) => !customRoleIds.has(role.id)),
+      ...customRoles
+    ]
+  }
+
   const assembleRunContext = async (sessionId: string, workspacePath?: string, requestedEnabledToolIds?: string[]): Promise<{ systemPrompt: string; enabledToolIds: string[]; workspacePath?: string }> => {
     const session = await options.container.sessionService.getSession(sessionId)
     const resolvedWorkspacePath = workspacePath ?? session.workspacePath
-    const roles = options.container.roleService.listRoles()
-    const role = options.container.roleService.getRole(session.roleId ?? 'main-agent')
+    const roles = await listRuntimeRoles()
+    const role = roles.find((candidate) => candidate.id === (session.roleId ?? 'main-agent'))
     const assignableWorkerAgentRoles = roles.filter((candidate) => candidate.canBeAssignedToWorkerAgent ?? candidate.canBeWorkerAgent)
     const configuredToolIds = session.enabledToolIds?.length ? session.enabledToolIds : role?.defaultToolIds ?? []
     const requestedToolIdSet = requestedEnabledToolIds === undefined ? undefined : new Set(requestedEnabledToolIds)

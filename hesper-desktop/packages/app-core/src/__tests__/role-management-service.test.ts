@@ -44,8 +44,8 @@ describe('role management service', () => {
       defaultSkillIds: [],
       defaultToolIds: ['filesystem.read-file'],
       canBeMainAgent: true,
-      canBeWorkerAgent: false,
-      canBeAssignedToWorkerAgent: false
+      canBeWorkerAgent: true,
+      canBeAssignedToWorkerAgent: true
     })
   })
 

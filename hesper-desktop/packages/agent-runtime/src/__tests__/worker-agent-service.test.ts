@@ -511,6 +511,18 @@ describe('worker agent service', () => {
     })
   })
 
+  it('allows assignable worker roles when the session has no explicit allowed worker role list', async () => {
+    const { allowedWorkerAgentRoleIds: _allowedWorkerAgentRoleIds, ...sessionWithoutExplicitAllowedRoles } = defaultSession
+    const { service, createContext } = await createHarness({
+      session: sessionWithoutExplicitAllowedRoles
+    })
+
+    await expect(service.spawn({ task: 'review', roleId: 'reviewer', allowedToolIds: ['filesystem.read-file'], wait: false }, createContext())).resolves.toMatchObject({
+      roleId: 'reviewer',
+      status: 'running'
+    })
+  })
+
   it('denies cross-session access to worker invocations', async () => {
     const { service, createContext } = await createHarness()
     const spawned = await withTimeout(

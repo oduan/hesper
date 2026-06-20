@@ -67,8 +67,8 @@ function toStoredRole(input: ManagedRoleDto): Role {
     defaultSkillIds: [],
     defaultToolIds: input.defaultToolIds,
     canBeMainAgent: true,
-    canBeWorkerAgent: false,
-    canBeAssignedToWorkerAgent: false
+    canBeWorkerAgent: true,
+    canBeAssignedToWorkerAgent: true
   }
 }
 

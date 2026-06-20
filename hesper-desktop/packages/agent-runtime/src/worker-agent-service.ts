@@ -101,9 +101,11 @@ type RegistryLike<T> = {
   list(): T[]
 }
 
+type MaybePromise<T> = T | Promise<T>
+
 type RoleRegistryLike = {
-  listRoles(): Role[]
-  getRole(id: string): Role | undefined
+  listRoles(): MaybePromise<Role[]>
+  getRole(id: string): MaybePromise<Role | undefined>
 }
 
 type ToolRegistryLike = RegistryLike<ToolDefinition> & {
@@ -411,11 +413,21 @@ export function createWorkerAgentService(options: WorkerAgentServiceOptions): Wo
     return { parentRun, session }
   }
 
-  function ensureWorkerRole(session: Session, role: Role | undefined, roleId: string): Role {
+  function isAssignableWorkerRole(role: Role): boolean {
+    return role.canBeWorkerAgent === true && role.canBeAssignedToWorkerAgent !== false
+  }
+
+  function ensureWorkerRole(session: Session, role: Role | undefined, roleId: string, assignableRoles: Role[]): Role {
     if (!role) throw createNotFoundError('Role', roleId)
-    if (role.canBeWorkerAgent !== true) throw createRoleError(roleId)
-    if (role.canBeAssignedToWorkerAgent === false) throw createRoleError(roleId)
-    if (!session.allowedWorkerAgentRoleIds?.includes(roleId)) throw createRoleError(roleId)
+    if (!isAssignableWorkerRole(role)) throw createRoleError(roleId)
+
+    const allowedRoleIds = session.allowedWorkerAgentRoleIds
+    if (allowedRoleIds && allowedRoleIds.length > 0) {
+      if (!allowedRoleIds.includes(roleId)) throw createRoleError(roleId)
+      return role
+    }
+
+    if (!assignableRoles.some((candidate) => candidate.id === roleId)) throw createRoleError(roleId)
     return role
   }
 
@@ -604,7 +616,8 @@ export function createWorkerAgentService(options: WorkerAgentServiceOptions): Wo
         throw createLimitError(`Worker Agent invocation limit exceeded: ${existingInvocations.length} >= ${maxWorkerAgentsPerRun}`)
       }
 
-      const role = ensureWorkerRole(session, options.roles.getRole(parsed.roleId), parsed.roleId)
+      const roles = await options.roles.listRoles()
+      const role = ensureWorkerRole(session, await options.roles.getRole(parsed.roleId), parsed.roleId, roles.filter(isAssignableWorkerRole))
       const depth = (parentRun.depth ?? 0) + 1
       const maxDepth = session.maxWorkerAgentDepth ?? 1
       if (depth > maxDepth) {

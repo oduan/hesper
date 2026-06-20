@@ -14,6 +14,7 @@ import {
   type CredentialVaultCodec
 } from '@hesper/app-core'
 import type { Persistence } from '@hesper/persistence'
+import type { Role } from '@hesper/shared'
 import { Notification } from 'electron'
 import { createAllowlistPermissionPolicy, createBuiltinToolDefinitions, createBuiltinToolExecutor, createToolRunner } from '@hesper/tools'
 
@@ -116,11 +117,22 @@ export function createServiceContainer(options: ServiceContainerOptions) {
       })
     : new MockAgentAdapter({ delayMs: 0 })
   const agentRuntime = new AgentRuntime({ persistence: options.persistence, adapter })
+  const listRuntimeRoles = async (): Promise<Role[]> => {
+    const customRoles = await options.persistence.roles.list()
+    const customRoleIds = new Set(customRoles.map((role) => role.id))
+    return [
+      ...roleService.listRoles().filter((role) => !customRoleIds.has(role.id)),
+      ...customRoles
+    ]
+  }
   workerAgentService = createWorkerAgentService({
     persistence: options.persistence,
     adapter,
     promptAssembly: promptAssemblyService,
-    roles: roleService,
+    roles: {
+      listRoles: listRuntimeRoles,
+      getRole: async (id) => roleService.getRole(id) ?? await options.persistence.roles.get(id)
+    },
     skills: {
       list: () => skillService.listSkills()
     },

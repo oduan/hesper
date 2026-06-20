@@ -105,6 +105,41 @@ describe('desktop service container', () => {
     })
   })
 
+  it('spawns Worker Agents with custom roles created through role management', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock' })
+    const session = await container.sessionService.createSession({ title: 'Custom worker role' })
+    await persistence.runs.save({
+      id: 'run-parent',
+      sessionId: session.id,
+      status: 'running',
+      modelId: 'mock/hesper-fast',
+      retryCount: 0,
+      maxRetries: 0
+    })
+    const role = await container.roleManagementService.createRole({
+      name: 'Custom Reviewer',
+      systemPrompt: 'Review carefully.',
+      defaultToolIds: ['filesystem.read-file']
+    })
+
+    await expect(container.workerAgentService.spawn({
+      task: 'Read the root README.',
+      roleId: role.id,
+      allowedToolIds: ['filesystem.read-file'],
+      wait: true,
+      timeoutMs: 5_000
+    }, {
+      runId: 'run-parent',
+      sessionId: session.id,
+      allowedToolIds: ['agent.spawn-worker-agent', 'filesystem.read-file']
+    })).resolves.toMatchObject({
+      roleId: role.id,
+      status: 'succeeded',
+      result: expect.objectContaining({ content: expect.stringContaining('Read the root README.') })
+    })
+  })
+
   it('seeds builtin providers for an empty desktop persistence store', async () => {
     const persistence = await createInMemoryPersistence()
     const container = createServiceContainer({ persistence, agentMode: 'mock', credentialCodec: createMockCredentialCodec() })
