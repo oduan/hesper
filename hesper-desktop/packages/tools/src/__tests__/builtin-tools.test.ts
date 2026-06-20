@@ -2,10 +2,18 @@ import { describe, expect, it } from 'vitest'
 import { createBuiltinToolDefinitions } from '../builtin-tools'
 
 describe('builtin tools', () => {
-  it('contains the builtin tool set without exposing legacy worker execution', () => {
+  it('contains the builtin tool set including Worker Agent management tools', () => {
     const tools = createBuiltinToolDefinitions()
-    expect(tools).toHaveLength(18)
-    expect(tools.map((tool) => tool.id)).not.toContain('agent.spawn-worker-agent')
+    expect(tools).toHaveLength(23)
+    expect(tools.map((tool) => tool.id)).toEqual(
+      expect.arrayContaining([
+        'agent.spawn-worker-agent',
+        'agent.list-worker-agents',
+        'agent.get-worker-agent',
+        'agent.wait-worker-agent',
+        'agent.cancel-worker-agent'
+      ])
+    )
     expect(tools.every((tool) => typeof tool.icon === 'string' && tool.icon.length > 0)).toBe(true)
   })
 
@@ -29,11 +37,15 @@ describe('builtin tools', () => {
         'roles.find',
         'roles.create',
         'roles.update',
+        'agent.spawn-worker-agent',
+        'agent.list-worker-agents',
+        'agent.get-worker-agent',
+        'agent.wait-worker-agent',
+        'agent.cancel-worker-agent',
         'system.execute-command',
         'system.show-notification'
       ])
     )
-    expect(ids).not.toContain('agent.spawn-worker-agent')
   })
 
   it('defines filesystem tools with required schema fields', () => {
@@ -96,7 +108,7 @@ describe('builtin tools', () => {
     expect(search).toMatchObject({ category: 'filesystem', inputSchema: { type: 'object', required: ['condition'] } })
   })
 
-  it('defines non-filesystem tools with key schema fields', () => {
+  it('defines non-filesystem and Worker Agent tools with key schema fields', () => {
     const tools = createBuiltinToolDefinitions()
 
     expect(tools.find((tool) => tool.id === 'git.status')).toMatchObject({
@@ -131,8 +143,6 @@ describe('builtin tools', () => {
       requiresApiKey: true,
       inputSchema: { type: 'object', required: ['query'] }
     })
-
-    expect(tools.find((tool) => tool.id === 'agent.spawn-worker-agent')).toBeUndefined()
 
     expect(tools.find((tool) => tool.id === 'roles.list')).toMatchObject({
       category: 'agent',
@@ -176,7 +186,67 @@ describe('builtin tools', () => {
         }
       }
     })
-    expect(tools.find((tool) => tool.id === 'roles.delete')).toBeUndefined()
+
+    expect(tools.find((tool) => tool.id === 'agent.spawn-worker-agent')).toMatchObject({
+      category: 'agent',
+      inputSchema: {
+        type: 'object',
+        required: ['task', 'roleId', 'allowedToolIds'],
+        properties: {
+          task: expect.objectContaining({ type: 'string' }),
+          roleId: expect.objectContaining({ type: 'string' }),
+          allowedToolIds: expect.objectContaining({ type: 'array' }),
+          expectedOutput: expect.objectContaining({ type: 'string' }),
+          contextSummary: expect.objectContaining({ type: 'string' }),
+          wait: expect.objectContaining({ type: 'boolean' }),
+          timeoutMs: expect.objectContaining({ type: 'number' }),
+          cancelOnTimeout: expect.objectContaining({ type: 'boolean' })
+        }
+      }
+    })
+    expect(tools.find((tool) => tool.id === 'agent.list-worker-agents')).toMatchObject({
+      category: 'agent',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          parentRunId: expect.objectContaining({ type: 'string' }),
+          status: expect.objectContaining({ type: 'string' })
+        }
+      }
+    })
+    expect(tools.find((tool) => tool.id === 'agent.get-worker-agent')).toMatchObject({
+      category: 'agent',
+      inputSchema: {
+        type: 'object',
+        required: ['invocationId'],
+        properties: {
+          invocationId: expect.objectContaining({ type: 'string' })
+        }
+      }
+    })
+    expect(tools.find((tool) => tool.id === 'agent.wait-worker-agent')).toMatchObject({
+      category: 'agent',
+      inputSchema: {
+        type: 'object',
+        required: ['invocationId'],
+        properties: {
+          invocationId: expect.objectContaining({ type: 'string' }),
+          timeoutMs: expect.objectContaining({ type: 'number' }),
+          cancelOnTimeout: expect.objectContaining({ type: 'boolean' })
+        }
+      }
+    })
+    expect(tools.find((tool) => tool.id === 'agent.cancel-worker-agent')).toMatchObject({
+      category: 'agent',
+      inputSchema: {
+        type: 'object',
+        required: ['invocationId'],
+        properties: {
+          invocationId: expect.objectContaining({ type: 'string' }),
+          reason: expect.objectContaining({ type: 'string' })
+        }
+      }
+    })
 
     expect(tools.find((tool) => tool.id === 'system.show-notification')).toMatchObject({
       category: 'system',

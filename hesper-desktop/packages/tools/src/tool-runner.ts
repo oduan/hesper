@@ -5,6 +5,8 @@ export type ToolExecutionContext = {
   sessionId: string
   workspacePath?: string
   allowedToolIds: string[]
+  toolCallId?: string
+  parentStepId?: string
   signal?: AbortSignal
 }
 

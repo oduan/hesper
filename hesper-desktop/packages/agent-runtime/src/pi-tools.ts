@@ -45,6 +45,10 @@ function normalizePiToolName(toolId: string): string {
   return normalized || 'tool'
 }
 
+function parentStepIdForToolCall(runId: string, toolCallId: string): string {
+  return `step-${runId}-tool-${toolCallId}`
+}
+
 function toPiToolResult(tool: ToolDefinition, toolCallId: string, result: Awaited<ReturnType<ToolRunner['run']>>): AgentToolResult<unknown> {
   return {
     content: [{ type: 'text', text: result.content }],
@@ -67,6 +71,8 @@ export function createPiAgentTools(input: PiToolAdapterInput): AgentTool<any>[] 
     async execute(toolCallId, params, signal) {
       const result = await input.runner.run(tool, stripPurposeParameter(params), {
         ...input.context,
+        toolCallId,
+        parentStepId: parentStepIdForToolCall(input.context.runId, toolCallId),
         ...(signal !== undefined ? { signal } : {})
       })
 

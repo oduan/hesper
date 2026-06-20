@@ -518,18 +518,51 @@ describe('createBuiltinToolExecutor', () => {
     })
   })
 
-  it('returns a controlled error for agent.spawn-worker-agent until Worker Agent child runs are implemented', async () => {
+  it('delegates Worker Agent tools to injected handlers with execution context', async () => {
+    const spawn = vi.fn(async () => ({ invocationId: 'worker-agent-1', childRunId: 'run-child', status: 'running' }))
+    const executor = createBuiltinToolExecutor({
+      workerAgentTools: {
+        spawn,
+        list: vi.fn(),
+        get: vi.fn(),
+        wait: vi.fn(),
+        cancel: vi.fn()
+      }
+    })
+    const context = {
+      runId: 'run-parent',
+      sessionId: 'session-1',
+      allowedToolIds: ['agent.spawn-worker-agent'],
+      toolCallId: 'tool-1',
+      parentStepId: 'step-run-parent-tool-tool-1'
+    }
+
+    const result = await executor.execute(tool('agent.spawn-worker-agent'), {
+      task: 'review',
+      roleId: 'reviewer',
+      allowedToolIds: ['filesystem.read-file'],
+      wait: false
+    }, context)
+
+    expect(spawn).toHaveBeenCalledWith(expect.objectContaining({ task: 'review', wait: false }), context)
+    expect(result).toMatchObject({
+      content: expect.stringContaining('worker-agent-1'),
+      details: { toolId: 'agent.spawn-worker-agent', workerAgent: expect.objectContaining({ invocationId: 'worker-agent-1' }) }
+    })
+  })
+
+  it('returns a controlled error when Worker Agent handlers are unavailable', async () => {
     const executor = createBuiltinToolExecutor()
 
-    const result = await executor.execute(tool('agent.spawn-worker-agent'), { task: 'review' }, {
-      runId: 'run-1',
+    const result = await executor.execute(tool('agent.get-worker-agent'), { invocationId: 'worker-agent-1' }, {
+      runId: 'run-parent',
       sessionId: 'session-1',
-      allowedToolIds: ['agent.spawn-worker-agent']
+      allowedToolIds: ['agent.get-worker-agent']
     })
 
     expect(result).toEqual({
-      content: 'Worker Agent execution is not available yet.',
-      details: { code: 'not_implemented', toolId: 'agent.spawn-worker-agent' },
+      content: 'Worker Agent tools are not available in this runtime.',
+      details: { code: 'not_available', toolId: 'agent.get-worker-agent' },
       isError: true
     })
   })

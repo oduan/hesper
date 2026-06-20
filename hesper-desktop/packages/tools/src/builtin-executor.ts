@@ -34,6 +34,14 @@ export type RoleToolHandlers = {
   updateRole(input: RoleToolInput & { id: string }): Promise<unknown>
 }
 
+export type WorkerAgentToolHandlers = {
+  spawn(input: Record<string, unknown>, context: ToolExecutionContext): Promise<unknown>
+  list(input: Record<string, unknown>, context: ToolExecutionContext): Promise<unknown>
+  get(input: Record<string, unknown>, context: ToolExecutionContext): Promise<unknown>
+  wait(input: Record<string, unknown>, context: ToolExecutionContext): Promise<unknown>
+  cancel(input: Record<string, unknown>, context: ToolExecutionContext): Promise<unknown>
+}
+
 export type BuiltinToolExecutorOptions = {
   maxReadBytes?: number
   gitTimeoutMs?: number
@@ -43,6 +51,7 @@ export type BuiltinToolExecutorOptions = {
   fetch?: typeof fetch
   showNotification?: (message: string) => Promise<void> | void
   roleTools?: RoleToolHandlers
+  workerAgentTools?: WorkerAgentToolHandlers
   now?: () => string
 }
 
@@ -200,6 +209,28 @@ async function updateRoleTool(tool: ToolDefinition, args: unknown, roleTools: Ro
   if (!roleTools) return roleToolsUnavailable(tool)
   const role = await roleTools.updateRole(updateRoleToolInput(args))
   return { content: jsonContent(role), details: { toolId: tool.id, role } }
+}
+
+function workerAgentToolsUnavailable(tool: ToolDefinition): ToolExecutionResult {
+  return {
+    content: 'Worker Agent tools are not available in this runtime.',
+    details: { code: 'not_available', toolId: tool.id },
+    isError: true
+  }
+}
+
+async function runWorkerAgentTool(
+  tool: ToolDefinition,
+  args: unknown,
+  context: ToolExecutionContext,
+  handlers: WorkerAgentToolHandlers | undefined,
+  method: keyof WorkerAgentToolHandlers
+): Promise<ToolExecutionResult> {
+  if (!handlers) return workerAgentToolsUnavailable(tool)
+  const input = argsObject(args)
+  const result = await handlers[method](input, context)
+  const details = { toolId: tool.id, workerAgent: result }
+  return { content: jsonContent(result), details }
 }
 
 function requireWorkspace(context: ToolExecutionContext): string {
@@ -1093,14 +1124,6 @@ async function showNotification(tool: ToolDefinition, args: unknown, showNotific
   }
 }
 
-function workerAgentNotImplemented(tool: ToolDefinition): ToolExecutionResult {
-  return {
-    content: 'Worker Agent execution is not available yet.',
-    details: { code: 'not_implemented', toolId: tool.id },
-    isError: true
-  }
-}
-
 export function createBuiltinToolExecutor(options: BuiltinToolExecutorOptions = {}): ToolExecutor {
   const maxReadBytes = options.maxReadBytes ?? defaultMaxReadBytes
   const gitTimeoutMs = options.gitTimeoutMs ?? defaultGitTimeoutMs
@@ -1149,8 +1172,15 @@ export function createBuiltinToolExecutor(options: BuiltinToolExecutorOptions = 
         case 'system.show-notification':
           return showNotification(tool, args, options.showNotification)
         case 'agent.spawn-worker-agent':
-          // Legacy compatibility path: the tool is no longer exposed by default.
-          return workerAgentNotImplemented(tool)
+          return runWorkerAgentTool(tool, args, context, options.workerAgentTools, 'spawn')
+        case 'agent.list-worker-agents':
+          return runWorkerAgentTool(tool, args, context, options.workerAgentTools, 'list')
+        case 'agent.get-worker-agent':
+          return runWorkerAgentTool(tool, args, context, options.workerAgentTools, 'get')
+        case 'agent.wait-worker-agent':
+          return runWorkerAgentTool(tool, args, context, options.workerAgentTools, 'wait')
+        case 'agent.cancel-worker-agent':
+          return runWorkerAgentTool(tool, args, context, options.workerAgentTools, 'cancel')
         default:
           throw new Error(`No builtin executor registered for tool: ${tool.id}`)
       }

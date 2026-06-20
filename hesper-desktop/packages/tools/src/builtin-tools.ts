@@ -281,6 +281,86 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
       }
     },
     {
+      id: 'agent.spawn-worker-agent',
+      name: 'Spawn Worker Agent',
+      description: 'Create a constrained Worker Agent child run with a role, task, and limited tool set. By default waits only for a bounded timeout and returns a diagnosis if still running.',
+      category: 'agent',
+      icon: '🧑‍💻',
+      inputSchema: {
+        type: 'object',
+        required: ['task', 'roleId', 'allowedToolIds'],
+        properties: {
+          task: { type: 'string', description: 'Specific task for the Worker Agent.' },
+          roleId: { type: 'string', description: 'Assignable Worker Agent role id.' },
+          allowedToolIds: { type: 'array', items: { type: 'string' }, description: 'Requested tool ids. Effective tools are intersected with parent, role, and global limits.' },
+          expectedOutput: { type: 'string', description: 'Expected result format.' },
+          contextSummary: { type: 'string', description: 'Relevant context from the parent run.' },
+          wait: { type: 'boolean', description: 'When true, wait for a bounded timeout. Defaults to true.' },
+          timeoutMs: { type: 'number', description: 'Maximum wait duration in milliseconds. Defaults to 60000 and is capped at 300000.' },
+          cancelOnTimeout: { type: 'boolean', description: 'Cancel the Worker Agent if the bounded wait times out. Defaults to false.' }
+        }
+      }
+    },
+    {
+      id: 'agent.list-worker-agents',
+      name: 'List Worker Agents',
+      description: 'List Worker Agent invocations for the current parent run or another run in the same session.',
+      category: 'agent',
+      icon: '📋',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          parentRunId: { type: 'string', description: 'Parent run id. Defaults to the current run.' },
+          status: { type: 'string', description: 'Optional status filter: queued, running, succeeded, failed, or cancelled.' }
+        }
+      }
+    },
+    {
+      id: 'agent.get-worker-agent',
+      name: 'Get Worker Agent',
+      description: 'Get a Worker Agent invocation status, diagnosis, and result if available.',
+      category: 'agent',
+      icon: '🔎',
+      inputSchema: {
+        type: 'object',
+        required: ['invocationId'],
+        properties: {
+          invocationId: { type: 'string', description: 'Worker Agent invocation id.' }
+        }
+      }
+    },
+    {
+      id: 'agent.wait-worker-agent',
+      name: 'Wait Worker Agent',
+      description: 'Wait for a Worker Agent to finish for a bounded timeout and return a diagnosis if it is still running.',
+      category: 'agent',
+      icon: '⏱️',
+      inputSchema: {
+        type: 'object',
+        required: ['invocationId'],
+        properties: {
+          invocationId: { type: 'string', description: 'Worker Agent invocation id.' },
+          timeoutMs: { type: 'number', description: 'Maximum wait duration in milliseconds. Defaults to 60000 and is capped at 300000.' },
+          cancelOnTimeout: { type: 'boolean', description: 'Cancel if timeout elapses. Defaults to false.' }
+        }
+      }
+    },
+    {
+      id: 'agent.cancel-worker-agent',
+      name: 'Cancel Worker Agent',
+      description: 'Cancel a running Worker Agent in the same session.',
+      category: 'agent',
+      icon: '🛑',
+      inputSchema: {
+        type: 'object',
+        required: ['invocationId'],
+        properties: {
+          invocationId: { type: 'string', description: 'Worker Agent invocation id.' },
+          reason: { type: 'string', description: 'Optional cancellation reason.' }
+        }
+      }
+    },
+    {
       id: 'system.execute-command',
       name: 'Execute Command',
       description: `Execute one complete shell command from the selected workspace. ${currentCommandRuntimeDescription()} The command is run after changing to the workspace directory.`,

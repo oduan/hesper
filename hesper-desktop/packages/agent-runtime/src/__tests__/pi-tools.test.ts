@@ -53,12 +53,30 @@ describe('createPiAgentTools', () => {
       sessionId: 'session-1',
       workspacePath: 'C:/workspace',
       allowedToolIds: ['filesystem.read-file'],
+      toolCallId: 'tool-call-1',
+      parentStepId: 'step-run-1-tool-tool-call-1',
       signal
     })
     expect(result).toEqual({
       content: [{ type: 'text', text: 'file content' }],
       details: { toolId: 'filesystem.read-file', toolCallId: 'tool-call-1', toolIcon: '📖', result: { bytes: 12 } }
     })
+  })
+
+  it('passes toolCallId and parentStepId to ToolRunner context', async () => {
+    const run = vi.fn(async () => ({ content: 'ok' }))
+    const [tool] = createPiAgentTools({
+      tools: [{ id: 'agent.spawn-worker-agent', name: 'Spawn Worker Agent', description: 'Spawn', category: 'agent', inputSchema: { type: 'object', properties: {} } }],
+      runner: { run },
+      context: { runId: 'run-parent', sessionId: 'session-1', allowedToolIds: ['agent.spawn-worker-agent'] }
+    })
+
+    await tool!.execute('tool-1', { purpose: 'delegate work' }, new AbortController().signal)
+
+    expect(run).toHaveBeenCalledWith(expect.any(Object), {}, expect.objectContaining({
+      toolCallId: 'tool-1',
+      parentStepId: 'step-run-parent-tool-tool-1'
+    }))
   })
 
   it('throws with structured details when ToolRunner returns an error result', async () => {
