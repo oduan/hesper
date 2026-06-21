@@ -42,6 +42,9 @@ const ipcChannels = {
   toolsCredentialStatus: 'tools:credentialStatus',
   toolsSaveApiKey: 'tools:saveApiKey',
   toolsDeleteApiKey: 'tools:deleteApiKey',
+  skillsList: 'skills:list',
+  skillsGet: 'skills:get',
+  skillsRefresh: 'skills:refresh',
   sshKeysList: 'sshKeys:list',
   sshKeysCreate: 'sshKeys:create',
   sshKeysDelete: 'sshKeys:delete',
@@ -156,6 +159,11 @@ const hesperApi = {
     credentialStatus: (input) => ipcRenderer.invoke(ipcChannels.toolsCredentialStatus, input),
     saveApiKey: (input) => ipcRenderer.invoke(ipcChannels.toolsSaveApiKey, input),
     deleteApiKey: (input) => ipcRenderer.invoke(ipcChannels.toolsDeleteApiKey, input)
+  },
+  skills: {
+    list: () => ipcRenderer.invoke(ipcChannels.skillsList),
+    get: (id) => ipcRenderer.invoke(ipcChannels.skillsGet, id),
+    refresh: () => ipcRenderer.invoke(ipcChannels.skillsRefresh)
   },
   sshKeys: {
     list: () => ipcRenderer.invoke(ipcChannels.sshKeysList),

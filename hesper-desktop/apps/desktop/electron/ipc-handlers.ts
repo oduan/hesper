@@ -44,6 +44,8 @@ import {
   setSessionWorkspaceInputSchema,
   setToolEnabledInputSchema,
   saveToolApiKeyInputSchema,
+  skillDtoSchema,
+  skillsResultSchema,
   sshKeysResultSchema,
   sshServersResultSchema,
   subscribeAgentEventsResultSchema,
@@ -93,6 +95,7 @@ const mutatingChannels = [
   ipcChannels.toolsSetEnabled,
   ipcChannels.toolsSaveApiKey,
   ipcChannels.toolsDeleteApiKey,
+  ipcChannels.skillsRefresh,
   ipcChannels.sshKeysCreate,
   ipcChannels.sshKeysDelete,
   ipcChannels.sshServersCreate,
@@ -115,6 +118,14 @@ function omitUndefined<T extends Record<string, unknown>>(value: T): StripUndefi
 
 function toError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error))
+}
+
+type RefreshableSkillService = ServiceContainer['skillService'] & {
+  refreshSkills(): Promise<unknown[]>
+}
+
+function isRefreshableSkillService(skillService: ServiceContainer['skillService']): skillService is RefreshableSkillService {
+  return typeof (skillService as { refreshSkills?: unknown }).refreshSkills === 'function'
 }
 
 const trustedOAuthAuthorizationHosts = new Set([
@@ -347,13 +358,13 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
     },
     [ipcChannels.agentEnqueue]: async (_event, payload) => {
       const input = agentEnqueueInputSchema.parse(payload)
-      const { messageId, messageCreatedAt, ...runtimeInput } = input
+      const { messageId, messageCreatedAt, displayPrompt, ...runtimeInput } = input
       const runContext = await assembleRunContext(input.sessionId, input.workspacePath, input.enabledToolIds)
       const run = await options.container.agentRuntime.enqueue(omitUndefined({ ...runtimeInput, ...runContext }))
       try {
         await options.container.conversationService.createUserMessage({
           sessionId: input.sessionId,
-          content: input.prompt,
+          content: displayPrompt ?? input.prompt,
           runId: run.id,
           ...(messageId ? { id: messageId } : {}),
           ...(messageCreatedAt ? { now: messageCreatedAt } : {})
@@ -424,6 +435,16 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       const status = await options.container.credentialVaultService.deleteToolApiKey(toolCredentialInputSchema.parse(payload))
       await savePersistence()
       return toolCredentialStatusSchema.parse(status)
+    },
+    [ipcChannels.skillsList]: async () => skillsResultSchema.parse(options.container.skillService.listSkills()),
+    [ipcChannels.skillsGet]: async (_event, payload) => {
+      const skill = options.container.skillService.getSkill(sessionIdInputSchema.parse(payload))
+      return skill === undefined ? undefined : skillDtoSchema.parse(skill)
+    },
+    [ipcChannels.skillsRefresh]: async () => {
+      const skillService = options.container.skillService
+      const skills = isRefreshableSkillService(skillService) ? await skillService.refreshSkills() : skillService.listSkills()
+      return skillsResultSchema.parse(skills)
     },
     [ipcChannels.sshKeysList]: async () => sshKeysResultSchema.parse(await options.container.sshConfigurationService.listKeys()),
     [ipcChannels.sshKeysCreate]: async (_event, payload) => {

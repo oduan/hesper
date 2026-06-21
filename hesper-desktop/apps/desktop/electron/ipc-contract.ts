@@ -1,4 +1,4 @@
-import { agentRunSchema, agentRuntimeEventSchema, messageSchema, modelConfigSchema, modelProviderConfigSchema, modelRefSchema, runStepSchema, sessionSchema, sshKeySchema, sshServerSchema, toolDefinitionBaseSchema, workerAgentInvocationSchema } from '@hesper/shared'
+import { agentRunSchema, agentRuntimeEventSchema, messageSchema, modelConfigSchema, modelProviderConfigSchema, modelRefSchema, runStepSchema, sessionSchema, skillSchema, sshKeySchema, sshServerSchema, toolDefinitionBaseSchema, workerAgentInvocationSchema } from '@hesper/shared'
 import { z } from 'zod'
 
 export const ipcChannels = {
@@ -43,6 +43,9 @@ export const ipcChannels = {
   toolsCredentialStatus: 'tools:credentialStatus',
   toolsSaveApiKey: 'tools:saveApiKey',
   toolsDeleteApiKey: 'tools:deleteApiKey',
+  skillsList: 'skills:list',
+  skillsGet: 'skills:get',
+  skillsRefresh: 'skills:refresh',
   sshKeysList: 'sshKeys:list',
   sshKeysCreate: 'sshKeys:create',
   sshKeysDelete: 'sshKeys:delete',
@@ -118,6 +121,7 @@ export const setSessionOutputModeInputSchema = z.object({
 export const agentEnqueueInputSchema = z.object({
   sessionId: nonEmptyStringSchema,
   prompt: nonEmptyStringSchema,
+  displayPrompt: nonEmptyStringSchema.optional(),
   modelId: nonEmptyStringSchema,
   workspacePath: z.string().optional(),
   enabledToolIds: z.array(nonEmptyStringSchema).optional(),
@@ -350,6 +354,8 @@ export const updateSshServerInputSchema = z.object({
   note: z.string().optional()
 }).strict()
 
+export const skillDtoSchema = skillSchema
+export const skillsResultSchema = z.array(skillDtoSchema)
 export const sshKeysResultSchema = z.array(sshKeySchema)
 export const sshServersResultSchema = z.array(sshServerSchema)
 
@@ -402,6 +408,7 @@ export type ProviderOAuthSaveInput = z.infer<typeof providerOAuthSaveInputSchema
 export type ListModelsInput = z.infer<typeof listModelsInputSchema>
 export type SaveModelInput = z.infer<typeof saveModelInputSchema>
 export type ToolDto = z.infer<typeof toolDtoSchema>
+export type SkillDto = z.infer<typeof skillDtoSchema>
 export type SetToolEnabledInput = z.infer<typeof setToolEnabledInputSchema>
 export type ToolCredentialInput = z.infer<typeof toolCredentialInputSchema>
 export type SaveToolApiKeyInput = z.infer<typeof saveToolApiKeyInputSchema>
@@ -484,6 +491,11 @@ export type HesperDesktopApi = {
     credentialStatus(input: ToolCredentialInput): Promise<ToolCredentialStatus>
     saveApiKey(input: SaveToolApiKeyInput): Promise<ToolCredentialStatus>
     deleteApiKey(input: ToolCredentialInput): Promise<ToolCredentialStatus>
+  }
+  skills: {
+    list(): Promise<SkillDto[]>
+    get(id: string): Promise<SkillDto | undefined>
+    refresh(): Promise<SkillDto[]>
   }
   sshKeys: {
     list(): Promise<SshKeyDto[]>

@@ -1,4 +1,4 @@
-import type { CredentialVaultCodec } from '@hesper/app-core'
+import type { CredentialVaultCodec, SkillService } from '@hesper/app-core'
 import { createInMemoryPersistence } from '@hesper/persistence'
 import { describe, expect, it, vi } from 'vitest'
 import { registerIpcHandlers } from '../electron/ipc-handlers'
@@ -57,6 +57,32 @@ describe('desktop service container', () => {
       tools: container.toolCatalogService.list(),
       assignableWorkerAgentRoles: container.roleService.listRoles()
     }).systemPrompt).toContain('hesper desktop Agent')
+  })
+
+  it('supports injecting a skill service for desktop runtime and tools', async () => {
+    const persistence = await createInMemoryPersistence()
+    const researchSkill = { id: 'user:research', name: 'Research', description: 'Find references', source: 'user' as const, prompt: 'Research carefully.' }
+    const skillService: SkillService = {
+      listSkills: vi.fn(() => [researchSkill]),
+      getSkill: vi.fn((id) => id === 'user:research' ? researchSkill : undefined)
+    }
+    const container = createServiceContainer({ persistence, agentMode: 'mock', skillService })
+
+    expect(container.skillService).toBe(skillService)
+
+    const listResult = await container.toolRunner.run(container.toolCatalogService.get('skills.list')!, {}, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['skills.list']
+    })
+    expect(JSON.parse(listResult.content)).toEqual([expect.objectContaining({ id: 'user:research', name: 'Research' })])
+
+    const getResult = await container.toolRunner.run(container.toolCatalogService.get('skills.get')!, { id: 'user:research' }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['skills.get']
+    })
+    expect(JSON.parse(getResult.content)).toMatchObject({ id: 'user:research', prompt: 'Research carefully.' })
   })
 
   it('injects role management tools into the production tool runner', async () => {
@@ -590,6 +616,39 @@ describe('registerIpcHandlers', () => {
     expect(removeHandler).toHaveBeenCalledWith(ipcChannels.sessionsList)
   })
 
+  it('exposes skills through typed IPC handlers and refreshes async services', async () => {
+    const persistence = await createInMemoryPersistence()
+    const skills = [
+      { id: 'builtin:install-skills', name: 'Install Skills', description: 'Install reusable skills.', source: 'builtin' as const },
+      { id: 'user:research', name: 'Research', source: 'user' as const, prompt: 'Research carefully.' }
+    ]
+    const refreshedSkills = [...skills, { id: 'user:writer', name: 'Writer', source: 'user' as const }]
+    const skillService: SkillService & { refreshSkills: ReturnType<typeof vi.fn> } = {
+      listSkills: vi.fn(() => skills),
+      getSkill: vi.fn((id: string) => skills.find((skill) => skill.id === id)),
+      refreshSkills: vi.fn(async () => refreshedSkills)
+    }
+    const container = createServiceContainer({ persistence, agentMode: 'mock', skillService })
+    const handles = new Map<string, (event: any, ...args: any[]) => Promise<unknown> | unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (event: any, ...args: any[]) => Promise<unknown> | unknown) => {
+        handles.set(channel, handler)
+      }),
+      removeHandler: vi.fn()
+    }
+    const dialog = {
+      showOpenDialog: vi.fn(async () => ({ canceled: false, filePaths: ['C:/workspace'] }))
+    }
+
+    registerIpcHandlers({ ipcMain, dialog, container })
+
+    await expect(handles.get(ipcChannels.skillsList)?.({ sender: { id: 1 } })).resolves.toEqual(skills)
+    await expect(handles.get(ipcChannels.skillsGet)?.({ sender: { id: 1 } }, 'user:research')).resolves.toMatchObject({ id: 'user:research', prompt: 'Research carefully.' })
+    await expect(handles.get(ipcChannels.skillsGet)?.({ sender: { id: 1 } }, 'user:missing')).resolves.toBeUndefined()
+    await expect(handles.get(ipcChannels.skillsRefresh)?.({ sender: { id: 1 } })).resolves.toEqual(refreshedSkills)
+    expect(skillService.refreshSkills).toHaveBeenCalledTimes(1)
+  })
+
   it('assembles a registry-backed system prompt before enqueueing an agent run', async () => {
     const persistence = await createInMemoryPersistence()
     const container = createServiceContainer({ persistence, agentMode: 'mock' })
@@ -620,9 +679,9 @@ describe('registerIpcHandlers', () => {
     const session = await container.sessionService.createSession({ title: 'Prompt assembly IPC', workspacePath: 'C:/workspace' })
     await container.roleManagementService.createRole({ name: 'Custom Worker', defaultToolIds: ['filesystem.read-file'] })
 
-    await expect(handles.get(ipcChannels.agentEnqueue)?.({ sender: { id: 1 } }, { sessionId: session.id, prompt: 'Use assembled prompt', modelId: 'mock/hesper-fast', messageId: 'message-client-1', messageCreatedAt: '2026-06-10T03:00:02.000Z' })).resolves.toEqual({ runId: 'run-assembled' })
+    await expect(handles.get(ipcChannels.agentEnqueue)?.({ sender: { id: 1 } }, { sessionId: session.id, prompt: 'Use assembled prompt\n\n<skill>Injected instructions</skill>', displayPrompt: 'Use assembled prompt', modelId: 'mock/hesper-fast', messageId: 'message-client-1', messageCreatedAt: '2026-06-10T03:00:02.000Z' })).resolves.toEqual({ runId: 'run-assembled' })
 
-    const expectedDefaultEnabledTools = ['filesystem.read-file', 'filesystem.write-file', 'filesystem.edit-file', 'filesystem.delete-file', 'filesystem.delete-directory', 'filesystem.list-directory', 'filesystem.find', 'filesystem.search', 'git.status', 'git.run', 'roles.list', 'roles.find', 'roles.create', 'roles.update', 'models.list-available', 'agent.spawn-worker-agent', 'agent.list-worker-agents', 'agent.get-worker-agent', 'agent.wait-worker-agent', 'agent.cancel-worker-agent', 'ssh.list-servers', 'ssh.run-commands', 'ssh.list-executions', 'ssh.get-execution-output', 'time.current', 'time.sleep', 'time.wait-until', 'system.execute-command', 'system.show-notification']
+    const expectedDefaultEnabledTools = ['filesystem.read-file', 'filesystem.write-file', 'filesystem.edit-file', 'filesystem.delete-file', 'filesystem.delete-directory', 'filesystem.list-directory', 'filesystem.find', 'filesystem.search', 'git.status', 'git.run', 'roles.list', 'roles.find', 'roles.create', 'roles.update', 'skills.list', 'skills.get', 'models.list-available', 'agent.spawn-worker-agent', 'agent.list-worker-agents', 'agent.get-worker-agent', 'agent.wait-worker-agent', 'agent.cancel-worker-agent', 'ssh.list-servers', 'ssh.run-commands', 'ssh.list-executions', 'ssh.get-execution-output', 'time.current', 'time.sleep', 'time.wait-until', 'system.execute-command', 'system.show-notification']
     expect(promptSpy).toHaveBeenCalledWith(expect.objectContaining({
       session: expect.objectContaining({
         id: session.id,
@@ -638,7 +697,7 @@ describe('registerIpcHandlers', () => {
     expect(promptInput).not.toHaveProperty('assignableWorkerAgentRoles')
     expect(enqueueSpy).toHaveBeenCalledWith(expect.objectContaining({
       sessionId: session.id,
-      prompt: 'Use assembled prompt',
+      prompt: 'Use assembled prompt\n\n<skill>Injected instructions</skill>',
       modelId: 'mock/hesper-fast',
       systemPrompt: 'assembled system prompt',
       enabledToolIds: expectedDefaultEnabledTools,
@@ -729,7 +788,7 @@ describe('registerIpcHandlers', () => {
       { sessionId: session.id, prompt: 'Do not expose disabled web fetch', modelId: 'mock/hesper-fast' }
     )).resolves.toEqual({ runId: 'run-global-filter' })
 
-    const expectedEnabledTools = ['filesystem.read-file', 'filesystem.write-file', 'filesystem.edit-file', 'filesystem.delete-file', 'filesystem.delete-directory', 'filesystem.list-directory', 'filesystem.find', 'filesystem.search', 'git.status', 'git.run', 'roles.list', 'roles.find', 'roles.create', 'roles.update', 'models.list-available', 'agent.spawn-worker-agent', 'agent.list-worker-agents', 'agent.get-worker-agent', 'agent.wait-worker-agent', 'agent.cancel-worker-agent', 'ssh.list-servers', 'ssh.run-commands', 'ssh.list-executions', 'ssh.get-execution-output', 'time.current', 'time.sleep', 'time.wait-until', 'system.execute-command']
+    const expectedEnabledTools = ['filesystem.read-file', 'filesystem.write-file', 'filesystem.edit-file', 'filesystem.delete-file', 'filesystem.delete-directory', 'filesystem.list-directory', 'filesystem.find', 'filesystem.search', 'git.status', 'git.run', 'roles.list', 'roles.find', 'roles.create', 'roles.update', 'skills.list', 'skills.get', 'models.list-available', 'agent.spawn-worker-agent', 'agent.list-worker-agents', 'agent.get-worker-agent', 'agent.wait-worker-agent', 'agent.cancel-worker-agent', 'ssh.list-servers', 'ssh.run-commands', 'ssh.list-executions', 'ssh.get-execution-output', 'time.current', 'time.sleep', 'time.wait-until', 'system.execute-command']
     expect(promptSpy).toHaveBeenLastCalledWith(expect.objectContaining({
       session: expect.objectContaining({ enabledToolIds: expectedEnabledTools })
     }))

@@ -15,7 +15,8 @@ import {
   createToolCatalogService,
   createToolSettingsService,
   type CredentialVaultCodec,
-  type ProviderOAuthGateway
+  type ProviderOAuthGateway,
+  type SkillService
 } from '@hesper/app-core'
 import type { Persistence } from '@hesper/persistence'
 import type { ModelConfig, ModelProviderConfig, Role, SshExecutionStatus } from '@hesper/shared'
@@ -30,6 +31,7 @@ export type ServiceContainerOptions = {
   credentialCodec?: CredentialVaultCodec
   connectionTestFetch?: typeof fetch
   oauthGateway?: ProviderOAuthGateway
+  skillService?: SkillService
 }
 
 export type ServiceContainer = ReturnType<typeof createServiceContainer>
@@ -171,7 +173,7 @@ export function createServiceContainer(options: ServiceContainerOptions) {
   const conversationService = createConversationService(options.persistence)
   const settingsService = createSettingsService({ persistence: options.persistence })
   const roleService = createDefaultRoleService()
-  const skillService = createDefaultSkillService()
+  const skillService = options.skillService ?? createDefaultSkillService()
   const toolDefinitions = createBuiltinToolDefinitions()
   const toolCatalogService = createToolCatalogService(toolDefinitions)
   const roleManagementService = createRoleManagementService({ persistence: options.persistence, toolCatalogService })
