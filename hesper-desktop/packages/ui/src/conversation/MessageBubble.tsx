@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 import type { Message } from '@hesper/shared'
-import { darkTheme } from '../theme'
+import { themeTokens } from '../theme'
 
 export type MessageBubbleProps = {
   message: Message
@@ -22,15 +22,15 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           aria-label={isUser ? '用户消息' : '助手消息'}
           style={{
             maxWidth: '100%',
-            padding: `${darkTheme.spacing.sm} ${darkTheme.spacing.md}`,
-            borderRadius: darkTheme.radius.lg,
+            padding: `${themeTokens.spacing.sm} ${themeTokens.spacing.md}`,
+            borderRadius: themeTokens.radius.lg,
             border: 0,
-            background: isUser ? 'var(--hesper-color-soft-control, rgba(122, 162, 247, 0.14))' : darkTheme.color.surfaceMuted,
-            color: darkTheme.color.text,
+            background: isUser ? themeTokens.color.softControl : themeTokens.color.surfaceMuted,
+            color: themeTokens.color.text,
             whiteSpace: 'pre-wrap',
             overflowWrap: 'anywhere',
             lineHeight: 1.5,
-            fontSize: darkTheme.typography.body
+            fontSize: themeTokens.typography.body
           }}
         >
           {message.content}
@@ -73,9 +73,9 @@ function messageStackStyle(isUser: boolean): CSSProperties {
 const timestampStyle = {
   justifySelf: 'end',
   alignSelf: 'end',
-  fontSize: darkTheme.typography.tiny,
+  fontSize: themeTokens.typography.tiny,
   lineHeight: 1,
-  color: darkTheme.color.textMuted,
+  color: themeTokens.color.textMuted,
   opacity: 0.72,
   whiteSpace: 'nowrap',
   userSelect: 'none'

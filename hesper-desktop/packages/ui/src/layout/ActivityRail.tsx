@@ -1,4 +1,4 @@
-import { darkTheme } from '../theme'
+import { themeTokens } from '../theme'
 
 export type AppSection = 'sessions' | 'skills' | 'roles' | 'tools' | 'settings'
 
@@ -24,11 +24,11 @@ export function ActivityRail({ activeSection, onCreateSession, onSelectSection }
         width: '100%',
         minWidth: 0,
         boxSizing: 'border-box',
-        padding: `${darkTheme.spacing.sm} ${darkTheme.spacing.sm} ${darkTheme.spacing.md}`,
-        background: darkTheme.color.background,
+        padding: `${themeTokens.spacing.sm} ${themeTokens.spacing.sm} ${themeTokens.spacing.md}`,
+        background: themeTokens.color.background,
         display: 'flex',
         flexDirection: 'column',
-        gap: darkTheme.spacing.md
+        gap: themeTokens.spacing.md
       }}
     >
       <button

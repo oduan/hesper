@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react'
-import { builtinThemes, darkTheme } from '@hesper/ui'
+import { builtinThemes, themeTokens } from '@hesper/ui'
 import type { AppSettings, UpdateSettingsInput } from '../../electron/ipc-contract'
 
 export type AppearanceSettingsPanelProps = {
@@ -26,7 +26,7 @@ export function AppearanceSettingsPanel({ settings, error, onUpdate }: Appearanc
     <section aria-label="外观设置面板" style={panelStyle}>
       <header style={{ display: 'grid', gap: 6 }}>
         <h2 style={{ margin: 0, fontSize: 'calc(var(--hesper-font-size, 14px) + 6px)', lineHeight: 1.2 }}>外观</h2>
-        <p style={{ margin: 0, color: darkTheme.color.textMuted }}>调整 Hesper 的整体显示方式。设置会立即生效并自动保存。</p>
+        <p style={{ margin: 0, color: themeTokens.color.textMuted }}>调整 Hesper 的整体显示方式。设置会立即生效并自动保存。</p>
       </header>
 
       {error ? <p role="alert" style={errorStyle}>设置保存失败：{error}</p> : null}
@@ -54,7 +54,7 @@ export function AppearanceSettingsPanel({ settings, error, onUpdate }: Appearanc
                 }}
               >
                 <span style={{ fontWeight: 800 }}>{option.label}</span>
-                <span style={{ color: darkTheme.color.textMuted }}>{option.description}</span>
+                <span style={{ color: themeTokens.color.textMuted }}>{option.description}</span>
               </button>
             )
           })}
@@ -86,7 +86,7 @@ export function AppearanceSettingsPanel({ settings, error, onUpdate }: Appearanc
                 }}
               >
                 <span style={{ fontWeight: 800 }}>{theme.label}</span>
-                <span style={{ color: darkTheme.color.textMuted }}>{isDarkOnly ? '仅提供暗色样式' : variantLabels}</span>
+                <span style={{ color: themeTokens.color.textMuted }}>{isDarkOnly ? '仅提供暗色样式' : variantLabels}</span>
               </button>
             )
           })}
@@ -102,7 +102,7 @@ export function AppearanceSettingsPanel({ settings, error, onUpdate }: Appearanc
           <span style={statusPillStyle}>{settings.fontSize}px</span>
         </div>
         <label style={{ display: 'grid', gap: 10 }}>
-          <span style={{ color: darkTheme.color.textMuted }}>字体大小</span>
+          <span style={{ color: themeTokens.color.textMuted }}>字体大小</span>
           <input
             aria-label="全局字体大小"
             type="range"
@@ -144,45 +144,45 @@ const panelStyle: CSSProperties = {
   overflow: 'auto',
   display: 'grid',
   alignContent: 'start',
-  gap: darkTheme.spacing.lg,
+  gap: themeTokens.spacing.lg,
   paddingRight: 4,
-  color: darkTheme.color.text,
-  fontSize: darkTheme.typography.body
+  color: themeTokens.color.text,
+  fontSize: themeTokens.typography.body
 }
 
 const cardStyle: CSSProperties = {
-  border: `1px solid ${darkTheme.color.border}`,
-  borderRadius: darkTheme.radius.lg,
-  background: darkTheme.color.surfaceMuted,
-  padding: darkTheme.spacing.lg,
+  border: `1px solid ${themeTokens.color.border}`,
+  borderRadius: themeTokens.radius.lg,
+  background: themeTokens.color.surfaceMuted,
+  padding: themeTokens.spacing.lg,
   display: 'grid',
-  gap: darkTheme.spacing.md
+  gap: themeTokens.spacing.md
 }
 
 const fieldHeaderStyle: CSSProperties = {
   display: 'flex',
   alignItems: 'flex-start',
   justifyContent: 'space-between',
-  gap: darkTheme.spacing.md
+  gap: themeTokens.spacing.md
 }
 
 const fieldTitleStyle: CSSProperties = {
   margin: 0,
-  fontSize: darkTheme.typography.body,
+  fontSize: themeTokens.typography.body,
   lineHeight: 1.35
 }
 
 const fieldDescriptionStyle: CSSProperties = {
   margin: '4px 0 0',
-  color: darkTheme.color.textMuted
+  color: themeTokens.color.textMuted
 }
 
 const statusPillStyle: CSSProperties = {
   minWidth: 72,
-  border: `1px solid ${darkTheme.color.border}`,
+  border: `1px solid ${themeTokens.color.border}`,
   borderRadius: 999,
-  color: darkTheme.color.accent,
-  background: darkTheme.color.surface,
+  color: themeTokens.color.accent,
+  background: themeTokens.color.surface,
   padding: '5px 10px',
   textAlign: 'center',
   fontWeight: 800
@@ -191,61 +191,61 @@ const statusPillStyle: CSSProperties = {
 const segmentedGridStyle: CSSProperties = {
   display: 'grid',
   gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-  gap: darkTheme.spacing.sm
+  gap: themeTokens.spacing.sm
 }
 
 const themeGridStyle: CSSProperties = {
   display: 'grid',
   gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-  gap: darkTheme.spacing.sm
+  gap: themeTokens.spacing.sm
 }
 
 const segmentedButtonStyle: CSSProperties = {
-  border: `1px solid ${darkTheme.color.border}`,
-  borderRadius: darkTheme.radius.md,
-  background: darkTheme.color.surface,
-  color: darkTheme.color.text,
+  border: `1px solid ${themeTokens.color.border}`,
+  borderRadius: themeTokens.radius.md,
+  background: themeTokens.color.surface,
+  color: themeTokens.color.text,
   padding: '12px',
   cursor: 'pointer',
   display: 'grid',
   gap: 5,
   textAlign: 'left',
-  fontSize: darkTheme.typography.body
+  fontSize: themeTokens.typography.body
 }
 
 const segmentedButtonActiveStyle: CSSProperties = {
-  borderColor: darkTheme.color.accent,
-  background: 'var(--hesper-color-soft-control, rgba(122, 162, 247, 0.14))'
+  borderColor: themeTokens.color.accent,
+  background: themeTokens.color.softControl
 }
 
 const rangeStyle: CSSProperties = {
   width: '100%',
-  accentColor: darkTheme.color.accent,
+  accentColor: themeTokens.color.accent,
   cursor: 'pointer'
 }
 
 const fontSizeGridStyle: CSSProperties = {
   display: 'grid',
   gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
-  gap: darkTheme.spacing.sm
+  gap: themeTokens.spacing.sm
 }
 
 const fontSizeButtonStyle: CSSProperties = {
-  border: `1px solid ${darkTheme.color.border}`,
-  borderRadius: darkTheme.radius.md,
-  background: darkTheme.color.surface,
-  color: darkTheme.color.text,
+  border: `1px solid ${themeTokens.color.border}`,
+  borderRadius: themeTokens.radius.md,
+  background: themeTokens.color.surface,
+  color: themeTokens.color.text,
   minHeight: 38,
   cursor: 'pointer',
-  fontSize: darkTheme.typography.body,
+  fontSize: themeTokens.typography.body,
   fontWeight: 700
 }
 
 const errorStyle: CSSProperties = {
   margin: 0,
-  border: `1px solid ${darkTheme.color.danger}`,
-  borderRadius: darkTheme.radius.md,
-  background: 'rgba(255, 123, 123, 0.12)',
-  color: darkTheme.color.danger,
-  padding: darkTheme.spacing.md
+  border: `1px solid ${themeTokens.color.danger}`,
+  borderRadius: themeTokens.radius.md,
+  background: themeTokens.color.dangerSoft,
+  color: themeTokens.color.danger,
+  padding: themeTokens.spacing.md
 }

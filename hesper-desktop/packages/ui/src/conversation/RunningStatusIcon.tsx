@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react'
-import { darkTheme } from '../theme'
+import { themeTokens } from '../theme'
 
 export type RunningStatusIconProps = {
   ariaLabel?: string
@@ -66,7 +66,7 @@ const runningDotStyle: CSSProperties = {
   width: 3.5,
   height: 3.5,
   borderRadius: 999,
-  background: darkTheme.color.accent,
+  background: themeTokens.color.accent,
   opacity: 0.28,
   animationName: 'hesper-step-running-dot-sweep',
   animationDuration: '1260ms',

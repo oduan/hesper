@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type WheelEvent } from 'react'
 import type { AgentRun, Message, RunStep, Session } from '@hesper/shared'
-import { darkTheme } from '../theme'
+import { themeTokens } from '../theme'
 import { Composer, type ModelOptionGroup } from './Composer'
 import { MessageBubble } from './MessageBubble'
 import { OutputBlock } from './OutputBlock'
@@ -452,10 +452,10 @@ export function ConversationView({
   }, [contentSignature])
 
   return (
-    <div data-hesper-conversation-root="true" style={{ height: '100%', minHeight: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', fontSize: darkTheme.typography.body }}>
+    <div data-hesper-conversation-root="true" style={{ height: '100%', minHeight: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', fontSize: themeTokens.typography.body }}>
       <section
         aria-label="会话详情"
-        style={{ display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr) auto', gap: darkTheme.spacing.md, minWidth: 0, minHeight: 0 }}
+        style={{ display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr) auto', gap: themeTokens.spacing.md, minWidth: 0, minHeight: 0 }}
       >
         <header
           style={{
@@ -466,7 +466,7 @@ export function ConversationView({
             justifyContent: 'center'
           }}
         >
-          <h2 style={{ margin: 0, maxWidth: '65%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: darkTheme.typography.body, lineHeight: 1.2, textAlign: 'center', fontWeight: 700 }}>{session.title}</h2>
+          <h2 style={{ margin: 0, maxWidth: '65%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: themeTokens.typography.body, lineHeight: 1.2, textAlign: 'center', fontWeight: 700 }}>{session.title}</h2>
         </header>
         <div style={messagesAreaStyle}>
           <div
@@ -482,8 +482,8 @@ export function ConversationView({
               overflow: 'auto',
               display: 'grid',
               alignContent: 'start',
-              gap: darkTheme.spacing.md,
-              paddingRight: darkTheme.spacing.xs
+              gap: themeTokens.spacing.md,
+              paddingRight: themeTokens.spacing.xs
             }}
           >
             {orderedMessages.map((message) => {
@@ -514,7 +514,7 @@ export function ConversationView({
                   <MessageBubble message={message} />
                 )}
                 {shouldShowMessageRunSteps(message, messageSteps) ? (
-                  <div style={{ marginTop: darkTheme.spacing.sm }}>
+                  <div style={{ marginTop: themeTokens.spacing.sm }}>
                     <RunSteps
                       steps={messageSteps}
                       autoExpanded={message.role === 'user' && (!message.runId || !finalOutputRunIds.has(message.runId))}
@@ -543,7 +543,7 @@ export function ConversationView({
                       anchorRefs.current[streamingAnchorId] = node
                     }}
                     tabIndex={-1}
-                    style={{ marginTop: darkTheme.spacing.sm, outline: 'none' }}
+                    style={{ marginTop: themeTokens.spacing.sm, outline: 'none' }}
                   >
                     <OutputBlock
                       content={messageStreamingText}
@@ -636,11 +636,11 @@ const jumpToBottomButtonStyle = {
   border: 0,
   outline: 0,
   borderRadius: 999,
-  background: 'var(--hesper-color-soft-control, rgba(122, 162, 247, 0.14))',
-  color: darkTheme.color.text,
+  background: themeTokens.color.softControl,
+  color: themeTokens.color.text,
   display: 'inline-grid',
   placeItems: 'center',
-  boxShadow: '0 12px 32px rgba(0, 0, 0, 0.32)',
+  boxShadow: `0 12px 32px ${themeTokens.color.shadow}`,
   cursor: 'pointer',
   zIndex: 2
 } satisfies CSSProperties

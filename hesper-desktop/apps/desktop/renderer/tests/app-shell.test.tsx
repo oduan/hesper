@@ -3,6 +3,7 @@ import '@testing-library/jest-dom/vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { themeTokens } from '@hesper/ui'
 import { App, clearSessionSendError, pruneSessionSendErrors } from '../src/App'
 
 function createDeferred<T>() {
@@ -415,6 +416,8 @@ describe('renderer App', () => {
 
     expect((await screen.findAllByText('Hesper')).length).toBeGreaterThan(0)
     expect(screen.getByText('所有会话')).toBeInTheDocument()
+    const appRoot = screen.getByLabelText('主工作区').parentElement
+    expect(appRoot).toHaveStyle({ background: themeTokens.color.background, color: themeTokens.color.text })
 
     await user.click(screen.getByRole('button', { name: '最小化窗口' }))
     await user.click(screen.getByRole('button', { name: '最大化窗口' }))
@@ -431,6 +434,7 @@ describe('renderer App', () => {
     render(<App />)
 
     const newSessionButtons = await screen.findAllByRole('button', { name: '新建会话' })
+    expect(newSessionButtons.some((button) => button.style.background === themeTokens.color.accent && button.style.color === themeTokens.color.accentContrast)).toBe(true)
     await user.click(newSessionButtons[0]!)
 
     expect(createSession).toHaveBeenCalledWith({ title: 'New chat' })
@@ -584,7 +588,7 @@ describe('renderer App', () => {
     expect(screen.queryByText(/当前工具已全局关闭/)).not.toBeInTheDocument()
     const detailSwitch = screen.getByRole('switch', { name: '工具全局开关' })
     expect(detailSwitch).toHaveAttribute('aria-checked', 'false')
-    expect(detailSwitch.querySelector('[data-tool-toggle-track="true"]')).toHaveStyle({ background: 'var(--hesper-color-surface-muted, #24283b)' })
+    expect(detailSwitch.querySelector('[data-tool-toggle-track="true"]')).toHaveStyle({ background: themeTokens.color.surfaceMuted })
     expect(detailSwitch.querySelector('[data-tool-toggle-knob="true"]')).toHaveStyle({ transform: 'translateX(0)' })
     await user.click(detailSwitch)
     expect(setToolEnabled).toHaveBeenCalledWith({ id: 'system.show-notification', enabled: true })
@@ -1893,7 +1897,9 @@ describe('renderer App', () => {
     await user.type(composer, 'will fail')
     await user.click(screen.getByRole('button', { name: '发送' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('发送失败：enqueue failed')
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('发送失败：enqueue failed')
+    expect(alert).toHaveStyle({ color: themeTokens.color.danger })
     await waitFor(() => {
       expect(screen.queryByText('will fail')).not.toBeInTheDocument()
     })

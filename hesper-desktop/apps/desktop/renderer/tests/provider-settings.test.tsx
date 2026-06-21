@@ -3,6 +3,7 @@ import '@testing-library/jest-dom/vitest'
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { themeTokens } from '@hesper/ui'
 import { App } from '../src/App'
 
 const now = '2026-06-10T03:00:00.000Z'
@@ -300,7 +301,7 @@ describe('provider settings panel', () => {
 
     expect(connectionList).toHaveStyle({
       gap: '0px',
-      background: 'var(--hesper-color-surface-muted, #24283b)'
+      background: themeTokens.color.surfaceMuted
     })
     expect(mockItem?.style.border).toBe('0px')
     expect(mockItem?.style.boxShadow).toBe('none')
@@ -310,7 +311,7 @@ describe('provider settings panel', () => {
     expect(separators?.[0]).toHaveStyle({
       height: '1px',
       margin: '0px 14px',
-      background: 'var(--hesper-color-border-subtle, rgba(65, 72, 104, 0.45))'
+      background: themeTokens.color.borderSubtle
     })
     expect(deepSeekItem?.style.borderTopWidth).toBe('0px')
     expect(deepSeekItem?.style.borderTopStyle).toBe('none')

@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react'
-import { darkTheme } from '../theme'
+import { themeTokens } from '../theme'
 
 export type DesktopPlatform = 'aix' | 'android' | 'darwin' | 'freebsd' | 'haiku' | 'linux' | 'openbsd' | 'sunos' | 'win32' | 'cygwin' | 'netbsd'
 export type WindowControlAction = () => unknown | Promise<unknown>
@@ -41,14 +41,14 @@ export function TitleBar({ title, platform = 'win32', onMinimize, onToggleMaximi
         alignItems: 'center',
         justifyContent: 'center',
         borderBottom: 0,
-        background: darkTheme.color.background,
-        color: darkTheme.color.text,
+        background: themeTokens.color.background,
+        color: themeTokens.color.text,
         userSelect: 'none'
       }}
     >
       {isMac ? <div className="titlebar-no-drag" style={macControlsSlotStyle}>{controls}</div> : null}
       <div style={brandStyle}>Hesper</div>
-      <div style={{ fontSize: darkTheme.typography.body, fontWeight: 700, letterSpacing: '0.02em', pointerEvents: 'none' }}>{title}</div>
+      <div style={{ fontSize: themeTokens.typography.body, fontWeight: 700, letterSpacing: '0.02em', pointerEvents: 'none' }}>{title}</div>
       {!isMac ? <div className="titlebar-no-drag" style={windowsControlsSlotStyle}>{controls}</div> : null}
     </header>
   )
@@ -58,6 +58,7 @@ function WindowControls({ platform, onMinimize, onToggleMaximize, onClose }: Win
   if (isMacPlatform(platform)) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {/* macOS traffic light colors intentionally match native window controls. */}
         <button type="button" aria-label="关闭窗口" onClick={() => { void onClose?.() }} style={{ ...macControlStyle, background: '#ff5f57' }} />
         <button type="button" aria-label="最小化窗口" onClick={() => { void onMinimize?.() }} style={{ ...macControlStyle, background: '#ffbd2e' }} />
         <button type="button" aria-label="最大化窗口" onClick={() => { void onToggleMaximize?.() }} style={{ ...macControlStyle, background: '#28c840' }} />
@@ -111,10 +112,10 @@ const brandStyle: CSSProperties = {
   height: '100%',
   display: 'flex',
   alignItems: 'center',
-  fontSize: darkTheme.typography.body,
+  fontSize: themeTokens.typography.body,
   fontWeight: 700,
   letterSpacing: '0.02em',
-  color: darkTheme.color.text,
+  color: themeTokens.color.text,
   pointerEvents: 'none'
 }
 
@@ -140,7 +141,7 @@ const windowsControlStyle: CSSProperties = {
   border: 0,
   borderRadius: 0,
   background: 'transparent',
-  color: darkTheme.color.textMuted,
+  color: themeTokens.color.textMuted,
   cursor: 'pointer',
   lineHeight: 1,
   outline: 0,
@@ -154,7 +155,7 @@ const macControlStyle: CSSProperties = {
   width: 12,
   height: 12,
   borderRadius: 999,
-  border: '1px solid rgba(0, 0, 0, 0.16)',
+  border: `1px solid ${themeTokens.color.borderSubtle}`,
   padding: 0,
   cursor: 'pointer',
   outline: 0

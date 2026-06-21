@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react'
+import { themeTokens } from '@hesper/ui'
 import type { ManagedRoleDto, ToolDto } from '../../electron/ipc-contract'
 
 export type ModelOptionGroup = {
@@ -379,17 +380,17 @@ const emptyTitleStyle: CSSProperties = {
 
 const mutedTextStyle: CSSProperties = {
   margin: 0,
-  color: 'var(--hesper-color-text-muted, #9aa5ce)',
+  color: themeTokens.color.textMuted,
   fontSize: 13,
   lineHeight: 1.6
 }
 
 const errorStyle: CSSProperties = {
   margin: 0,
-  border: '1px solid rgba(252, 165, 165, 0.35)',
+  border: `1px solid ${themeTokens.color.danger}`,
   borderRadius: 10,
-  background: 'rgba(127, 29, 29, 0.20)',
-  color: '#fca5a5',
+  background: themeTokens.color.dangerSoft,
+  color: themeTokens.color.danger,
   padding: '10px 12px'
 }
 
@@ -408,17 +409,17 @@ const fieldStyle: CSSProperties = {
 
 const labelStyle: CSSProperties = {
   fontSize: 13,
-  color: 'var(--hesper-color-text-muted, #9aa5ce)',
+  color: themeTokens.color.textMuted,
   fontWeight: 700
 }
 
 const inputStyle: CSSProperties = {
   width: '100%',
   boxSizing: 'border-box',
-  border: '1px solid var(--hesper-color-border, #414868)',
+  border: `1px solid ${themeTokens.color.border}`,
   borderRadius: 10,
-  background: 'var(--hesper-color-surface-muted, #24283b)',
-  color: 'var(--hesper-color-text, #c0caf5)',
+  background: themeTokens.color.surfaceMuted,
+  color: themeTokens.color.text,
   padding: '10px 12px',
   outline: 'none'
 }
@@ -433,14 +434,14 @@ const textareaStyle: CSSProperties = {
 
 const fieldsetStyle: CSSProperties = {
   margin: 0,
-  border: '1px solid var(--hesper-color-border, #414868)',
+  border: `1px solid ${themeTokens.color.border}`,
   borderRadius: 12,
   padding: 12
 }
 
 const legendStyle: CSSProperties = {
   padding: '0 6px',
-  color: 'var(--hesper-color-text-muted, #9aa5ce)',
+  color: themeTokens.color.textMuted,
   fontSize: 13,
   fontWeight: 700
 }
@@ -455,7 +456,7 @@ const toolRowStyle: CSSProperties = {
   alignItems: 'flex-start',
   gap: 10,
   borderRadius: 10,
-  background: 'rgba(255, 255, 255, 0.03)',
+  background: themeTokens.color.neutralSoft,
   padding: 10,
   cursor: 'pointer'
 }
@@ -471,7 +472,7 @@ const toolNameStyle: CSSProperties = {
 }
 
 const toolDescriptionStyle: CSSProperties = {
-  color: 'var(--hesper-color-text-muted, #9aa5ce)',
+  color: themeTokens.color.textMuted,
   fontSize: 12,
   lineHeight: 1.45
 }
@@ -493,14 +494,14 @@ const buttonBaseStyle: CSSProperties = {
 
 const primaryButtonStyle: CSSProperties = {
   ...buttonBaseStyle,
-  background: 'var(--hesper-color-accent, #7c6cff)',
-  color: '#ffffff'
+  background: themeTokens.color.accent,
+  color: themeTokens.color.accentContrast
 }
 
 const disabledButtonStyle: CSSProperties = {
   ...buttonBaseStyle,
-  background: 'var(--hesper-color-surface-muted, #24283b)',
-  color: 'var(--hesper-color-text-muted, #737aa2)',
+  background: themeTokens.color.surfaceMuted,
+  color: themeTokens.color.textMuted,
   cursor: 'not-allowed'
 }
 
@@ -508,7 +509,7 @@ const dangerButtonStyle: CSSProperties = {
   ...buttonBaseStyle,
   borderWidth: 1,
   borderStyle: 'solid',
-  borderColor: 'var(--hesper-color-danger, #ef4444)',
-  background: 'var(--hesper-color-danger-soft, rgba(220, 38, 38, 0.20))',
-  color: 'var(--hesper-color-danger-strong, #dc2626)'
+  borderColor: themeTokens.color.danger,
+  background: themeTokens.color.dangerSoft,
+  color: themeTokens.color.dangerStrong
 }

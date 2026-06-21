@@ -1,5 +1,5 @@
 import { useId, useMemo, useState, type CSSProperties, type FocusEvent } from 'react'
-import { darkTheme } from '../theme'
+import { themeTokens } from '../theme'
 
 export type ThemedSelectOption = {
   value: string
@@ -168,8 +168,8 @@ const themedSelectHoverCss = `
 .hesper-themed-select-option:focus-visible,
 .hesper-themed-select-group-button:hover,
 .hesper-themed-select-group-button:focus-visible {
-  background: var(--hesper-color-hover, rgba(122, 162, 247, 0.12)) !important;
-  color: var(--hesper-color-text, #c0caf5) !important;
+  background: var(--hesper-color-hover) !important;
+  color: var(--hesper-color-text) !important;
 }
 `
 
@@ -184,14 +184,14 @@ const selectButtonStyle: CSSProperties = {
   outline: 0,
   borderRadius: 0,
   background: 'transparent',
-  color: darkTheme.color.text,
+  color: themeTokens.color.text,
   padding: 0,
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'flex-start',
-  gap: darkTheme.spacing.xs,
+  gap: themeTokens.spacing.xs,
   cursor: 'pointer',
-  fontSize: darkTheme.typography.body,
+  fontSize: themeTokens.typography.body,
   lineHeight: 1.2,
   textAlign: 'left'
 }
@@ -206,7 +206,7 @@ const selectValueStyle: CSSProperties = {
 const selectArrowStyle: CSSProperties = {
   width: 16,
   height: 16,
-  color: darkTheme.color.textMuted,
+  color: themeTokens.color.textMuted,
   display: 'block',
   flex: '0 0 auto'
 }
@@ -220,10 +220,10 @@ const selectMenuStyle: CSSProperties = {
   maxWidth: 280,
   display: 'grid',
   gap: 4,
-  borderRadius: darkTheme.radius.md,
-  background: darkTheme.color.surfaceMuted,
+  borderRadius: themeTokens.radius.md,
+  background: themeTokens.color.surfaceMuted,
   padding: 6,
-  boxShadow: '0 18px 36px rgba(0, 0, 0, 0.28)'
+  boxShadow: `0 18px 36px ${themeTokens.color.shadow}`
 }
 
 const selectGroupStyle: CSSProperties = {
@@ -236,25 +236,25 @@ const selectGroupButtonStyle: CSSProperties = {
   width: '100%',
   border: 0,
   outline: 0,
-  borderRadius: darkTheme.radius.sm,
+  borderRadius: themeTokens.radius.sm,
   background: 'transparent',
-  color: darkTheme.color.text,
-  padding: `${darkTheme.spacing.xs} ${darkTheme.spacing.sm}`,
+  color: themeTokens.color.text,
+  padding: `${themeTokens.spacing.xs} ${themeTokens.spacing.sm}`,
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'space-between',
-  gap: darkTheme.spacing.sm,
+  gap: themeTokens.spacing.sm,
   textAlign: 'left',
   cursor: 'default',
-  fontSize: darkTheme.typography.body,
+  fontSize: themeTokens.typography.body,
   overflow: 'hidden',
   whiteSpace: 'nowrap'
 }
 
 const selectGroupArrowStyle: CSSProperties = {
   flex: '0 0 auto',
-  color: darkTheme.color.textMuted,
-  fontSize: darkTheme.typography.body
+  color: themeTokens.color.textMuted,
+  fontSize: themeTokens.typography.body
 }
 
 const selectGroupOptionsStyle: CSSProperties = {
@@ -267,30 +267,30 @@ const selectGroupOptionsStyle: CSSProperties = {
   maxWidth: 280,
   display: 'grid',
   gap: 2,
-  borderRadius: darkTheme.radius.md,
-  background: darkTheme.color.surfaceMuted,
+  borderRadius: themeTokens.radius.md,
+  background: themeTokens.color.surfaceMuted,
   padding: 6,
-  boxShadow: '0 18px 36px rgba(0, 0, 0, 0.28)'
+  boxShadow: `0 18px 36px ${themeTokens.color.shadow}`
 }
 
 const selectOptionStyle: CSSProperties = {
   width: '100%',
   border: 0,
   outline: 0,
-  borderRadius: darkTheme.radius.sm,
+  borderRadius: themeTokens.radius.sm,
   background: 'transparent',
-  color: darkTheme.color.text,
-  padding: `${darkTheme.spacing.xs} ${darkTheme.spacing.sm}`,
+  color: themeTokens.color.text,
+  padding: `${themeTokens.spacing.xs} ${themeTokens.spacing.sm}`,
   display: 'block',
   textAlign: 'left',
   cursor: 'pointer',
-  fontSize: darkTheme.typography.body,
+  fontSize: themeTokens.typography.body,
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap'
 }
 
 const activeSelectOptionStyle: CSSProperties = {
-  background: 'var(--hesper-color-soft-control, rgba(122, 162, 247, 0.14))',
-  color: darkTheme.color.text
+  background: themeTokens.color.softControl,
+  color: themeTokens.color.text
 }

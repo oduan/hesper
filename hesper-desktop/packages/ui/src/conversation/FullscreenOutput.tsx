@@ -1,6 +1,6 @@
 import { useEffect, useMemo, type CSSProperties } from 'react'
 import type { MessageContentType } from '@hesper/shared'
-import { darkTheme } from '../theme'
+import { themeTokens } from '../theme'
 import { createSandboxedHtmlDocument } from './html-document'
 import { MarkdownOutput } from './MarkdownOutput'
 
@@ -73,6 +73,7 @@ export function FullscreenOutput({ open, content, contentType, onClose }: Fullsc
                 title="HTML 输出"
                 sandbox=""
                 srcDoc={sandboxedDocument}
+                // User-supplied HTML/preview content keeps a neutral white canvas so external documents render predictably.
                 style={{ width: '100%', height: '100%', minHeight: 480, border: 0, background: '#fff' }}
               />
             ) : contentType === 'markdown' ? (
@@ -93,7 +94,7 @@ const overlayStyle: CSSProperties = {
   right: 0,
   bottom: 0,
   left: 0,
-  background: darkTheme.color.surface,
+  background: themeTokens.color.surface,
   display: 'block',
   padding: 0,
   boxSizing: 'border-box',
@@ -112,11 +113,11 @@ const contentShellStyle: CSSProperties = {
 
 const actionsStyle: CSSProperties = {
   position: 'absolute',
-  top: darkTheme.spacing.lg,
-  right: darkTheme.spacing.lg,
+  top: themeTokens.spacing.lg,
+  right: themeTokens.spacing.lg,
   zIndex: 2,
   display: 'flex',
-  gap: darkTheme.spacing.sm
+  gap: themeTokens.spacing.sm
 }
 
 const scrollAreaStyle: CSSProperties = {
@@ -128,7 +129,7 @@ const scrollAreaStyle: CSSProperties = {
   overflowAnchor: 'none',
   willChange: 'scroll-position',
   boxSizing: 'border-box',
-  padding: `${darkTheme.spacing.xl} ${darkTheme.spacing.lg}`
+  padding: `${themeTokens.spacing.xl} ${themeTokens.spacing.lg}`
 }
 
 const contentBodyStyle: CSSProperties = {
@@ -144,9 +145,9 @@ const iconButtonStyle: CSSProperties = {
   height: 34,
   border: 0,
   outline: 0,
-  borderRadius: darkTheme.radius.md,
+  borderRadius: themeTokens.radius.md,
   background: 'transparent',
-  color: darkTheme.color.text,
+  color: themeTokens.color.text,
   display: 'inline-grid',
   placeItems: 'center',
   cursor: 'pointer'

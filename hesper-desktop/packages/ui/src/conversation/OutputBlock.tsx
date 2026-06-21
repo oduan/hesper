@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useState, type MouseEvent } from 'react'
 import type { MessageContentType } from '@hesper/shared'
-import { darkTheme } from '../theme'
+import { themeTokens } from '../theme'
 import { FullscreenOutput } from './FullscreenOutput'
 import { createSandboxedHtmlDocument } from './html-document'
 import { MarkdownOutput } from './MarkdownOutput'
@@ -45,9 +45,9 @@ export const OutputBlock = memo(function OutputBlock({ content, contentType, clo
           height: contentType === 'html' ? outputBlockHtmlHeight : 'auto',
           maxHeight: outputBlockMaxHeight,
           overflow: 'hidden',
-          borderRadius: darkTheme.radius.lg,
+          borderRadius: themeTokens.radius.lg,
           border: 0,
-          background: darkTheme.color.surfaceMuted
+          background: themeTokens.color.surfaceMuted
         }}
       >
         <style>{outputBlockChromeCss}</style>
@@ -58,13 +58,13 @@ export const OutputBlock = memo(function OutputBlock({ content, contentType, clo
           onClick={() => setIsFullscreen(true)}
           style={{
             position: 'absolute',
-            top: darkTheme.spacing.sm,
-            right: darkTheme.spacing.sm,
+            top: themeTokens.spacing.sm,
+            right: themeTokens.spacing.sm,
             zIndex: 1,
-            borderRadius: darkTheme.radius.md,
+            borderRadius: themeTokens.radius.md,
             border: 0,
-            background: 'var(--hesper-color-soft-control, rgba(122, 162, 247, 0.14))',
-            color: darkTheme.color.text,
+            background: themeTokens.color.softControl,
+            color: themeTokens.color.text,
             cursor: 'pointer'
           }}
         >
@@ -82,7 +82,7 @@ export const OutputBlock = memo(function OutputBlock({ content, contentType, clo
             overscrollBehavior: 'contain',
             overflowAnchor: 'none',
             willChange: 'scroll-position',
-            padding: darkTheme.spacing.md
+            padding: themeTokens.spacing.md
           }}
         >
           {contentType === 'html' ? (
@@ -90,12 +90,13 @@ export const OutputBlock = memo(function OutputBlock({ content, contentType, clo
               title="HTML 输出预览"
               sandbox=""
               srcDoc={sandboxedDocument}
-              style={{ width: '100%', height: '100%', minHeight: 200, border: 0, borderRadius: darkTheme.radius.md, background: '#fff' }}
+              // User-supplied HTML/preview content keeps a neutral white canvas so external documents render predictably.
+              style={{ width: '100%', height: '100%', minHeight: 200, border: 0, borderRadius: themeTokens.radius.md, background: '#fff' }}
             />
           ) : contentType === 'markdown' ? (
             <MarkdownOutput content={content} />
           ) : (
-            <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.55, fontSize: darkTheme.typography.body }}>{content}</div>
+            <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.55, fontSize: themeTokens.typography.body }}>{content}</div>
           )}
         </div>
       </section>

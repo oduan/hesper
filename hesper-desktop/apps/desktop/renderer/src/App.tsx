@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react'
 import { createId, defaultAppThemeId, nowIso, type Message, type RunStep, type Session, type WorkerAgentInvocation } from '@hesper/shared'
-import { AppShell, ConversationView, resolveThemeVariant, type AppSection, type ConversationShortcutCommand } from '@hesper/ui'
+import { AppShell, ConversationView, resolveThemeVariant, themeTokens, type AppSection, type ConversationShortcutCommand } from '@hesper/ui'
 import { AppStoreProvider, useAppStore } from './app-store'
 import { hesperApi } from './ipc-client'
 import { defaultFallbackModelId, fallbackSessionModelCatalog, loadAvailableModelCatalog, mergeModelOptions, type SessionModelCatalog } from './model-options'
@@ -1257,17 +1257,17 @@ function AppContent() {
       ) : activeSession ? (
         <>
           {titleGenerationError ? (
-            <p role="alert" style={{ margin: '0 0 12px', color: '#fca5a5', padding: '0 12px' }}>
+            <p role="alert" style={{ margin: '0 0 12px', color: themeTokens.color.danger, padding: '0 12px' }}>
               {titleGenerationError}
             </p>
           ) : null}
           {activeHistoryError ? (
-            <p role="alert" style={{ margin: '0 0 12px', color: '#fca5a5', padding: '0 12px' }}>
+            <p role="alert" style={{ margin: '0 0 12px', color: themeTokens.color.danger, padding: '0 12px' }}>
               历史加载失败：{activeHistoryError}
             </p>
           ) : null}
           {activeSendError ? (
-            <p role="alert" style={{ margin: '0 0 12px', color: '#fca5a5', padding: '0 12px' }}>
+            <p role="alert" style={{ margin: '0 0 12px', color: themeTokens.color.danger, padding: '0 12px' }}>
               发送失败：{activeSendError}
             </p>
           ) : null}
@@ -1454,9 +1454,9 @@ function SectionPlaceholder({ section }: { section: AppSection }) {
       aria-label={`${getSectionTitle(section)} 占位区域`}
       style={{
         height: '100%',
-        border: '1px solid var(--hesper-color-border, #414868)',
+        border: `1px solid ${themeTokens.color.border}`,
         borderRadius: 14,
-        background: 'var(--hesper-color-surface-muted, #24283b)',
+        background: themeTokens.color.surfaceMuted,
         display: 'grid',
         placeItems: 'center',
         textAlign: 'center',
@@ -1494,7 +1494,7 @@ function EmptyConversationState({
         <h2 style={{ margin: '0 0 8px', fontSize: 14 }}>准备开始新的 hesper 会话</h2>
         <p style={{ margin: 0, opacity: 0.72 }}>当前还没有会话。先创建一个主界面会话壳，后续任务再接入完整交互。</p>
         {loadError ? (
-          <p role="alert" style={{ margin: '12px 0 0', color: '#fca5a5' }}>
+          <p role="alert" style={{ margin: '12px 0 0', color: themeTokens.color.danger }}>
             会话加载失败：{loadError}
           </p>
         ) : null}
@@ -1665,8 +1665,8 @@ const primaryButtonStyle: CSSProperties = {
   border: 0,
   borderRadius: 10,
   padding: '10px 18px',
-  background: '#7c6cff',
-  color: '#ffffff',
+  background: themeTokens.color.accent,
+  color: themeTokens.color.accentContrast,
   fontWeight: 700,
   cursor: 'pointer'
 }

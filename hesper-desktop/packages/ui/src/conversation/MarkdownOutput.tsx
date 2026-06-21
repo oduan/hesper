@@ -1,5 +1,5 @@
 import { createElement, memo, useMemo, type CSSProperties, type ReactNode } from 'react'
-import { darkTheme } from '../theme'
+import { themeTokens } from '../theme'
 
 type MarkdownBlock =
   | { type: 'heading'; level: 1 | 2 | 3 | 4 | 5 | 6; text: string }
@@ -289,14 +289,14 @@ export const MarkdownOutput = memo(function MarkdownOutput({ content }: Markdown
 
 const rootStyle: CSSProperties = {
   lineHeight: 1.6,
-  fontSize: darkTheme.typography.body,
-  color: darkTheme.color.text
+  fontSize: themeTokens.typography.body,
+  color: themeTokens.color.text
 }
 
 function headingStyle(level: number): CSSProperties {
   return {
     margin: level <= 2 ? '0 0 10px' : '10px 0 8px',
-    fontSize: darkTheme.typography.body,
+    fontSize: themeTokens.typography.body,
     lineHeight: 1.3,
     fontWeight: 750
   }
@@ -324,35 +324,35 @@ const strongStyle: CSSProperties = {
 const inlineCodeStyle: CSSProperties = {
   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
   fontSize: '1em',
-  color: darkTheme.color.text,
-  background: 'var(--hesper-color-soft-control, rgba(122, 162, 247, 0.14))',
-  borderRadius: darkTheme.radius.sm,
+  color: themeTokens.color.text,
+  background: themeTokens.color.softControl,
+  borderRadius: themeTokens.radius.sm,
   padding: '1px 5px'
 }
 
 const codeBlockStyle: CSSProperties = {
   margin: '0 0 10px',
-  padding: darkTheme.spacing.md,
+  padding: themeTokens.spacing.md,
   overflow: 'auto',
-  borderRadius: darkTheme.radius.md,
-  background: darkTheme.color.surface,
-  color: darkTheme.color.text,
+  borderRadius: themeTokens.radius.md,
+  background: themeTokens.color.codeBackground,
+  color: themeTokens.color.text,
   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
-  fontSize: darkTheme.typography.body,
+  fontSize: themeTokens.typography.body,
   lineHeight: 1.5,
   whiteSpace: 'pre-wrap'
 }
 
 const linkStyle: CSSProperties = {
-  color: darkTheme.color.accent,
+  color: themeTokens.color.accent,
   textDecoration: 'underline'
 }
 
 const blockquoteStyle: CSSProperties = {
   margin: '0 0 10px',
-  padding: `0 0 0 ${darkTheme.spacing.md}`,
-  borderLeft: `3px solid ${darkTheme.color.border}`,
-  color: darkTheme.color.textMuted
+  padding: `0 0 0 ${themeTokens.spacing.md}`,
+  borderLeft: `3px solid ${themeTokens.color.border}`,
+  color: themeTokens.color.textMuted
 }
 
 const tableWrapStyle: CSSProperties = {
@@ -363,26 +363,26 @@ const tableWrapStyle: CSSProperties = {
 const tableStyle: CSSProperties = {
   width: '100%',
   borderCollapse: 'collapse',
-  fontSize: darkTheme.typography.body
+  fontSize: themeTokens.typography.body
 }
 
 const tableHeaderStyle: CSSProperties = {
   textAlign: 'left',
-  padding: `${darkTheme.spacing.sm} ${darkTheme.spacing.md}`,
-  borderBottom: `1px solid ${darkTheme.color.border}`,
-  color: darkTheme.color.text,
+  padding: `${themeTokens.spacing.sm} ${themeTokens.spacing.md}`,
+  borderBottom: `1px solid ${themeTokens.color.border}`,
+  color: themeTokens.color.text,
   fontWeight: 700,
-  background: darkTheme.color.surfaceMuted
+  background: themeTokens.color.surfaceMuted
 }
 
 const tableCellStyle: CSSProperties = {
-  padding: `${darkTheme.spacing.sm} ${darkTheme.spacing.md}`,
-  borderBottom: `1px solid ${darkTheme.color.border}`,
+  padding: `${themeTokens.spacing.sm} ${themeTokens.spacing.md}`,
+  borderBottom: `1px solid ${themeTokens.color.border}`,
   verticalAlign: 'top'
 }
 
 const ruleStyle: CSSProperties = {
   border: 0,
-  borderTop: `1px solid ${darkTheme.color.border}`,
-  margin: `${darkTheme.spacing.md} 0`
+  borderTop: `1px solid ${themeTokens.color.border}`,
+  margin: `${themeTokens.spacing.md} 0`
 }

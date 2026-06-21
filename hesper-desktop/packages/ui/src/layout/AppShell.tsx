@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import type { Session, ToolDefinition } from '@hesper/shared'
-import { createThemeVariables, darkTheme, type ThemeMode } from '../theme'
+import { createThemeVariables, themeTokens, type ThemeMode } from '../theme'
 import { ActivityRail, type AppSection } from './ActivityRail'
 import { EntityListPane, type RoleListItem, type SettingsCategory } from './EntityListPane'
 import { TitleBar, type DesktopPlatform, type WindowControlAction } from './TitleBar'
@@ -84,12 +84,12 @@ export function AppShell({
         height: '100vh',
         minHeight: 0,
         overflow: 'hidden',
-        background: darkTheme.color.background,
-        color: darkTheme.color.text,
+        background: themeTokens.color.background,
+        color: themeTokens.color.text,
         display: 'grid',
         gridTemplateRows: '36px minmax(0, 1fr)',
         fontFamily: 'Inter, Segoe UI, sans-serif',
-        fontSize: darkTheme.typography.body
+        fontSize: themeTokens.typography.body
       }}
     >
       <TitleBar
@@ -105,9 +105,9 @@ export function AppShell({
           minHeight: 0,
           display: 'grid',
           gridTemplateColumns: '204px 427px minmax(0, 1fr)',
-          gap: darkTheme.spacing.sm,
+          gap: themeTokens.spacing.sm,
           overflow: 'hidden',
-          padding: `0 ${darkTheme.spacing.sm} ${darkTheme.spacing.sm} 0`
+          padding: `0 ${themeTokens.spacing.sm} ${themeTokens.spacing.sm} 0`
         }}
       >
         <ActivityRail
@@ -145,11 +145,11 @@ export function AppShell({
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
-            borderRadius: darkTheme.radius.xl,
-            background: darkTheme.color.surface
+            borderRadius: themeTokens.radius.xl,
+            background: themeTokens.color.surface
           }}
         >
-          <div style={{ flex: 1, minHeight: 0, padding: darkTheme.spacing.lg, overflow: 'hidden' }}>{children}</div>
+          <div style={{ flex: 1, minHeight: 0, padding: themeTokens.spacing.lg, overflow: 'hidden' }}>{children}</div>
         </section>
       </div>
     </div>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent } from 'react'
-import { darkTheme } from '../theme'
+import { themeTokens } from '../theme'
 import { ThemedSelect, type ThemedSelectOptionGroup } from './ThemedSelect'
 
 export type ModelOptionGroup = ThemedSelectOptionGroup
@@ -75,11 +75,11 @@ export function Composer({
       aria-label="消息输入区"
       style={{
         display: 'grid',
-        gap: darkTheme.spacing.sm,
+        gap: themeTokens.spacing.sm,
         border: 0,
-        borderRadius: darkTheme.radius.xl,
-        background: darkTheme.color.surfaceMuted,
-        padding: darkTheme.spacing.md
+        borderRadius: themeTokens.radius.xl,
+        background: themeTokens.color.surfaceMuted,
+        padding: themeTokens.spacing.md
       }}
     >
       <textarea
@@ -97,7 +97,7 @@ export function Composer({
         }}
         style={textareaStyle}
       />
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: darkTheme.spacing.md, alignItems: 'center', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: themeTokens.spacing.md, alignItems: 'center', flexWrap: 'wrap' }}>
         <button
           type="button"
           className="hesper-soft-control"
@@ -107,7 +107,7 @@ export function Composer({
         >
           工作目录：{workspacePath ?? '未设置'}
         </button>
-        <div style={{ display: 'flex', alignItems: 'center', gap: darkTheme.spacing.xs, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: themeTokens.spacing.xs, flexWrap: 'wrap' }}>
           <div style={modelControlStyle}>
             <ThemedSelect
               ariaLabel="选择模型"
@@ -161,24 +161,24 @@ const textareaStyle = {
   border: 0,
   outline: 0,
   background: 'transparent',
-  color: darkTheme.color.text,
+  color: themeTokens.color.text,
   padding: '0 1px',
   fontFamily: 'inherit',
-  fontSize: darkTheme.typography.body,
+  fontSize: themeTokens.typography.body,
   fontWeight: 'inherit',
   letterSpacing: 'inherit',
   lineHeight: 1.5
 } satisfies CSSProperties
 
 const controlButtonStyle = {
-  borderRadius: darkTheme.radius.md,
+  borderRadius: themeTokens.radius.md,
   border: 0,
   outline: 0,
-  background: 'var(--hesper-color-soft-control, rgba(122, 162, 247, 0.14))',
-  color: darkTheme.color.textMuted,
+  background: themeTokens.color.softControl,
+  color: themeTokens.color.textMuted,
   cursor: 'pointer',
-  padding: `${darkTheme.spacing.xs} ${darkTheme.spacing.sm}`,
-  fontSize: darkTheme.typography.body,
+  padding: `${themeTokens.spacing.xs} ${themeTokens.spacing.sm}`,
+  fontSize: themeTokens.typography.body,
   maxWidth: '100%',
   overflow: 'hidden',
   textOverflow: 'ellipsis',
@@ -188,8 +188,8 @@ const controlButtonStyle = {
 const modelControlStyle = {
   display: 'flex',
   alignItems: 'center',
-  color: darkTheme.color.textMuted,
-  fontSize: darkTheme.typography.body
+  color: themeTokens.color.textMuted,
+  fontSize: themeTokens.typography.body
 } satisfies CSSProperties
 
 const sendButtonStyle = {
@@ -198,8 +198,8 @@ const sendButtonStyle = {
   borderRadius: '999px',
   border: 0,
   outline: 0,
-  background: 'var(--hesper-color-soft-control, rgba(122, 162, 247, 0.14))',
-  color: darkTheme.color.text,
+  background: themeTokens.color.softControl,
+  color: themeTokens.color.text,
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',

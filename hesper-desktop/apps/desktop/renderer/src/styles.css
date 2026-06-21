@@ -1,5 +1,6 @@
 :root {
   color-scheme: light;
+  /* Bootstrap fallback before React mounts theme variables. Component-level colors should use themeTokens/CSS variables without local fallbacks. */
   --hesper-body-background: var(--hesper-color-background, #1a1b26);
   --hesper-body-text: var(--hesper-color-text, #c0caf5);
 }
@@ -62,7 +63,7 @@ button {
   border: 0;
   border-radius: 10px;
   background: transparent;
-  color: var(--hesper-color-text-muted, #737aa2);
+  color: var(--hesper-color-text-muted);
   padding: 7px 10px;
   text-align: left;
   font-size: var(--hesper-font-size, 14px);
@@ -73,12 +74,12 @@ button {
 
 .hesper-nav-item:hover,
 .hesper-nav-item.is-active {
-  background: var(--hesper-color-hover, rgba(122, 162, 247, 0.12));
-  color: var(--hesper-color-text, #c0caf5);
+  background: var(--hesper-color-hover);
+  color: var(--hesper-color-text);
 }
 
 .hesper-nav-item-strong {
-  color: var(--hesper-color-text, #c0caf5);
+  color: var(--hesper-color-text);
 }
 
 .hesper-list-row {
@@ -89,7 +90,7 @@ button {
   box-shadow: none;
   border-radius: 10px;
   background: transparent;
-  color: var(--hesper-color-text, #c0caf5);
+  color: var(--hesper-color-text);
   padding: 7px 10px;
   text-align: left;
   cursor: pointer;
@@ -110,11 +111,11 @@ button {
 
 .hesper-list-row:hover,
 .hesper-list-row.is-active {
-  background: var(--hesper-color-hover, rgba(122, 162, 247, 0.12));
+  background: var(--hesper-color-hover);
 }
 
 .hesper-list-row.is-selected {
-  background: var(--hesper-color-soft-control, rgba(122, 162, 247, 0.14));
+  background: var(--hesper-color-soft-control);
 }
 
 .hesper-settings-row {
@@ -123,7 +124,7 @@ button {
   border: 0;
   border-radius: 12px;
   background: transparent;
-  color: var(--hesper-color-text, #c0caf5);
+  color: var(--hesper-color-text);
   padding: 10px 12px;
   text-align: left;
   cursor: pointer;
@@ -135,7 +136,7 @@ button {
 
 .hesper-settings-row:hover,
 .hesper-settings-row.is-active {
-  background: var(--hesper-color-hover, rgba(122, 162, 247, 0.12));
+  background: var(--hesper-color-hover);
 }
 
 .hesper-scroll-invisible {
@@ -149,7 +150,7 @@ button {
 
 .hesper-theme-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: var(--hesper-color-scrollbar-thumb, rgba(192, 202, 245, 0.10)) transparent;
+  scrollbar-color: var(--hesper-color-scrollbar-thumb) transparent;
 }
 
 .hesper-theme-scrollbar::-webkit-scrollbar {
@@ -166,18 +167,18 @@ button {
   min-height: 24px;
   border: 0;
   border-radius: 999px;
-  background: var(--hesper-color-scrollbar-thumb, rgba(192, 202, 245, 0.10)) border-box;
+  background: var(--hesper-color-scrollbar-thumb) border-box;
   background-clip: padding-box;
   transition: background 120ms ease;
 }
 
 .hesper-theme-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: var(--hesper-color-scrollbar-thumb-hover, rgba(192, 202, 245, 0.24)) border-box;
+  background: var(--hesper-color-scrollbar-thumb-hover) border-box;
   background-clip: padding-box;
 }
 
 .hesper-theme-scrollbar::-webkit-scrollbar-thumb:active {
-  background: var(--hesper-color-scrollbar-thumb-active, rgba(192, 202, 245, 0.38)) border-box;
+  background: var(--hesper-color-scrollbar-thumb-active) border-box;
   background-clip: padding-box;
 }
 
@@ -188,7 +189,7 @@ button {
 
 .hesper-soft-control:hover,
 .hesper-send-button:hover:not(:disabled) {
-  background: var(--hesper-color-soft-control, rgba(122, 162, 247, 0.14)) !important;
+  background: var(--hesper-color-soft-control) !important;
 }
 
 .hesper-output-block {
