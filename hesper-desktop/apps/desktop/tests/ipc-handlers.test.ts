@@ -78,9 +78,11 @@ describe('desktop service container', () => {
       sessionId: 'session-1',
       allowedToolIds: ['roles.list']
     })
-    expect(JSON.parse(listed.content)).toEqual([
+    expect(JSON.parse(listed.content)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'main-agent', name: 'Main Agent' }),
+      expect.objectContaining({ id: 'worker-agent', name: 'Worker Agent' }),
       expect.objectContaining({ id: created.id, name: 'Tool-created role' })
-    ])
+    ]))
 
     const found = await container.toolRunner.run(container.toolCatalogService.get('roles.find')!, { query: 'created' }, {
       runId: 'run-1',
@@ -616,7 +618,7 @@ describe('registerIpcHandlers', () => {
 
     registerIpcHandlers({ ipcMain, dialog, container, savePersistence, schedulePersistenceSave })
     const session = await container.sessionService.createSession({ title: 'Prompt assembly IPC', workspacePath: 'C:/workspace' })
-    const customRole = await container.roleManagementService.createRole({ name: 'Custom Worker', defaultToolIds: ['filesystem.read-file'] })
+    await container.roleManagementService.createRole({ name: 'Custom Worker', defaultToolIds: ['filesystem.read-file'] })
 
     await expect(handles.get(ipcChannels.agentEnqueue)?.({ sender: { id: 1 } }, { sessionId: session.id, prompt: 'Use assembled prompt', modelId: 'mock/hesper-fast', messageId: 'message-client-1', messageCreatedAt: '2026-06-10T03:00:02.000Z' })).resolves.toEqual({ runId: 'run-assembled' })
 
@@ -629,15 +631,11 @@ describe('registerIpcHandlers', () => {
       }),
       role: expect.objectContaining({ id: 'main-agent' }),
       skills: expect.any(Array),
-      tools: expect.any(Array),
-      assignableWorkerAgentRoles: expect.any(Array)
+      tools: expect.any(Array)
     }))
     const promptInput = promptSpy.mock.calls[0]![0]
     expect(promptInput.session).not.toHaveProperty('allowedWorkerAgentRoleIds')
-    expect(promptInput.assignableWorkerAgentRoles).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'worker-agent' }),
-      expect.objectContaining({ id: customRole.id })
-    ]))
+    expect(promptInput).not.toHaveProperty('assignableWorkerAgentRoles')
     expect(enqueueSpy).toHaveBeenCalledWith(expect.objectContaining({
       sessionId: session.id,
       prompt: 'Use assembled prompt',

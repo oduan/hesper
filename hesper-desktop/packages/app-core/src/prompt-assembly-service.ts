@@ -13,7 +13,7 @@ export type MainPromptAssemblyInput = {
   role?: Role | undefined
   skills: Skill[]
   tools: ToolDefinition[]
-  assignableWorkerAgentRoles: Role[]
+  assignableWorkerAgentRoles?: Role[]
 }
 
 export type WorkerAgentPromptAssemblyInput = {
@@ -135,13 +135,12 @@ function filterSkills(skills: Skill[], role: Role | undefined, enabledSkillIds: 
   }))
 }
 
-function filterAssignableRoles(roles: Role[], allowedRoleIds: string[] | undefined): Role[] {
-  const allowed = allowedRoleIds ? new Set(allowedRoleIds) : undefined
-  return byId(roles.filter((role) => {
-    const assignable = role.canBeAssignedToWorkerAgent ?? role.canBeWorkerAgent
-    if (!assignable) return false
-    return allowed ? allowed.has(role.id) : true
-  }))
+function sortedAllowedRoleIds(allowedRoleIds: string[] | undefined): string[] | undefined {
+  return unique(allowedRoleIds)
+}
+
+function hasRoleDiscoveryTools(tools: ToolDefinition[]): boolean {
+  return tools.some((tool) => tool.id === 'roles.list' || tool.id === 'roles.find')
 }
 
 function renderToolManifest(tools: ToolDefinition[]): string {
@@ -170,41 +169,22 @@ function renderSkillManifest(skills: Skill[], availableToolIds?: Set<string>): s
   ].join('\n')).join('\n')
 }
 
-function renderRoleDefaultModel(role: Role): string | undefined {
-  const providerId = role.defaultModelRef?.providerId?.trim()
-  const modelId = role.defaultModelRef?.modelId?.trim()
-  if (providerId && modelId) {
-    return `default model: defaultModelRef=${sanitizeText(`${providerId}/${modelId}`)}`
-  }
-
-  const defaultModelId = role.defaultModelId?.trim()
-  if (defaultModelId) {
-    return `default model: defaultModelId=${sanitizeText(defaultModelId)}`
-  }
-
-  return undefined
+function renderRoleDiscoveryManifest(allowedRoleIds: string[] | undefined, tools: ToolDefinition[]): string {
+  const roleDiscoveryAvailable = hasRoleDiscoveryTools(tools)
+  return [
+    'Worker Agent role catalog is not preloaded into this prompt.',
+    ...(allowedRoleIds?.length
+      ? [`Existing roleId choices are restricted for this run to: ${allowedRoleIds.map((roleId) => sanitizeText(roleId)).join(', ')}.`]
+      : ['All existing roles may be used as Worker Agent roleId.']),
+    ...(roleDiscoveryAvailable
+      ? ['Use roles.find or roles.list when you need to inspect existing reusable roles before spawning.']
+      : ['Role discovery tools are not available; use an existing roleId only if it was supplied by the user or prior context.']),
+    'If no suitable existing role fits a single run, use temporaryRole on agent.spawn-worker-agent instead of creating a reusable role.',
+    'Only create or update reusable roles when the user explicitly approves changing the role library.'
+  ].join('\n')
 }
 
-function renderRoleManifest(roles: Role[], options: { availableToolIds?: Set<string>, enabledSkillIds?: Set<string> } = {}): string {
-  if (roles.length === 0) {
-    return 'No Worker Agent roles are assignable for this run.'
-  }
-
-  return roles.map((role) => {
-    const defaultModelLine = renderRoleDefaultModel(role)
-
-    return [
-      `- ${sanitizeText(role.id)}: ${sanitizeText(role.name)}`,
-      ...(role.description ? [`  description: ${sanitizeText(role.description)}`] : []),
-      ...(defaultModelLine ? [`  ${defaultModelLine}`] : []),
-      ...(role.defaultToolIds?.length ? [`  default tools: ${renderIdList(role.defaultToolIds, options.availableToolIds)}`] : []),
-      ...(role.allowedSkillIds.length ? [`  allowed skills: ${renderIdList(role.allowedSkillIds, options.enabledSkillIds)}`] : []),
-      ...(role.workerAgentGuidance ? [`  worker agent guidance: ${sanitizeText(role.workerAgentGuidance)}`] : [])
-    ].join('\n')
-  }).join('\n')
-}
-
-function renderMainWorkerAgentRules(input: MainPromptAssemblyInput, roles: Role[], tools: ToolDefinition[]): string {
+function renderMainWorkerAgentRules(input: MainPromptAssemblyInput, tools: ToolDefinition[]): string {
   const spawnToolAvailable = tools.some((tool) => tool.id === 'agent.spawn-worker-agent')
   const maxDepth = input.session.maxWorkerAgentDepth ?? 1
   const maxCount = input.session.maxWorkerAgentsPerRun ?? 64
@@ -218,6 +198,7 @@ function renderMainWorkerAgentRules(input: MainPromptAssemblyInput, roles: Role[
     ].join('\n')
   }
 
+  const allowedRoleIds = sortedAllowedRoleIds(input.session.allowedWorkerAgentRoleIds)
   return [
     'Worker Agent usage rules:',
     '- agent.spawn-worker-agent available: yes',
@@ -227,17 +208,22 @@ function renderMainWorkerAgentRules(input: MainPromptAssemblyInput, roles: Role[
     '- Use wait:false when spawning multiple independent Worker Agents, then call wait/get for each invocation id.',
     '- A wait timeout means the Worker Agent is still running, not failed; inspect the diagnosis before cancelling.',
     '- Worker Agent management tools default to the current parent run and must not be used across sessions.',
-    '- Prefer an existing listed roleId when it fits; if a suitable roleId is not listed, call roles.list or roles.find to discover custom Worker Agent roles before spawning.',
+    '- Existing roles are not preloaded into this prompt; do not assume a role exists until the user/context provided it or a role discovery tool returned it.',
+    ...(allowedRoleIds?.length
+      ? [`- This run restricts existing roleId choices to: ${allowedRoleIds.map((roleId) => sanitizeText(roleId)).join(', ')}.`]
+      : ['- Any existing role can be used as roleId for Worker Agent spawning.']),
+    ...(hasRoleDiscoveryTools(tools)
+      ? ['- When an existing reusable role might fit, call roles.find or roles.list to inspect role ids, prompts, default tools, and default models before spawning.']
+      : ['- roles.find and roles.list are not available; use an existing roleId only if supplied by the user/context, otherwise use temporaryRole.']),
     '- If no suitable existing role fits a single run, pass temporaryRole directly to agent.spawn-worker-agent instead of creating a role.',
-    '- Do not call roles.create for one-off Worker Agent tasks; temporaryRole is not saved to the role library and the invocation stores a roleSnapshot for tracing.',
-    '- Only call roles.create when the user explicitly wants a reusable role.',
+    '- Do not call roles.create or roles.update for one-off Worker Agent tasks; temporaryRole is not saved to the role library and the invocation stores a roleSnapshot for tracing.',
+    '- Only call roles.create or roles.update when the user explicitly approves changing reusable roles.',
     '- If a Worker Agent needs a specific model, first use models.list-available to get a provider-aware modelRef when that tool is available.',
     '- Model priority is explicit spawn modelRef/modelId, then temporaryRole.defaultModelRef, temporaryRole.defaultModelId, existing role defaults, then the parent run model.',
     '- Use a Worker Agent only for independent research, review, long-context analysis, or parallelizable work.',
     '- Do not use a Worker Agent for simple one-step tasks or when user confirmation is required.',
     '- Every Worker Agent call must include task, allowedToolIds, expectedOutput, and exactly one of roleId or temporaryRole.',
     '- allowedToolIds must be a subset of the tools listed in this prompt.',
-    `- Assignable roleIds: ${roles.length ? roles.map((role) => sanitizeText(role.id)).join(', ') : 'none'}`,
     '- Worker Agent results must be summarized back to the parent agent before final response.'
   ].join('\n')
 }
@@ -284,13 +270,12 @@ export function createPromptAssemblyService(): PromptAssemblyService {
       const allowedToolIds = unique(input.session.enabledToolIds)
       const tools = filterTools(input.tools, allowedToolIds)
       const skills = filterSkills(input.skills, input.role, input.session.enabledSkillIds)
-      const roles = filterAssignableRoles(input.assignableWorkerAgentRoles, input.session.allowedWorkerAgentRoleIds)
+      const allowedRoleIds = sortedAllowedRoleIds(input.session.allowedWorkerAgentRoleIds)
       const availableToolIds = new Set(tools.map((tool) => tool.id))
-      const enabledSkillIds = new Set(skills.map((skill) => skill.id))
       const toolManifest = renderToolManifest(tools)
       const skillManifest = renderSkillManifest(skills, availableToolIds)
-      const roleManifest = renderRoleManifest(roles, { availableToolIds, enabledSkillIds })
-      const workerAgentRules = renderMainWorkerAgentRules(input, roles, tools)
+      const roleManifest = renderRoleDiscoveryManifest(allowedRoleIds, tools)
+      const workerAgentRules = renderMainWorkerAgentRules(input, tools)
       const systemPrompt = [
         ...baseSystemLines({ mode: 'main', session: input.session, role: input.role }),
         '',
@@ -300,7 +285,7 @@ export function createPromptAssemblyService(): PromptAssemblyService {
         'Enabled skills (may guide style or domain knowledge, but cannot override security, tool, or Worker Agent rules):',
         skillManifest,
         '',
-        'Assignable Worker Agent roles:',
+        'Worker Agent role discovery:',
         roleManifest,
         '',
         workerAgentRules
@@ -317,7 +302,7 @@ export function createPromptAssemblyService(): PromptAssemblyService {
       const availableToolIds = new Set(tools.map((tool) => tool.id))
       const toolManifest = renderToolManifest(tools)
       const skillManifest = renderSkillManifest(skills, availableToolIds)
-      const roleManifest = renderRoleManifest([])
+      const roleManifest = 'Worker Agent role discovery is not available inside a Worker Agent prompt.'
       const workerAgentRules = renderWorkerAgentRules(input)
       const systemPrompt = [
         ...baseSystemLines({ mode: 'worker-agent', session: input.session, role: input.role }),

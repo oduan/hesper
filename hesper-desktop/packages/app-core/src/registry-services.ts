@@ -72,7 +72,7 @@ export function createDefaultRoleService(): RoleService {
         'system.show-notification'
       ],
       canBeMainAgent: true,
-      canBeWorkerAgent: false
+      canBeWorkerAgent: true
     },
     {
       id: 'worker-agent',

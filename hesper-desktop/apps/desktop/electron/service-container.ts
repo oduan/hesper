@@ -203,6 +203,31 @@ export function createServiceContainer(options: ServiceContainerOptions) {
     readProviderApiKey: readResolvedProviderApiKey
   })
   const allowlistPolicy = createAllowlistPermissionPolicy()
+  const listRuntimeRoles = async (): Promise<Role[]> => {
+    const customRoles = await options.persistence.roles.list()
+    const customRoleIds = new Set(customRoles.map((role) => role.id))
+    return [
+      ...roleService.listRoles().filter((role) => !customRoleIds.has(role.id)),
+      ...customRoles
+    ]
+  }
+  const roleToToolRecord = (role: Role) => {
+    const defaultModelId = role.defaultModelId !== undefined
+      ? role.defaultModelId
+      : role.defaultModelRef?.modelId ?? ''
+    const defaultModelRef = role.defaultModelId === ''
+      ? undefined
+      : role.defaultModelRef ? { providerId: role.defaultModelRef.providerId, modelId: role.defaultModelRef.modelId } : undefined
+    return {
+      id: role.id,
+      name: role.name,
+      description: role.description ?? '',
+      systemPrompt: role.systemPrompt ?? '',
+      defaultToolIds: [...(role.defaultToolIds ?? [])],
+      defaultModelId,
+      ...(defaultModelRef ? { defaultModelRef } : {})
+    }
+  }
   let workerAgentService!: ReturnType<typeof createWorkerAgentService>
   const toolRunner = createToolRunner({
     policy: {
@@ -224,7 +249,7 @@ export function createServiceContainer(options: ServiceContainerOptions) {
         new Notification({ title: 'hesper', body: message }).show()
       },
       roleTools: {
-        listRoles: () => roleManagementService.listRoles(),
+        listRoles: async () => (await listRuntimeRoles()).map(roleToToolRecord),
         createRole: (input) => roleManagementService.createRole(input),
         updateRole: (input) => roleManagementService.updateRole(input)
       },
@@ -305,14 +330,6 @@ export function createServiceContainer(options: ServiceContainerOptions) {
       })
     : new MockAgentAdapter({ delayMs: 0 })
   const agentRuntime = new AgentRuntime({ persistence: options.persistence, adapter })
-  const listRuntimeRoles = async (): Promise<Role[]> => {
-    const customRoles = await options.persistence.roles.list()
-    const customRoleIds = new Set(customRoles.map((role) => role.id))
-    return [
-      ...roleService.listRoles().filter((role) => !customRoleIds.has(role.id)),
-      ...customRoles
-    ]
-  }
   workerAgentService = createWorkerAgentService({
     persistence: options.persistence,
     adapter,

@@ -376,7 +376,7 @@ function createNotFoundError(entity: string, id: string): Error {
 }
 
 function createRoleError(roleId: string): Error {
-  return new Error(`Worker Agent role is not assignable: ${roleId}`)
+  return new Error(`Worker Agent role is not allowed for this session: ${roleId}`)
 }
 
 function createLimitError(message: string): Error {
@@ -538,29 +538,24 @@ export function createWorkerAgentService(options: WorkerAgentServiceOptions): Wo
     return { parentRun, session }
   }
 
-  function isAssignableWorkerRole(role: Role): boolean {
-    return role.canBeWorkerAgent === true && role.canBeAssignedToWorkerAgent !== false
-  }
-
-  function ensureWorkerRole(session: Session, role: Role | undefined, roleId: string, assignableRoles: Role[]): Role {
+  function ensureWorkerRole(session: Session, role: Role | undefined, roleId: string): Role {
     if (!role) throw createNotFoundError('Role', roleId)
-    if (!isAssignableWorkerRole(role)) throw createRoleError(roleId)
 
     const allowedRoleIds = session.allowedWorkerAgentRoleIds
-    if (allowedRoleIds && allowedRoleIds.length > 0) {
-      if (!allowedRoleIds.includes(roleId)) throw createRoleError(roleId)
-      return role
+    if (allowedRoleIds && allowedRoleIds.length > 0 && !allowedRoleIds.includes(roleId)) {
+      throw createRoleError(roleId)
     }
 
-    if (!assignableRoles.some((candidate) => candidate.id === roleId)) throw createRoleError(roleId)
     return role
   }
 
   async function resolveEffectiveAllowedToolIds(requestedAllowedToolIds: string[], contextAllowedToolIds: string[], roleDefaultToolIds: string[] | undefined): Promise<string[]> {
     const requested = uniqueStrings(requestedAllowedToolIds)
     const contextAllowed = new Set(uniqueStrings(contextAllowedToolIds))
-    const roleAllowed = new Set(uniqueStrings(roleDefaultToolIds ?? []))
-    const intersection = requested.filter((toolId) => contextAllowed.has(toolId) && roleAllowed.has(toolId))
+    const roleDefaultToolSet = roleDefaultToolIds && roleDefaultToolIds.length > 0
+      ? new Set(uniqueStrings(roleDefaultToolIds))
+      : undefined
+    const intersection = requested.filter((toolId) => contextAllowed.has(toolId) && (!roleDefaultToolSet || roleDefaultToolSet.has(toolId)))
     if (intersection.length === 0) return []
 
     const globallyEnabled = new Set(await options.filterEnabledToolIds(intersection))
@@ -748,8 +743,7 @@ export function createWorkerAgentService(options: WorkerAgentServiceOptions): Wo
         : ensureWorkerRole(
             session,
             await options.roles.getRole(parsed.roleId!),
-            parsed.roleId!,
-            (await options.roles.listRoles()).filter(isAssignableWorkerRole)
+            parsed.roleId!
           )
       const roleDefaultToolIds = parsed.temporaryRole && role.defaultToolIds === undefined ? parsed.allowedToolIds : role.defaultToolIds
       const depth = (parentRun.depth ?? 0) + 1

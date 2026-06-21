@@ -925,14 +925,17 @@ describe('worker agent service', () => {
     })
   })
 
-  it('allows assignable worker roles when the session has no explicit allowed worker role list', async () => {
+  it('allows any existing role when the session has no explicit allowed worker role list', async () => {
     const { allowedWorkerAgentRoleIds: _allowedWorkerAgentRoleIds, ...sessionWithoutExplicitAllowedRoles } = defaultSession
+    const noDefaultToolsRole: Role = { ...blockedRole, id: 'no-default-tools', defaultToolIds: [] }
     const { service, createContext } = await createHarness({
-      session: sessionWithoutExplicitAllowedRoles
+      session: sessionWithoutExplicitAllowedRoles,
+      roles: [noDefaultToolsRole]
     })
 
-    await expect(service.spawn({ task: 'review', roleId: 'reviewer', allowedToolIds: ['filesystem.read-file'], wait: false }, createContext())).resolves.toMatchObject({
-      roleId: 'reviewer',
+    await expect(service.spawn({ task: 'review', roleId: 'no-default-tools', allowedToolIds: ['filesystem.read-file'], wait: false }, createContext())).resolves.toMatchObject({
+      roleId: 'no-default-tools',
+      allowedToolIds: ['filesystem.read-file'],
       status: 'running'
     })
   })
@@ -955,14 +958,14 @@ describe('worker agent service', () => {
     await expect(service.list({ parentRunId: 'run-parent' }, foreignContext)).rejects.toThrow('Worker Agent access denied')
   })
 
-  it('enforces role and tool limits', async () => {
+  it('enforces session role allowlists and tool limits', async () => {
     const blockedHarness = await createHarness({ roles: [blockedRole] })
     await expect(
       blockedHarness.service.spawn(
         { task: 'blocked role', roleId: 'blocked', allowedToolIds: ['filesystem.read-file'], wait: false },
         blockedHarness.createContext()
       )
-    ).rejects.toThrow(/role/i)
+    ).rejects.toThrow(/not allowed for this session/i)
 
     const { service, createContext } = await createHarness({
       filterEnabledToolIds: async (toolIds) => toolIds.filter((toolId) => toolId === 'filesystem.read-file')

@@ -232,7 +232,16 @@ function normalizeSearchText(value: string): string {
 
 function roleMatchesQuery(role: RoleToolRecord, query: string): boolean {
   const normalizedQuery = normalizeSearchText(query)
-  const haystacks = [role.id, role.name, role.description, role.systemPrompt, ...role.defaultToolIds]
+  const haystacks = [
+    role.id,
+    role.name,
+    role.description,
+    role.systemPrompt,
+    role.defaultModelId,
+    role.defaultModelRef?.providerId ?? '',
+    role.defaultModelRef?.modelId ?? '',
+    ...role.defaultToolIds
+  ]
   return haystacks.some((value) => normalizeSearchText(value).includes(normalizedQuery))
 }
 

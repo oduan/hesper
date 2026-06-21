@@ -240,7 +240,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
     {
       id: 'roles.list',
       name: 'List Roles',
-      description: 'List all user-defined roles with their id, name, description, full prompt, and default tools.',
+      description: 'List all available roles, including built-in and user-defined roles, with their id, name, description, full prompt, default tools, and default model metadata. Any listed role id can be used as a Worker Agent roleId unless the current session explicitly restricts role choices.',
       category: 'agent',
       icon: '🎭',
       display: { name: 'List Roles', names: { 'zh-CN': '列出角色' } },
@@ -249,7 +249,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
     {
       id: 'roles.find',
       name: 'Find Roles',
-      description: 'Fuzzy search user-defined roles by id, name, description, prompt text, or default tool IDs.',
+      description: 'Fuzzy search available built-in and user-defined roles by id, name, description, prompt text, default tool IDs, or default model metadata. Use this before spawning when an existing reusable Worker Agent role might fit.',
       category: 'agent',
       icon: '🎭',
       display: { name: 'Find Roles', names: { 'zh-CN': '查找角色' }, resourceFields: ['query'] },
@@ -265,7 +265,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
     {
       id: 'roles.create',
       name: 'Create Role',
-      description: 'Create a reusable role with a name, description, full prompt, default tools, and optional default model. Do not use for one-off Worker Agent tasks; pass temporaryRole to agent.spawn-worker-agent instead. Only create roles the user explicitly wants to reuse.',
+      description: 'Create a reusable role with a name, description, full prompt, default tools, and optional default model. Do not use for one-off Worker Agent tasks; pass temporaryRole to agent.spawn-worker-agent instead. Only create roles when the user explicitly approves adding a reusable role to the role library.',
       category: 'agent',
       icon: '🎭',
       display: { name: 'Create Role', names: { 'zh-CN': '创建角色' }, resourceFields: ['name'] },
@@ -293,7 +293,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
     {
       id: 'roles.update',
       name: 'Update Role',
-      description: 'Update an existing reusable user-defined role. This tool cannot delete roles.',
+      description: 'Update an existing reusable user-defined role. This tool cannot delete roles. Only update the role library when the user explicitly approves changing a reusable role.',
       category: 'agent',
       icon: '🎭',
       display: { name: 'Update Role', names: { 'zh-CN': '更新角色' }, resourceFields: ['id'] },
@@ -331,7 +331,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
     {
       id: 'agent.spawn-worker-agent',
       name: 'Spawn Worker Agent',
-      description: 'Create a constrained Worker Agent child run with either an existing roleId or a one-off temporaryRole, task, limited tool set, and optional model override. Use temporaryRole when no suitable existing role fits a single run; temporaryRole is not saved as a reusable role and is not written to the role library; the invocation persists a roleSnapshot for tracing. Do not call roles.create for one-off Worker Agent tasks; only create roles the user explicitly wants to reuse. Use models.list-available first to choose a provider-aware modelRef when possible; modelRef takes precedence over modelId, temporaryRole/default role defaults, and the parent run model. If no explicit model is provided, temporaryRole.defaultModelRef/default role defaultModelRef is used before temporaryRole.defaultModelId/default role defaultModelId, then the parent run model. By default waits only for a bounded timeout and returns a diagnosis if still running.',
+      description: 'Create a constrained Worker Agent child run with either any existing roleId or a one-off temporaryRole, task, limited tool set, and optional model override. Use roles.find or roles.list first when you need to inspect existing reusable roles. Use temporaryRole when no suitable existing role fits a single run; temporaryRole is not saved as a reusable role and is not written to the role library; the invocation persists a roleSnapshot for tracing. Do not call roles.create for one-off Worker Agent tasks; only create roles when the user explicitly approves adding a reusable role. Use models.list-available first to choose a provider-aware modelRef when possible; modelRef takes precedence over modelId, temporaryRole/default role defaults, and the parent run model. If no explicit model is provided, temporaryRole.defaultModelRef/default role defaultModelRef is used before temporaryRole.defaultModelId/default role defaultModelId, then the parent run model. By default waits only for a bounded timeout and returns a diagnosis if still running.',
       category: 'agent',
       icon: '🧑‍💻',
       display: { name: 'Spawn Worker Agent', names: { 'zh-CN': '启动 Worker Agent' }, resourceFields: ['task'] },
@@ -344,7 +344,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
         ],
         properties: {
           task: { type: 'string', description: 'Specific task for the Worker Agent.' },
-          roleId: { type: 'string', description: 'Assignable Worker Agent role id. Provide exactly one of roleId or temporaryRole.' },
+          roleId: { type: 'string', description: 'Existing role id to use as the Worker Agent role. Provide exactly one of roleId or temporaryRole.' },
           temporaryRole: {
             type: 'object',
             description: 'One-off Worker Agent role used only for this spawn. It is not saved to the role library; use this instead of roles.create for single-use tasks.',

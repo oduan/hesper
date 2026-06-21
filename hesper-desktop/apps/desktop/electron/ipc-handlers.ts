@@ -199,7 +199,6 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
     const resolvedWorkspacePath = workspacePath ?? session.workspacePath
     const roles = await listRuntimeRoles()
     const role = roles.find((candidate) => candidate.id === (session.roleId ?? 'main-agent'))
-    const assignableWorkerAgentRoles = roles.filter((candidate) => candidate.canBeAssignedToWorkerAgent ?? candidate.canBeWorkerAgent)
     const configuredToolIds = session.enabledToolIds?.length ? session.enabledToolIds : role?.defaultToolIds ?? []
     const requestedToolIdSet = requestedEnabledToolIds === undefined ? undefined : new Set(requestedEnabledToolIds)
     const enabledToolIdsBeforeGlobalFilter = requestedToolIdSet ? configuredToolIds.filter((toolId) => requestedToolIdSet.has(toolId)) : configuredToolIds
@@ -219,8 +218,7 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       session: sessionForPrompt,
       role,
       skills: options.container.skillService.listSkills(),
-      tools: options.container.toolCatalogService.list(),
-      assignableWorkerAgentRoles
+      tools: options.container.toolCatalogService.list()
     })
 
     return omitUndefined({ systemPrompt: prompt.systemPrompt, enabledToolIds: sessionForPrompt.enabledToolIds, workspacePath: resolvedWorkspacePath })

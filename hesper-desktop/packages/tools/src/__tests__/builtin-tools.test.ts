@@ -140,6 +140,8 @@ describe('builtin tools', () => {
     })
     expect(schema.properties.temporaryRole.properties.defaultModelRef.description).toContain('Takes precedence over defaultModelId')
     expect(spawnWorkerAgent?.description).toContain('temporaryRole')
+    expect(spawnWorkerAgent?.description).toContain('any existing roleId')
+    expect(spawnWorkerAgent?.description).toContain('roles.find or roles.list')
     expect(spawnWorkerAgent?.description).toContain('roleSnapshot')
     expect(spawnWorkerAgent?.description).toContain('role library')
     expect(spawnWorkerAgent?.description).not.toMatch(/not persisted/i)
@@ -160,6 +162,7 @@ describe('builtin tools', () => {
     expect(createRole?.description).toContain('reusable role')
     expect(createRole?.description).toContain('Do not use for one-off Worker Agent tasks')
     expect(createRole?.description).toContain('temporaryRole')
+    expect(createRole?.description).toContain('user explicitly approves')
   })
 
   it('defines filesystem tools with required schema fields', () => {
@@ -260,10 +263,12 @@ describe('builtin tools', () => {
 
     expect(tools.find((tool) => tool.id === 'roles.list')).toMatchObject({
       category: 'agent',
+      description: expect.stringContaining('built-in and user-defined roles'),
       inputSchema: { type: 'object', properties: {} }
     })
     expect(tools.find((tool) => tool.id === 'roles.find')).toMatchObject({
       category: 'agent',
+      description: expect.stringContaining('default model metadata'),
       inputSchema: {
         type: 'object',
         required: ['query'],

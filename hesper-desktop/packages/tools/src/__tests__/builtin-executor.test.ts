@@ -407,7 +407,7 @@ describe('createBuiltinToolExecutor', () => {
   it('lists, finds, creates and updates roles through injected role handlers', async () => {
     const roles = [
       { id: 'role-ops', name: '运维助手', description: '部署与命令', systemPrompt: '负责生产部署和命令执行。', defaultToolIds: ['git.status'], defaultModelId: '' },
-      { id: 'role-search', name: '搜索专家', description: '查找资料', systemPrompt: '负责检索上下文。', defaultToolIds: ['web.search'], defaultModelId: '' }
+      { id: 'role-search', name: '搜索专家', description: '查找资料', systemPrompt: '负责检索上下文。', defaultToolIds: ['web.search'], defaultModelId: 'gpt-4o', defaultModelRef: { providerId: 'openai', modelId: 'gpt-4o' } }
     ]
     const listRoles = vi.fn(async () => roles)
     const createRole = vi.fn(async (input) => ({ id: 'role-1', description: '', systemPrompt: '', defaultToolIds: [], ...input }))
@@ -428,6 +428,13 @@ describe('createBuiltinToolExecutor', () => {
       allowedToolIds: ['roles.find']
     })
     expect(JSON.parse(found.content)).toEqual([roles[0]])
+
+    const foundByModel = await executor.execute(tool('roles.find'), { query: 'openai' }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['roles.find']
+    })
+    expect(JSON.parse(foundByModel.content)).toEqual([roles[1]])
 
     const created = await executor.execute(tool('roles.create'), { name: '运维助手', defaultToolIds: ['git.status'] }, {
       runId: 'run-1',

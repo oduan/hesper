@@ -87,11 +87,25 @@ const tools: ToolDefinition[] = [
         allowedToolIds: { type: 'array' }
       }
     }
+  },
+  {
+    id: 'roles.list',
+    name: 'List Roles',
+    description: 'List available roles',
+    category: 'agent',
+    inputSchema: { type: 'object', properties: {} }
+  },
+  {
+    id: 'roles.find',
+    name: 'Find Roles',
+    description: 'Find available roles',
+    category: 'agent',
+    inputSchema: { type: 'object', properties: { query: { type: 'string' } } }
   }
 ]
 
 describe('PromptAssemblyService', () => {
-  it('assembles a main agent prompt with allowed tools, skills and assignable Worker Agent roles', () => {
+  it('assembles a main agent prompt with allowed tools, skills and Worker Agent role discovery guidance', () => {
     const service = createPromptAssemblyService()
 
     const output = service.assembleMainPrompt({
@@ -114,7 +128,8 @@ describe('PromptAssemblyService', () => {
     expect(output.skillManifest).toContain('skill:notes')
     expect(output.skillManifest).toContain('Prefer concise project-specific answers.')
     expect(output.skillManifest).not.toContain('DO NOT INCLUDE')
-    expect(output.roleManifest).toContain('reviewer')
+    expect(output.roleManifest).toContain('Worker Agent role catalog is not preloaded')
+    expect(output.roleManifest).toContain('restricted for this run to: "reviewer"')
     expect(output.roleManifest).not.toContain('dangerous')
     expect(output.workerAgentRules).toContain('agent.spawn-worker-agent')
     expect(output.workerAgentRules).toContain('allowedToolIds')
@@ -131,7 +146,7 @@ describe('PromptAssemblyService', () => {
     const service = createPromptAssemblyService()
 
     const output = service.assembleMainPrompt({
-      session,
+      session: { ...session, enabledToolIds: ['filesystem.read-file', 'agent.spawn-worker-agent', 'roles.list', 'roles.find'] },
       role: mainRole,
       skills,
       tools,
@@ -142,14 +157,15 @@ describe('PromptAssemblyService', () => {
     expect(output.workerAgentRules).toContain('models.list-available')
     expect(output.workerAgentRules).toContain('provider-aware modelRef')
     expect(output.workerAgentRules).toContain('exactly one of roleId or temporaryRole')
-    expect(output.workerAgentRules).toContain('Prefer an existing listed roleId when it fits')
-    expect(output.workerAgentRules).toContain('Do not call roles.create for one-off Worker Agent tasks')
-    expect(output.workerAgentRules).toContain('Only call roles.create when the user explicitly wants a reusable role')
+    expect(output.workerAgentRules).toContain('Existing roles are not preloaded into this prompt')
+    expect(output.workerAgentRules).toContain('roles.find or roles.list')
+    expect(output.workerAgentRules).toContain('Do not call roles.create or roles.update for one-off Worker Agent tasks')
+    expect(output.workerAgentRules).toContain('Only call roles.create or roles.update when the user explicitly approves')
     expect(output.workerAgentRules).toContain('temporaryRole.defaultModelRef')
     expect(output.workerAgentRules).toContain('temporaryRole.defaultModelId')
   })
 
-  it('renders Worker Agent role default model metadata and preserves model selection guidance', () => {
+  it('keeps role metadata out of the prompt and preserves model selection guidance', () => {
     const service = createPromptAssemblyService()
     const providerAwareRole: Role = {
       ...reviewerRole,
@@ -181,20 +197,17 @@ describe('PromptAssemblyService', () => {
       assignableWorkerAgentRoles: [providerAwareRole, legacyRole, inheritRole]
     })
 
-    expect(output.roleManifest).toContain('provider-reviewer')
-    expect(output.roleManifest).toContain('default model: defaultModelRef="openai/gpt-4o"')
+    expect(output.roleManifest).toContain('restricted for this run to: "inherit-reviewer", "legacy-reviewer", "provider-reviewer"')
+    expect(output.roleManifest).not.toContain('defaultModelRef="openai/gpt-4o"')
     expect(output.roleManifest).not.toContain('legacy-shadow-model')
-    expect(output.roleManifest).toContain('legacy-reviewer')
-    expect(output.roleManifest).toContain('default model: defaultModelId="deepseek-chat"')
-    const inheritRoleBlock = output.roleManifest.split('- "inherit-reviewer":')[1]?.split('\n- "legacy-reviewer":')[0]
-    expect(inheritRoleBlock).not.toContain('default model')
+    expect(output.roleManifest).not.toContain('defaultModelId="deepseek-chat"')
     expect(output.workerAgentRules).toContain('Use a Worker Agent only for independent research')
     expect(output.workerAgentRules).toContain('models.list-available')
     expect(output.workerAgentRules).toContain('provider-aware modelRef')
-    expect(output.workerAgentRules).toContain('Only call roles.create when the user explicitly wants a reusable role')
+    expect(output.workerAgentRules).toContain('Only call roles.create or roles.update when the user explicitly approves')
   })
 
-  it('lists all assignable Worker roles by default when no explicit role allowlist is configured', () => {
+  it('does not preload role details when no explicit role allowlist is configured', () => {
     const service = createPromptAssemblyService()
     const { allowedWorkerAgentRoleIds: _allowedWorkerAgentRoleIds, ...sessionWithoutExplicitWorkerRoles } = session
     const builtinWorkerRole: Role = {
@@ -207,18 +220,20 @@ describe('PromptAssemblyService', () => {
     }
 
     const output = service.assembleMainPrompt({
-      session: sessionWithoutExplicitWorkerRoles,
+      session: { ...sessionWithoutExplicitWorkerRoles, enabledToolIds: ['filesystem.read-file', 'agent.spawn-worker-agent', 'roles.list', 'roles.find'] },
       role: mainRole,
       skills,
       tools,
       assignableWorkerAgentRoles: [builtinWorkerRole, reviewerRole]
     })
 
-    expect(output.roleManifest).toContain('worker-agent')
-    expect(output.roleManifest).toContain('reviewer')
-    expect(output.workerAgentRules).toContain('roles.list or roles.find')
-    expect(output.workerAgentRules).toContain('discover custom Worker Agent roles')
-    expect(output.workerAgentRules).toContain('Assignable roleIds: "reviewer", "worker-agent"')
+    expect(output.roleManifest).toContain('All existing roles may be used as Worker Agent roleId')
+    expect(output.roleManifest).toContain('Use roles.find or roles.list')
+    expect(output.roleManifest).not.toContain('"worker-agent"')
+    expect(output.roleManifest).not.toContain('"reviewer"')
+    expect(output.workerAgentRules).toContain('Any existing role can be used as roleId')
+    expect(output.workerAgentRules).toContain('roles.find or roles.list')
+    expect(output.workerAgentRules).not.toContain('Assignable roleIds')
   })
 
   it('includes write file when it is enabled for the run', () => {
@@ -342,7 +357,7 @@ describe('PromptAssemblyService', () => {
     expect(output.toolManifest).not.toContain('filesystem.read-file')
     expect(output.skillManifest).toContain('No skills are currently enabled')
     expect(output.skillManifest).not.toContain('skill:notes')
-    expect(output.roleManifest).toContain('No Worker Agent roles are assignable')
+    expect(output.roleManifest).toContain('Worker Agent role catalog is not preloaded')
     expect(output.roleManifest).not.toContain('reviewer')
   })
 
@@ -383,7 +398,7 @@ describe('PromptAssemblyService', () => {
     expect(output.roleManifest).toContain('leaky-reviewer')
     expect(output.roleManifest).not.toContain('filesystem.write-file')
     expect(output.roleManifest).not.toContain('skill:secret')
-    expect(output.roleManifest).toContain('skill:leaky')
+    expect(output.roleManifest).not.toContain('skill:leaky')
   })
 
   it('fails closed when allowlists are absent', () => {
@@ -403,7 +418,8 @@ describe('PromptAssemblyService', () => {
 
     expect(output.toolManifest).toBe('No tools are currently available to this agent.')
     expect(output.skillManifest).toBe('No skills are currently enabled for this agent.')
-    expect(output.roleManifest).toContain('reviewer')
+    expect(output.roleManifest).toContain('All existing roles may be used as Worker Agent roleId')
+    expect(output.roleManifest).not.toContain('reviewer')
   })
 
   it('quotes untrusted registry text and redacts credential-shaped values', () => {
