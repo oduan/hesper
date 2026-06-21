@@ -64,85 +64,75 @@ export type GetSshExecutionOutputInput = {
   executionId: string
 }
 
-export type SshExecutionListItem = {
+export type SshDeleteResult = {
+  deleted: true
   id: string
-  sessionId: string
-  runId: string
+}
+
+export type SshExecutionListItem = {
+  executionId: string
   serverId: string
   serverName: string
   status: SshExecutionStatus
-  commandCount: number
-  completedCommandCount: number
   startedAt: string
   updatedAt: string
   completedAt?: string
+  commandCount: number
+  completedCommandCount: number
   error?: RunError
 }
 
 export type SshExecutionOutput = {
-  execution: SshExecution
-  commands: SshCommandResult[]
+  executionId: string
+  serverId: string
+  serverName: string
+  status: SshExecutionStatus
+  startedAt: string
+  updatedAt: string
+  completedAt?: string
+  results: SshCommandResult[]
 }
 
 export type SshRunCommandsResult = SshExecutionOutput & {
   wait: boolean
-}
-
-export type SshClientCommandStartEvent = {
-  index: number
-  command: string
-}
-
-export type SshClientOutputEvent = {
-  index: number
-  chunk: string
-}
-
-export type SshClientCommandCompleteEvent = {
-  index: number
-  exitCode?: number
-  signal?: string
-  durationMs?: number
-  status?: Extract<SshCommandStatus, 'succeeded' | 'failed' | 'cancelled'>
-}
-
-export type SshClientCommandSkippedEvent = {
-  index: number
-  reason?: string
+  stoppedOnError: boolean
 }
 
 export type SshClientRunInput = {
-  server: Pick<SshServer, 'id' | 'name' | 'host' | 'port' | 'username'>
+  executionId: string
+  host: string
+  port: number
+  username: string
   privateKey: string
   passphrase?: string
   commands: string[]
   stopOnError: boolean
   timeoutMs: number
-  onCommandStart(event: SshClientCommandStartEvent): Promise<void> | void
-  onStdout(event: SshClientOutputEvent): Promise<void> | void
-  onStderr(event: SshClientOutputEvent): Promise<void> | void
-  onCommandComplete(event: SshClientCommandCompleteEvent): Promise<void> | void
-  onCommandSkipped(event: SshClientCommandSkippedEvent): Promise<void> | void
-  onCommandCancelled(event: { index: number; reason?: string }): Promise<void> | void
+  signal?: AbortSignal
+  onCommandStart(result: SshCommandResult): Promise<void> | void
+  onStdout(index: number, chunk: string): Promise<void> | void
+  onStderr(index: number, chunk: string): Promise<void> | void
+  onCommandComplete(result: SshCommandResult): Promise<void> | void
+  onCommandSkipped(result: SshCommandResult): Promise<void> | void
 }
 
 export type SshClientAdapter = {
-  run(input: SshClientRunInput): Promise<void>
+  runCommands(input: SshClientRunInput): Promise<void>
 }
 
 export type SshConfigurationService = {
   listKeys(): Promise<SshKey[]>
   getKey(id: string): Promise<SshKey | undefined>
   createKey(input: CreateSshKeyInput): Promise<SshKey>
-  deleteKey(id: string): Promise<void>
+  deleteKey(id: string): Promise<SshDeleteResult>
   listServers(): Promise<SshServer[]>
   getServer(id: string): Promise<SshServer | undefined>
   createServer(input: CreateSshServerInput): Promise<SshServer>
   updateServer(input: UpdateSshServerInput): Promise<SshServer>
-  deleteServer(id: string): Promise<void>
+  deleteServer(id: string): Promise<SshDeleteResult>
   listServersForAgent(): Promise<SshServerAgentSummary[]>
   runCommands(input: RunSshCommandsInput): Promise<SshRunCommandsResult>
-  listExecutions(input: ListSshExecutionsInput): Promise<SshExecutionListItem[]>
+  listExecutions(input: ListSshExecutionsInput): Promise<{ executions: SshExecutionListItem[]; count: number }>
   getExecutionOutput(input: GetSshExecutionOutputInput): Promise<SshExecutionOutput>
   waitForIdle(executionId?: string): Promise<void>
 }
@@ -225,16 +215,14 @@ function errorForAdapterFailure(): RunError {
   }
 }
 
-function commandStatusFromComplete(event: SshClientCommandCompleteEvent): Extract<SshCommandStatus, 'succeeded' | 'failed' | 'cancelled'> {
-  if (event.status) return event.status
-  if (event.signal) return 'cancelled'
-  return event.exitCode === 0 ? 'succeeded' : 'failed'
-}
-
 function finalExecutionStatus(results: SshCommandResult[]): Extract<SshExecutionStatus, 'succeeded' | 'failed' | 'cancelled'> {
   if (results.some((result) => result.status === 'failed')) return 'failed'
   if (results.some((result) => result.status === 'cancelled')) return 'cancelled'
   return 'succeeded'
+}
+
+function stoppedOnError(execution: SshExecution, results: SshCommandResult[]): boolean {
+  return execution.stopOnError && results.some((result) => result.status === 'skipped')
 }
 
 export function createSshConfigurationService(options: SshConfigurationServiceOptions): SshConfigurationService {
@@ -263,6 +251,17 @@ export function createSshConfigurationService(options: SshConfigurationServiceOp
     }
   }
 
+  const normalizeCallbackResult = (executionId: string, commands: string[], result: SshCommandResult): SshCommandResult => {
+    const command = ensureCommandIndex(commands, result.index)
+    return sshCommandResultSchema.parse(stripUndefined({
+      ...result,
+      executionId,
+      command: result.command || command,
+      stdout: result.stdout ?? '',
+      stderr: result.stderr ?? ''
+    }))
+  }
+
   const saveCommandResult = async (result: SshCommandResult): Promise<void> => {
     await options.persistence.sshCommandResults.save(sshCommandResultSchema.parse(stripUndefined({ ...result })))
   }
@@ -278,8 +277,26 @@ export function createSshConfigurationService(options: SshConfigurationServiceOp
   }
 
   const buildExecutionOutput = async (execution: SshExecution): Promise<SshExecutionOutput> => {
-    const commands = (await options.persistence.sshCommandResults.listByExecution(execution.id)).sort((left, right) => left.index - right.index)
-    return { execution, commands }
+    const results = (await options.persistence.sshCommandResults.listByExecution(execution.id)).sort((left, right) => left.index - right.index)
+    return {
+      executionId: execution.id,
+      serverId: execution.serverId,
+      serverName: execution.serverName,
+      status: execution.status,
+      startedAt: execution.startedAt,
+      updatedAt: execution.updatedAt,
+      ...(execution.completedAt !== undefined ? { completedAt: execution.completedAt } : {}),
+      results
+    }
+  }
+
+  const buildRunCommandsResult = async (execution: SshExecution, wait: boolean): Promise<SshRunCommandsResult> => {
+    const output = await buildExecutionOutput(execution)
+    return {
+      ...output,
+      wait,
+      stoppedOnError: stoppedOnError(execution, output.results)
+    }
   }
 
   const failExecution = async (executionId: string, commands: string[]): Promise<void> => {
@@ -291,40 +308,40 @@ export function createSshConfigurationService(options: SshConfigurationServiceOp
     const hasFailedCommand = results.some((result) => result.status === 'failed')
     const firstUnfinished = results.find((result) => activeCommandStatuses.has(result.status))
     if (!hasFailedCommand && firstUnfinished) {
-      await saveCommandResult(stripUndefined({
+      await saveCommandResult({
         ...firstUnfinished,
-        status: 'failed' as const,
+        status: 'failed',
         stderr: firstUnfinished.stderr || 'SSH command execution failed',
         completedAt: timestamp
-      }))
+      })
     }
 
     const latestResults = await options.persistence.sshCommandResults.listByExecution(executionId)
     for (const result of latestResults) {
       if (result.status === 'queued') {
-        await saveCommandResult(stripUndefined({
+        await saveCommandResult({
           ...result,
-          status: 'skipped' as const,
+          status: 'skipped',
           completedAt: timestamp,
           skippedReason: 'execution failed'
-        }))
+        })
       } else if (result.status === 'running') {
-        await saveCommandResult(stripUndefined({
+        await saveCommandResult({
           ...result,
-          status: 'failed' as const,
+          status: 'failed',
           stderr: result.stderr || 'SSH command execution failed',
           completedAt: timestamp
-        }))
+        })
       }
     }
 
-    await saveExecution(stripUndefined({
+    await saveExecution({
       ...execution,
-      status: 'failed' as const,
+      status: 'failed',
       updatedAt: timestamp,
       completedAt: timestamp,
       error: errorForAdapterFailure()
-    }))
+    })
   }
 
   const finalizeExecution = async (executionId: string): Promise<void> => {
@@ -333,12 +350,12 @@ export function createSshConfigurationService(options: SshConfigurationServiceOp
     const timestamp = now()
     const results = await options.persistence.sshCommandResults.listByExecution(executionId)
     const status = finalExecutionStatus(results)
-    await saveExecution(stripUndefined({
+    await saveExecution({
       ...execution,
       status,
       updatedAt: timestamp,
       completedAt: timestamp
-    }))
+    })
   }
 
   const startExecution = (input: {
@@ -373,80 +390,78 @@ export function createSshConfigurationService(options: SshConfigurationServiceOp
     const runPromise = (async () => {
       try {
         const adapterInput: SshClientRunInput = {
-          server: {
-            id: input.server.id,
-            name: input.server.name,
-            host: input.server.host,
-            port: input.server.port,
-            username: input.server.username
-          },
+          executionId: input.execution.id,
+          host: input.server.host,
+          port: input.server.port,
+          username: input.server.username,
           privateKey: input.privateKey,
           ...(input.passphrase !== undefined ? { passphrase: input.passphrase } : {}),
           commands,
           stopOnError: input.execution.stopOnError,
           timeoutMs: input.execution.timeoutMs,
-          onCommandStart: (event: SshClientCommandStartEvent) => enqueue(async () => {
-            const command = ensureCommandIndex(commands, event.index)
-            const current = await getCommandResult(input.execution.id, event.index, commands)
+          onCommandStart: (result: SshCommandResult) => enqueue(async () => {
+            const normalized = normalizeCallbackResult(input.execution.id, commands, result)
+            const current = await getCommandResult(input.execution.id, normalized.index, commands)
             await saveCommandResult({
               ...current,
-              command: event.command || command,
-              status: 'running',
+              ...normalized,
+              stdout: normalized.stdout || current.stdout,
+              stderr: normalized.stderr || current.stderr,
+              startedAt: normalized.startedAt ?? current.startedAt ?? now()
+            })
+            await touchExecution(input.execution.id, 'running')
+          }),
+          onStdout: (index: number, chunk: string) => enqueue(async () => {
+            const current = await getCommandResult(input.execution.id, index, commands)
+            await saveCommandResult({
+              ...current,
+              status: current.status === 'queued' ? 'running' : current.status,
+              stdout: current.stdout + chunk,
               startedAt: current.startedAt ?? now()
             })
             await touchExecution(input.execution.id, 'running')
           }),
-          onStdout: (event: SshClientOutputEvent) => enqueue(async () => {
-            const current = await getCommandResult(input.execution.id, event.index, commands)
+          onStderr: (index: number, chunk: string) => enqueue(async () => {
+            const current = await getCommandResult(input.execution.id, index, commands)
             await saveCommandResult({
               ...current,
-              stdout: current.stdout + event.chunk
+              status: current.status === 'queued' ? 'running' : current.status,
+              stderr: current.stderr + chunk,
+              startedAt: current.startedAt ?? now()
+            })
+            await touchExecution(input.execution.id, 'running')
+          }),
+          onCommandComplete: (result: SshCommandResult) => enqueue(async () => {
+            const normalized = normalizeCallbackResult(input.execution.id, commands, result)
+            const current = await getCommandResult(input.execution.id, normalized.index, commands)
+            const startedAt = normalized.startedAt ?? current.startedAt
+            await saveCommandResult({
+              ...current,
+              ...normalized,
+              stdout: normalized.stdout || current.stdout,
+              stderr: normalized.stderr || current.stderr,
+              ...(startedAt !== undefined ? { startedAt } : {}),
+              completedAt: normalized.completedAt ?? now()
             })
             await touchExecution(input.execution.id)
           }),
-          onStderr: (event: SshClientOutputEvent) => enqueue(async () => {
-            const current = await getCommandResult(input.execution.id, event.index, commands)
+          onCommandSkipped: (result: SshCommandResult) => enqueue(async () => {
+            const normalized = normalizeCallbackResult(input.execution.id, commands, result)
+            const current = await getCommandResult(input.execution.id, normalized.index, commands)
+            const startedAt = normalized.startedAt ?? current.startedAt
             await saveCommandResult({
               ...current,
-              stderr: current.stderr + event.chunk
-            })
-            await touchExecution(input.execution.id)
-          }),
-          onCommandComplete: (event: SshClientCommandCompleteEvent) => enqueue(async () => {
-            const current = await getCommandResult(input.execution.id, event.index, commands)
-            const status = commandStatusFromComplete(event)
-            await saveCommandResult({
-              ...current,
-              status,
-              ...(event.exitCode !== undefined ? { exitCode: event.exitCode } : {}),
-              ...(event.signal !== undefined ? { signal: event.signal } : {}),
-              ...(event.durationMs !== undefined ? { durationMs: event.durationMs } : {}),
-              completedAt: now()
-            })
-            await touchExecution(input.execution.id)
-          }),
-          onCommandSkipped: (event: SshClientCommandSkippedEvent) => enqueue(async () => {
-            const current = await getCommandResult(input.execution.id, event.index, commands)
-            await saveCommandResult({
-              ...current,
+              ...normalized,
               status: 'skipped',
-              ...(event.reason !== undefined ? { skippedReason: event.reason } : {}),
-              completedAt: now()
-            })
-            await touchExecution(input.execution.id)
-          }),
-          onCommandCancelled: (event: { index: number; reason?: string }) => enqueue(async () => {
-            const current = await getCommandResult(input.execution.id, event.index, commands)
-            await saveCommandResult({
-              ...current,
-              status: 'cancelled',
-              ...(event.reason !== undefined ? { signal: event.reason } : {}),
-              completedAt: now()
+              stdout: normalized.stdout || current.stdout,
+              stderr: normalized.stderr || current.stderr,
+              ...(startedAt !== undefined ? { startedAt } : {}),
+              completedAt: normalized.completedAt ?? now()
             })
             await touchExecution(input.execution.id)
           })
         }
-        await options.adapter.run(adapterInput)
+        await options.adapter.runCommands(adapterInput)
         await drainOperations()
         await finalizeExecution(input.execution.id)
       } catch {
@@ -505,6 +520,7 @@ export function createSshConfigurationService(options: SshConfigurationServiceOp
       await options.persistence.sshKeys.delete(keyId)
       await options.credentialVault.deleteSshPrivateKey({ keyId })
       await options.credentialVault.deleteSshPassphrase({ keyId })
+      return { deleted: true, id: keyId }
     },
     async listServers() {
       return options.persistence.sshServers.list()
@@ -559,7 +575,9 @@ export function createSshConfigurationService(options: SshConfigurationServiceOp
       return server
     },
     async deleteServer(id) {
-      await options.persistence.sshServers.delete(requireId(id))
+      const serverId = requireId(id)
+      await options.persistence.sshServers.delete(serverId)
+      return { deleted: true, id: serverId }
     },
     async listServersForAgent() {
       const servers = await options.persistence.sshServers.list()
@@ -585,6 +603,7 @@ export function createSshConfigurationService(options: SshConfigurationServiceOp
       const privateKey = await options.credentialVault.readSshPrivateKey(key.id)
       if (!privateKey) throw new Error('SSH private key not found')
       const passphrase = key.hasPassphrase ? await options.credentialVault.readSshPassphrase(key.id) : undefined
+      if (key.hasPassphrase && !passphrase) throw new Error('SSH passphrase not found')
 
       const timestamp = now()
       const execution = sshExecutionSchema.parse(stripUndefined({
@@ -596,7 +615,7 @@ export function createSshConfigurationService(options: SshConfigurationServiceOp
         commands,
         stopOnError,
         timeoutMs,
-        status: 'running' as const,
+        status: 'running',
         startedAt: timestamp,
         updatedAt: timestamp
       }))
@@ -617,7 +636,7 @@ export function createSshConfigurationService(options: SshConfigurationServiceOp
         await service.waitForIdle(execution.id)
       }
       const latest = await getExecutionForSession({ sessionId, executionId: execution.id })
-      return { ...await buildExecutionOutput(latest), wait }
+      return buildRunCommandsResult(latest, wait)
     },
     async listExecutions(input) {
       const sessionId = requireId(input.sessionId, 'sessionId')
@@ -627,21 +646,19 @@ export function createSshConfigurationService(options: SshConfigurationServiceOp
       for (const execution of filtered) {
         const results = await options.persistence.sshCommandResults.listByExecution(execution.id)
         items.push({
-          id: execution.id,
-          sessionId: execution.sessionId,
-          runId: execution.runId,
+          executionId: execution.id,
           serverId: execution.serverId,
           serverName: execution.serverName,
           status: execution.status,
-          commandCount: execution.commands.length,
-          completedCommandCount: results.filter((result) => commandFinished(result.status)).length,
           startedAt: execution.startedAt,
           updatedAt: execution.updatedAt,
           ...(execution.completedAt !== undefined ? { completedAt: execution.completedAt } : {}),
+          commandCount: execution.commands.length,
+          completedCommandCount: results.filter((result) => commandFinished(result.status)).length,
           ...(execution.error !== undefined ? { error: execution.error } : {})
         })
       }
-      return items
+      return { executions: items, count: items.length }
     },
     async getExecutionOutput(input) {
       const sessionId = requireId(input.sessionId, 'sessionId')
