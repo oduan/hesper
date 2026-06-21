@@ -399,20 +399,6 @@ function latestRunningStep(steps: RunStep[]): RunStep | undefined {
   return undefined
 }
 
-function isFinalStatus(status: WorkerAgentInvocation['status']): boolean {
-  return status === 'succeeded' || status === 'failed' || status === 'cancelled'
-}
-
-function runIdFromEvent(event: AgentRuntimeEvent): string | undefined {
-  if (event.type === 'run.created') return event.run.id
-  if (event.type === 'run.started' || event.type === 'run.retrying' || event.type === 'run.failed' || event.type === 'run.succeeded' || event.type === 'run.cancelled') return event.runId
-  if (event.type === 'step.created' || event.type === 'step.updated') return event.step.runId
-  if (event.type === 'message.delta') return event.runId
-  if (event.type === 'message.completed') return event.message.runId
-  if (event.type === 'worker.invocation.created' || event.type === 'worker.invocation.updated') return event.invocation.childRunId ?? event.invocation.parentRunId
-  return undefined
-}
-
 export function createWorkerAgentService(options: WorkerAgentServiceOptions): WorkerAgentService {
   const listeners = new Set<RuntimeListener>()
   const activeWorkers = new Map<string, ActiveWorker>()
@@ -502,15 +488,6 @@ export function createWorkerAgentService(options: WorkerAgentServiceOptions): Wo
 
   function getActiveWorkerByInvocationId(invocationId: string): ActiveWorker | undefined {
     return activeWorkers.get(invocationId)
-  }
-
-  async function findInvocationByChildRun(childRunId: string): Promise<WorkerAgentInvocation | undefined> {
-    const invocationId = childRunIdToInvocationId.get(childRunId)
-    if (invocationId) {
-      return options.persistence.workerAgentInvocations.get(invocationId)
-    }
-    const invocations = await options.persistence.workerAgentInvocations.listByChildRun(childRunId)
-    return invocations[0]
   }
 
   async function loadInvocationWithSession(invocationId: string, context: ToolExecutionContext): Promise<{ invocation: WorkerAgentInvocation; parentRun: AgentRun; }> {

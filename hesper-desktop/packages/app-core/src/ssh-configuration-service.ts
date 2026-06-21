@@ -300,7 +300,7 @@ export function createSshConfigurationService(options: SshConfigurationServiceOp
     }
   }
 
-  const failExecution = async (executionId: string, commands: string[]): Promise<void> => {
+  const failExecution = async (executionId: string, _commands: string[]): Promise<void> => {
     const timestamp = now()
     const execution = await options.persistence.sshExecutions.get(executionId)
     if (!execution) return

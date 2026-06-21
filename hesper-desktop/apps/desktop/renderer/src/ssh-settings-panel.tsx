@@ -430,12 +430,6 @@ const sectionTitleStyle: CSSProperties = {
   lineHeight: 1.2
 }
 
-const sectionDescriptionStyle: CSSProperties = {
-  margin: '4px 0 0',
-  color: mutedTextColor,
-  lineHeight: 1.45
-}
-
 const listStyle: CSSProperties = {
   display: 'grid',
   gap: 0,

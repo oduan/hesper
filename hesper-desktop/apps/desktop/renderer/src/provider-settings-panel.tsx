@@ -1336,11 +1336,6 @@ const secondaryActionStyle: CSSProperties = {
   cursor: 'pointer'
 }
 
-const disabledActionStyle: CSSProperties = {
-  opacity: 0.55,
-  cursor: 'not-allowed'
-}
-
 const fullWindowOverlayStyle: CSSProperties = {
   position: 'fixed',
   top: 36,
