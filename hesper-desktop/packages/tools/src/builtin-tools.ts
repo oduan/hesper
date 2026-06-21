@@ -385,7 +385,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
             description: 'Shell commands to run sequentially on the selected SSH server.'
           },
           stopOnError: { type: 'boolean', description: 'When true, skip remaining commands after the first failed command. Defaults to true.' },
-          timeoutMs: { type: 'number', description: 'Per-command timeout in milliseconds. Defaults to 0, which means no timeout.' },
+          timeoutMs: { type: 'number', description: 'Whole execution timeout in milliseconds. Defaults to 0, which means no timeout.' },
           wait: { type: 'boolean', description: 'When true, wait for command execution to finish before returning. Defaults to true.' }
         }
       }

@@ -4,6 +4,7 @@ import type { SshClientAdapter, SshClientRunInput } from './ssh-configuration-se
 type SshCommandCallbackResult = Parameters<SshClientRunInput['onCommandComplete']>[0]
 
 const stopOnErrorSkippedReason = 'Previous command failed and stopOnError=true'
+const executionAbortedMessage = 'SSH execution timed out or was aborted'
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -25,9 +26,32 @@ function commandAt(input: SshClientRunInput, index: number): string {
   return command
 }
 
-function appendTimeout(stderr: string, message: string): string {
-  if (!stderr) return `${message}\n`
-  return `${stderr}${stderr.endsWith('\n') ? '' : '\n'}${message}\n`
+function createExecutionAbort(input: SshClientRunInput): { signal: AbortSignal; cleanup(): void } {
+  const controller = new AbortController()
+  let timeout: ReturnType<typeof setTimeout> | undefined
+
+  const abortExecution = () => {
+    if (!controller.signal.aborted) controller.abort(new Error(executionAbortedMessage))
+  }
+
+  if (input.signal?.aborted) {
+    abortExecution()
+  } else {
+    input.signal?.addEventListener('abort', abortExecution, { once: true })
+  }
+
+  if (input.timeoutMs > 0) {
+    timeout = setTimeout(abortExecution, input.timeoutMs)
+    timeout.unref?.()
+  }
+
+  return {
+    signal: controller.signal,
+    cleanup() {
+      if (timeout !== undefined) clearTimeout(timeout)
+      input.signal?.removeEventListener('abort', abortExecution)
+    }
+  }
 }
 
 function connectClient(client: Client, input: SshClientRunInput): Promise<void> {
@@ -52,8 +76,8 @@ function connectClient(client: Client, input: SshClientRunInput): Promise<void> 
     const onError = (error: Error) => settle(() => reject(error))
     const onClose = () => settle(() => reject(new Error('SSH connection closed before ready')))
     const onAbort = () => {
+      settle(() => reject(new Error(executionAbortedMessage)))
       client.destroy()
-      settle(() => reject(new Error('SSH operation aborted')))
     }
 
     if (input.signal?.aborted) {
@@ -71,7 +95,7 @@ function connectClient(client: Client, input: SshClientRunInput): Promise<void> 
       port: input.port,
       username: input.username,
       privateKey: input.privateKey,
-      readyTimeout: input.timeoutMs > 0 ? input.timeoutMs : 0,
+      readyTimeout: 0,
       ...(input.passphrase !== undefined ? { passphrase: input.passphrase } : {})
     }
 
@@ -101,12 +125,10 @@ function runSingleCommand(client: Client, input: SshClientRunInput, index: numbe
     let stdout = ''
     let stderr = ''
     let stream: ClientChannel | undefined
-    let timeout: ReturnType<typeof setTimeout> | undefined
     let settled = false
     let callbackQueue = Promise.resolve()
 
     const cleanup = () => {
-      if (timeout !== undefined) clearTimeout(timeout)
       input.signal?.removeEventListener('abort', onAbort)
     }
 
@@ -163,9 +185,10 @@ function runSingleCommand(client: Client, input: SshClientRunInput, index: numbe
     }
 
     const onAbort = () => {
-      stream?.close()
+      const currentStream = stream
+      rejectOnce(new Error(executionAbortedMessage))
+      currentStream?.close()
       client.destroy()
-      rejectOnce(new Error('SSH operation aborted'))
     }
 
     if (input.signal?.aborted) {
@@ -186,16 +209,6 @@ function runSingleCommand(client: Client, input: SshClientRunInput, index: numbe
         channel.stderr.on('data', appendStderr)
         channel.once('error', rejectOnce)
         channel.once('close', (code: number | null, exitSignal: string | undefined) => complete(code, exitSignal))
-
-        if (input.timeoutMs > 0) {
-          timeout = setTimeout(() => {
-            if (settled) return
-            const message = `Command timed out after ${input.timeoutMs}ms`
-            stderr = appendTimeout(stderr, message)
-            enqueueCallback(() => input.onStderr(index, `${message}\n`))
-            channel.close()
-          }, input.timeoutMs)
-        }
       })
     } catch (error) {
       rejectOnce(error)
@@ -223,19 +236,22 @@ export function createSsh2ClientAdapter(): SshClientAdapter {
   return {
     async runCommands(input) {
       const client = new Client()
+      const executionAbort = createExecutionAbort(input)
+      const executionInput: SshClientRunInput = { ...input, signal: executionAbort.signal }
       try {
-        await connectClient(client, input)
+        await connectClient(client, executionInput)
 
-        for (let index = 0; index < input.commands.length; index += 1) {
-          const status = await runSingleCommand(client, input, index)
-          if (status === 'failed' && input.stopOnError) {
-            await skipRemainingCommands(input, index + 1)
+        for (let index = 0; index < executionInput.commands.length; index += 1) {
+          const status = await runSingleCommand(client, executionInput, index)
+          if (status === 'failed' && executionInput.stopOnError) {
+            await skipRemainingCommands(executionInput, index + 1)
             return
           }
         }
       } catch (error) {
         throw wrapSshClientError(error)
       } finally {
+        executionAbort.cleanup()
         client.end()
       }
     }

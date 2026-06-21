@@ -269,7 +269,10 @@ describe('builtin tools', () => {
         serverId: expect.objectContaining({ type: 'string' }),
         commands: expect.objectContaining({ type: 'array' }),
         stopOnError: expect.objectContaining({ type: 'boolean' }),
-        timeoutMs: expect.objectContaining({ type: 'number' }),
+        timeoutMs: expect.objectContaining({
+          type: 'number',
+          description: expect.stringContaining('Whole execution timeout')
+        }),
         wait: expect.objectContaining({ type: 'boolean' })
       })
     })
