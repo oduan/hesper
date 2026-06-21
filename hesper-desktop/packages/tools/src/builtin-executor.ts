@@ -46,6 +46,10 @@ export type WorkerAgentToolHandlers = {
   cancel(input: Record<string, unknown>, context: ToolExecutionContext): Promise<unknown>
 }
 
+export type ModelToolHandlers = {
+  listAvailableModels(): Promise<unknown>
+}
+
 export type SleepOptions = {
   signal?: AbortSignal
 }
@@ -60,6 +64,7 @@ export type BuiltinToolExecutorOptions = {
   showNotification?: (message: string) => Promise<void> | void
   roleTools?: RoleToolHandlers
   workerAgentTools?: WorkerAgentToolHandlers
+  modelTools?: ModelToolHandlers
   now?: () => string
   sleep?: (durationMs: number, options?: SleepOptions) => Promise<void>
 }
@@ -277,6 +282,20 @@ async function runWorkerAgentTool(
   const result = await handlers[method](input, context)
   const details = { toolId: tool.id, workerAgent: result }
   return { content: jsonContent(result), details }
+}
+
+function modelToolsUnavailable(tool: ToolDefinition): ToolExecutionResult {
+  return {
+    content: 'Model listing tools are not available in this runtime.',
+    details: { code: 'not_available', toolId: tool.id },
+    isError: true
+  }
+}
+
+async function listAvailableModelsTool(tool: ToolDefinition, modelTools: ModelToolHandlers | undefined): Promise<ToolExecutionResult> {
+  if (!modelTools) return modelToolsUnavailable(tool)
+  const catalog = await modelTools.listAvailableModels()
+  return { content: jsonContent(catalog), details: { toolId: tool.id, catalog } }
 }
 
 function requireWorkspace(context: ToolExecutionContext): string {
@@ -1318,6 +1337,8 @@ export function createBuiltinToolExecutor(options: BuiltinToolExecutorOptions = 
           return createRoleTool(tool, args, options.roleTools)
         case 'roles.update':
           return updateRoleTool(tool, args, options.roleTools)
+        case 'models.list-available':
+          return listAvailableModelsTool(tool, options.modelTools)
         case 'time.current':
           return currentTimeTool(tool, now)
         case 'time.sleep':

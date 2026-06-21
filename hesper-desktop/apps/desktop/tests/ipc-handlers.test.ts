@@ -150,6 +150,36 @@ describe('desktop service container', () => {
     expect((await container.modelProviderService.listModels('mock')).map((model) => model.id)).toEqual(['mock/hesper-fast'])
   })
 
+  it('injects model listing tools into the production tool runner without exposing credentials', async () => {
+    const secret = 'sk-live-secret-never-return'
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock', credentialCodec: createMockCredentialCodec() })
+    await container.modelProviderService.ensureBuiltinProviders()
+    await container.credentialVaultService.saveProviderApiKey({ providerId: 'openai', apiKey: secret })
+
+    const result = await container.toolRunner.run(container.toolCatalogService.get('models.list-available')!, {}, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['models.list-available']
+    })
+
+    expect(result.isError).not.toBe(true)
+    const catalog = JSON.parse(result.content) as { providers: Array<{ id: string; credentialStatus: string; hasApiKey?: boolean; apiKeyRef?: string; models: Array<{ id: string; readyForRuntime: boolean; modelRef: { providerId: string; modelId: string } }> }> }
+    expect(catalog.providers.map((provider) => provider.id)).toEqual(expect.arrayContaining(['mock', 'deepseek', 'openai']))
+    expect(catalog.providers.find((provider) => provider.id === 'mock')).toMatchObject({ credentialStatus: 'ready' })
+    expect(catalog.providers.find((provider) => provider.id === 'deepseek')).toMatchObject({ credentialStatus: 'needs_api_key' })
+    expect(catalog.providers.find((provider) => provider.id === 'openai')).toMatchObject({ credentialStatus: 'ready', hasApiKey: true })
+    expect(catalog.providers.find((provider) => provider.id === 'openai')?.models).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'gpt-4o',
+        readyForRuntime: true,
+        modelRef: { providerId: 'openai', modelId: 'gpt-4o' }
+      })
+    ]))
+    expect(catalog.providers.every((provider) => provider.apiKeyRef === undefined)).toBe(true)
+    expect(JSON.stringify(result)).not.toContain(secret)
+  })
+
   it('wires pi-core runs through the provider registry resolver and fails fast without credentials', async () => {
     const persistence = await createInMemoryPersistence()
     const container = createServiceContainer({ persistence, agentMode: 'pi-core', credentialCodec: createMockCredentialCodec() })

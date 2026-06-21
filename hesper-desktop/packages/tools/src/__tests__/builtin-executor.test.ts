@@ -596,6 +596,63 @@ describe('createBuiltinToolExecutor', () => {
     }
   })
 
+  it('lists available models through an injected model handler without echoing secrets', async () => {
+    const secret = 'sk-test-secret-never-return'
+    const catalog = {
+      providers: [
+        {
+          id: 'openai',
+          name: 'OpenAI',
+          kind: 'openai',
+          enabled: true,
+          hasApiKey: true,
+          credentialStatus: 'ready',
+          defaultModelId: 'gpt-4o',
+          models: [
+            {
+              id: 'gpt-4o',
+              providerId: 'openai',
+              modelName: 'gpt-4o',
+              displayName: 'GPT-4o',
+              capabilities: ['streaming', 'toolCalls', 'jsonOutput'],
+              enabled: true,
+              readyForRuntime: true,
+              modelRef: { providerId: 'openai', modelId: 'gpt-4o' }
+            }
+          ]
+        }
+      ]
+    }
+    const listAvailableModels = vi.fn(async () => catalog)
+    const executor = createBuiltinToolExecutor({ modelTools: { listAvailableModels } })
+
+    const result = await executor.execute(tool('models.list-available'), { apiKey: secret }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['models.list-available']
+    })
+
+    expect(listAvailableModels).toHaveBeenCalledTimes(1)
+    expect(listAvailableModels).toHaveBeenCalledWith()
+    expect(JSON.parse(result.content)).toEqual(catalog)
+    expect(result.details).toEqual({ toolId: 'models.list-available', catalog })
+    expect(JSON.stringify(result)).not.toContain(secret)
+  })
+
+  it('returns a controlled error when model listing tools are unavailable', async () => {
+    const executor = createBuiltinToolExecutor()
+
+    await expect(executor.execute(tool('models.list-available'), {}, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['models.list-available']
+    })).resolves.toEqual({
+      content: 'Model listing tools are not available in this runtime.',
+      details: { code: 'not_available', toolId: 'models.list-available' },
+      isError: true
+    })
+  })
+
   it('returns the current time and timezone', async () => {
     const executor = createBuiltinToolExecutor({ now: () => '2026-06-20T13:00:00.000Z' })
 

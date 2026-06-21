@@ -16,7 +16,7 @@ import {
   type ProviderOAuthGateway
 } from '@hesper/app-core'
 import type { Persistence } from '@hesper/persistence'
-import type { Role } from '@hesper/shared'
+import type { ModelConfig, ModelProviderConfig, Role } from '@hesper/shared'
 import { Notification } from 'electron'
 import { createAllowlistPermissionPolicy, createBuiltinToolDefinitions, createBuiltinToolExecutor, createToolRunner } from '@hesper/tools'
 
@@ -31,6 +31,50 @@ export type ServiceContainerOptions = {
 }
 
 export type ServiceContainer = ReturnType<typeof createServiceContainer>
+
+type ModelCredentialStatus = 'ready' | 'needs_api_key' | 'needs_oauth' | 'disabled'
+
+function providerCredentialStatus(provider: ModelProviderConfig): ModelCredentialStatus {
+  if (!provider.enabled) return 'disabled'
+  if (provider.kind === 'mock' || provider.authType === 'none') return 'ready'
+  if (provider.authType === 'oauth' && !provider.hasApiKey) return 'needs_oauth'
+  if (!provider.hasApiKey) return 'needs_api_key'
+  return 'ready'
+}
+
+function createAvailableModelCatalog(providers: ModelProviderConfig[], models: ModelConfig[]) {
+  return {
+    providers: providers.map((provider) => {
+      const credentialStatus = providerCredentialStatus(provider)
+      return {
+        id: provider.id,
+        name: provider.name,
+        kind: provider.kind,
+        ...(provider.authType !== undefined ? { authType: provider.authType } : {}),
+        enabled: provider.enabled,
+        hasApiKey: provider.hasApiKey === true,
+        credentialStatus,
+        ...(provider.defaultModelId !== undefined ? { defaultModelId: provider.defaultModelId } : {}),
+        models: models
+          .filter((model) => model.providerId === provider.id)
+          .map((model) => {
+            const enabled = model.enabled !== false
+            return {
+              id: model.id,
+              providerId: model.providerId,
+              modelName: model.modelName,
+              displayName: model.displayName,
+              capabilities: model.capabilities,
+              ...(model.contextWindow !== undefined ? { contextWindow: model.contextWindow } : {}),
+              enabled,
+              readyForRuntime: provider.enabled && enabled && credentialStatus === 'ready',
+              modelRef: { providerId: provider.id, modelId: model.id }
+            }
+          })
+      }
+    })
+  }
+}
 
 export function createServiceContainer(options: ServiceContainerOptions) {
   const sessionService = createSessionService(options.persistence)
@@ -95,6 +139,16 @@ export function createServiceContainer(options: ServiceContainerOptions) {
         get: (input, context) => workerAgentService.get(input, context),
         wait: (input, context) => workerAgentService.wait(input, context),
         cancel: (input, context) => workerAgentService.cancel(input, context)
+      },
+      modelTools: {
+        listAvailableModels: async () => {
+          await modelProviderService.ensureBuiltinProviders()
+          const [providers, models] = await Promise.all([
+            modelProviderService.listProviders(),
+            modelProviderService.listModels()
+          ])
+          return createAvailableModelCatalog(providers, models)
+        }
       }
     })
   })

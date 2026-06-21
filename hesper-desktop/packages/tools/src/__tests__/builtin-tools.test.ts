@@ -2,11 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { createBuiltinToolDefinitions } from '../builtin-tools'
 
 describe('builtin tools', () => {
-  it('contains the builtin tool set including Worker Agent management tools', () => {
+  it('contains the builtin tool set including model listing and Worker Agent management tools', () => {
     const tools = createBuiltinToolDefinitions()
-    expect(tools).toHaveLength(26)
+    expect(tools).toHaveLength(27)
     expect(tools.map((tool) => tool.id)).toEqual(
       expect.arrayContaining([
+        'models.list-available',
         'agent.spawn-worker-agent',
         'agent.list-worker-agents',
         'agent.get-worker-agent',
@@ -37,6 +38,7 @@ describe('builtin tools', () => {
         'roles.find',
         'roles.create',
         'roles.update',
+        'models.list-available',
         'agent.spawn-worker-agent',
         'agent.list-worker-agents',
         'agent.get-worker-agent',
@@ -212,6 +214,13 @@ describe('builtin tools', () => {
           })
         }
       }
+    })
+
+    expect(tools.find((tool) => tool.id === 'models.list-available')).toMatchObject({
+      name: 'List Available Models',
+      category: 'agent',
+      icon: '🤖',
+      inputSchema: { type: 'object', properties: {} }
     })
 
     expect(tools.find((tool) => tool.id === 'agent.spawn-worker-agent')).toMatchObject({

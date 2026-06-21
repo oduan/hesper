@@ -299,6 +299,14 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
       }
     },
     {
+      id: 'models.list-available',
+      name: 'List Available Models',
+      description: 'List currently available model providers and models so the main Agent can choose a model for itself or Worker Agents. Returns metadata only and never returns API keys.',
+      category: 'agent',
+      icon: '🤖',
+      inputSchema: { type: 'object', properties: {} }
+    },
+    {
       id: 'agent.spawn-worker-agent',
       name: 'Spawn Worker Agent',
       description: 'Create a constrained Worker Agent child run with a role, task, and limited tool set. By default waits only for a bounded timeout and returns a diagnosis if still running.',
