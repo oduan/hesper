@@ -309,12 +309,16 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
     {
       id: 'agent.spawn-worker-agent',
       name: 'Spawn Worker Agent',
-      description: 'Create a constrained Worker Agent child run with either an existing roleId or a one-off temporaryRole, task, limited tool set, and optional model override. Use temporaryRole when no suitable existing role fits a single run; temporaryRole is not saved, not persisted, and not written to the role library. Do not call roles.create for one-off Worker Agent tasks; only create roles the user explicitly wants to reuse. Use models.list-available first to choose a provider-aware modelRef when possible; modelRef takes precedence over modelId, temporaryRole/default role defaults, and the parent run model. If no explicit model is provided, temporaryRole.defaultModelRef/default role defaultModelRef is used before temporaryRole.defaultModelId/default role defaultModelId, then the parent run model. By default waits only for a bounded timeout and returns a diagnosis if still running.',
+      description: 'Create a constrained Worker Agent child run with either an existing roleId or a one-off temporaryRole, task, limited tool set, and optional model override. Use temporaryRole when no suitable existing role fits a single run; temporaryRole is not saved as a reusable role and is not written to the role library; the invocation persists a roleSnapshot for tracing. Do not call roles.create for one-off Worker Agent tasks; only create roles the user explicitly wants to reuse. Use models.list-available first to choose a provider-aware modelRef when possible; modelRef takes precedence over modelId, temporaryRole/default role defaults, and the parent run model. If no explicit model is provided, temporaryRole.defaultModelRef/default role defaultModelRef is used before temporaryRole.defaultModelId/default role defaultModelId, then the parent run model. By default waits only for a bounded timeout and returns a diagnosis if still running.',
       category: 'agent',
       icon: '🧑‍💻',
       inputSchema: {
         type: 'object',
         required: ['task', 'allowedToolIds'],
+        oneOf: [
+          { required: ['roleId'], not: { required: ['temporaryRole'] } },
+          { required: ['temporaryRole'], not: { required: ['roleId'] } }
+        ],
         properties: {
           task: { type: 'string', description: 'Specific task for the Worker Agent.' },
           roleId: { type: 'string', description: 'Assignable Worker Agent role id. Provide exactly one of roleId or temporaryRole.' },

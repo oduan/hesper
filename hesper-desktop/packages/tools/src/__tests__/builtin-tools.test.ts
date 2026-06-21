@@ -83,6 +83,10 @@ describe('builtin tools', () => {
 
     expect(schema.required).toEqual(['task', 'allowedToolIds'])
     expect(schema.required).not.toContain('roleId')
+    expect(schema.oneOf).toEqual([
+      { required: ['roleId'], not: { required: ['temporaryRole'] } },
+      { required: ['temporaryRole'], not: { required: ['roleId'] } }
+    ])
     expect(schema.properties.temporaryRole).toMatchObject({
       type: 'object',
       required: ['name', 'systemPrompt'],
@@ -103,7 +107,9 @@ describe('builtin tools', () => {
       }
     })
     expect(spawnWorkerAgent?.description).toContain('temporaryRole')
-    expect(spawnWorkerAgent?.description).toMatch(/not (saved|persisted)|not written/i)
+    expect(spawnWorkerAgent?.description).toContain('roleSnapshot')
+    expect(spawnWorkerAgent?.description).toContain('role library')
+    expect(spawnWorkerAgent?.description).not.toMatch(/not persisted/i)
     expect(spawnWorkerAgent?.description).toContain('roles.create')
   })
 
