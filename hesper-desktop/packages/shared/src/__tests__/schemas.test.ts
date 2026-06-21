@@ -7,8 +7,13 @@ import {
   roleSchema,
   runStepSchema,
   sessionSchema,
-  workerAgentInvocationSchema,
-  toolPermissionPolicySchema
+  sshCommandResultSchema,
+  sshExecutionSchema,
+  sshKeySchema,
+  sshServerAgentSummarySchema,
+  sshServerSchema,
+  toolPermissionPolicySchema,
+  workerAgentInvocationSchema
 } from '../schemas'
 
 const now = '2026-06-10T03:00:00.000Z'
@@ -331,5 +336,78 @@ describe('shared schemas', () => {
       type: 'worker.invocation.updated',
       invocation: { ...invocation, status: 'succeeded', completedAt: now }
     })).toMatchObject({ type: 'worker.invocation.updated', invocation: { status: 'succeeded' } })
+  })
+
+  it('validates SSH key, server, execution, and command result schemas without secrets', () => {
+    const key = sshKeySchema.parse({
+      id: 'ssh-key-1',
+      name: 'Production key',
+      note: 'deploy only',
+      hasPassphrase: true,
+      createdAt: now,
+      updatedAt: now
+    })
+    expect(key).toMatchObject({ id: 'ssh-key-1', hasPassphrase: true })
+    expect(JSON.stringify(key)).not.toContain('PRIVATE KEY')
+
+    const server = sshServerSchema.parse({
+      id: 'ssh-server-1',
+      name: 'Production',
+      host: '10.0.0.8',
+      port: 22,
+      username: 'deploy',
+      keyId: 'ssh-key-1',
+      note: 'log access',
+      createdAt: now,
+      updatedAt: now
+    })
+    expect(server).toMatchObject({ host: '10.0.0.8', port: 22, username: 'deploy', keyId: 'ssh-key-1' })
+
+    const execution = sshExecutionSchema.parse({
+      id: 'ssh-exec-1',
+      sessionId: 'session-1',
+      runId: 'run-1',
+      serverId: 'ssh-server-1',
+      serverName: 'Production',
+      commands: ['pwd', 'whoami'],
+      stopOnError: true,
+      timeoutMs: 0,
+      status: 'running',
+      startedAt: now,
+      updatedAt: now
+    })
+    expect(execution.timeoutMs).toBe(0)
+
+    const result = sshCommandResultSchema.parse({
+      executionId: 'ssh-exec-1',
+      index: 0,
+      command: 'pwd',
+      status: 'succeeded',
+      stdout: '/home/deploy\n',
+      stderr: '',
+      exitCode: 0,
+      startedAt: now,
+      completedAt: now,
+      durationMs: 12
+    })
+    expect(result.stdout).toBe('/home/deploy\n')
+  })
+
+  it('keeps SSH server agent summaries free of connection details', () => {
+    const summary = sshServerAgentSummarySchema.parse({
+      id: 'ssh-server-1',
+      name: 'Production',
+      note: 'safe summary'
+    })
+    expect(summary).toEqual({ id: 'ssh-server-1', name: 'Production', note: 'safe summary' })
+
+    expect(() => sshServerAgentSummarySchema.parse({
+      id: 'ssh-server-1',
+      name: 'Production',
+      host: '10.0.0.8',
+      port: 22,
+      username: 'deploy',
+      keyId: 'ssh-key-1'
+    })).toThrow()
   })
 })

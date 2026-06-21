@@ -178,3 +178,64 @@ export type WorkerAgentInvocation = {
   completedAt?: string
   error?: RunError
 }
+
+export type SshKey = {
+  id: string
+  name: string
+  note?: string
+  hasPassphrase: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export type SshServer = {
+  id: string
+  name: string
+  host: string
+  port: number
+  username: string
+  keyId: string
+  note?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type SshServerAgentSummary = {
+  id: string
+  name: string
+  note?: string
+}
+
+export type SshExecutionStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+export type SshCommandStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'skipped' | 'cancelled'
+
+export type SshExecution = {
+  id: string
+  sessionId: string
+  runId: string
+  serverId: string
+  serverName: string
+  commands: string[]
+  stopOnError: boolean
+  timeoutMs: number
+  status: SshExecutionStatus
+  startedAt: string
+  updatedAt: string
+  completedAt?: string
+  error?: RunError
+}
+
+export type SshCommandResult = {
+  executionId: string
+  index: number
+  command: string
+  status: SshCommandStatus
+  stdout: string
+  stderr: string
+  exitCode?: number
+  signal?: string
+  startedAt?: string
+  completedAt?: string
+  durationMs?: number
+  skippedReason?: string
+}
