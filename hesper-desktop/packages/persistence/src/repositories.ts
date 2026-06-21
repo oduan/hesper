@@ -45,6 +45,7 @@ export type AppSettingsRecord = {
   defaultOutputMode: 'markdown' | 'html'
   themeMode: 'system' | 'light' | 'dark'
   fontSize: number
+  soul: string
   updatedAt: string
 }
 
@@ -502,6 +503,7 @@ function toAppSettingsRecord(row: any): AppSettingsRecord {
     defaultOutputMode: defaultOutputMode as AppSettingsRecord['defaultOutputMode'],
     themeMode: themeMode as AppSettingsRecord['themeMode'],
     fontSize,
+    soul: typeof row.soul === 'string' ? row.soul : '',
     updatedAt: String(row.updated_at)
   }
 }
@@ -610,11 +612,12 @@ export function createRepositories(db: Database): Persistence {
     settings: {
       async save(settings) {
         exec('DELETE FROM app_settings')
-        exec('INSERT INTO app_settings (default_model_id, default_output_mode, theme_mode, font_size, updated_at) VALUES (?, ?, ?, ?, ?)', [
+        exec('INSERT INTO app_settings (default_model_id, default_output_mode, theme_mode, font_size, soul, updated_at) VALUES (?, ?, ?, ?, ?, ?)', [
           settings.defaultModelId,
           settings.defaultOutputMode,
           settings.themeMode,
           settings.fontSize,
+          settings.soul,
           settings.updatedAt
         ])
       },

@@ -69,6 +69,23 @@ CREATE TABLE model_providers (
   return db.export()
 }
 
+async function createLegacySettingsDatabaseBytes(): Promise<Uint8Array> {
+  const SQL = await initSqlJs()
+  const db = new SQL.Database()
+  db.run(`
+CREATE TABLE app_settings (
+  default_model_id TEXT NOT NULL,
+  default_output_mode TEXT NOT NULL,
+  theme_mode TEXT NOT NULL,
+  font_size INTEGER NOT NULL DEFAULT 14,
+  updated_at TEXT NOT NULL
+);
+INSERT INTO app_settings (default_model_id, default_output_mode, theme_mode, font_size, updated_at)
+VALUES ('legacy-model', 'html', 'dark', 16, '${now}');
+`)
+  return db.export()
+}
+
 async function createLegacyDatabaseBytes(): Promise<Uint8Array> {
   const SQL = await initSqlJs()
   const db = new SQL.Database()
@@ -250,6 +267,7 @@ describe('persistence repositories', () => {
       defaultOutputMode: 'html',
       themeMode: 'dark',
       fontSize: 16,
+      soul: 'Helpful, calm, and precise.',
       updatedAt: now
     })
 
@@ -263,6 +281,26 @@ describe('persistence repositories', () => {
         defaultOutputMode: 'html',
         themeMode: 'dark',
         fontSize: 16,
+        soul: 'Helpful, calm, and precise.',
+        updatedAt: now
+      })
+    } finally {
+      fs.rmSync(tempFile, { force: true })
+    }
+  })
+
+  it('migrates legacy app settings rows with a default empty soul', async () => {
+    const tempFile = path.join(os.tmpdir(), `hesper-legacy-settings-${Date.now()}.sqlite`)
+    fs.writeFileSync(tempFile, await createLegacySettingsDatabaseBytes())
+
+    try {
+      const migrated = await createFilePersistence(tempFile)
+      await expect(migrated.settings.get()).resolves.toEqual({
+        defaultModelId: 'legacy-model',
+        defaultOutputMode: 'html',
+        themeMode: 'dark',
+        fontSize: 16,
+        soul: '',
         updatedAt: now
       })
     } finally {
