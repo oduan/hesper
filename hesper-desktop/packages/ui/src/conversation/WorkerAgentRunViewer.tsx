@@ -11,6 +11,7 @@ export type WorkerAgentRunViewerProps = {
   steps: RunStep[]
   messages: Message[]
   streamingText: string
+  onLocalFileClick?: ((path: string) => void) | undefined
 }
 
 function compareCreatedAt<T extends { id: string; createdAt: string }>(left: T, right: T): number {
@@ -22,7 +23,7 @@ function sortChronologically<T extends { id: string; createdAt: string }>(items:
   return [...items].sort(compareCreatedAt)
 }
 
-function renderMessageContent(content: string, contentType: MessageContentType) {
+function renderMessageContent(content: string, contentType: MessageContentType, onLocalFileClick?: ((path: string) => void) | undefined) {
   if (contentType === 'html') {
     return (
       <iframe
@@ -35,7 +36,7 @@ function renderMessageContent(content: string, contentType: MessageContentType) 
   }
 
   if (contentType === 'markdown') {
-    return <MarkdownOutput content={content} />
+    return <MarkdownOutput content={content} onLocalFileClick={onLocalFileClick} />
   }
 
   return <div style={plainTextStyle}>{content}</div>
@@ -50,7 +51,7 @@ function SectionCard({ title, children }: { title: string; children: ReactNode }
   )
 }
 
-export function WorkerAgentRunViewer({ invocation, run, steps, messages, streamingText }: WorkerAgentRunViewerProps) {
+export function WorkerAgentRunViewer({ invocation, run, steps, messages, streamingText, onLocalFileClick }: WorkerAgentRunViewerProps) {
   const orderedMessages = useMemo(() => sortChronologically(messages), [messages])
   const finalAssistantMessage = [...orderedMessages].reverse().find((message) => message.role === 'assistant')
   const childRunStartedAt = run?.startedAt ?? steps[0]?.createdAt
@@ -59,16 +60,16 @@ export function WorkerAgentRunViewer({ invocation, run, steps, messages, streami
     <section aria-label="Worker Agent 查看器" style={viewerStyle}>
       <div style={introGridStyle}>
         <SectionCard title="任务">
-          <MarkdownOutput content={invocation.task} />
+          <MarkdownOutput content={invocation.task} onLocalFileClick={onLocalFileClick} />
         </SectionCard>
         {invocation.contextSummary ? (
           <SectionCard title="上下文">
-            <MarkdownOutput content={invocation.contextSummary} />
+            <MarkdownOutput content={invocation.contextSummary} onLocalFileClick={onLocalFileClick} />
           </SectionCard>
         ) : null}
         {invocation.expectedOutput ? (
           <SectionCard title="预期输出">
-            <MarkdownOutput content={invocation.expectedOutput} />
+            <MarkdownOutput content={invocation.expectedOutput} onLocalFileClick={onLocalFileClick} />
           </SectionCard>
         ) : null}
         <SectionCard title="角色">
@@ -103,7 +104,7 @@ export function WorkerAgentRunViewer({ invocation, run, steps, messages, streami
 
       <section aria-label="子步骤" style={sectionStyle}>
         <h3 style={sectionTitleStyle}>子步骤</h3>
-        <RunSteps steps={steps} autoExpanded runStartedAt={childRunStartedAt} runEndedAt={run?.endedAt} />
+        <RunSteps steps={steps} autoExpanded runStartedAt={childRunStartedAt} runEndedAt={run?.endedAt} onLocalFileClick={onLocalFileClick} />
       </section>
 
       {streamingText ? (
@@ -116,7 +117,7 @@ export function WorkerAgentRunViewer({ invocation, run, steps, messages, streami
       {finalAssistantMessage ? (
         <section aria-label="最终助手输出" style={sectionStyle}>
           <h3 style={sectionTitleStyle}>最终助手输出</h3>
-          {renderMessageContent(finalAssistantMessage.content, finalAssistantMessage.contentType)}
+          {renderMessageContent(finalAssistantMessage.content, finalAssistantMessage.contentType, onLocalFileClick)}
         </section>
       ) : null}
     </section>

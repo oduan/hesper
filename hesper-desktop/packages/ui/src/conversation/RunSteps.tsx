@@ -19,6 +19,7 @@ export type RunStepsProps = {
   runStartedAt?: string | undefined
   runEndedAt?: string | undefined
   workerAgentView?: WorkerAgentView | undefined
+  onLocalFileClick?: ((path: string) => void) | undefined
   getStepProps?: (step: RunStep) => {
     id?: string
     tabIndex?: number
@@ -338,7 +339,7 @@ function ToolDetailBlock({ title, children }: { title: string; children: ReactNo
   )
 }
 
-function ToolStepDetails({ step }: { step: RunStep }) {
+function ToolStepDetails({ step, onLocalFileClick }: { step: RunStep; onLocalFileClick?: ((path: string) => void) | undefined }) {
   const payload = getToolStepDetailPayload(step) ?? { input: {} }
   const hasOutput = Object.prototype.hasOwnProperty.call(payload, 'output')
   const outputText = hasOutput ? formatOutputValue(payload.output) : undefined
@@ -351,7 +352,7 @@ function ToolStepDetails({ step }: { step: RunStep }) {
       <ToolDetailBlock title="Output">
         {hasOutput ? (
           typeof payload.output === 'string' ? (
-            outputText ? <MarkdownOutput content={outputText} /> : <pre style={toolDetailPreStyle}>{outputText}</pre>
+            outputText ? <MarkdownOutput content={outputText} onLocalFileClick={onLocalFileClick} /> : <pre style={toolDetailPreStyle}>{outputText}</pre>
           ) : (
             <pre style={toolDetailPreStyle}>{outputText}</pre>
           )
@@ -363,7 +364,7 @@ function ToolStepDetails({ step }: { step: RunStep }) {
   )
 }
 
-function StepFullscreenDialog({ step, workerAgentView, onClose }: { step: RunStep; workerAgentView?: WorkerAgentView | undefined; onClose: () => void }) {
+function StepFullscreenDialog({ step, workerAgentView, onClose, onLocalFileClick }: { step: RunStep; workerAgentView?: WorkerAgentView | undefined; onClose: () => void; onLocalFileClick?: ((path: string) => void) | undefined }) {
   const dialogId = useId()
   const markdown = createStepMarkdown(step)
   const toolDetailPayload = getToolStepDetailPayload(step)
@@ -422,11 +423,12 @@ function StepFullscreenDialog({ step, workerAgentView, onClose }: { step: RunSte
                 steps={workerSteps}
                 messages={workerMessages}
                 streamingText={workerStreamingText}
+                onLocalFileClick={onLocalFileClick}
               />
             ) : toolDetailPayload ? (
-              <ToolStepDetails step={step} />
+              <ToolStepDetails step={step} onLocalFileClick={onLocalFileClick} />
             ) : (
-              <MarkdownOutput content={markdown} />
+              <MarkdownOutput content={markdown} onLocalFileClick={onLocalFileClick} />
             )}
           </article>
         </div>
@@ -435,7 +437,7 @@ function StepFullscreenDialog({ step, workerAgentView, onClose }: { step: RunSte
   )
 }
 
-export function RunSteps({ steps, autoExpanded = false, runStartedAt, runEndedAt, workerAgentView, getStepProps }: RunStepsProps) {
+export function RunSteps({ steps, autoExpanded = false, runStartedAt, runEndedAt, workerAgentView, onLocalFileClick, getStepProps }: RunStepsProps) {
   const [expanded, setExpanded] = useState(autoExpanded)
   const [activeStep, setActiveStep] = useState<RunStep>()
   const orderedSteps = useMemo(() => [...steps].sort(compareCreatedAt), [steps])
@@ -521,7 +523,7 @@ export function RunSteps({ steps, autoExpanded = false, runStartedAt, runEndedAt
           })}
         </ul>
       ) : null}
-      {activeStep ? <StepFullscreenDialog step={activeStep} workerAgentView={workerAgentView} onClose={() => setActiveStep(undefined)} /> : null}
+      {activeStep ? <StepFullscreenDialog step={activeStep} workerAgentView={workerAgentView} onClose={() => setActiveStep(undefined)} onLocalFileClick={onLocalFileClick} /> : null}
     </section>
   )
 }

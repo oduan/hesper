@@ -1,12 +1,13 @@
 import '@testing-library/jest-dom/vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import type { AgentRun, Message, RunStep, Session, WorkerAgentInvocation } from '@hesper/shared'
+import type { AgentRun, LocalFilePreview, Message, RunStep, Session, WorkerAgentInvocation } from '@hesper/shared'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppShell } from '../layout/AppShell'
 import { Composer } from '../conversation/Composer'
 import { ConversationView } from '../conversation/ConversationView'
 import { FullscreenOutput } from '../conversation/FullscreenOutput'
+import { MarkdownOutput } from '../conversation/MarkdownOutput'
 import { MessageBubble } from '../conversation/MessageBubble'
 import { OutputBlock } from '../conversation/OutputBlock'
 import { RunSteps } from '../conversation/RunSteps'
@@ -21,6 +22,39 @@ const baseSession = {
   createdAt: now,
   updatedAt: now
 } satisfies Session
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+  return { promise, resolve, reject }
+}
+
+function renderConversationWithAssistant(content: string, loadLocalFilePreview?: (path: string) => Promise<LocalFilePreview>) {
+  render(
+    <ConversationView
+      session={baseSession}
+      messages={[
+        {
+          id: 'message-assistant-local-preview',
+          sessionId: 'session-1',
+          role: 'assistant',
+          content,
+          contentType: 'markdown',
+          createdAt: now
+        }
+      ]}
+      steps={[]}
+      streamingText=""
+      modelId="mock/hesper-fast"
+      onSend={() => undefined}
+      {...(loadLocalFilePreview ? { loadLocalFilePreview } : {})}
+    />
+  )
+}
 
 afterEach(() => {
   cleanup()
@@ -877,6 +911,158 @@ describe('ui components', () => {
     expect(screen.getByRole('link', { name: 'Docs' })).toHaveAttribute('href', 'https://example.com/docs')
     expect(screen.queryByText('## Summary')).not.toBeInTheDocument()
     expect(screen.queryByText('| Name | Status |')).not.toBeInTheDocument()
+  })
+
+  it('recognizes workspace markdown links and preserves regular web links', async () => {
+    const user = userEvent.setup()
+    const onLocalFileClick = vi.fn()
+
+    render(
+      <MarkdownOutput
+        content="查看 [报告](workspace:docs/report%20final.md) 和 [官网](https://example.com/docs)"
+        onLocalFileClick={onLocalFileClick}
+      />
+    )
+
+    const workspaceLink = screen.getByRole('link', { name: '报告' })
+    expect(workspaceLink).toHaveAttribute('href', 'workspace:docs/report%20final.md')
+    await user.click(workspaceLink)
+    expect(onLocalFileClick).toHaveBeenCalledWith('docs/report final.md')
+    expect(onLocalFileClick).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('link', { name: '官网' })).toHaveAttribute('href', 'https://example.com/docs')
+  })
+
+  it('downgrades invalid workspace markdown links to plain labels', async () => {
+    const user = userEvent.setup()
+    const onLocalFileClick = vi.fn()
+
+    render(
+      <MarkdownOutput
+        content="非法 [绝对路径](workspace:/tmp/file.md)、[上级目录](workspace:docs/../secret.md)、[NUL](workspace:bad%00file.txt)"
+        onLocalFileClick={onLocalFileClick}
+      />
+    )
+
+    expect(screen.queryByRole('link', { name: '绝对路径' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '上级目录' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'NUL' })).not.toBeInTheDocument()
+    await user.click(screen.getByText('绝对路径'))
+    await user.click(screen.getByText('上级目录'))
+    await user.click(screen.getByText('NUL'))
+    expect(onLocalFileClick).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [
+      'markdown',
+      {
+        path: 'docs/readme.md',
+        name: 'readme.md',
+        kind: 'markdown',
+        mimeType: 'text/markdown',
+        bytes: 18,
+        content: '# 预览标题\n\n正文'
+      } satisfies LocalFilePreview
+    ],
+    [
+      'json',
+      {
+        path: 'data/sample.json',
+        name: 'sample.json',
+        kind: 'json',
+        mimeType: 'application/json',
+        bytes: 16,
+        content: '{\n  "ok": true\n}'
+      } satisfies LocalFilePreview
+    ],
+    [
+      'image',
+      {
+        path: 'assets/pixel.png',
+        name: 'pixel.png',
+        kind: 'image',
+        mimeType: 'image/png',
+        bytes: 68,
+        dataUrl: 'data:image/png;base64,iVBORw0KGgo='
+      } satisfies LocalFilePreview
+    ]
+  ])('opens the local file preview dialog and renders %s previews from assistant markdown', async (_kind, preview) => {
+    const user = userEvent.setup()
+    const deferred = createDeferred<LocalFilePreview>()
+    const loadLocalFilePreview = vi.fn(() => deferred.promise)
+    renderConversationWithAssistant(`[打开文件](workspace:${preview.path})`, loadLocalFilePreview)
+
+    await user.click(screen.getByRole('link', { name: '打开文件' }))
+
+    expect(loadLocalFilePreview).toHaveBeenCalledWith(preview.path)
+    const dialog = screen.getByRole('dialog', { name: '本地文件全屏预览' })
+    expect(dialog).toHaveTextContent(preview.path)
+    expect(dialog).toHaveTextContent('加载中')
+
+    deferred.resolve(preview)
+
+    if (preview.kind === 'markdown') {
+      expect(await screen.findByRole('heading', { name: '预览标题' })).toBeInTheDocument()
+    } else if (preview.kind === 'json') {
+      expect(await screen.findByText(/"ok": true/)).toBeInTheDocument()
+    } else {
+      const image = await screen.findByRole('img', { name: 'pixel.png' })
+      expect(image).toHaveAttribute('src', preview.dataUrl)
+    }
+  })
+
+  it('shows a Chinese error when the local file preview loader rejects', async () => {
+    const user = userEvent.setup()
+    const loadLocalFilePreview = vi.fn(async () => {
+      throw new Error('磁盘不可读')
+    })
+    renderConversationWithAssistant('[打开失败文件](workspace:docs/broken.md)', loadLocalFilePreview)
+
+    await user.click(screen.getByRole('link', { name: '打开失败文件' }))
+
+    expect(await screen.findByText(/加载本地文件预览失败/)).toBeInTheDocument()
+    expect(screen.getByText(/磁盘不可读/)).toBeInTheDocument()
+  })
+
+  it('closes the local file preview dialog with Escape', async () => {
+    const user = userEvent.setup()
+    const loadLocalFilePreview = vi.fn(async (): Promise<LocalFilePreview> => ({
+      path: 'docs/esc.md',
+      name: 'esc.md',
+      kind: 'markdown',
+      mimeType: 'text/markdown',
+      bytes: 12,
+      content: '# 可关闭'
+    }))
+    renderConversationWithAssistant('[打开可关闭文件](workspace:docs/esc.md)', loadLocalFilePreview)
+
+    await user.click(screen.getByRole('link', { name: '打开可关闭文件' }))
+    expect(await screen.findByRole('heading', { name: '可关闭' })).toBeInTheDocument()
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '本地文件全屏预览' })).not.toBeInTheDocument())
+  })
+
+  it('routes workspace links inside fullscreen markdown output through the same local preview loader', async () => {
+    const user = userEvent.setup()
+    const loadLocalFilePreview = vi.fn(async (): Promise<LocalFilePreview> => ({
+      path: 'docs/from-fullscreen.md',
+      name: 'from-fullscreen.md',
+      kind: 'markdown',
+      mimeType: 'text/markdown',
+      bytes: 21,
+      content: '# 来自全屏输出'
+    }))
+    renderConversationWithAssistant('[全屏附件](workspace:docs/from-fullscreen.md)', loadLocalFilePreview)
+
+    await user.click(screen.getByRole('button', { name: '全屏查看输出' }))
+    const fullscreenDialog = screen.getByRole('dialog', { name: '输出全屏查看' })
+    await user.click(within(fullscreenDialog).getByRole('link', { name: '全屏附件' }))
+
+    expect(loadLocalFilePreview).toHaveBeenCalledWith('docs/from-fullscreen.md')
+    expect(await screen.findByRole('dialog', { name: '本地文件全屏预览' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '来自全屏输出' })).toBeInTheDocument()
   })
 
   it('auto-expands running steps, shows elapsed time before the first tool intent, and stops when final output appears', () => {

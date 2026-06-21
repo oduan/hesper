@@ -1,4 +1,4 @@
-import { createElement, memo, useMemo, type CSSProperties, type ReactNode } from 'react'
+import { createElement, memo, useMemo, type CSSProperties, type MouseEvent, type ReactNode } from 'react'
 import { darkTheme } from '../theme'
 
 type MarkdownBlock =
@@ -13,6 +13,7 @@ type MarkdownBlock =
 
 export type MarkdownOutputProps = {
   content: string
+  onLocalFileClick?: ((path: string) => void) | undefined
 }
 
 function isBlank(line: string): boolean {
@@ -177,11 +178,38 @@ function safeHref(href: string): string | undefined {
   }
 }
 
+function isWorkspaceHref(href: string): boolean {
+  return href.trim().startsWith('workspace:')
+}
+
+function normalizeWorkspacePath(href: string): string | undefined {
+  const trimmed = href.trim()
+  if (!trimmed.startsWith('workspace:')) return undefined
+
+  const encodedPath = trimmed.slice('workspace:'.length)
+  if (!encodedPath || /\s/.test(encodedPath)) return undefined
+
+  let decodedPath: string
+  try {
+    decodedPath = decodeURIComponent(encodedPath)
+  } catch {
+    return undefined
+  }
+
+  const normalizedPath = decodedPath.replace(/\\/g, '/')
+  if (!normalizedPath || normalizedPath.trim() === '' || normalizedPath.includes('\0')) return undefined
+  if (normalizedPath.startsWith('/')) return undefined
+  if (/^[A-Za-z]:/.test(normalizedPath)) return undefined
+  if (normalizedPath.split('/').some((segment) => segment === '..')) return undefined
+
+  return normalizedPath
+}
+
 function pushText(nodes: ReactNode[], text: string, key: string): void {
   if (text) nodes.push(<span key={key}>{text}</span>)
 }
 
-function renderInline(text: string, keyPrefix: string): ReactNode[] {
+function renderInline(text: string, keyPrefix: string, onLocalFileClick?: ((path: string) => void) | undefined): ReactNode[] {
   const nodes: ReactNode[] = []
   let index = 0
   let textKey = 0
@@ -190,7 +218,7 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
     if (text.startsWith('**', index)) {
       const end = text.indexOf('**', index + 2)
       if (end !== -1) {
-        nodes.push(<strong key={`${keyPrefix}-strong-${index}`} style={strongStyle}>{renderInline(text.slice(index + 2, end), `${keyPrefix}-strong-${index}`)}</strong>)
+        nodes.push(<strong key={`${keyPrefix}-strong-${index}`} style={strongStyle}>{renderInline(text.slice(index + 2, end), `${keyPrefix}-strong-${index}`, onLocalFileClick)}</strong>)
         index = end + 2
         continue
       }
@@ -206,15 +234,36 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
     }
 
     if (text[index] === '[') {
-      const match = text.slice(index).match(/^\[([^\]]+)]\(([^)\s]+)\)/)
-      if (match) {
+      const match = text.slice(index).match(/^\[([^\]]+)]\(([^)]+)\)/)
+      if (match && (isWorkspaceHref(match[2]!) || !/\s/.test(match[2]!))) {
         const label = match[1]!
-        const href = safeHref(match[2]!)
-        nodes.push(href ? (
-          <a key={`${keyPrefix}-link-${index}`} href={href} target="_blank" rel="noreferrer" style={linkStyle}>{label}</a>
-        ) : (
-          <span key={`${keyPrefix}-link-${index}`}>{label}</span>
-        ))
+        const rawHref = match[2]!
+        if (isWorkspaceHref(rawHref)) {
+          const workspacePath = normalizeWorkspacePath(rawHref)
+          nodes.push(workspacePath ? (
+            <a
+              key={`${keyPrefix}-link-${index}`}
+              href={rawHref.trim()}
+              style={linkStyle}
+              onClick={(event: MouseEvent<HTMLAnchorElement>) => {
+                event.preventDefault()
+                event.stopPropagation()
+                onLocalFileClick?.(workspacePath)
+              }}
+            >
+              {label}
+            </a>
+          ) : (
+            <span key={`${keyPrefix}-link-${index}`}>{label}</span>
+          ))
+        } else {
+          const href = safeHref(rawHref)
+          nodes.push(href ? (
+            <a key={`${keyPrefix}-link-${index}`} href={href} target="_blank" rel="noreferrer" style={linkStyle}>{label}</a>
+          ) : (
+            <span key={`${keyPrefix}-link-${index}`}>{label}</span>
+          ))
+        }
         index += match[0].length
         continue
       }
@@ -234,18 +283,18 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
   return nodes
 }
 
-function renderBlock(block: MarkdownBlock, index: number): ReactNode {
+function renderBlock(block: MarkdownBlock, index: number, onLocalFileClick?: ((path: string) => void) | undefined): ReactNode {
   switch (block.type) {
     case 'heading': {
       const tag = `h${block.level}` as 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6'
-      return createElement(tag, { key: index, style: headingStyle(block.level) }, renderInline(block.text, `heading-${index}`))
+      return createElement(tag, { key: index, style: headingStyle(block.level) }, renderInline(block.text, `heading-${index}`, onLocalFileClick))
     }
     case 'paragraph':
-      return <p key={index} style={paragraphStyle}>{renderInline(block.text, `paragraph-${index}`)}</p>
+      return <p key={index} style={paragraphStyle}>{renderInline(block.text, `paragraph-${index}`, onLocalFileClick)}</p>
     case 'unordered-list':
-      return <ul key={index} style={listStyle}>{block.items.map((item, itemIndex) => <li key={itemIndex} style={listItemStyle}>{renderInline(item, `ul-${index}-${itemIndex}`)}</li>)}</ul>
+      return <ul key={index} style={listStyle}>{block.items.map((item, itemIndex) => <li key={itemIndex} style={listItemStyle}>{renderInline(item, `ul-${index}-${itemIndex}`, onLocalFileClick)}</li>)}</ul>
     case 'ordered-list':
-      return <ol key={index} style={listStyle}>{block.items.map((item, itemIndex) => <li key={itemIndex} style={listItemStyle}>{renderInline(item, `ol-${index}-${itemIndex}`)}</li>)}</ol>
+      return <ol key={index} style={listStyle}>{block.items.map((item, itemIndex) => <li key={itemIndex} style={listItemStyle}>{renderInline(item, `ol-${index}-${itemIndex}`, onLocalFileClick)}</li>)}</ol>
     case 'code':
       return (
         <pre key={index} style={codeBlockStyle}>
@@ -253,7 +302,7 @@ function renderBlock(block: MarkdownBlock, index: number): ReactNode {
         </pre>
       )
     case 'blockquote':
-      return <blockquote key={index} style={blockquoteStyle}>{renderInline(block.text, `blockquote-${index}`)}</blockquote>
+      return <blockquote key={index} style={blockquoteStyle}>{renderInline(block.text, `blockquote-${index}`, onLocalFileClick)}</blockquote>
     case 'table':
       return (
         <div key={index} style={tableWrapStyle} className="hesper-theme-scrollbar">
@@ -261,7 +310,7 @@ function renderBlock(block: MarkdownBlock, index: number): ReactNode {
             <thead>
               <tr>
                 {block.headers.map((header, headerIndex) => (
-                  <th key={headerIndex} scope="col" style={tableHeaderStyle}>{renderInline(header, `table-${index}-header-${headerIndex}`)}</th>
+                  <th key={headerIndex} scope="col" style={tableHeaderStyle}>{renderInline(header, `table-${index}-header-${headerIndex}`, onLocalFileClick)}</th>
                 ))}
               </tr>
             </thead>
@@ -269,7 +318,7 @@ function renderBlock(block: MarkdownBlock, index: number): ReactNode {
               {block.rows.map((row, rowIndex) => (
                 <tr key={rowIndex}>
                   {row.map((cell, cellIndex) => (
-                    <td key={cellIndex} style={tableCellStyle}>{renderInline(cell, `table-${index}-row-${rowIndex}-${cellIndex}`)}</td>
+                    <td key={cellIndex} style={tableCellStyle}>{renderInline(cell, `table-${index}-row-${rowIndex}-${cellIndex}`, onLocalFileClick)}</td>
                   ))}
                 </tr>
               ))}
@@ -282,9 +331,9 @@ function renderBlock(block: MarkdownBlock, index: number): ReactNode {
   }
 }
 
-export const MarkdownOutput = memo(function MarkdownOutput({ content }: MarkdownOutputProps) {
+export const MarkdownOutput = memo(function MarkdownOutput({ content, onLocalFileClick }: MarkdownOutputProps) {
   const blocks = useMemo(() => parseMarkdown(content), [content])
-  return <div style={rootStyle}>{blocks.map(renderBlock)}</div>
+  return <div style={rootStyle}>{blocks.map((block, index) => renderBlock(block, index, onLocalFileClick))}</div>
 })
 
 const rootStyle: CSSProperties = {

@@ -9,9 +9,10 @@ export type OutputBlockProps = {
   content: string
   contentType: MessageContentType
   closeFullscreenSignal?: number
+  onLocalFileClick?: ((path: string) => void) | undefined
 }
 
-export const OutputBlock = memo(function OutputBlock({ content, contentType, closeFullscreenSignal = 0 }: OutputBlockProps) {
+export const OutputBlock = memo(function OutputBlock({ content, contentType, closeFullscreenSignal = 0, onLocalFileClick }: OutputBlockProps) {
   const [isFullscreen, setIsFullscreen] = useState(false)
   const sandboxedDocument = useMemo(
     () => (contentType === 'html' ? createSandboxedHtmlDocument(content) : undefined),
@@ -26,6 +27,11 @@ export const OutputBlock = memo(function OutputBlock({ content, contentType, clo
 
   const handleOutputClickCapture = (event: MouseEvent<HTMLElement>) => {
     if (!(event.ctrlKey || event.metaKey) || event.button !== 0) {
+      return
+    }
+
+    const target = event.target instanceof Element ? event.target : null
+    if (target?.closest('a, button')) {
       return
     }
 
@@ -93,7 +99,7 @@ export const OutputBlock = memo(function OutputBlock({ content, contentType, clo
               style={{ width: '100%', height: '100%', minHeight: 200, border: 0, borderRadius: darkTheme.radius.md, background: '#fff' }}
             />
           ) : contentType === 'markdown' ? (
-            <MarkdownOutput content={content} />
+            <MarkdownOutput content={content} onLocalFileClick={onLocalFileClick} />
           ) : (
             <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.55, fontSize: darkTheme.typography.body }}>{content}</div>
           )}
@@ -104,6 +110,7 @@ export const OutputBlock = memo(function OutputBlock({ content, contentType, clo
         content={content}
         contentType={contentType}
         onClose={() => setIsFullscreen(false)}
+        onLocalFileClick={onLocalFileClick}
       />
     </>
   )

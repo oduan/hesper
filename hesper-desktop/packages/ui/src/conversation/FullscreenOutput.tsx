@@ -9,9 +9,10 @@ export type FullscreenOutputProps = {
   content: string
   contentType: MessageContentType
   onClose: () => void
+  onLocalFileClick?: ((path: string) => void) | undefined
 }
 
-export function FullscreenOutput({ open, content, contentType, onClose }: FullscreenOutputProps) {
+export function FullscreenOutput({ open, content, contentType, onClose, onLocalFileClick }: FullscreenOutputProps) {
   const sandboxedDocument = useMemo(
     () => (contentType === 'html' ? createSandboxedHtmlDocument(content) : undefined),
     [content, contentType]
@@ -76,7 +77,7 @@ export function FullscreenOutput({ open, content, contentType, onClose }: Fullsc
                 style={{ width: '100%', height: '100%', minHeight: 480, border: 0, background: '#fff' }}
               />
             ) : contentType === 'markdown' ? (
-              <MarkdownOutput content={content} />
+              <MarkdownOutput content={content} onLocalFileClick={onLocalFileClick} />
             ) : (
               <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{content}</div>
             )}

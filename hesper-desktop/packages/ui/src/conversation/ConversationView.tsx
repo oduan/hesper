@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type WheelEvent } from 'react'
-import type { AgentRun, Message, RunStep, Session } from '@hesper/shared'
+import type { AgentRun, LocalFilePreview, Message, RunStep, Session } from '@hesper/shared'
 import { darkTheme } from '../theme'
 import { Composer, type ModelOptionGroup } from './Composer'
+import { LocalFilePreviewDialog } from './LocalFilePreviewDialog'
 import { MessageBubble } from './MessageBubble'
 import { OutputBlock } from './OutputBlock'
 import type { NavigationItem } from './RightNavigation'
@@ -31,6 +32,7 @@ export type ConversationViewProps = {
   onStop?: () => void
   onSelectWorkspace?: () => void
   onModelChange?: (modelId: string) => void
+  loadLocalFilePreview?: (path: string) => Promise<LocalFilePreview>
   shortcutCommand?: ConversationShortcutCommand
 }
 
@@ -39,6 +41,11 @@ type AnchorEntry = {
   kind: NavigationItem['kind']
   label: string
 }
+
+type LocalFilePreviewState =
+  | { status: 'loading'; path: string }
+  | { status: 'loaded'; path: string; preview: LocalFilePreview }
+  | { status: 'error'; path: string; error: string }
 
 const userMessageAnchorSelector = '[data-hesper-user-message-anchor="true"]'
 
@@ -120,6 +127,18 @@ function sortChronologically<T extends { id: string; createdAt: string }>(items:
   return [...items].sort(compareCreatedAt)
 }
 
+function createLocalFilePreviewError(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) {
+    return `加载本地文件预览失败：${error.message}`
+  }
+
+  if (typeof error === 'string' && error.trim()) {
+    return `加载本地文件预览失败：${error}`
+  }
+
+  return '加载本地文件预览失败，请稍后重试。'
+}
+
 function isNearScrollBottom(element: HTMLElement): boolean {
   return element.scrollHeight - element.scrollTop - element.clientHeight <= 24
 }
@@ -198,13 +217,16 @@ export function ConversationView({
   onStop,
   onSelectWorkspace,
   onModelChange,
+  loadLocalFilePreview,
   shortcutCommand
 }: ConversationViewProps) {
   const [closeFullscreenSignal, setCloseFullscreenSignal] = useState(0)
   const [showJumpToBottom, setShowJumpToBottom] = useState(false)
+  const [localFilePreviewState, setLocalFilePreviewState] = useState<LocalFilePreviewState>()
   ensureGlobalCtrlWheelListener()
   const anchorRefs = useRef<Record<string, HTMLElement | null>>({})
   const messagesScrollRef = useRef<HTMLDivElement | null>(null)
+  const localFilePreviewRequestRef = useRef(0)
   const pinnedToBottomRef = useRef(true)
   const didMeasureContentRef = useRef(false)
   const orderedMessages = useMemo(() => sortChronologically(messages), [messages])
@@ -400,6 +422,41 @@ export function ConversationView({
     scrollMessagesByDelta(event.deltaX, event.deltaY)
   }
 
+  const closeLocalFilePreview = useCallback(() => {
+    localFilePreviewRequestRef.current += 1
+    setLocalFilePreviewState(undefined)
+  }, [])
+
+  const handleLocalFileClick = useCallback((path: string) => {
+    const requestId = localFilePreviewRequestRef.current + 1
+    localFilePreviewRequestRef.current = requestId
+    setLocalFilePreviewState({ status: 'loading', path })
+
+    if (!loadLocalFilePreview) {
+      setLocalFilePreviewState({ status: 'error', path, error: '加载本地文件预览失败：未配置本地文件预览加载器。' })
+      return
+    }
+
+    let previewPromise: Promise<LocalFilePreview>
+    try {
+      previewPromise = loadLocalFilePreview(path)
+    } catch (error) {
+      setLocalFilePreviewState({ status: 'error', path, error: createLocalFilePreviewError(error) })
+      return
+    }
+
+    void previewPromise.then(
+      (preview) => {
+        if (localFilePreviewRequestRef.current !== requestId) return
+        setLocalFilePreviewState({ status: 'loaded', path: preview.path || path, preview })
+      },
+      (error: unknown) => {
+        if (localFilePreviewRequestRef.current !== requestId) return
+        setLocalFilePreviewState({ status: 'error', path, error: createLocalFilePreviewError(error) })
+      }
+    )
+  }, [loadLocalFilePreview])
+
   useEffect(() => {
     if (!shortcutCommand) {
       return
@@ -407,6 +464,7 @@ export function ConversationView({
 
     if (shortcutCommand.type === 'close-panels') {
       setCloseFullscreenSignal((value) => value + 1)
+      closeLocalFilePreview()
       return
     }
 
@@ -430,7 +488,7 @@ export function ConversationView({
         focusAnchor(next.id)
       }
     }
-  }, [jumpTargets, shortcutCommand])
+  }, [closeLocalFilePreview, jumpTargets, shortcutCommand])
 
   useEffect(() => {
     const element = messagesScrollRef.current
@@ -509,6 +567,7 @@ export function ConversationView({
                     content={message.content}
                     contentType={message.contentType}
                     closeFullscreenSignal={closeFullscreenSignal}
+                    onLocalFileClick={handleLocalFileClick}
                   />
                 ) : (
                   <MessageBubble message={message} />
@@ -521,6 +580,7 @@ export function ConversationView({
                       runStartedAt={message.createdAt}
                       runEndedAt={getMessageRunEndedAt(message)}
                       workerAgentView={workerAgentView}
+                      onLocalFileClick={handleLocalFileClick}
                       getStepProps={(step) => {
                         const stepAnchorId = createStepAnchorId(step.id)
                         return {
@@ -549,6 +609,7 @@ export function ConversationView({
                       content={messageStreamingText}
                       contentType={session.outputMode}
                       closeFullscreenSignal={closeFullscreenSignal}
+                      onLocalFileClick={handleLocalFileClick}
                     />
                   </div>
                 ) : null}
@@ -562,6 +623,7 @@ export function ConversationView({
               runStartedAt={fallbackStepsRun?.startedAt ?? orderedSteps[0]?.createdAt}
               runEndedAt={fallbackStepsRun?.endedAt}
               workerAgentView={workerAgentView}
+              onLocalFileClick={handleLocalFileClick}
               getStepProps={(step) => {
                 const stepAnchorId = createStepAnchorId(step.id)
                 return {
@@ -589,6 +651,7 @@ export function ConversationView({
                   content={streamingText}
                   contentType={session.outputMode}
                   closeFullscreenSignal={closeFullscreenSignal}
+                  onLocalFileClick={handleLocalFileClick}
                 />
               </div>
             ) : null}
@@ -617,6 +680,16 @@ export function ConversationView({
           sendSignal={shortcutCommand?.type === 'send' ? shortcutCommand.nonce : 0}
         />
       </section>
+      {localFilePreviewState ? (
+        <LocalFilePreviewDialog
+          path={localFilePreviewState.path}
+          loading={localFilePreviewState.status === 'loading'}
+          onClose={closeLocalFilePreview}
+          onLocalFileClick={handleLocalFileClick}
+          {...(localFilePreviewState.status === 'loaded' ? { preview: localFilePreviewState.preview } : {})}
+          {...(localFilePreviewState.status === 'error' ? { error: localFilePreviewState.error } : {})}
+        />
+      ) : null}
     </div>
   )
 }
