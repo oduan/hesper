@@ -916,9 +916,12 @@ describe('renderer App', () => {
     expect(await screen.findByRole('region', { name: 'SSH 设置面板' })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'SSH 密钥管理' })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'SSH 主机管理' })).toBeInTheDocument()
+    const appRoot = screen.getByLabelText('主工作区').parentElement
 
     await user.click(screen.getByRole('button', { name: '添加 SSH 密钥' }))
-    expect(await screen.findByRole('dialog', { name: '添加 SSH 密钥' })).toBeInTheDocument()
+    const keyDialog = await screen.findByRole('dialog', { name: '添加 SSH 密钥' })
+    expect(keyDialog).toBeInTheDocument()
+    expect(appRoot).toContainElement(keyDialog)
     await user.type(screen.getByLabelText('SSH 密钥名称'), 'Prod key')
     await user.type(screen.getByLabelText('SSH 公钥内容'), 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAprod prod@example')
     await user.type(screen.getByLabelText('SSH 私钥内容'), 'private-key-secret')
@@ -931,7 +934,9 @@ describe('renderer App', () => {
     expect(screen.queryByText('private-key-secret')).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '添加 SSH 主机' }))
-    expect(await screen.findByRole('dialog', { name: '添加 SSH 主机' })).toBeInTheDocument()
+    const hostDialog = await screen.findByRole('dialog', { name: '添加 SSH 主机' })
+    expect(hostDialog).toBeInTheDocument()
+    expect(appRoot).toContainElement(hostDialog)
     await user.type(screen.getByLabelText('SSH 主机名称'), 'Prod host')
     await user.type(screen.getByLabelText('主机 IP 地址'), '10.0.0.8')
     await user.clear(screen.getByLabelText('SSH 端口'))

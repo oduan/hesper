@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
-import { createPortal } from 'react-dom'
 import type { CreateSshKeyInput, CreateSshServerInput, SshKeyDto, SshServerDto } from '../../electron/ipc-contract'
 
 type SshSettingsPanelProps = {
@@ -310,12 +309,11 @@ function FullWindowDialogShell({ ariaLabel, children, onClose, initialFocusRef }
     }
   }
 
-  return createPortal(
+  return (
     <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={ariaLabel} tabIndex={-1} onKeyDown={handleKeyDown} style={fullWindowOverlayStyle}>
       <button type="button" aria-label={`关闭 ${ariaLabel}`} onClick={onClose} style={overlayCloseStyle}>×</button>
       {children}
-    </div>,
-    document.body
+    </div>
   )
 }
 
