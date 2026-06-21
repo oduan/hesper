@@ -149,4 +149,24 @@ describe('SoulSettingsPanel', () => {
     expect(onUpdate).toHaveBeenCalledTimes(2)
     expect(onUpdate).toHaveBeenLastCalledWith({ soul: '第二次编辑' })
   })
+
+  it('renders the soul field without card chrome or textarea inset', () => {
+    render(<SoulSettingsPanel settings={{ soul: '' }} onUpdate={vi.fn()} />)
+
+    const textarea = screen.getByLabelText('身份设定')
+    const textareaStyle = window.getComputedStyle(textarea)
+    expect(textareaStyle.borderTopStyle).toBe('none')
+    expect(['transparent', 'rgba(0, 0, 0, 0)']).toContain(textareaStyle.backgroundColor)
+    expect(textareaStyle.paddingLeft).toBe('0px')
+    expect(textareaStyle.paddingRight).toBe('0px')
+
+    const fieldWrapper = screen.getByText('身份设定').closest('label')?.parentElement
+    expect(fieldWrapper).not.toBeNull()
+
+    const fieldWrapperStyle = window.getComputedStyle(fieldWrapper as HTMLElement)
+    expect(fieldWrapperStyle.borderTopStyle).toBe('none')
+    expect(['transparent', 'rgba(0, 0, 0, 0)']).toContain(fieldWrapperStyle.backgroundColor)
+    expect(fieldWrapperStyle.paddingLeft).toBe('0px')
+    expect(fieldWrapperStyle.paddingRight).toBe('0px')
+  })
 })

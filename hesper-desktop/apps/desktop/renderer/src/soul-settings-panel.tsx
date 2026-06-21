@@ -129,12 +129,11 @@ const descriptionStyle: CSSProperties = {
 }
 
 const cardStyle: CSSProperties = {
-  border: `1px solid ${darkTheme.color.border}`,
-  borderRadius: darkTheme.radius.lg,
-  background: darkTheme.color.surfaceMuted,
-  padding: darkTheme.spacing.lg,
+  border: 'none',
+  background: 'transparent',
+  padding: 0,
   display: 'grid',
-  gap: darkTheme.spacing.md
+  gap: 0
 }
 
 const fieldStyle: CSSProperties = {
@@ -151,12 +150,11 @@ const labelStyle: CSSProperties = {
 const textareaStyle: CSSProperties = {
   width: '100%',
   boxSizing: 'border-box',
-  border: '1px solid var(--hesper-color-border, #414868)',
-  borderRadius: 10,
-  background: 'var(--hesper-color-surface-muted, #24283b)',
+  border: 'none',
+  borderRadius: 0,
+  background: 'transparent',
   color: 'var(--hesper-color-text, #c0caf5)',
-  padding: '10px 12px',
-  outline: 'none',
+  padding: 0,
   minHeight: 160,
   resize: 'vertical',
   fontFamily: 'inherit',
