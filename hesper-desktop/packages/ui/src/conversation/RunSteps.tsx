@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import type { AgentRun, Message, RunStep, RunStepStatus, WorkerAgentInvocation } from '@hesper/shared'
 import { darkTheme } from '../theme'
+import { isTopFullscreenDialog, pushFullscreenDialog, removeFullscreenDialog } from './fullscreen-dialog-stack'
 import { MarkdownOutput } from './MarkdownOutput'
 import { RunningStatusIcon } from './RunningStatusIcon'
 import { WorkerAgentRunViewer } from './WorkerAgentRunViewer'
@@ -311,23 +312,6 @@ function StatusDot({ step }: { step: RunStep }) {
 
 function createStepMarkdown(step: RunStep): string {
   return step.detail?.trim() || step.summary?.trim() || step.title
-}
-
-const fullscreenDialogStack: string[] = []
-
-function pushFullscreenDialog(dialogId: string) {
-  fullscreenDialogStack.push(dialogId)
-}
-
-function removeFullscreenDialog(dialogId: string) {
-  const index = fullscreenDialogStack.lastIndexOf(dialogId)
-  if (index >= 0) {
-    fullscreenDialogStack.splice(index, 1)
-  }
-}
-
-function isTopFullscreenDialog(dialogId: string): boolean {
-  return fullscreenDialogStack[fullscreenDialogStack.length - 1] === dialogId
 }
 
 function ToolDetailBlock({ title, children }: { title: string; children: ReactNode }) {

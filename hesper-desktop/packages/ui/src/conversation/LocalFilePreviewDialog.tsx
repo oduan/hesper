@@ -1,6 +1,7 @@
-import { useEffect, useMemo, type CSSProperties } from 'react'
+import { useEffect, useId, useMemo, type CSSProperties } from 'react'
 import type { LocalFilePreview } from '@hesper/shared'
 import { darkTheme } from '../theme'
+import { isTopFullscreenDialog, pushFullscreenDialog, removeFullscreenDialog } from './fullscreen-dialog-stack'
 import { createSandboxedHtmlDocument } from './html-document'
 import { MarkdownOutput } from './MarkdownOutput'
 
@@ -62,7 +63,7 @@ function renderPreviewContent(preview: LocalFilePreview, htmlDocument: string | 
       ) : <MissingInlineContent kind="视频" />
     case 'pdf':
       return preview.dataUrl ? (
-        <iframe title={preview.name} src={preview.dataUrl} style={pdfFrameStyle} />
+        <iframe title={preview.name} sandbox="" src={preview.dataUrl} style={pdfFrameStyle} />
       ) : <MissingInlineContent kind="PDF" />
     case 'html':
       return (
@@ -84,6 +85,7 @@ function renderPreviewContent(preview: LocalFilePreview, htmlDocument: string | 
 }
 
 export function LocalFilePreviewDialog({ path, loading = false, preview, error, onClose, onLocalFileClick }: LocalFilePreviewDialogProps) {
+  const dialogId = useId()
   const htmlDocument = useMemo(
     () => (preview?.kind === 'html' ? createSandboxedHtmlDocument(preview.content ?? '') : undefined),
     [preview?.content, preview?.kind]
@@ -91,8 +93,13 @@ export function LocalFilePreviewDialog({ path, loading = false, preview, error, 
   const title = preview?.name ?? fallbackName(path) ?? '本地文件预览'
 
   useEffect(() => {
+    pushFullscreenDialog(dialogId)
+    return () => removeFullscreenDialog(dialogId)
+  }, [dialogId])
+
+  useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
+      if (event.key !== 'Escape' || !isTopFullscreenDialog(dialogId)) return
 
       event.preventDefault()
       event.stopPropagation()
@@ -102,7 +109,7 @@ export function LocalFilePreviewDialog({ path, loading = false, preview, error, 
 
     window.addEventListener('keydown', handleKeyDown, { capture: true })
     return () => window.removeEventListener('keydown', handleKeyDown, { capture: true })
-  }, [onClose])
+  }, [dialogId, onClose])
 
   return (
     <div

@@ -457,6 +457,10 @@ export function ConversationView({
     )
   }, [loadLocalFilePreview])
 
+  useEffect(() => () => {
+    localFilePreviewRequestRef.current += 1
+  }, [])
+
   useEffect(() => {
     if (!shortcutCommand) {
       return

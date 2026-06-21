@@ -34,7 +34,7 @@ function createDeferred<T>() {
 }
 
 function renderConversationWithAssistant(content: string, loadLocalFilePreview?: (path: string) => Promise<LocalFilePreview>) {
-  render(
+  return render(
     <ConversationView
       session={baseSession}
       messages={[
@@ -1014,6 +1014,59 @@ describe('ui components', () => {
     }
   })
 
+  it('sandboxes pdf local file preview iframes', async () => {
+    const user = userEvent.setup()
+    const loadLocalFilePreview = vi.fn(async (): Promise<LocalFilePreview> => ({
+      path: 'docs/preview.pdf',
+      name: 'preview.pdf',
+      kind: 'pdf',
+      mimeType: 'application/pdf',
+      bytes: 128,
+      dataUrl: 'data:application/pdf;base64,JVBERi0xLjQ='
+    }))
+    renderConversationWithAssistant('[打开 PDF](workspace:docs/preview.pdf)', loadLocalFilePreview)
+
+    await user.click(screen.getByRole('link', { name: '打开 PDF' }))
+
+    const pdfFrame = await screen.findByTitle('preview.pdf')
+    expect(pdfFrame).toHaveAttribute('sandbox', '')
+    expect(pdfFrame).toHaveAttribute('src', 'data:application/pdf;base64,JVBERi0xLjQ=')
+  })
+
+  it.each(['resolve', 'reject'] as const)('ignores late local preview %s after conversation unmount', async (settleMode) => {
+    const user = userEvent.setup()
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const deferred = createDeferred<LocalFilePreview>()
+    const loadLocalFilePreview = vi.fn(() => deferred.promise)
+    const { unmount } = renderConversationWithAssistant('[卸载文件](workspace:docs/unmount.md)', loadLocalFilePreview)
+
+    await user.click(screen.getByRole('link', { name: '卸载文件' }))
+    expect(screen.getByRole('dialog', { name: '本地文件全屏预览' })).toHaveTextContent('加载中')
+
+    unmount()
+    if (settleMode === 'reject') {
+      deferred.promise.catch(() => undefined)
+    }
+
+    await act(async () => {
+      if (settleMode === 'resolve') {
+        deferred.resolve({
+          path: 'docs/unmount.md',
+          name: 'unmount.md',
+          kind: 'markdown',
+          mimeType: 'text/markdown',
+          bytes: 12,
+          content: '# 已卸载'
+        })
+      } else {
+        deferred.reject(new Error('late failure'))
+      }
+      await Promise.resolve()
+    })
+
+    expect(consoleError).not.toHaveBeenCalled()
+  })
+
   it('shows a Chinese error when the local file preview loader rejects', async () => {
     const user = userEvent.setup()
     const loadLocalFilePreview = vi.fn(async () => {
@@ -1066,6 +1119,56 @@ describe('ui components', () => {
     expect(loadLocalFilePreview).toHaveBeenCalledWith('docs/from-fullscreen.md')
     expect(await screen.findByRole('dialog', { name: '本地文件全屏预览' })).toBeInTheDocument()
     expect(await screen.findByRole('heading', { name: '来自全屏输出' })).toBeInTheDocument()
+  })
+
+  it('closes only the top local preview when opened from tool output details', async () => {
+    const user = userEvent.setup()
+    const loadLocalFilePreview = vi.fn(async (): Promise<LocalFilePreview> => ({
+      path: 'docs/tool-attachment.md',
+      name: 'tool-attachment.md',
+      kind: 'markdown',
+      mimeType: 'text/markdown',
+      bytes: 18,
+      content: '# 工具附件'
+    }))
+    render(
+      <ConversationView
+        session={baseSession}
+        messages={[]}
+        steps={[
+          {
+            id: 'step-tool-preview-escape',
+            runId: 'run-tool-preview-escape',
+            type: 'tool_call',
+            status: 'succeeded',
+            title: 'Read File',
+            detail: JSON.stringify({
+              kind: 'tool_call',
+              input: { path: 'docs/tool-attachment.md' },
+              output: '[打开工具附件](workspace:docs/tool-attachment.md)'
+            }),
+            createdAt: now
+          }
+        ]}
+        streamingText=""
+        modelId="mock/hesper-fast"
+        onSend={() => undefined}
+        loadLocalFilePreview={loadLocalFilePreview}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: '查看步骤详情：Read File' }))
+    const stepDialog = screen.getByRole('dialog', { name: '步骤全屏查看' })
+    await user.click(within(stepDialog).getByRole('link', { name: '打开工具附件' }))
+
+    expect(loadLocalFilePreview).toHaveBeenCalledWith('docs/tool-attachment.md')
+    expect(await screen.findByRole('dialog', { name: '本地文件全屏预览' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '工具附件' })).toBeInTheDocument()
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '本地文件全屏预览' })).not.toBeInTheDocument())
+    expect(screen.getByRole('dialog', { name: '步骤全屏查看' })).toBeInTheDocument()
   })
 
   it('auto-expands running steps, shows elapsed time before the first tool intent, and stops when final output appears', () => {
