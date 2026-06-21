@@ -72,7 +72,7 @@ describe('desktop service container', () => {
     const persistence = await createInMemoryPersistence()
     const container = createServiceContainer({ persistence, agentMode: 'mock', credentialCodec: createMockCredentialCodec() })
     const privateKey = '-----BEGIN OPENSSH PRIVATE KEY-----\nprivate-key-secret\n-----END OPENSSH PRIVATE KEY-----'
-    const key = await container.sshConfigurationService.createKey({ name: 'Production key', privateKey })
+    const key = await container.sshConfigurationService.createKey({ name: 'Production key', publicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAprod prod@example', privateKey })
     await container.sshConfigurationService.createServer({
       name: 'Production',
       host: 'prod.internal.example',
@@ -506,11 +506,12 @@ describe('registerIpcHandlers', () => {
 
     const key = await handles.get(ipcChannels.sshKeysCreate)?.({ sender: { id: 1 } }, {
       name: 'Prod key',
+      publicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAprod prod@example',
       privateKey: 'private-key-secret',
       passphrase: 'passphrase-secret',
       note: 'deploy'
     })
-    expect(key).toMatchObject({ name: 'Prod key', hasPassphrase: true })
+    expect(key).toMatchObject({ name: 'Prod key', publicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAprod prod@example', hasPassphrase: true })
     expect(JSON.stringify(key)).not.toContain('private-key-secret')
     expect(JSON.stringify(key)).not.toContain('passphrase-secret')
 

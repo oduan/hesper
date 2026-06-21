@@ -349,11 +349,13 @@ export function createFallbackHesperApi(): HesperDesktopApi {
     sshKeys: {
       list: async () => sshKeys.map(cloneSshKey),
       create: async (input: CreateSshKeyInput): Promise<SshKeyDto> => {
+        normalizeSshText(input.publicKey, 'publicKey')
         normalizeSshText(input.privateKey, 'privateKey')
         const timestamp = new Date().toISOString()
         const key = withDefined({
           id: `ssh-key-${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)}`,
           name: normalizeSshText(input.name, 'name'),
+          publicKey: normalizeSshText(input.publicKey, 'publicKey'),
           note: normalizeSshNote(input.note),
           hasPassphrase: Boolean(input.passphrase?.trim()),
           createdAt: timestamp,

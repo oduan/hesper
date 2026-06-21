@@ -20,6 +20,7 @@ import type { CredentialVaultService } from './credential-vault-service'
 
 export type CreateSshKeyInput = {
   name: string
+  publicKey: string
   privateKey: string
   passphrase?: string
   note?: string
@@ -491,6 +492,7 @@ export function createSshConfigurationService(options: SshConfigurationServiceOp
       const id = createId('ssh-key')
       const timestamp = now()
       const name = requireText(input.name, 'name')
+      const publicKey = requireText(input.publicKey, 'publicKey')
       const privateKey = requireText(input.privateKey, 'privateKey')
       const passphrase = normalizeOptionalText(input.passphrase)
       const note = normalizeOptionalText(input.note)
@@ -503,6 +505,7 @@ export function createSshConfigurationService(options: SshConfigurationServiceOp
       const key = sshKeySchema.parse(stripUndefined({
         id,
         name,
+        publicKey,
         note,
         hasPassphrase: Boolean(passphrase),
         createdAt: timestamp,

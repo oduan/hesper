@@ -12,6 +12,8 @@ export type RoleListItem = {
   description?: string
 }
 
+export type SettingsCategory = 'ai' | 'appearance' | 'ssh'
+
 export type EntityListPaneProps = {
   title?: string
   activeSection: AppSection
@@ -23,12 +25,12 @@ export type EntityListPaneProps = {
   pendingToolIds?: string[]
   roles?: RoleListItem[]
   activeRoleId?: string
-  activeSettingsCategory?: 'ai' | 'appearance'
+  activeSettingsCategory?: SettingsCategory
   onSelectSession?: (sessionId: string) => void
   onSelectTool?: (toolId: string) => void
   onToggleToolEnabled?: (toolId: string, enabled: boolean) => void
   onSelectRole?: (roleId: string) => void
-  onSelectSettingsCategory?: (category: 'ai' | 'appearance') => void
+  onSelectSettingsCategory?: (category: SettingsCategory) => void
   onRenameSession?: (sessionId: string, title: string) => void
   onRegenerateSessionTitle?: (sessionId: string, sessionIds?: string[]) => void
   onDeleteSession?: (sessionId: string, sessionIds?: string[]) => void
@@ -463,8 +465,9 @@ function ToolEnableSwitch({ enabled, pending, label, onToggle }: { enabled: bool
   )
 }
 
-const settingsCategories: Array<{ id: 'ai' | 'appearance'; title: string; label: string; description: string }> = [
+const settingsCategories: Array<{ id: SettingsCategory; title: string; label: string; description: string }> = [
   { id: 'ai', title: 'AI', label: 'AI 设置', description: '模型、思考、连接' },
+  { id: 'ssh', title: 'SSH', label: 'SSH 设置', description: '密钥、主机、远程连接' },
   { id: 'appearance', title: '外观', label: '外观设置', description: '字体大小、亮色与暗色' }
 ]
 

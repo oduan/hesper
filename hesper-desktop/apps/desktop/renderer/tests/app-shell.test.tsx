@@ -153,6 +153,7 @@ const { listSessions, createSession, updateTitle, deleteSession, generateTitle, 
   sshKeysCreate: vi.fn(async (input) => ({
     id: 'ssh-key-created',
     name: input.name,
+    publicKey: input.publicKey,
     note: input.note,
     hasPassphrase: Boolean(input.passphrase?.trim()),
     createdAt: '2026-06-21T05:00:00.000Z',
@@ -346,6 +347,7 @@ describe('renderer App', () => {
     sshKeysCreate.mockImplementation(async (input) => ({
       id: 'ssh-key-created',
       name: input.name,
+      publicKey: input.publicKey,
       note: input.note,
       hasPassphrase: Boolean(input.passphrase?.trim()),
       createdAt: '2026-06-21T05:00:00.000Z',
@@ -871,8 +873,10 @@ describe('renderer App', () => {
     expect(screen.getByRole('switch', { name: '工具全局开关' })).not.toBeDisabled()
   })
 
-  it('manages SSH keys and servers from the SSH tool detail panel without echoing secrets', async () => {
+  it('manages SSH keys and hosts from SSH settings without exposing secrets in SSH tool details', async () => {
     const user = userEvent.setup()
+    const savedKeys: any[] = []
+    const savedServers: any[] = []
     listTools.mockResolvedValueOnce([
       {
         id: 'ssh.run-commands',
@@ -884,40 +888,64 @@ describe('renderer App', () => {
         enabled: true
       }
     ] as any)
-    sshKeysList.mockResolvedValueOnce([]).mockResolvedValueOnce([{ id: 'ssh-key-1', name: 'Prod key', note: 'deploy', hasPassphrase: true, createdAt: '2026-06-21T05:00:00.000Z', updatedAt: '2026-06-21T05:00:00.000Z' }] as any)
-    sshServersList.mockResolvedValueOnce([]).mockResolvedValueOnce([{ id: 'ssh-server-1', name: 'Prod server', host: '10.0.0.8', port: 22, username: 'deploy', keyId: 'ssh-key-1', note: 'logs', createdAt: '2026-06-21T05:00:00.000Z', updatedAt: '2026-06-21T05:00:00.000Z' }] as any)
-    sshKeysCreate.mockResolvedValueOnce({ id: 'ssh-key-1', name: 'Prod key', note: 'deploy', hasPassphrase: true, createdAt: '2026-06-21T05:00:00.000Z', updatedAt: '2026-06-21T05:00:00.000Z' })
-    sshServersCreate.mockResolvedValueOnce({ id: 'ssh-server-1', name: 'Prod server', host: '10.0.0.8', port: 22, username: 'deploy', keyId: 'ssh-key-1', note: 'logs', createdAt: '2026-06-21T05:00:00.000Z', updatedAt: '2026-06-21T05:00:00.000Z' })
+    sshKeysList.mockImplementation(async () => savedKeys as any)
+    sshServersList.mockImplementation(async () => savedServers as any)
+    sshKeysCreate.mockImplementation(async (input) => {
+      const key = { id: 'ssh-key-1', name: input.name, publicKey: input.publicKey, note: undefined, hasPassphrase: false, createdAt: '2026-06-21T05:00:00.000Z', updatedAt: '2026-06-21T05:00:00.000Z' }
+      savedKeys.splice(0, savedKeys.length, key)
+      return key
+    })
+    sshServersCreate.mockImplementation(async (input) => {
+      const server = { id: 'ssh-server-1', name: input.name, host: input.host, port: input.port, username: input.username, keyId: input.keyId, note: input.note, createdAt: '2026-06-21T05:00:00.000Z', updatedAt: '2026-06-21T05:00:00.000Z' }
+      savedServers.splice(0, savedServers.length, server)
+      return server
+    })
 
     render(<App />)
     await user.click(screen.getByRole('button', { name: '工具' }))
     const toolsList = await screen.findByLabelText('工具列表')
     await user.click(toolsList.querySelector('[data-tool-id="ssh.run-commands"]') as HTMLElement)
 
-    expect(await screen.findByRole('region', { name: 'SSH 配置' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: '工具详情' })).toHaveTextContent('Run SSH Commands')
+    expect(screen.queryByRole('region', { name: 'SSH 配置' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('SSH 私钥内容')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '设置' }))
+    await user.click(await screen.findByRole('button', { name: 'SSH 设置' }))
+
+    expect(await screen.findByRole('region', { name: 'SSH 设置面板' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'SSH 密钥管理' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'SSH 主机管理' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '添加 SSH 密钥' }))
+    expect(await screen.findByRole('dialog', { name: '添加 SSH 密钥' })).toBeInTheDocument()
     await user.type(screen.getByLabelText('SSH 密钥名称'), 'Prod key')
+    await user.type(screen.getByLabelText('SSH 公钥内容'), 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAprod prod@example')
     await user.type(screen.getByLabelText('SSH 私钥内容'), 'private-key-secret')
-    await user.type(screen.getByLabelText('SSH Passphrase'), 'passphrase-secret')
-    await user.type(screen.getByLabelText('SSH 密钥备注'), 'deploy')
     await user.click(screen.getByRole('button', { name: '保存 SSH 密钥' }))
 
-    await waitFor(() => expect(sshKeysCreate).toHaveBeenCalledWith({ name: 'Prod key', privateKey: 'private-key-secret', passphrase: 'passphrase-secret', note: 'deploy' }))
-    expect(screen.getByLabelText('SSH 私钥内容')).toHaveValue('')
-    expect(screen.getByLabelText('SSH Passphrase')).toHaveValue('')
+    await waitFor(() => expect(sshKeysCreate).toHaveBeenCalledWith({ name: 'Prod key', publicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAprod prod@example', privateKey: 'private-key-secret' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '添加 SSH 密钥' })).not.toBeInTheDocument())
+    expect(screen.getByText('Prod key')).toBeInTheDocument()
+    expect(screen.getByText(/ssh-ed25519/)).toBeInTheDocument()
     expect(screen.queryByText('private-key-secret')).not.toBeInTheDocument()
 
-    await user.type(screen.getByLabelText('SSH 服务器名称'), 'Prod server')
-    await user.type(screen.getByLabelText('SSH Host 或 IP'), '10.0.0.8')
+    await user.click(screen.getByRole('button', { name: '添加 SSH 主机' }))
+    expect(await screen.findByRole('dialog', { name: '添加 SSH 主机' })).toBeInTheDocument()
+    await user.type(screen.getByLabelText('SSH 主机名称'), 'Prod host')
+    await user.type(screen.getByLabelText('主机 IP 地址'), '10.0.0.8')
     await user.clear(screen.getByLabelText('SSH 端口'))
     await user.type(screen.getByLabelText('SSH 端口'), '22')
     await user.type(screen.getByLabelText('SSH 用户名'), 'deploy')
     await user.selectOptions(screen.getByLabelText('SSH 密钥'), 'ssh-key-1')
-    await user.type(screen.getByLabelText('SSH 服务器备注'), 'logs')
-    await user.click(screen.getByRole('button', { name: '保存 SSH 服务器' }))
+    await user.type(screen.getByLabelText('主机备注'), 'logs')
+    await user.click(screen.getByRole('button', { name: '保存 SSH 主机' }))
 
-    await waitFor(() => expect(sshServersCreate).toHaveBeenCalledWith({ name: 'Prod server', host: '10.0.0.8', port: 22, username: 'deploy', keyId: 'ssh-key-1', note: 'logs' }))
-    expect(await screen.findByText('Prod server')).toBeInTheDocument()
-    expect(screen.getByText('10.0.0.8:22')).toBeInTheDocument()
+    await waitFor(() => expect(sshServersCreate).toHaveBeenCalledWith({ name: 'Prod host', host: '10.0.0.8', port: 22, username: 'deploy', keyId: 'ssh-key-1', note: 'logs' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '添加 SSH 主机' })).not.toBeInTheDocument())
+    expect(screen.getByText('Prod host')).toBeInTheDocument()
+    expect(screen.getByText(/10\.0\.0\.\*\*\*:22/)).toBeInTheDocument()
+    expect(screen.queryByText('10.0.0.8:22')).not.toBeInTheDocument()
   })
 
   it('shows unread completion icon for background runs until the session is viewed', async () => {

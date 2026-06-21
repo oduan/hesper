@@ -365,12 +365,13 @@ describe('shared schemas', () => {
     const key = sshKeySchema.parse({
       id: 'ssh-key-1',
       name: 'Production key',
+      publicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAprod prod@example',
       note: 'deploy only',
       hasPassphrase: true,
       createdAt: now,
       updatedAt: now
     })
-    expect(key).toMatchObject({ id: 'ssh-key-1', hasPassphrase: true })
+    expect(key).toMatchObject({ id: 'ssh-key-1', publicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAprod prod@example', hasPassphrase: true })
     expect(JSON.stringify(key)).not.toContain('PRIVATE KEY')
 
     const server = sshServerSchema.parse({

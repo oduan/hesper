@@ -407,6 +407,7 @@ function toSshKey(row: any): SshKey {
   return sshKeySchema.parse(stripUndefined({
     id: row.id,
     name: row.name,
+    publicKey: row.public_key ?? undefined,
     note: row.note ?? undefined,
     hasPassphrase: Number(row.has_passphrase) === 1,
     createdAt: row.created_at,
@@ -934,9 +935,10 @@ export function createRepositories(db: Database): Persistence {
     },
     sshKeys: {
       async save(key) {
-        upsert('ssh_keys', ['id', 'name', 'note', 'has_passphrase', 'created_at', 'updated_at', 'sort_seq'], [
+        upsert('ssh_keys', ['id', 'name', 'public_key', 'note', 'has_passphrase', 'created_at', 'updated_at', 'sort_seq'], [
           key.id,
           key.name,
+          key.publicKey,
           key.note,
           key.hasPassphrase ? 1 : 0,
           key.createdAt,

@@ -189,6 +189,7 @@ export type WorkerAgentInvocation = {
 export type SshKey = {
   id: string
   name: string
+  publicKey?: string
   note?: string
   hasPassphrase: boolean
   createdAt: string

@@ -319,6 +319,7 @@ export const toolCredentialStatusSchema = z.object({
 
 export const createSshKeyInputSchema = z.object({
   name: nonEmptyStringSchema,
+  publicKey: nonEmptyStringSchema,
   privateKey: nonEmptyStringSchema,
   passphrase: z.string().optional(),
   note: z.string().optional()

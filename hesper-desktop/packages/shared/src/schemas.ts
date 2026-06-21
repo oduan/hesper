@@ -250,6 +250,7 @@ export const workerAgentInvocationSchema = workerAgentInvocationBaseSchema.trans
 const sshKeyBaseSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
+  publicKey: z.string().min(1).optional(),
   note: z.string().optional(),
   hasPassphrase: z.boolean(),
   createdAt: z.string().datetime(),

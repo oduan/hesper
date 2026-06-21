@@ -62,6 +62,7 @@ async function createServer(adapter: SshClientAdapter = successfulAdapter) {
   const context = await createService(adapter)
   const key = await context.service.createKey({
     name: ' Production key ',
+    publicKey: ' ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAprod prod@example ',
     privateKey: ' private-key-secret ',
     passphrase: ' passphrase-secret ',
     note: ' deploy key '
@@ -83,6 +84,7 @@ describe('createSshConfigurationService', () => {
 
     const key = await service.createKey({
       name: ' Production key ',
+      publicKey: ' ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAprod prod@example ',
       privateKey: ' -----BEGIN OPENSSH PRIVATE KEY-----\nsecret\n-----END OPENSSH PRIVATE KEY----- ',
       passphrase: ' ssh-passphrase-secret ',
       note: ' deploy key '
@@ -96,7 +98,7 @@ describe('createSshConfigurationService', () => {
       note: ' logs '
     })
 
-    expect(key).toMatchObject({ id: 'ssh-key-1', name: 'Production key', note: 'deploy key', hasPassphrase: true })
+    expect(key).toMatchObject({ id: 'ssh-key-1', name: 'Production key', publicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAprod prod@example', note: 'deploy key', hasPassphrase: true })
     expect(await vault.readSshPrivateKey(key.id)).toContain('BEGIN OPENSSH PRIVATE KEY')
     expect(await vault.readSshPassphrase(key.id)).toBe('ssh-passphrase-secret')
     expect(JSON.stringify(await service.listKeys())).not.toContain('BEGIN OPENSSH PRIVATE KEY')

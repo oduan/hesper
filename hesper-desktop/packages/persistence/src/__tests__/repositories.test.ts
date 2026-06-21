@@ -604,6 +604,7 @@ describe('persistence repositories', () => {
     await persistence.sshKeys.save({
       id: 'ssh-key-1',
       name: 'Production key',
+      publicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAprod prod@example',
       note: 'deploy key',
       hasPassphrase: true,
       createdAt: now,
@@ -646,7 +647,7 @@ describe('persistence repositories', () => {
       durationMs: 5
     })
 
-    expect(await persistence.sshKeys.get('ssh-key-1')).toMatchObject({ name: 'Production key', hasPassphrase: true })
+    expect(await persistence.sshKeys.get('ssh-key-1')).toMatchObject({ name: 'Production key', publicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAprod prod@example', hasPassphrase: true })
     expect(await persistence.sshServers.get('ssh-server-1')).toMatchObject({ host: '10.0.0.8', port: 2222, username: 'deploy', keyId: 'ssh-key-1' })
     expect(await persistence.sshServers.listByKeyId('ssh-key-1')).toHaveLength(1)
     expect(await persistence.sshExecutions.listBySession('session-1')).toMatchObject([{ id: 'ssh-exec-1', timeoutMs: 0 }])

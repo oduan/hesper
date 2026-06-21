@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import type { Session, ToolDefinition } from '@hesper/shared'
 import { createThemeVariables, darkTheme, type ThemeMode } from '../theme'
 import { ActivityRail, type AppSection } from './ActivityRail'
-import { EntityListPane, type RoleListItem } from './EntityListPane'
+import { EntityListPane, type RoleListItem, type SettingsCategory } from './EntityListPane'
 import { TitleBar, type DesktopPlatform, type WindowControlAction } from './TitleBar'
 
 export type ToolListItem = ToolDefinition & { enabled: boolean }
@@ -20,7 +20,7 @@ export type AppShellProps = {
   pendingToolIds?: string[]
   roles?: RoleListItem[]
   activeRoleId?: string
-  activeSettingsCategory?: 'ai' | 'appearance'
+  activeSettingsCategory?: SettingsCategory
   appearance?: { themeMode: ThemeMode; fontSize: number }
   onCreateSession?: () => void | Promise<void>
   onSelectSection?: (section: AppSection) => void
@@ -28,7 +28,7 @@ export type AppShellProps = {
   onSelectTool?: (toolId: string) => void
   onToggleToolEnabled?: (toolId: string, enabled: boolean) => void
   onSelectRole?: (roleId: string) => void
-  onSelectSettingsCategory?: (category: 'ai' | 'appearance') => void
+  onSelectSettingsCategory?: (category: SettingsCategory) => void
   onRenameSession?: (sessionId: string, title: string) => void
   onRegenerateSessionTitle?: (sessionId: string, sessionIds?: string[]) => void
   onDeleteSession?: (sessionId: string, sessionIds?: string[]) => void
