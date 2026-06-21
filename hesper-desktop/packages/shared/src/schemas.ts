@@ -16,6 +16,7 @@ import type {
   SshServer,
   SshServerAgentSummary,
   WorkerAgentInvocation,
+  WorkerAgentRoleSnapshot,
   ToolDefinition,
   ToolPermissionPolicy
 } from './domain'
@@ -200,6 +201,18 @@ const toolDisplayMetadataSchema = z.object({
   resourceFields: z.array(z.string().min(1)).optional()
 }).transform(stripUndefined)
 
+const roleSnapshotBaseSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  description: z.string().optional(),
+  systemPrompt: z.string().optional(),
+  defaultToolIds: z.array(z.string().min(1)).optional(),
+  defaultModelId: z.string().optional(),
+  defaultModelRef: modelRefSchema.optional()
+})
+
+export const roleSnapshotSchema = roleSnapshotBaseSchema.transform(stripUndefined)
+
 export const toolDefinitionBaseSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -236,6 +249,7 @@ const workerAgentInvocationBaseSchema = z.object({
   roleId: z.string().min(1),
   allowedToolIds: z.array(z.string().min(1)),
   modelRef: modelRefSchema.optional(),
+  roleSnapshot: roleSnapshotSchema.optional(),
   expectedOutput: z.string().optional(),
   contextSummary: z.string().optional(),
   status: z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled']),
@@ -407,6 +421,7 @@ type _AgentRunCheck = Expect<Equal<z.output<typeof agentRunSchema>, NormalizeOpt
 type _RunStepCheck = Expect<Equal<z.output<typeof runStepSchema>, NormalizeOptional<RunStep>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type _SkillCheck = Expect<Equal<z.output<typeof skillSchema>, NormalizeOptional<Skill>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type _RoleCheck = Expect<Equal<z.output<typeof roleSchema>, NormalizeOptional<Role>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _RoleSnapshotCheck = Expect<Equal<z.output<typeof roleSnapshotSchema>, NormalizeOptional<WorkerAgentRoleSnapshot>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type _ToolDefinitionOutputCheck = Expect<z.output<typeof toolDefinitionSchema> extends NormalizeOptional<ToolDefinition> ? true : false>// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type _ToolPermissionPolicyCheck = Expect<Equal<z.output<typeof toolPermissionPolicySchema>, NormalizeOptional<ToolPermissionPolicy>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type _ModelRefCheck = Expect<Equal<z.output<typeof modelRefSchema>, NormalizeOptional<ModelRef>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars

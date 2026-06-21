@@ -25,6 +25,7 @@ export type EntityListPaneProps = {
   pendingToolIds?: string[]
   roles?: RoleListItem[]
   activeRoleId?: string
+  roleSelectionDisabled?: boolean
   activeSettingsCategory?: SettingsCategory
   onSelectSession?: (sessionId: string) => void
   onSelectTool?: (toolId: string) => void
@@ -34,11 +35,19 @@ export type EntityListPaneProps = {
   onRenameSession?: (sessionId: string, title: string) => void
   onRegenerateSessionTitle?: (sessionId: string, sessionIds?: string[]) => void
   onDeleteSession?: (sessionId: string, sessionIds?: string[]) => void
+  onDeleteRole?: (roleId: string, roleIds?: string[]) => void
 }
 
 type SessionMenuState = {
   sessionId: string
   sessionIds: string[]
+  x: number
+  y: number
+}
+
+type RoleMenuState = {
+  roleId: string
+  roleIds: string[]
   x: number
   y: number
 }
@@ -54,9 +63,19 @@ type SessionMenuItem = {
   danger?: boolean
 }
 
+type RoleMenuItem = {
+  key: 'delete'
+  label: string
+  danger?: boolean
+}
+
 const sessionMenuItems: SessionMenuItem[] = [
   { key: 'rename', label: '重命名' },
   { key: 'regenerate-title', label: '重新生成标题' },
+  { key: 'delete', label: '删除', danger: true }
+]
+
+const roleMenuItems: RoleMenuItem[] = [
   { key: 'delete', label: '删除', danger: true }
 ]
 
@@ -104,6 +123,7 @@ export function EntityListPane({
   pendingToolIds = [],
   roles = [],
   activeRoleId,
+  roleSelectionDisabled = false,
   activeSettingsCategory = 'ai',
   onSelectSession,
   onSelectTool,
@@ -112,17 +132,22 @@ export function EntityListPane({
   onSelectSettingsCategory,
   onRenameSession,
   onRegenerateSessionTitle,
-  onDeleteSession
+  onDeleteSession,
+  onDeleteRole
 }: EntityListPaneProps) {
   const heading = title ?? (activeSection === 'sessions' ? '所有会话' : activeSection === 'settings' ? '设置' : activeSection === 'tools' ? '工具' : activeSection === 'roles' ? '角色' : '列表')
   const runningSessionIdSet = new Set(runningSessionIds)
   const pendingToolIdSet = new Set(pendingToolIds)
   const [sessionMenu, setSessionMenu] = useState<SessionMenuState>()
+  const [roleMenu, setRoleMenu] = useState<RoleMenuState>()
   const [editingSession, setEditingSession] = useState<EditingSessionState>()
   const [selectedSessionIds, setSelectedSessionIds] = useState<string[]>([])
   const [selectionAnchorSessionId, setSelectionAnchorSessionId] = useState<string>()
+  const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([])
+  const [selectionAnchorRoleId, setSelectionAnchorRoleId] = useState<string>()
   const [relativeNowMs, setRelativeNowMs] = useState(() => Date.now())
   const renameInputRef = useRef<HTMLInputElement>(null)
+  const roleMenuFirstItemRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     if (activeSection !== 'sessions') return undefined
@@ -139,16 +164,36 @@ export function EntityListPane({
   }, [activeSection])
 
   useEffect(() => {
-    if (!sessionMenu) return undefined
+    if (!sessionMenu && !roleMenu) return undefined
 
-    const close = () => setSessionMenu(undefined)
+    const close = () => {
+      setSessionMenu(undefined)
+      setRoleMenu(undefined)
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        close()
+      }
+    }
     window.addEventListener('click', close)
-    window.addEventListener('keydown', close)
+    window.addEventListener('keydown', closeOnEscape)
     return () => {
       window.removeEventListener('click', close)
-      window.removeEventListener('keydown', close)
+      window.removeEventListener('keydown', closeOnEscape)
     }
-  }, [sessionMenu])
+  }, [sessionMenu, roleMenu])
+
+  useEffect(() => {
+    if (roleMenu) {
+      roleMenuFirstItemRef.current?.focus()
+    }
+  }, [roleMenu])
+
+  useEffect(() => {
+    if (roleSelectionDisabled) {
+      setRoleMenu(undefined)
+    }
+  }, [roleSelectionDisabled])
 
   useEffect(() => {
     if (!editingSession) return
@@ -165,6 +210,15 @@ export function EntityListPane({
     setSelectionAnchorSessionId((current) => current && sessionIdSet.has(current) ? current : undefined)
   }, [sessions])
 
+  useEffect(() => {
+    const roleIdSet = new Set(roles.map((role) => role.id))
+    setSelectedRoleIds((current) => {
+      const next = current.filter((roleId) => roleIdSet.has(roleId))
+      return arraysEqual(current, next) ? current : next
+    })
+    setSelectionAnchorRoleId((current) => current && roleIdSet.has(current) ? current : undefined)
+  }, [roles])
+
   const getSessionRange = (fromSessionId: string, toSessionId: string): string[] => {
     const fromIndex = sessions.findIndex((session) => session.id === fromSessionId)
     const toIndex = sessions.findIndex((session) => session.id === toSessionId)
@@ -173,6 +227,16 @@ export function EntityListPane({
     const start = Math.min(fromIndex, toIndex)
     const end = Math.max(fromIndex, toIndex)
     return sessions.slice(start, end + 1).map((session) => session.id)
+  }
+
+  const getRoleRange = (fromRoleId: string, toRoleId: string): string[] => {
+    const fromIndex = roles.findIndex((role) => role.id === fromRoleId)
+    const toIndex = roles.findIndex((role) => role.id === toRoleId)
+    if (fromIndex === -1 || toIndex === -1) return [toRoleId]
+
+    const start = Math.min(fromIndex, toIndex)
+    const end = Math.max(fromIndex, toIndex)
+    return roles.slice(start, end + 1).map((role) => role.id)
   }
 
   const handleSessionClick = (sessionId: string, shiftKey: boolean) => {
@@ -187,13 +251,52 @@ export function EntityListPane({
     onSelectSession?.(sessionId)
   }
 
+  const handleRoleClick = (roleId: string, shiftKey: boolean) => {
+    if (roleSelectionDisabled) return
+
+    if (shiftKey) {
+      const anchorRoleId = selectionAnchorRoleId ?? selectedRoleIds[0] ?? activeRoleId ?? roleId
+      setSelectedRoleIds(getRoleRange(anchorRoleId, roleId))
+      setSelectionAnchorRoleId(anchorRoleId)
+    } else {
+      setSelectedRoleIds([roleId])
+      setSelectionAnchorRoleId(roleId)
+    }
+    onSelectRole?.(roleId)
+  }
+
   const openSessionMenu = (sessionId: string, x: number, y: number) => {
     const sessionIdSet = new Set(sessions.map((session) => session.id))
     const selectedTargets = selectedSessionIds.filter((selectedSessionId) => sessionIdSet.has(selectedSessionId))
     const isSelectedTarget = selectedTargets.includes(sessionId)
     const sessionIds = isSelectedTarget ? selectedTargets : [sessionId]
 
+    setRoleMenu(undefined)
     setSessionMenu({ sessionId, sessionIds, x, y })
+  }
+
+  const openRoleMenu = (roleId: string, x: number, y: number) => {
+    if (roleSelectionDisabled) return
+
+    const roleIdSet = new Set(roles.map((role) => role.id))
+    const selectedTargets = selectedRoleIds.filter((selectedRoleId) => roleIdSet.has(selectedRoleId))
+    const isSelectedTarget = selectedTargets.includes(roleId)
+    const roleIds = isSelectedTarget ? selectedTargets : [roleId]
+
+    if (!isSelectedTarget) {
+      setSelectedRoleIds([roleId])
+      setSelectionAnchorRoleId(roleId)
+    }
+
+    setSessionMenu(undefined)
+    setRoleMenu({ roleId, roleIds, x, y })
+  }
+
+  const openRoleMenuFromKeyboard = (roleId: string, target: HTMLElement) => {
+    if (roleSelectionDisabled) return
+
+    const rect = target.getBoundingClientRect()
+    openRoleMenu(roleId, rect.left + 12, rect.top + Math.min(rect.height, 32))
   }
 
   const startRenameSession = (sessionId: string) => {
@@ -225,6 +328,15 @@ export function EntityListPane({
         return
       case 'delete':
         onDeleteSession?.(menuState.sessionId, menuState.sessionIds)
+        return
+    }
+  }
+
+  const handleRoleMenuAction = (action: typeof roleMenuItems[number]['key'], menuState: RoleMenuState) => {
+    setRoleMenu(undefined)
+    switch (action) {
+      case 'delete':
+        onDeleteRole?.(menuState.roleId, menuState.roleIds)
         return
     }
   }
@@ -326,15 +438,28 @@ export function EntityListPane({
             <ul aria-label="角色列表" className="hesper-theme-scrollbar" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 4, overflow: 'auto', minHeight: 0 }}>
               {roles.map((role) => {
                 const isActive = role.id === activeRoleId
+                const isSelected = selectedRoleIds.includes(role.id)
                 const roleDescription = role.description || '暂无简介'
                 return (
                   <li key={role.id}>
                     <button
                       type="button"
-                      className={`hesper-list-row${isActive ? ' is-active' : ''}`}
+                      className={`hesper-list-row${isActive ? ' is-active' : ''}${isSelected ? ' is-selected' : ''}`}
+                      data-selected={isSelected ? 'true' : undefined}
                       aria-current={isActive ? 'page' : undefined}
+                      aria-selected={isSelected ? 'true' : undefined}
+                      aria-disabled={roleSelectionDisabled ? 'true' : undefined}
                       aria-label={`${role.name} ${roleDescription}`.trim()}
-                      onClick={() => onSelectRole?.(role.id)}
+                      onClick={(event) => handleRoleClick(role.id, event.shiftKey)}
+                      onKeyDown={(event) => {
+                        if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return
+                        event.preventDefault()
+                        openRoleMenuFromKeyboard(role.id, event.currentTarget)
+                      }}
+                      onContextMenu={(event) => {
+                        event.preventDefault()
+                        openRoleMenu(role.id, event.clientX, event.clientY)
+                      }}
                       style={roleRowStyle}
                     >
                       <span style={roleNameStyle}>{role.name}</span>
@@ -429,6 +554,36 @@ export function EntityListPane({
               role="menuitem"
               className="hesper-session-menu-item"
               onClick={() => handleMenuAction(item.key, sessionMenu)}
+              style={{
+                ...sessionMenuItemStyle,
+                ...(item.danger ? { color: darkTheme.color.danger } : {})
+              }}
+            >
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {roleMenu ? (
+        <div
+          role="menu"
+          aria-label="角色操作"
+          style={{
+            ...sessionMenuStyle,
+            left: roleMenu.x,
+            top: roleMenu.y
+          }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <style>{sessionMenuHoverCss}</style>
+          {roleMenuItems.map((item, index) => (
+            <button
+              key={item.key}
+              ref={index === 0 ? roleMenuFirstItemRef : undefined}
+              type="button"
+              role="menuitem"
+              className="hesper-session-menu-item"
+              onClick={() => handleRoleMenuAction(item.key, roleMenu)}
               style={{
                 ...sessionMenuItemStyle,
                 ...(item.danger ? { color: darkTheme.color.danger } : {})

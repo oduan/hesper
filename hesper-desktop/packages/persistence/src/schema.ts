@@ -152,6 +152,7 @@ CREATE TABLE IF NOT EXISTS worker_agent_invocations (
   role_id TEXT NOT NULL,
   allowed_tool_ids_json TEXT NOT NULL,
   model_ref_json TEXT,
+  role_snapshot_json TEXT,
   expected_output TEXT,
   context_summary TEXT,
   status TEXT NOT NULL,
@@ -264,7 +265,8 @@ const migrationColumns: Record<string, string[]> = {
     'parent_step_id TEXT',
     'parent_tool_call_id TEXT',
     'context_summary TEXT',
-    'last_event_at TEXT'
+    'last_event_at TEXT',
+    'role_snapshot_json TEXT'
   ],
   ssh_keys: [
     'public_key TEXT'

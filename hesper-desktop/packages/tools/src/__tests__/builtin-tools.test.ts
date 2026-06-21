@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { createBuiltinToolDefinitions } from '../builtin-tools'
 
 describe('builtin tools', () => {
-  it('contains the builtin tool set including Worker Agent management and SSH tools', () => {
+  it('contains the builtin tool set including model listing, Worker Agent management, and SSH tools', () => {
     const tools = createBuiltinToolDefinitions()
-    expect(tools).toHaveLength(30)
-    const toolIds = tools.map((tool) => tool.id)
-    expect(toolIds).toEqual(
+    expect(tools).toHaveLength(31)
+    expect(tools.map((tool) => tool.id)).toEqual(
       expect.arrayContaining([
+        'models.list-available',
         'agent.spawn-worker-agent',
         'agent.list-worker-agents',
         'agent.get-worker-agent',
@@ -42,6 +42,7 @@ describe('builtin tools', () => {
         'roles.find',
         'roles.create',
         'roles.update',
+        'models.list-available',
         'agent.spawn-worker-agent',
         'agent.list-worker-agents',
         'agent.get-worker-agent',
@@ -82,6 +83,83 @@ describe('builtin tools', () => {
         resourceFields: ['task']
       }
     })
+  })
+
+  it('defines Worker Agent model override schema and guidance', () => {
+    const spawnWorkerAgent = createBuiltinToolDefinitions().find((tool) => tool.id === 'agent.spawn-worker-agent')
+
+    expect(spawnWorkerAgent?.description).toContain('models.list-available')
+    expect(spawnWorkerAgent?.description).toContain('modelRef')
+    expect(spawnWorkerAgent?.description).toContain('modelId')
+    expect(spawnWorkerAgent?.description).toContain('modelRef takes precedence')
+    expect(spawnWorkerAgent).toMatchObject({
+      inputSchema: {
+        type: 'object',
+        properties: {
+          modelRef: {
+            type: 'object',
+            properties: {
+              providerId: expect.objectContaining({ type: 'string' }),
+              modelId: expect.objectContaining({ type: 'string' })
+            }
+          },
+          modelId: expect.objectContaining({ type: 'string' })
+        }
+      }
+    })
+  })
+
+  it('defines temporary Worker Agent role schema and one-off guidance', () => {
+    const spawnWorkerAgent = createBuiltinToolDefinitions().find((tool) => tool.id === 'agent.spawn-worker-agent')
+    const schema = spawnWorkerAgent?.inputSchema as any
+
+    expect(schema.required).toEqual(['task', 'allowedToolIds'])
+    expect(schema.required).not.toContain('roleId')
+    expect(schema.oneOf).toEqual([
+      { required: ['roleId'], not: { required: ['temporaryRole'] } },
+      { required: ['temporaryRole'], not: { required: ['roleId'] } }
+    ])
+    expect(schema.properties.temporaryRole).toMatchObject({
+      type: 'object',
+      required: ['name', 'systemPrompt'],
+      properties: {
+        name: expect.objectContaining({ type: 'string' }),
+        description: expect.objectContaining({ type: 'string' }),
+        systemPrompt: expect.objectContaining({ type: 'string' }),
+        defaultToolIds: expect.objectContaining({ type: 'array' }),
+        defaultModelId: expect.objectContaining({ type: 'string' }),
+        defaultModelRef: expect.objectContaining({
+          type: 'object',
+          required: ['providerId', 'modelId'],
+          properties: {
+            providerId: expect.objectContaining({ type: 'string' }),
+            modelId: expect.objectContaining({ type: 'string' })
+          }
+        })
+      }
+    })
+    expect(schema.properties.temporaryRole.properties.defaultModelRef.description).toContain('Takes precedence over defaultModelId')
+    expect(spawnWorkerAgent?.description).toContain('temporaryRole')
+    expect(spawnWorkerAgent?.description).toContain('roleSnapshot')
+    expect(spawnWorkerAgent?.description).toContain('role library')
+    expect(spawnWorkerAgent?.description).not.toMatch(/not persisted/i)
+    expect(spawnWorkerAgent?.description).toContain('roles.create')
+  })
+
+  it('describes provider-aware model discovery, Worker spawning, and reusable role creation consistently', () => {
+    const tools = createBuiltinToolDefinitions()
+    const modelList = tools.find((tool) => tool.id === 'models.list-available')
+    const spawnWorkerAgent = tools.find((tool) => tool.id === 'agent.spawn-worker-agent')
+    const createRole = tools.find((tool) => tool.id === 'roles.create')
+
+    expect(modelList?.description).toContain('provider-aware modelRef')
+    expect(modelList?.description).toContain('never returns API keys')
+    expect(spawnWorkerAgent?.description).toContain('modelRef takes precedence')
+    expect(spawnWorkerAgent?.description).toContain('temporaryRole is not saved')
+    expect(spawnWorkerAgent?.description).toContain('roleSnapshot')
+    expect(createRole?.description).toContain('reusable role')
+    expect(createRole?.description).toContain('Do not use for one-off Worker Agent tasks')
+    expect(createRole?.description).toContain('temporaryRole')
   })
 
   it('defines filesystem tools with required schema fields', () => {
@@ -204,7 +282,19 @@ describe('builtin tools', () => {
           name: expect.objectContaining({ type: 'string' }),
           description: expect.objectContaining({ type: 'string' }),
           systemPrompt: expect.objectContaining({ type: 'string' }),
-          defaultToolIds: expect.objectContaining({ type: 'array' })
+          defaultToolIds: expect.objectContaining({ type: 'array' }),
+          defaultModelId: expect.objectContaining({
+            type: 'string',
+            description: 'Legacy default model id for this role. Empty string means inherit the caller/parent model; prefer defaultModelRef for provider-aware selection.'
+          }),
+          defaultModelRef: expect.objectContaining({
+            type: 'object',
+            required: ['providerId', 'modelId'],
+            properties: {
+              providerId: expect.objectContaining({ type: 'string' }),
+              modelId: expect.objectContaining({ type: 'string' })
+            }
+          })
         }
       }
     })
@@ -218,19 +308,49 @@ describe('builtin tools', () => {
           name: expect.objectContaining({ type: 'string' }),
           description: expect.objectContaining({ type: 'string' }),
           systemPrompt: expect.objectContaining({ type: 'string' }),
-          defaultToolIds: expect.objectContaining({ type: 'array' })
+          defaultToolIds: expect.objectContaining({ type: 'array' }),
+          defaultModelId: expect.objectContaining({
+            type: 'string',
+            description: 'Legacy default model id for this role. Empty string means inherit the caller/parent model; prefer defaultModelRef for provider-aware selection.'
+          }),
+          defaultModelRef: expect.objectContaining({
+            type: 'object',
+            required: ['providerId', 'modelId'],
+            properties: {
+              providerId: expect.objectContaining({ type: 'string' }),
+              modelId: expect.objectContaining({ type: 'string' })
+            }
+          })
         }
       }
+    })
+
+    for (const toolId of ['roles.create', 'roles.update']) {
+      const defaultModelRef = (tools.find((tool) => tool.id === toolId)?.inputSchema as any).properties.defaultModelRef
+      expect(defaultModelRef.description).toMatch(/provider-aware/i)
+      expect(defaultModelRef.description).toContain('defaultModelId')
+      expect(defaultModelRef.description).toMatch(/must match/i)
+      expect(defaultModelRef.description).toContain("defaultModelId: ''")
+      expect(defaultModelRef.description).not.toContain('does not require defaultModelId')
+      expect(defaultModelRef.required).toEqual(['providerId', 'modelId'])
+    }
+
+    expect(tools.find((tool) => tool.id === 'models.list-available')).toMatchObject({
+      name: 'List Available Models',
+      category: 'agent',
+      icon: '🤖',
+      inputSchema: { type: 'object', properties: {} }
     })
 
     expect(tools.find((tool) => tool.id === 'agent.spawn-worker-agent')).toMatchObject({
       category: 'agent',
       inputSchema: {
         type: 'object',
-        required: ['task', 'roleId', 'allowedToolIds'],
+        required: ['task', 'allowedToolIds'],
         properties: {
           task: expect.objectContaining({ type: 'string' }),
           roleId: expect.objectContaining({ type: 'string' }),
+          temporaryRole: expect.objectContaining({ type: 'object' }),
           allowedToolIds: expect.objectContaining({ type: 'array' }),
           expectedOutput: expect.objectContaining({ type: 'string' }),
           contextSummary: expect.objectContaining({ type: 'string' }),

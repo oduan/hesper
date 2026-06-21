@@ -20,6 +20,7 @@ export type AppShellProps = {
   pendingToolIds?: string[]
   roles?: RoleListItem[]
   activeRoleId?: string
+  roleSelectionDisabled?: boolean
   activeSettingsCategory?: SettingsCategory
   appearance?: { themeMode: ThemeMode; fontSize: number }
   onCreateSession?: () => void | Promise<void>
@@ -32,6 +33,7 @@ export type AppShellProps = {
   onRenameSession?: (sessionId: string, title: string) => void
   onRegenerateSessionTitle?: (sessionId: string, sessionIds?: string[]) => void
   onDeleteSession?: (sessionId: string, sessionIds?: string[]) => void
+  onDeleteRole?: (roleId: string, roleIds?: string[]) => void
   onWindowMinimize?: WindowControlAction
   onWindowToggleMaximize?: WindowControlAction
   onWindowClose?: WindowControlAction
@@ -50,6 +52,7 @@ export function AppShell({
   pendingToolIds,
   roles,
   activeRoleId,
+  roleSelectionDisabled,
   activeSettingsCategory,
   appearance,
   onCreateSession,
@@ -62,6 +65,7 @@ export function AppShell({
   onRenameSession,
   onRegenerateSessionTitle,
   onDeleteSession,
+  onDeleteRole,
   onWindowMinimize,
   onWindowToggleMaximize,
   onWindowClose,
@@ -117,6 +121,7 @@ export function AppShell({
           {...(pendingToolIds ? { pendingToolIds } : {})}
           {...(roles ? { roles } : {})}
           {...(activeRoleId ? { activeRoleId } : {})}
+          {...(roleSelectionDisabled ? { roleSelectionDisabled } : {})}
           {...(activeSettingsCategory ? { activeSettingsCategory } : {})}
           {...(onSelectSession ? { onSelectSession } : {})}
           {...(onSelectTool ? { onSelectTool } : {})}
@@ -126,6 +131,7 @@ export function AppShell({
           {...(onRenameSession ? { onRenameSession } : {})}
           {...(onRegenerateSessionTitle ? { onRegenerateSessionTitle } : {})}
           {...(onDeleteSession ? { onDeleteSession } : {})}
+          {...(onDeleteRole ? { onDeleteRole } : {})}
         />
         <section
           aria-label="详情区域"

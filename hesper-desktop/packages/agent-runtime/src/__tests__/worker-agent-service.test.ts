@@ -266,13 +266,17 @@ async function createHarness(options: CreateHarnessOptions = {}): Promise<any> {
 
   const adapter: any = options.adapter ?? new BlockingAdapter()
   const events: AgentRuntimeEvent[] = []
+  const roleService = {
+    listRoles: vi.fn(() => [...roles]),
+    getRole: vi.fn((id: string) => roles.find((role) => role.id === id))
+  }
   const service = createWorkerAgentService({
     persistence,
     adapter,
     promptAssembly: {
       assembleWorkerAgentPrompt(input) {
         return {
-          systemPrompt: `worker-system:${input.role.id}:${input.task}${input.contextSummary ? `\nContext summary: ${input.contextSummary}` : ''}`,
+          systemPrompt: `worker-system:${input.role.id}:${input.role.systemPrompt ?? ''}:${input.task}${input.contextSummary ? `\nContext summary: ${input.contextSummary}` : ''}`,
           toolManifest: 'tools',
           skillManifest: 'skills',
           roleManifest: 'roles',
@@ -280,10 +284,7 @@ async function createHarness(options: CreateHarnessOptions = {}): Promise<any> {
         }
       }
     },
-    roles: {
-      listRoles: () => [...roles],
-      getRole: (id) => roles.find((role) => role.id === id)
-    },
+    roles: roleService,
     skills: {
       list: () => []
     },
@@ -309,7 +310,7 @@ async function createHarness(options: CreateHarnessOptions = {}): Promise<any> {
     } as any
   }
 
-  return { persistence, service, adapter, events, session, roles, parentRun, now, createContext } as any
+  return { persistence, service, adapter, events, session, roles, roleService, parentRun, now, createContext } as any
 }
 
 describe('worker agent diagnosis', () => {
@@ -379,6 +380,419 @@ describe('worker agent service', () => {
     expect(await service.list({ status: 'running' }, createContext())).toHaveLength(2)
     expect(await persistence.workerAgentInvocations.listByParentRun('run-parent')).toHaveLength(2)
     expect(events.map((event: AgentRuntimeEvent) => event.type)).toEqual(expect.arrayContaining(['worker.invocation.created', 'run.created']))
+  })
+
+  it('uses explicit modelRef over role defaults and the parent run model', async () => {
+    const adapter = new BlockingAdapter()
+    const roleWithDefaults: Role = {
+      ...reviewerRole,
+      defaultModelId: 'role-default-id',
+      defaultModelRef: { providerId: 'role-provider', modelId: 'role-ref-model' }
+    }
+    const { service, persistence, createContext } = await createHarness({
+      adapter,
+      roles: [roleWithDefaults],
+      parentRun: { modelId: 'parent-model' }
+    })
+
+    const spawned = await withTimeout(
+      service.spawn(
+        {
+          task: 'review with explicit modelRef',
+          roleId: 'reviewer',
+          allowedToolIds: ['filesystem.read-file'],
+          modelRef: { providerId: 'explicit-provider', modelId: 'explicit-model' },
+          modelId: 'explicit-legacy-model',
+          wait: false
+        },
+        createContext()
+      ),
+      'spawn timed out'
+    )
+
+    await vi.waitFor(() => expect(adapter.startedRunIds).toHaveLength(1))
+    await expect(persistence.runs.get(spawned.childRunId)).resolves.toMatchObject({ modelId: 'explicit-model' })
+    await expect(persistence.workerAgentInvocations.get(spawned.invocationId)).resolves.toMatchObject({
+      modelRef: { providerId: 'explicit-provider', modelId: 'explicit-model' }
+    })
+    expect(adapter.inputs[0]).toMatchObject({
+      modelId: 'explicit-model',
+      modelRef: { providerId: 'explicit-provider', modelId: 'explicit-model' }
+    })
+  })
+
+  it('uses explicit modelId without passing a provider-aware modelRef', async () => {
+    const adapter = new BlockingAdapter()
+    const roleWithDefaults: Role = {
+      ...reviewerRole,
+      defaultModelId: 'role-default-id',
+      defaultModelRef: { providerId: 'role-provider', modelId: 'role-ref-model' }
+    }
+    const { service, persistence, createContext } = await createHarness({
+      adapter,
+      roles: [roleWithDefaults],
+      parentRun: { modelId: 'parent-model' }
+    })
+
+    const spawned = await withTimeout(
+      service.spawn(
+        {
+          task: 'review with explicit modelId',
+          roleId: 'reviewer',
+          allowedToolIds: ['filesystem.read-file'],
+          modelId: 'explicit-model-id',
+          wait: false
+        },
+        createContext()
+      ),
+      'spawn timed out'
+    )
+
+    await vi.waitFor(() => expect(adapter.startedRunIds).toHaveLength(1))
+    await expect(persistence.runs.get(spawned.childRunId)).resolves.toMatchObject({ modelId: 'explicit-model-id' })
+    await expect(persistence.workerAgentInvocations.get(spawned.invocationId)).resolves.not.toHaveProperty('modelRef')
+    expect(adapter.inputs[0]).toMatchObject({ modelId: 'explicit-model-id' })
+    expect(adapter.inputs[0]).not.toHaveProperty('modelRef')
+  })
+
+  it('uses a role defaultModelRef before a role defaultModelId when no model is explicit', async () => {
+    const adapter = new BlockingAdapter()
+    const roleWithDefaults: Role = {
+      ...reviewerRole,
+      defaultModelId: 'role-default-id',
+      defaultModelRef: { providerId: 'role-provider', modelId: 'role-ref-model' }
+    }
+    const { service, persistence, createContext } = await createHarness({
+      adapter,
+      roles: [roleWithDefaults],
+      parentRun: { modelId: 'parent-model' }
+    })
+
+    const spawned = await withTimeout(
+      service.spawn(
+        { task: 'review with role modelRef', roleId: 'reviewer', allowedToolIds: ['filesystem.read-file'], wait: false },
+        createContext()
+      ),
+      'spawn timed out'
+    )
+
+    await vi.waitFor(() => expect(adapter.startedRunIds).toHaveLength(1))
+    await expect(persistence.runs.get(spawned.childRunId)).resolves.toMatchObject({ modelId: 'role-ref-model' })
+    await expect(persistence.workerAgentInvocations.get(spawned.invocationId)).resolves.toMatchObject({
+      modelRef: { providerId: 'role-provider', modelId: 'role-ref-model' }
+    })
+    expect(adapter.inputs[0]).toMatchObject({
+      modelId: 'role-ref-model',
+      modelRef: { providerId: 'role-provider', modelId: 'role-ref-model' }
+    })
+  })
+
+  it('uses a role defaultModelId when no explicit model or defaultModelRef is present', async () => {
+    const adapter = new BlockingAdapter()
+    const roleWithDefaultModelId: Role = { ...reviewerRole, defaultModelId: 'role-default-id' }
+    const { service, persistence, createContext } = await createHarness({
+      adapter,
+      roles: [roleWithDefaultModelId],
+      parentRun: { modelId: 'parent-model' }
+    })
+
+    const spawned = await withTimeout(
+      service.spawn(
+        { task: 'review with role modelId', roleId: 'reviewer', allowedToolIds: ['filesystem.read-file'], wait: false },
+        createContext()
+      ),
+      'spawn timed out'
+    )
+
+    await vi.waitFor(() => expect(adapter.startedRunIds).toHaveLength(1))
+    await expect(persistence.runs.get(spawned.childRunId)).resolves.toMatchObject({ modelId: 'role-default-id' })
+    await expect(persistence.workerAgentInvocations.get(spawned.invocationId)).resolves.not.toHaveProperty('modelRef')
+    expect(adapter.inputs[0]).toMatchObject({ modelId: 'role-default-id' })
+    expect(adapter.inputs[0]).not.toHaveProperty('modelRef')
+  })
+
+  it('inherits the parent run model when no explicit or role default model is present', async () => {
+    const adapter = new BlockingAdapter()
+    const { service, persistence, createContext } = await createHarness({
+      adapter,
+      parentRun: { modelId: 'parent-model' }
+    })
+
+    const spawned = await withTimeout(
+      service.spawn(
+        { task: 'review with parent model', roleId: 'reviewer', allowedToolIds: ['filesystem.read-file'], wait: false },
+        createContext()
+      ),
+      'spawn timed out'
+    )
+
+    await vi.waitFor(() => expect(adapter.startedRunIds).toHaveLength(1))
+    await expect(persistence.runs.get(spawned.childRunId)).resolves.toMatchObject({ modelId: 'parent-model' })
+    await expect(persistence.workerAgentInvocations.get(spawned.invocationId)).resolves.not.toHaveProperty('modelRef')
+    expect(adapter.inputs[0]).toMatchObject({ modelId: 'parent-model' })
+    expect(adapter.inputs[0]).not.toHaveProperty('modelRef')
+  })
+
+  it('spawns a temporary role without querying or mutating the role registry and stores a role snapshot', async () => {
+    const adapter = new BlockingAdapter()
+    const { service, persistence, roleService, roles, createContext } = await createHarness({ adapter })
+
+    const spawned = await withTimeout(
+      service.spawn(
+        {
+          task: 'review with a one-off role',
+          temporaryRole: {
+            name: 'One-off Reviewer',
+            description: 'Temporary role for this single Worker Agent run',
+            systemPrompt: 'Use the temporary prompt only.',
+            defaultToolIds: ['filesystem.read-file'],
+            defaultModelRef: { providerId: 'temp-provider', modelId: 'temp-model' },
+            defaultModelId: 'temp-legacy-model'
+          },
+          allowedToolIds: ['filesystem.read-file', 'filesystem.write-file'],
+          wait: false
+        },
+        createContext()
+      ),
+      'temporary role spawn timed out'
+    )
+
+    await vi.waitFor(() => expect(adapter.startedRunIds).toHaveLength(1))
+    expect(roleService.listRoles).not.toHaveBeenCalled()
+    expect(roleService.getRole).not.toHaveBeenCalled()
+    expect(roles).toHaveLength(1)
+    expect(roles[0].id).toBe('reviewer')
+    await expect(persistence.roles.list()).resolves.toEqual([])
+
+    expect(spawned.roleId).toMatch(/^temporary:/)
+    expect(spawned.roleSnapshot).toMatchObject({
+      id: spawned.roleId,
+      name: 'One-off Reviewer',
+      description: 'Temporary role for this single Worker Agent run',
+      systemPrompt: 'Use the temporary prompt only.',
+      defaultToolIds: ['filesystem.read-file'],
+      defaultModelId: 'temp-legacy-model',
+      defaultModelRef: { providerId: 'temp-provider', modelId: 'temp-model' }
+    })
+    expect(spawned.allowedToolIds).toEqual(['filesystem.read-file'])
+    expect(adapter.inputs[0]).toMatchObject({
+      systemPrompt: expect.stringContaining('Use the temporary prompt only.'),
+      enabledToolIds: ['filesystem.read-file'],
+      modelId: 'temp-model',
+      modelRef: { providerId: 'temp-provider', modelId: 'temp-model' }
+    })
+    await expect(persistence.workerAgentInvocations.get(spawned.invocationId)).resolves.toMatchObject({
+      roleId: spawned.roleId,
+      roleSnapshot: {
+        id: spawned.roleId,
+        name: 'One-off Reviewer',
+        systemPrompt: 'Use the temporary prompt only.',
+        defaultToolIds: ['filesystem.read-file'],
+        defaultModelId: 'temp-legacy-model',
+        defaultModelRef: { providerId: 'temp-provider', modelId: 'temp-model' }
+      }
+    })
+  })
+
+  it('requires exactly one of roleId or temporaryRole', async () => {
+    const { service, createContext } = await createHarness()
+
+    await expect(
+      service.spawn(
+        { task: 'missing role selector', allowedToolIds: ['filesystem.read-file'], wait: false },
+        createContext()
+      )
+    ).rejects.toThrow(/roleId.*temporaryRole|temporaryRole.*roleId/i)
+
+    await expect(
+      service.spawn(
+        {
+          task: 'ambiguous role selector',
+          roleId: 'reviewer',
+          temporaryRole: { name: 'Temporary Reviewer', systemPrompt: 'Review once.' },
+          allowedToolIds: ['filesystem.read-file'],
+          wait: false
+        },
+        createContext()
+      )
+    ).rejects.toThrow(/roleId.*temporaryRole|temporaryRole.*roleId|not both/i)
+  })
+
+  it('intersects temporary role default tools with requested, parent, and global tool allowlists', async () => {
+    const adapter = new BlockingAdapter()
+    const { service, persistence, createContext } = await createHarness({
+      adapter,
+      filterEnabledToolIds: async (toolIds) => toolIds
+    })
+
+    const withDefaultTools = await withTimeout(
+      service.spawn(
+        {
+          task: 'use temporary default tools',
+          temporaryRole: {
+            name: 'Writer',
+            systemPrompt: 'Write only.',
+            defaultToolIds: ['filesystem.write-file', 'agent.spawn-worker-agent']
+          },
+          allowedToolIds: ['filesystem.read-file', 'filesystem.write-file', 'agent.spawn-worker-agent'],
+          wait: false
+        },
+        createContext()
+      ),
+      'temporary default tool spawn timed out'
+    )
+
+    const withoutDefaultTools = await withTimeout(
+      service.spawn(
+        {
+          task: 'use requested tools when temporary role has no defaults',
+          temporaryRole: {
+            name: 'Requested Tools',
+            systemPrompt: 'Use requested tools.'
+          },
+          allowedToolIds: ['filesystem.read-file', 'filesystem.write-file', 'agent.spawn-worker-agent'],
+          wait: false
+        },
+        createContext()
+      ),
+      'temporary requested tool spawn timed out'
+    )
+
+    await vi.waitFor(() => expect(adapter.startedRunIds).toHaveLength(2))
+    expect(adapter.inputs.map((input) => input.enabledToolIds)).toEqual([
+      ['filesystem.write-file'],
+      ['filesystem.read-file', 'filesystem.write-file']
+    ])
+    await expect(persistence.workerAgentInvocations.get(withDefaultTools.invocationId)).resolves.toMatchObject({
+      allowedToolIds: ['filesystem.write-file']
+    })
+    await expect(persistence.workerAgentInvocations.get(withoutDefaultTools.invocationId)).resolves.toMatchObject({
+      allowedToolIds: ['filesystem.read-file', 'filesystem.write-file']
+    })
+  })
+
+  it('uses temporary role default models before the parent run model', async () => {
+    const adapter = new BlockingAdapter()
+    const { service, persistence, createContext } = await createHarness({
+      adapter,
+      parentRun: { modelId: 'parent-model' }
+    })
+
+    const withDefaultModelRef = await withTimeout(
+      service.spawn(
+        {
+          task: 'use temporary default modelRef',
+          temporaryRole: {
+            name: 'Temporary Model Ref',
+            systemPrompt: 'Use default modelRef.',
+            defaultToolIds: ['filesystem.read-file'],
+            defaultModelRef: { providerId: 'temp-provider', modelId: 'temp-ref-model' },
+            defaultModelId: 'temp-default-id'
+          },
+          allowedToolIds: ['filesystem.read-file'],
+          wait: false
+        },
+        createContext()
+      ),
+      'temporary default modelRef spawn timed out'
+    )
+
+    const withDefaultModelId = await withTimeout(
+      service.spawn(
+        {
+          task: 'use temporary default modelId',
+          temporaryRole: {
+            name: 'Temporary Model Id',
+            systemPrompt: 'Use default modelId.',
+            defaultToolIds: ['filesystem.read-file'],
+            defaultModelId: 'temp-default-id-only'
+          },
+          allowedToolIds: ['filesystem.read-file'],
+          wait: false
+        },
+        createContext()
+      ),
+      'temporary default modelId spawn timed out'
+    )
+
+    await vi.waitFor(() => expect(adapter.startedRunIds).toHaveLength(2))
+    await expect(persistence.runs.get(withDefaultModelRef.childRunId)).resolves.toMatchObject({ modelId: 'temp-ref-model' })
+    await expect(persistence.workerAgentInvocations.get(withDefaultModelRef.invocationId)).resolves.toMatchObject({
+      modelRef: { providerId: 'temp-provider', modelId: 'temp-ref-model' }
+    })
+    expect(adapter.inputs[0]).toMatchObject({
+      modelId: 'temp-ref-model',
+      modelRef: { providerId: 'temp-provider', modelId: 'temp-ref-model' }
+    })
+
+    await expect(persistence.runs.get(withDefaultModelId.childRunId)).resolves.toMatchObject({ modelId: 'temp-default-id-only' })
+    await expect(persistence.workerAgentInvocations.get(withDefaultModelId.invocationId)).resolves.not.toHaveProperty('modelRef')
+    expect(adapter.inputs[1]).toMatchObject({ modelId: 'temp-default-id-only' })
+    expect(adapter.inputs[1]).not.toHaveProperty('modelRef')
+  })
+
+  it('lets explicit modelRef and modelId override temporary role defaults', async () => {
+    const adapter = new BlockingAdapter()
+    const { service, persistence, createContext } = await createHarness({
+      adapter,
+      parentRun: { modelId: 'parent-model' }
+    })
+
+    const explicitModelRef = await withTimeout(
+      service.spawn(
+        {
+          task: 'explicit modelRef beats temporary defaults',
+          temporaryRole: {
+            name: 'Temporary Explicit Ref',
+            systemPrompt: 'Has defaults.',
+            defaultToolIds: ['filesystem.read-file'],
+            defaultModelRef: { providerId: 'temp-provider', modelId: 'temp-ref-model' },
+            defaultModelId: 'temp-default-id'
+          },
+          allowedToolIds: ['filesystem.read-file'],
+          modelRef: { providerId: 'explicit-provider', modelId: 'explicit-ref-model' },
+          modelId: 'explicit-legacy-model',
+          wait: false
+        },
+        createContext()
+      ),
+      'explicit temporary modelRef spawn timed out'
+    )
+
+    const explicitModelId = await withTimeout(
+      service.spawn(
+        {
+          task: 'explicit modelId beats temporary defaults',
+          temporaryRole: {
+            name: 'Temporary Explicit Id',
+            systemPrompt: 'Has defaults.',
+            defaultToolIds: ['filesystem.read-file'],
+            defaultModelRef: { providerId: 'temp-provider', modelId: 'temp-ref-model' },
+            defaultModelId: 'temp-default-id'
+          },
+          allowedToolIds: ['filesystem.read-file'],
+          modelId: 'explicit-model-id',
+          wait: false
+        },
+        createContext()
+      ),
+      'explicit temporary modelId spawn timed out'
+    )
+
+    await vi.waitFor(() => expect(adapter.startedRunIds).toHaveLength(2))
+    await expect(persistence.runs.get(explicitModelRef.childRunId)).resolves.toMatchObject({ modelId: 'explicit-ref-model' })
+    await expect(persistence.workerAgentInvocations.get(explicitModelRef.invocationId)).resolves.toMatchObject({
+      modelRef: { providerId: 'explicit-provider', modelId: 'explicit-ref-model' }
+    })
+    expect(adapter.inputs[0]).toMatchObject({
+      modelId: 'explicit-ref-model',
+      modelRef: { providerId: 'explicit-provider', modelId: 'explicit-ref-model' }
+    })
+
+    await expect(persistence.runs.get(explicitModelId.childRunId)).resolves.toMatchObject({ modelId: 'explicit-model-id' })
+    await expect(persistence.workerAgentInvocations.get(explicitModelId.invocationId)).resolves.not.toHaveProperty('modelRef')
+    expect(adapter.inputs[1]).toMatchObject({ modelId: 'explicit-model-id' })
+    expect(adapter.inputs[1]).not.toHaveProperty('modelRef')
   })
 
   it('passes contextSummary through to the worker prompt and adapter input', async () => {

@@ -28,6 +28,29 @@ describe('ipc-client fallback', () => {
     })
   })
 
+  it('lists role tools with default model schemas in fallback mode', async () => {
+    const api = createHesperApi({ allowFallback: true })
+
+    const tools = await api.tools.list()
+
+    for (const toolId of ['roles.create', 'roles.update']) {
+      expect(tools.find((tool) => tool.id === toolId)).toMatchObject({
+        inputSchema: {
+          properties: {
+            defaultModelId: expect.objectContaining({ type: 'string' }),
+            defaultModelRef: expect.objectContaining({
+              type: 'object',
+              properties: {
+                providerId: expect.objectContaining({ type: 'string' }),
+                modelId: expect.objectContaining({ type: 'string' })
+              }
+            })
+          }
+        }
+      })
+    }
+  })
+
   it('manages roles in fallback mode', async () => {
     const api = createHesperApi({ allowFallback: true })
 
@@ -35,10 +58,17 @@ describe('ipc-client fallback', () => {
       name: 'Fallback Role',
       description: 'Created locally',
       systemPrompt: 'Fallback prompt',
-      defaultToolIds: ['filesystem.read-file']
+      defaultToolIds: ['filesystem.read-file'],
+      defaultModelId: 'deepseek-chat',
+      defaultModelRef: { providerId: 'deepseek', modelId: 'deepseek-chat' }
     })
 
-    expect(created).toMatchObject({ name: 'Fallback Role', defaultToolIds: ['filesystem.read-file'] })
+    expect(created).toMatchObject({
+      name: 'Fallback Role',
+      defaultToolIds: ['filesystem.read-file'],
+      defaultModelId: 'deepseek-chat',
+      defaultModelRef: { providerId: 'deepseek', modelId: 'deepseek-chat' }
+    })
     expect(await api.roles.list()).toEqual([created])
 
     const updated = await api.roles.update({ id: created.id, name: 'Updated Fallback Role' })
@@ -47,12 +77,51 @@ describe('ipc-client fallback', () => {
       name: 'Updated Fallback Role',
       description: 'Created locally',
       systemPrompt: 'Fallback prompt',
-      defaultToolIds: ['filesystem.read-file']
+      defaultToolIds: ['filesystem.read-file'],
+      defaultModelId: 'deepseek-chat',
+      defaultModelRef: { providerId: 'deepseek', modelId: 'deepseek-chat' }
     })
     expect(await api.roles.list()).toEqual([updated])
 
     await expect(api.roles.delete(created.id)).resolves.toEqual({ deleted: true, id: created.id })
     expect(await api.roles.list()).toEqual([])
+  })
+
+  it('clears default model fields in fallback mode', async () => {
+    const api = createHesperApi({ allowFallback: true })
+
+    const created = await api.roles.create({
+      name: 'Fallback Role',
+      defaultModelId: 'gpt-4o',
+      defaultModelRef: { providerId: 'openai', modelId: 'gpt-4o' }
+    })
+
+    const updated = await api.roles.update({ id: created.id, defaultModelId: '' })
+
+    expect(updated.defaultModelId).toBe('')
+    expect(updated.defaultModelRef).toBeUndefined()
+    expect(await api.roles.list()).toEqual([updated])
+  })
+
+  it('does not change fallback role default model when only default model ref is provided', async () => {
+    const api = createHesperApi({ allowFallback: true })
+
+    const created = await api.roles.create({
+      name: 'Fallback Role',
+      defaultModelId: 'gpt-4o',
+      defaultModelRef: { providerId: 'openai', modelId: 'gpt-4o' }
+    })
+
+    const updated = await api.roles.update({
+      id: created.id,
+      defaultModelRef: { providerId: 'deepseek', modelId: 'deepseek-chat' }
+    })
+
+    expect(updated).toMatchObject({
+      defaultModelId: 'gpt-4o',
+      defaultModelRef: { providerId: 'openai', modelId: 'gpt-4o' }
+    })
+    expect(await api.roles.list()).toEqual([updated])
   })
 
   it('trims role names in fallback mode', async () => {

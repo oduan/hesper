@@ -795,7 +795,9 @@ function AppContent() {
         name: role.name,
         description: role.description,
         systemPrompt: role.systemPrompt,
-        defaultToolIds: role.defaultToolIds
+        defaultToolIds: role.defaultToolIds,
+        defaultModelId: role.defaultModelId,
+        ...(role.defaultModelRef ? { defaultModelRef: { ...role.defaultModelRef } } : {})
       })
       const result = await loadRoles()
       if (result.applied && !('error' in result)) {
@@ -811,23 +813,79 @@ function AppContent() {
     }
   }
 
-  const deleteRole = async (roleId: string) => {
+  const normalizeRoleActionIds = (roleId: string, roleIds?: string[]): string[] => {
+    const requestedIds = roleIds?.length ? roleIds : [roleId]
+    const requestedIdSet = new Set(requestedIds)
+    const orderedIds = roles.flatMap((role) => requestedIdSet.has(role.id) ? [role.id] : [])
+    return orderedIds.length > 0 ? orderedIds : [roleId]
+  }
+
+  const confirmRoleDeletion = (roleIds: string[]): boolean => {
+    if (roleIds.length === 1) {
+      const roleName = roles.find((role) => role.id === roleIds[0])?.name ?? roleIds[0]
+      return window.confirm(`确定要删除角色“${roleName}”吗？`)
+    }
+
+    return window.confirm(`确定要删除选中的 ${roleIds.length} 个角色吗？`)
+  }
+
+  const resolveActiveRoleIdAfterDelete = (nextRoles: ManagedRoleDto[], deletedRoleIdSet: Set<string>, previousActiveRoleId?: string) => (
+    previousActiveRoleId && !deletedRoleIdSet.has(previousActiveRoleId) && nextRoles.some((role) => role.id === previousActiveRoleId)
+      ? previousActiveRoleId
+      : nextRoles[0]?.id
+  )
+
+  const deleteRoleIds = async (roleIds: string[]) => {
+    if (roleIds.length === 0) return
+
+    const successfullyDeletedIds: string[] = []
+    const previousActiveRoleId = activeRoleId
+    const applyDeletedRoleState = (nextRoles: ManagedRoleDto[], deletedRoleIdSet: Set<string>) => {
+      setRoles(nextRoles)
+      setActiveRoleId(resolveActiveRoleIdAfterDelete(nextRoles, deletedRoleIdSet, previousActiveRoleId))
+    }
+
     setRolesPending(true)
     invalidateRolesRequests()
     setRolesError(undefined)
     try {
-      await hesperApi.roles.delete(roleId)
+      for (const roleId of roleIds) {
+        await hesperApi.roles.delete(roleId)
+        successfullyDeletedIds.push(roleId)
+      }
+      const deletedRoleIdSet = new Set(successfullyDeletedIds)
       const result = await loadRoles()
       const nextRoles = result.applied && !('error' in result)
         ? result.loadedRoles
-        : roles.filter((role) => role.id !== roleId)
-      setRoles(nextRoles)
-      setActiveRoleId(nextRoles[0]?.id)
+        : roles.filter((role) => !deletedRoleIdSet.has(role.id))
+      applyDeletedRoleState(nextRoles, deletedRoleIdSet)
     } catch (error) {
-      setRolesError(error instanceof Error ? error.message : '未知角色删除错误')
+      const message = error instanceof Error ? error.message : '未知角色删除错误'
+      const deletedRoleIdSet = new Set(successfullyDeletedIds)
+      setRolesError(message)
+
+      const result = await loadRoles()
+      const nextRoles = result.applied && !('error' in result)
+        ? result.loadedRoles
+        : roles.filter((role) => !deletedRoleIdSet.has(role.id))
+      applyDeletedRoleState(nextRoles, deletedRoleIdSet)
+      setRolesError(message)
     } finally {
       setRolesPending(false)
     }
+  }
+
+  const deleteRole = async (roleId: string) => {
+    await deleteRoleIds(normalizeRoleActionIds(roleId, [roleId]))
+  }
+
+  const deleteRoles = async (roleId: string, roleIds?: string[]) => {
+    if (rolesLoading || rolesPending) return
+
+    const targetRoleIds = normalizeRoleActionIds(roleId, roleIds)
+    if (!confirmRoleDeletion(targetRoleIds)) return
+
+    await deleteRoleIds(targetRoleIds)
   }
 
   const updateToolEnabled = async (toolId: string, enabled: boolean) => {
@@ -1106,6 +1164,7 @@ function AppContent() {
       tools={tools}
       pendingToolIds={pendingToolIdList}
       roles={roles.map((role) => ({ id: role.id, name: role.name, description: role.description }))}
+      roleSelectionDisabled={rolesLoading || rolesPending}
       {...(activeTool ? { activeToolId: activeTool.id } : {})}
       {...(activeRoleId ? { activeRoleId } : {})}
       {...(state.activeSessionId ? { activeSessionId: state.activeSessionId } : {})}
@@ -1136,6 +1195,9 @@ function AppContent() {
       onDeleteSession={(sessionId, sessionIds) => {
         void deleteSessions(sessionId, sessionIds)
       }}
+      onDeleteRole={(roleId, roleIds) => {
+        void deleteRoles(roleId, roleIds)
+      }}
       onWindowMinimize={() => hesperApi.window.minimize()}
       onWindowToggleMaximize={() => hesperApi.window.toggleMaximize()}
       onWindowClose={() => hesperApi.window.close()}
@@ -1164,6 +1226,8 @@ function AppContent() {
             roles={roles}
             {...(activeRole ? { selectedRole: activeRole } : {})}
             tools={tools}
+            modelOptions={sessionModelCatalog.options}
+            modelOptionGroups={sessionModelCatalog.optionGroups}
             pending={rolesPending || rolesLoading}
             loading={rolesLoading}
             {...(rolesError ? { error: rolesError } : {})}

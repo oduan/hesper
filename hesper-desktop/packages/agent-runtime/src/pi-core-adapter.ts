@@ -74,7 +74,11 @@ export class PiCoreAgentAdapter implements AgentAdapter {
       throw { code: 'unknown', message: 'Run was aborted before model resolution started.', retryable: false }
     }
 
-    const resolved = await this.modelResolver.resolve({ modelId: input.modelId })
+    const resolved = await this.modelResolver.resolve(
+      input.modelRef
+        ? { providerId: input.modelRef.providerId, modelId: input.modelRef.modelId }
+        : { modelId: input.modelId }
+    )
 
     if (input.signal.aborted) {
       throw { code: 'unknown', message: 'Run was aborted before the pi core agent started.', retryable: false }

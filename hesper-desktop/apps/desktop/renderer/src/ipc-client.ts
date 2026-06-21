@@ -50,8 +50,8 @@ const fallbackBuiltinTools: ToolDto[] = [
   { id: 'web.search', name: 'Web Search', description: 'Search the web with TinyFish Search API. Requires a saved TinyFish API key.', category: 'web', icon: '🌐', requiresApiKey: true, hasApiKey: false, inputSchema: { type: 'object', required: ['query'], properties: { query: { type: 'string' } } }, enabled: false },
   { id: 'roles.list', name: 'List Roles', description: 'List all user-defined roles with their id, name, description, full prompt, and default tools.', category: 'agent', icon: '🎭', inputSchema: { type: 'object', properties: {} }, enabled: true },
   { id: 'roles.find', name: 'Find Roles', description: 'Fuzzy search user-defined roles by id, name, description, prompt text, or default tool IDs.', category: 'agent', icon: '🎭', inputSchema: { type: 'object', required: ['query'], properties: { query: { type: 'string' }, limit: { type: 'number' } } }, enabled: true },
-  { id: 'roles.create', name: 'Create Role', description: 'Create a user-defined role with a name, description, full prompt, and default tools.', category: 'agent', icon: '🎭', inputSchema: { type: 'object', required: ['name'], properties: { name: { type: 'string' }, description: { type: 'string' }, systemPrompt: { type: 'string' }, defaultToolIds: { type: 'array', items: { type: 'string' } } } }, enabled: true },
-  { id: 'roles.update', name: 'Update Role', description: 'Update an existing user-defined role. This tool cannot delete roles.', category: 'agent', icon: '🎭', inputSchema: { type: 'object', required: ['id'], properties: { id: { type: 'string' }, name: { type: 'string' }, description: { type: 'string' }, systemPrompt: { type: 'string' }, defaultToolIds: { type: 'array', items: { type: 'string' } } } }, enabled: true },
+  { id: 'roles.create', name: 'Create Role', description: 'Create a user-defined role with a name, description, full prompt, and default tools.', category: 'agent', icon: '🎭', inputSchema: { type: 'object', required: ['name'], properties: { name: { type: 'string' }, description: { type: 'string' }, systemPrompt: { type: 'string' }, defaultToolIds: { type: 'array', items: { type: 'string' } }, defaultModelId: { type: 'string', description: 'Default model id for this role. Empty string means inherit the caller/parent model.' }, defaultModelRef: { type: 'object', required: ['providerId', 'modelId'], description: 'Provider-aware model reference. Only used with a non-empty defaultModelId whose value matches defaultModelRef.modelId.', properties: { providerId: { type: 'string' }, modelId: { type: 'string' } } } } }, enabled: true },
+  { id: 'roles.update', name: 'Update Role', description: 'Update an existing user-defined role. This tool cannot delete roles.', category: 'agent', icon: '🎭', inputSchema: { type: 'object', required: ['id'], properties: { id: { type: 'string' }, name: { type: 'string' }, description: { type: 'string' }, systemPrompt: { type: 'string' }, defaultToolIds: { type: 'array', items: { type: 'string' }, }, defaultModelId: { type: 'string', description: 'Default model id for this role. Empty string means inherit the caller/parent model.' }, defaultModelRef: { type: 'object', required: ['providerId', 'modelId'], description: 'Provider-aware model reference. Only used with a non-empty defaultModelId whose value matches defaultModelRef.modelId.', properties: { providerId: { type: 'string' }, modelId: { type: 'string' } } } } }, enabled: true },
   { id: 'ssh.list-servers', name: 'List SSH Servers', description: 'List SSH servers configured for agent use. Sensitive connection details such as hostnames, usernames, and credentials are not returned.', category: 'system', icon: '🔐', inputSchema: { type: 'object', properties: {} }, enabled: true },
   { id: 'ssh.run-commands', name: 'Run SSH Commands', description: 'Run one or more shell commands on a configured SSH server using stored credentials. Commands run sequentially and may stop after the first failure.', category: 'system', icon: '🔐', inputSchema: { type: 'object', required: ['serverId', 'commands'], properties: { serverId: { type: 'string', description: 'SSH server id returned by ssh.list-servers.' }, commands: { type: 'array', items: { type: 'string' }, description: 'Shell commands to run sequentially on the selected SSH server.' }, stopOnError: { type: 'boolean', description: 'When true, skip remaining commands after the first failed command. Defaults to true.' }, timeoutMs: { type: 'number', description: 'Whole execution timeout in milliseconds. Defaults to 0, which means no timeout.' }, wait: { type: 'boolean', description: 'When true, wait for command execution to finish before returning. Defaults to true.' } } }, enabled: true },
   { id: 'ssh.list-executions', name: 'List SSH Executions', description: 'List SSH command executions for the current session, optionally filtered by status.', category: 'system', icon: '🔐', inputSchema: { type: 'object', properties: { status: { type: 'string', description: 'Optional execution status filter: queued, running, succeeded, failed, or cancelled.' } } }, enabled: true },
@@ -105,7 +105,13 @@ export function createFallbackHesperApi(): HesperDesktopApi {
     sessions = [updated, ...sessions.filter((session) => session.id !== id)]
     return updated
   }
-  const cloneRole = (role: ManagedRoleDto): ManagedRoleDto => ({ ...role, defaultToolIds: [...role.defaultToolIds] })
+  const cloneModelRef = (modelRef: ManagedRoleDto['defaultModelRef']): ManagedRoleDto['defaultModelRef'] => modelRef ? { ...modelRef } : undefined
+  const cloneRole = (role: ManagedRoleDto): ManagedRoleDto => ({
+    ...role,
+    defaultToolIds: [...role.defaultToolIds],
+    defaultModelId: role.defaultModelId ?? role.defaultModelRef?.modelId ?? '',
+    ...(role.defaultModelRef ? { defaultModelRef: cloneModelRef(role.defaultModelRef) } : {})
+  })
   const normalizeRoleName = (name: string): string => {
     const trimmed = name.trim()
     if (!trimmed) {
@@ -424,12 +430,15 @@ export function createFallbackHesperApi(): HesperDesktopApi {
     roles: {
       list: async () => roles.map(cloneRole),
       create: async (input) => {
+        const defaultModelId = input.defaultModelId?.trim() ?? ''
         const role: ManagedRoleDto = {
           id: createId('role'),
           name: normalizeRoleName(input.name),
           description: normalizeRoleText(input.description),
           systemPrompt: normalizeRoleText(input.systemPrompt),
-          defaultToolIds: validateRoleToolIds(input.defaultToolIds)
+          defaultToolIds: validateRoleToolIds(input.defaultToolIds),
+          defaultModelId,
+          ...(defaultModelId && input.defaultModelRef ? { defaultModelRef: cloneModelRef(input.defaultModelRef) } : {})
         }
         roles = [...roles, role]
         return cloneRole(role)
@@ -439,6 +448,9 @@ export function createFallbackHesperApi(): HesperDesktopApi {
         if (!existing) {
           throw new Error(`Role not found: ${input.id}`)
         }
+
+        const defaultModelId = input.defaultModelId?.trim()
+        const currentDefaultModelId = existing.defaultModelId ?? existing.defaultModelRef?.modelId ?? ''
         const updated: ManagedRoleDto = {
           ...existing,
           ...(input.name !== undefined ? { name: normalizeRoleName(input.name) } : {}),
@@ -446,6 +458,19 @@ export function createFallbackHesperApi(): HesperDesktopApi {
           ...(input.systemPrompt !== undefined ? { systemPrompt: normalizeRoleText(input.systemPrompt) } : {}),
           ...(input.defaultToolIds !== undefined ? { defaultToolIds: validateRoleToolIds(input.defaultToolIds) } : {})
         }
+
+        if (defaultModelId === '') {
+          updated.defaultModelId = ''
+          delete updated.defaultModelRef
+        } else if (defaultModelId !== undefined) {
+          updated.defaultModelId = defaultModelId
+          if (input.defaultModelRef !== undefined) {
+            updated.defaultModelRef = cloneModelRef(input.defaultModelRef)
+          } else if (currentDefaultModelId !== defaultModelId && updated.defaultModelRef !== undefined) {
+            delete updated.defaultModelRef
+          }
+        }
+
         roles = roles.map((role) => role.id === updated.id ? updated : role)
         return cloneRole(updated)
       },

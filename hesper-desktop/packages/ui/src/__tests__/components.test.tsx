@@ -244,6 +244,255 @@ describe('ui components', () => {
     expect(onSelectRole).toHaveBeenCalledWith('role-fallback')
   })
 
+  it('supports shift range selection for roles and keeps the last clicked role active', async () => {
+    const user = userEvent.setup()
+    const onSelectRole = vi.fn()
+    const roles = [
+      { id: 'role-1', name: '角色一', description: '第一位' },
+      { id: 'role-2', name: '角色二', description: '第二位' },
+      { id: 'role-3', name: '角色三', description: '第三位' },
+      { id: 'role-4', name: '角色四', description: '第四位' }
+    ]
+
+    render(
+      <AppShell
+        sessions={[]}
+        activeSection="roles"
+        title="角色"
+        roles={roles}
+        activeRoleId="role-1"
+        onSelectRole={onSelectRole}
+      >
+        <div>Role detail</div>
+      </AppShell>
+    )
+
+    const firstRow = screen.getByRole('button', { name: /角色一/ })
+    const secondRow = screen.getByRole('button', { name: /角色二/ })
+    const thirdRow = screen.getByRole('button', { name: /角色三/ })
+    const fourthRow = screen.getByRole('button', { name: /角色四/ })
+
+    await user.click(firstRow)
+    fireEvent.click(thirdRow, { shiftKey: true })
+
+    expect(onSelectRole).toHaveBeenLastCalledWith('role-3')
+    for (const row of [firstRow, secondRow, thirdRow]) {
+      expect(row).toHaveClass('is-selected')
+      expect(row).toHaveAttribute('aria-selected', 'true')
+    }
+    expect(fourthRow).not.toHaveClass('is-selected')
+    expect(fourthRow).not.toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('deletes the selected role range from the role context menu', async () => {
+    const user = userEvent.setup()
+    const onDeleteRole = vi.fn()
+    const roles = [
+      { id: 'role-1', name: '角色一', description: '第一位' },
+      { id: 'role-2', name: '角色二', description: '第二位' },
+      { id: 'role-3', name: '角色三', description: '第三位' },
+      { id: 'role-4', name: '角色四', description: '第四位' }
+    ]
+
+    render(
+      <AppShell
+        sessions={[]}
+        activeSection="roles"
+        title="角色"
+        roles={roles}
+        activeRoleId="role-1"
+        onDeleteRole={onDeleteRole}
+      >
+        <div>Role detail</div>
+      </AppShell>
+    )
+
+    const firstRow = screen.getByRole('button', { name: /角色一/ })
+    const secondRow = screen.getByRole('button', { name: /角色二/ })
+    const thirdRow = screen.getByRole('button', { name: /角色三/ })
+
+    await user.click(firstRow)
+    fireEvent.click(thirdRow, { shiftKey: true })
+    fireEvent.contextMenu(secondRow)
+
+    const menu = screen.getByRole('menu', { name: '角色操作' })
+    await user.click(within(menu).getByRole('menuitem', { name: '删除' }))
+
+    expect(onDeleteRole).toHaveBeenCalledWith('role-2', ['role-1', 'role-2', 'role-3'])
+  })
+
+  it('context-selects an unselected role before deleting only that role', async () => {
+    const user = userEvent.setup()
+    const onDeleteRole = vi.fn()
+    const roles = [
+      { id: 'role-1', name: '角色一', description: '第一位' },
+      { id: 'role-2', name: '角色二', description: '第二位' },
+      { id: 'role-3', name: '角色三', description: '第三位' }
+    ]
+
+    render(
+      <AppShell
+        sessions={[]}
+        activeSection="roles"
+        title="角色"
+        roles={roles}
+        activeRoleId="role-1"
+        onDeleteRole={onDeleteRole}
+      >
+        <div>Role detail</div>
+      </AppShell>
+    )
+
+    const firstRow = screen.getByRole('button', { name: /角色一/ })
+    const secondRow = screen.getByRole('button', { name: /角色二/ })
+    const thirdRow = screen.getByRole('button', { name: /角色三/ })
+
+    await user.click(firstRow)
+    fireEvent.click(secondRow, { shiftKey: true })
+    fireEvent.contextMenu(thirdRow)
+
+    expect(firstRow).not.toHaveClass('is-selected')
+    expect(secondRow).not.toHaveClass('is-selected')
+    expect(thirdRow).toHaveClass('is-selected')
+    expect(thirdRow).toHaveAttribute('aria-selected', 'true')
+
+    await user.click(within(screen.getByRole('menu', { name: '角色操作' })).getByRole('menuitem', { name: '删除' }))
+
+    expect(onDeleteRole).toHaveBeenCalledWith('role-3', ['role-3'])
+  })
+
+  it('opens the role context menu from the keyboard and focuses delete', async () => {
+    const user = userEvent.setup()
+    const onDeleteRole = vi.fn()
+    const roles = [
+      { id: 'role-1', name: '角色一', description: '第一位' },
+      { id: 'role-2', name: '角色二', description: '第二位' }
+    ]
+
+    render(
+      <AppShell
+        sessions={[]}
+        activeSection="roles"
+        title="角色"
+        roles={roles}
+        activeRoleId="role-1"
+        onDeleteRole={onDeleteRole}
+      >
+        <div>Role detail</div>
+      </AppShell>
+    )
+
+    const secondRow = screen.getByRole('button', { name: /角色二/ })
+    secondRow.focus()
+    fireEvent.keyDown(secondRow, { key: 'F10', shiftKey: true })
+
+    const menu = await screen.findByRole('menu', { name: '角色操作' })
+    const deleteItem = within(menu).getByRole('menuitem', { name: '删除' })
+    await waitFor(() => expect(deleteItem).toHaveFocus())
+
+    await user.keyboard('{Enter}')
+
+    expect(onDeleteRole).toHaveBeenCalledWith('role-2', ['role-2'])
+  })
+
+  it('keeps role selection unchanged when role interactions are disabled', async () => {
+    const user = userEvent.setup()
+    const onSelectRole = vi.fn()
+    const onDeleteRole = vi.fn()
+    const roles = [
+      { id: 'role-1', name: '角色一', description: '第一位' },
+      { id: 'role-2', name: '角色二', description: '第二位' },
+      { id: 'role-3', name: '角色三', description: '第三位' }
+    ]
+
+    const { rerender } = render(
+      <AppShell
+        sessions={[]}
+        activeSection="roles"
+        title="角色"
+        roles={roles}
+        activeRoleId="role-1"
+        onSelectRole={onSelectRole}
+        onDeleteRole={onDeleteRole}
+      >
+        <div>Role detail</div>
+      </AppShell>
+    )
+
+    const firstRow = screen.getByRole('button', { name: /角色一/ })
+    const secondRow = screen.getByRole('button', { name: /角色二/ })
+    const thirdRow = screen.getByRole('button', { name: /角色三/ })
+    await user.click(firstRow)
+    expect(firstRow).toHaveClass('is-selected')
+
+    onSelectRole.mockClear()
+    rerender(
+      <AppShell
+        sessions={[]}
+        activeSection="roles"
+        title="角色"
+        roles={roles}
+        activeRoleId="role-1"
+        roleSelectionDisabled
+        onSelectRole={onSelectRole}
+        onDeleteRole={onDeleteRole}
+      >
+        <div>Role detail</div>
+      </AppShell>
+    )
+
+    await user.click(secondRow)
+    fireEvent.click(thirdRow, { shiftKey: true })
+    fireEvent.contextMenu(secondRow)
+
+    expect(firstRow).toHaveClass('is-selected')
+    expect(secondRow).not.toHaveClass('is-selected')
+    expect(thirdRow).not.toHaveClass('is-selected')
+    expect(onSelectRole).not.toHaveBeenCalled()
+    expect(onDeleteRole).not.toHaveBeenCalled()
+    expect(screen.queryByRole('menu', { name: '角色操作' })).not.toBeInTheDocument()
+  })
+
+  it('clears role range selection on a normal role click', async () => {
+    const user = userEvent.setup()
+    const onSelectRole = vi.fn()
+    const roles = [
+      { id: 'role-1', name: '角色一', description: '第一位' },
+      { id: 'role-2', name: '角色二', description: '第二位' },
+      { id: 'role-3', name: '角色三', description: '第三位' },
+      { id: 'role-4', name: '角色四', description: '第四位' }
+    ]
+
+    render(
+      <AppShell
+        sessions={[]}
+        activeSection="roles"
+        title="角色"
+        roles={roles}
+        activeRoleId="role-1"
+        onSelectRole={onSelectRole}
+      >
+        <div>Role detail</div>
+      </AppShell>
+    )
+
+    const firstRow = screen.getByRole('button', { name: /角色一/ })
+    const secondRow = screen.getByRole('button', { name: /角色二/ })
+    const thirdRow = screen.getByRole('button', { name: /角色三/ })
+    const fourthRow = screen.getByRole('button', { name: /角色四/ })
+
+    await user.click(firstRow)
+    fireEvent.click(thirdRow, { shiftKey: true })
+    await user.click(fourthRow)
+
+    expect(onSelectRole).toHaveBeenLastCalledWith('role-4')
+    expect(firstRow).not.toHaveClass('is-selected')
+    expect(secondRow).not.toHaveClass('is-selected')
+    expect(thirdRow).not.toHaveClass('is-selected')
+    expect(fourthRow).toHaveClass('is-selected')
+    expect(fourthRow).toHaveAttribute('aria-selected', 'true')
+  })
+
   it('renders empty role list state', () => {
     render(
       <AppShell sessions={[]} activeSection="roles" title="角色" roles={[]}>

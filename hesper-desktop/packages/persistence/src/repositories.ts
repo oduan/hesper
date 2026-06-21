@@ -2,6 +2,7 @@
 import {
   agentRuntimeEventSchema,
   modelRefSchema,
+  roleSnapshotSchema,
   runErrorSchema,
   sshCommandResultSchema,
   sshExecutionSchema,
@@ -219,6 +220,11 @@ function parseOptionalModelRef(value: unknown, field: string): ModelRef | undefi
   return parsed === undefined ? undefined : modelRefSchema.parse(parsed)
 }
 
+function parseOptionalRoleSnapshot(value: unknown, field: string) {
+  const parsed = parseOptionalJson(value, field)
+  return parsed === undefined ? undefined : roleSnapshotSchema.parse(parsed)
+}
+
 function optionalString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined
 }
@@ -393,6 +399,7 @@ function toWorkerAgentInvocation(row: any): WorkerAgentInvocation {
     roleId: row.role_id,
     allowedToolIds: parseStringArrayJson(row.allowed_tool_ids_json, 'worker_agent_invocations.allowed_tool_ids_json'),
     modelRef: parseOptionalModelRef(row.model_ref_json, 'worker_agent_invocations.model_ref_json'),
+    roleSnapshot: parseOptionalRoleSnapshot(row.role_snapshot_json, 'worker_agent_invocations.role_snapshot_json'),
     expectedOutput: row.expected_output ?? undefined,
     contextSummary: row.context_summary ?? undefined,
     status: row.status,
@@ -902,7 +909,7 @@ export function createRepositories(db: Database): Persistence {
     },
     workerAgentInvocations: {
       async save(invocation) {
-        upsert('worker_agent_invocations', ['id', 'parent_run_id', 'child_run_id', 'parent_step_id', 'parent_tool_call_id', 'task', 'role_id', 'allowed_tool_ids_json', 'model_ref_json', 'expected_output', 'context_summary', 'status', 'created_at', 'last_event_at', 'completed_at', 'error_json', 'sort_seq'], [
+        upsert('worker_agent_invocations', ['id', 'parent_run_id', 'child_run_id', 'parent_step_id', 'parent_tool_call_id', 'task', 'role_id', 'allowed_tool_ids_json', 'model_ref_json', 'role_snapshot_json', 'expected_output', 'context_summary', 'status', 'created_at', 'last_event_at', 'completed_at', 'error_json', 'sort_seq'], [
           invocation.id,
           invocation.parentRunId,
           invocation.childRunId,
@@ -912,6 +919,7 @@ export function createRepositories(db: Database): Persistence {
           invocation.roleId,
           JSON.stringify(invocation.allowedToolIds),
           json(invocation.modelRef),
+          json(invocation.roleSnapshot),
           invocation.expectedOutput,
           invocation.contextSummary,
           invocation.status,

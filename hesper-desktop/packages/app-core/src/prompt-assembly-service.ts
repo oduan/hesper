@@ -173,18 +173,38 @@ function renderSkillManifest(skills: Skill[], availableToolIds?: Set<string>): s
   ].join('\n')).join('\n')
 }
 
+function renderRoleDefaultModel(role: Role): string | undefined {
+  const providerId = role.defaultModelRef?.providerId?.trim()
+  const modelId = role.defaultModelRef?.modelId?.trim()
+  if (providerId && modelId) {
+    return `default model: defaultModelRef=${sanitizeText(`${providerId}/${modelId}`)}`
+  }
+
+  const defaultModelId = role.defaultModelId?.trim()
+  if (defaultModelId) {
+    return `default model: defaultModelId=${sanitizeText(defaultModelId)}`
+  }
+
+  return undefined
+}
+
 function renderRoleManifest(roles: Role[], options: { availableToolIds?: Set<string>, enabledSkillIds?: Set<string> } = {}): string {
   if (roles.length === 0) {
     return 'No Worker Agent roles are assignable for this run.'
   }
 
-  return roles.map((role) => [
-    `- ${sanitizeText(role.id)}: ${sanitizeText(role.name)}`,
-    ...(role.description ? [`  description: ${sanitizeText(role.description)}`] : []),
-    ...(role.defaultToolIds?.length ? [`  default tools: ${renderIdList(role.defaultToolIds, options.availableToolIds)}`] : []),
-    ...(role.allowedSkillIds.length ? [`  allowed skills: ${renderIdList(role.allowedSkillIds, options.enabledSkillIds)}`] : []),
-    ...(role.workerAgentGuidance ? [`  worker agent guidance: ${sanitizeText(role.workerAgentGuidance)}`] : [])
-  ].join('\n')).join('\n')
+  return roles.map((role) => {
+    const defaultModelLine = renderRoleDefaultModel(role)
+
+    return [
+      `- ${sanitizeText(role.id)}: ${sanitizeText(role.name)}`,
+      ...(role.description ? [`  description: ${sanitizeText(role.description)}`] : []),
+      ...(defaultModelLine ? [`  ${defaultModelLine}`] : []),
+      ...(role.defaultToolIds?.length ? [`  default tools: ${renderIdList(role.defaultToolIds, options.availableToolIds)}`] : []),
+      ...(role.allowedSkillIds.length ? [`  allowed skills: ${renderIdList(role.allowedSkillIds, options.enabledSkillIds)}`] : []),
+      ...(role.workerAgentGuidance ? [`  worker agent guidance: ${sanitizeText(role.workerAgentGuidance)}`] : [])
+    ].join('\n')
+  }).join('\n')
 }
 
 function renderMainWorkerAgentRules(input: MainPromptAssemblyInput, roles: Role[], tools: ToolDefinition[]): string {
@@ -210,10 +230,15 @@ function renderMainWorkerAgentRules(input: MainPromptAssemblyInput, roles: Role[
     '- Use wait:false when spawning multiple independent Worker Agents, then call wait/get for each invocation id.',
     '- A wait timeout means the Worker Agent is still running, not failed; inspect the diagnosis before cancelling.',
     '- Worker Agent management tools default to the current parent run and must not be used across sessions.',
-    '- If a suitable roleId is not listed, call roles.list or roles.find to discover custom Worker Agent roles before spawning.',
+    '- Prefer an existing listed roleId when it fits; if a suitable roleId is not listed, call roles.list or roles.find to discover custom Worker Agent roles before spawning.',
+    '- If no suitable existing role fits a single run, pass temporaryRole directly to agent.spawn-worker-agent instead of creating a role.',
+    '- Do not call roles.create for one-off Worker Agent tasks; temporaryRole is not saved to the role library and the invocation stores a roleSnapshot for tracing.',
+    '- Only call roles.create when the user explicitly wants a reusable role.',
+    '- If a Worker Agent needs a specific model, first use models.list-available to get a provider-aware modelRef when that tool is available.',
+    '- Model priority is explicit spawn modelRef/modelId, then temporaryRole.defaultModelRef, temporaryRole.defaultModelId, existing role defaults, then the parent run model.',
     '- Use a Worker Agent only for independent research, review, long-context analysis, or parallelizable work.',
     '- Do not use a Worker Agent for simple one-step tasks or when user confirmation is required.',
-    '- Every Worker Agent call must include task, roleId, allowedToolIds, and expectedOutput.',
+    '- Every Worker Agent call must include task, allowedToolIds, expectedOutput, and exactly one of roleId or temporaryRole.',
     '- allowedToolIds must be a subset of the tools listed in this prompt.',
     `- Assignable roleIds: ${roles.length ? roles.map((role) => sanitizeText(role.id)).join(', ') : 'none'}`,
     '- Worker Agent results must be summarized back to the parent agent before final response.'

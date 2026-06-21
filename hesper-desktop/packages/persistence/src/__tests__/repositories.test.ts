@@ -134,6 +134,70 @@ VALUES ('legacy-run', 'legacy-session', NULL, 'queued', 'mock/hesper-fast', NULL
   return db.export()
 }
 
+async function createLegacyWorkerAgentInvocationDatabaseBytes(): Promise<Uint8Array> {
+  const SQL = await initSqlJs()
+  const db = new SQL.Database()
+  db.run(`
+CREATE TABLE worker_agent_invocations (
+  id TEXT PRIMARY KEY,
+  parent_run_id TEXT NOT NULL,
+  child_run_id TEXT,
+  parent_step_id TEXT,
+  parent_tool_call_id TEXT,
+  task TEXT NOT NULL,
+  role_id TEXT NOT NULL,
+  allowed_tool_ids_json TEXT NOT NULL,
+  model_ref_json TEXT,
+  expected_output TEXT,
+  context_summary TEXT,
+  status TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  last_event_at TEXT,
+  completed_at TEXT,
+  error_json TEXT,
+  sort_seq INTEGER NOT NULL
+);
+INSERT INTO worker_agent_invocations (
+  id,
+  parent_run_id,
+  child_run_id,
+  parent_step_id,
+  parent_tool_call_id,
+  task,
+  role_id,
+  allowed_tool_ids_json,
+  model_ref_json,
+  expected_output,
+  context_summary,
+  status,
+  created_at,
+  last_event_at,
+  completed_at,
+  error_json,
+  sort_seq
+) VALUES (
+  'legacy-worker-agent',
+  'legacy-parent-run',
+  'legacy-child-run',
+  'step-legacy-parent-tool-1',
+  'tool-1',
+  'Review the staged diff.',
+  'reviewer',
+  '["filesystem.read-file"]',
+  '{"providerId":"provider-deepseek","modelId":"deepseek-chat"}',
+  'PASS or NEEDS_CHANGES.',
+  'Legacy invocation created before snapshots existed.',
+  'running',
+  '${now}',
+  '${now}',
+  NULL,
+  NULL,
+  1
+);
+`)
+  return db.export()
+}
+
 describe('persistence repositories', () => {
   it('creates and lists sessions by latest update without deleted sessions', async () => {
     const db = await createInMemoryPersistence()
@@ -446,6 +510,57 @@ describe('persistence repositories', () => {
     await expect(db.messages.listByRun('run-child')).resolves.toEqual([
       expect.objectContaining({ id: 'message-child', content: 'Worker result' })
     ])
+  })
+
+  it('round-trips Worker Agent invocation role snapshots through persistence', async () => {
+    const db = await createInMemoryPersistence()
+    await db.workerAgentInvocations.save({
+      id: 'worker-agent-role-snapshot',
+      parentRunId: 'run-parent',
+      task: 'Review the staged diff.',
+      roleId: 'reviewer',
+      allowedToolIds: ['filesystem.read-file', 'git.status'],
+      roleSnapshot: {
+        id: 'reviewer',
+        name: 'Reviewer',
+        description: 'Reviews code for correctness.',
+        systemPrompt: 'Review carefully.',
+        defaultToolIds: ['filesystem.read-file'],
+        defaultModelId: 'deepseek-chat',
+        defaultModelRef: { providerId: 'provider-deepseek', modelId: 'deepseek-chat' }
+      },
+      status: 'running',
+      createdAt: now
+    })
+
+    await expect(db.workerAgentInvocations.get('worker-agent-role-snapshot')).resolves.toMatchObject({
+      roleSnapshot: {
+        id: 'reviewer',
+        name: 'Reviewer',
+        defaultModelRef: { providerId: 'provider-deepseek', modelId: 'deepseek-chat' }
+      }
+    })
+  })
+
+  it('keeps legacy Worker Agent invocations readable without role snapshots', async () => {
+    const tempFile = path.join(os.tmpdir(), `hesper-legacy-worker-agent-${Date.now()}.sqlite`)
+    fs.writeFileSync(tempFile, await createLegacyWorkerAgentInvocationDatabaseBytes())
+
+    try {
+      const migrated = await createFilePersistence(tempFile)
+      const invocation = await migrated.workerAgentInvocations.get('legacy-worker-agent')
+
+      expect(invocation).toMatchObject({
+        id: 'legacy-worker-agent',
+        parentRunId: 'legacy-parent-run',
+        childRunId: 'legacy-child-run',
+        roleId: 'reviewer',
+        allowedToolIds: ['filesystem.read-file']
+      })
+      expect(invocation?.roleSnapshot).toBeUndefined()
+    } finally {
+      fs.rmSync(tempFile, { force: true })
+    }
   })
 
   it('keeps messages with missing runs visible in session history', async () => {

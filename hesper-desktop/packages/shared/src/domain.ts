@@ -145,6 +145,11 @@ export type Role = {
   workerAgentGuidance?: string
 }
 
+export type WorkerAgentRoleSnapshot = Pick<
+  Role,
+  'id' | 'name' | 'description' | 'systemPrompt' | 'defaultToolIds' | 'defaultModelId' | 'defaultModelRef'
+>
+
 export type ToolDefinition = {
   id: string
   name: string
@@ -177,6 +182,7 @@ export type WorkerAgentInvocation = {
   roleId: string
   allowedToolIds: string[]
   modelRef?: ModelRef
+  roleSnapshot?: WorkerAgentRoleSnapshot
   expectedOutput?: string
   contextSummary?: string
   status: WorkerAgentInvocationStatus

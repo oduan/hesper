@@ -18,7 +18,7 @@ import {
   type ProviderOAuthGateway
 } from '@hesper/app-core'
 import type { Persistence } from '@hesper/persistence'
-import type { Role, SshExecutionStatus } from '@hesper/shared'
+import type { ModelConfig, ModelProviderConfig, Role, SshExecutionStatus } from '@hesper/shared'
 import { Notification } from 'electron'
 import { createAllowlistPermissionPolicy, createBuiltinToolDefinitions, createBuiltinToolExecutor, createToolRunner } from '@hesper/tools'
 
@@ -45,6 +45,125 @@ function optionalBooleanArg(input: Record<string, unknown>, key: string): boolea
   if (value === undefined) return undefined
   if (typeof value !== 'boolean') throw new Error(`Tool argument must be a boolean: ${key}`)
   return value
+}
+
+type ModelCredentialStatus = 'ready' | 'needs_api_key' | 'needs_oauth' | 'disabled'
+
+type AvailableModelCatalogModel = {
+  id: string
+  providerId: string
+  modelName: string
+  displayName: string
+  capabilities: ModelConfig['capabilities']
+  contextWindow?: number
+  enabled: boolean
+  readyForRuntime: boolean
+  modelRef: { providerId: string; modelId: string }
+}
+
+type AvailableModelCatalogProvider = {
+  id: string
+  name: string
+  kind: ModelProviderConfig['kind']
+  authType?: ModelProviderConfig['authType']
+  enabled: boolean
+  hasApiKey: boolean
+  credentialStatus: ModelCredentialStatus
+  defaultModelId?: string
+  models: AvailableModelCatalogModel[]
+}
+
+type AvailableModelCatalog = {
+  providers: AvailableModelCatalogProvider[]
+}
+
+function isCodexOAuthProvider(provider: ModelProviderConfig): boolean {
+  return provider.kind === 'pi' && provider.authType === 'oauth' && provider.piAuthProvider === 'openai-codex'
+}
+
+function accessTokenFromCodexOAuthCredential(rawCredential: string | undefined, nowMs = Date.now()): string | undefined {
+  const trimmed = rawCredential?.trim()
+  if (!trimmed) return undefined
+  try {
+    const parsed = JSON.parse(trimmed) as unknown
+    if (typeof parsed !== 'object' || parsed === null || (parsed as { type?: unknown }).type !== 'codex_oauth') {
+      return undefined
+    }
+    const expiresAt = (parsed as { expiresAt?: unknown }).expiresAt
+    if (typeof expiresAt === 'number' && Number.isFinite(expiresAt) && expiresAt <= nowMs) {
+      return undefined
+    }
+    const accessToken = (parsed as { accessToken?: unknown }).accessToken
+    return typeof accessToken === 'string' && accessToken.trim() ? accessToken.trim() : undefined
+  } catch {
+    return trimmed
+  }
+}
+
+function hasUsableCredential(provider: ModelProviderConfig, rawCredential: string | undefined): boolean {
+  if (provider.kind === 'mock') return true
+  if (isCodexOAuthProvider(provider)) {
+    return accessTokenFromCodexOAuthCredential(rawCredential) !== undefined
+  }
+  return Boolean(rawCredential?.trim())
+}
+
+function providerCredentialStatus(provider: ModelProviderConfig, rawCredential: string | undefined): ModelCredentialStatus {
+  if (!provider.enabled) return 'disabled'
+  if (hasUsableCredential(provider, rawCredential)) return 'ready'
+  if (provider.authType === 'oauth') return 'needs_oauth'
+  return 'needs_api_key'
+}
+
+function hasRuntimeBaseUrl(provider: ModelProviderConfig): boolean {
+  return Boolean(provider.baseUrl?.trim())
+}
+
+function hasSupportedPiAuthProvider(provider: ModelProviderConfig): boolean {
+  return provider.piAuthProvider === 'openai-codex'
+}
+
+function modelReadyForRuntime(provider: ModelProviderConfig, model: ModelConfig, credentialStatus: ModelCredentialStatus): boolean {
+  if (!provider.enabled || model.enabled === false) return false
+  if (credentialStatus !== 'ready') return false
+  if (provider.kind === 'custom' || provider.kind === 'openai-compatible') return hasRuntimeBaseUrl(provider)
+  if (provider.kind === 'pi') return hasSupportedPiAuthProvider(provider)
+  if (provider.kind === 'mock' || provider.kind === 'openai' || provider.kind === 'deepseek' || provider.kind === 'anthropic') return true
+  return false
+}
+
+function createAvailableModelCatalog(providers: ModelProviderConfig[], models: ModelConfig[], credentialsByProviderId: ReadonlyMap<string, string | undefined>): AvailableModelCatalog {
+  return {
+    providers: providers.map((provider) => {
+      const credentialStatus = providerCredentialStatus(provider, credentialsByProviderId.get(provider.id))
+      return {
+        id: provider.id,
+        name: provider.name,
+        kind: provider.kind,
+        ...(provider.authType !== undefined ? { authType: provider.authType } : {}),
+        enabled: provider.enabled,
+        hasApiKey: provider.hasApiKey === true,
+        credentialStatus,
+        ...(provider.defaultModelId !== undefined ? { defaultModelId: provider.defaultModelId } : {}),
+        models: models
+          .filter((model) => model.providerId === provider.id)
+          .map((model) => {
+            const enabled = model.enabled !== false
+            return {
+              id: model.id,
+              providerId: model.providerId,
+              modelName: model.modelName,
+              displayName: model.displayName,
+              capabilities: model.capabilities,
+              ...(model.contextWindow !== undefined ? { contextWindow: model.contextWindow } : {}),
+              enabled,
+              readyForRuntime: modelReadyForRuntime(provider, model, credentialStatus),
+              modelRef: { providerId: provider.id, modelId: model.id }
+            }
+          })
+      }
+    })
+  }
 }
 
 export function createServiceContainer(options: ServiceContainerOptions) {
@@ -145,6 +264,20 @@ export function createServiceContainer(options: ServiceContainerOptions) {
           sessionId: context.sessionId,
           executionId: input.executionId as string
         })
+      },
+      modelTools: {
+        listAvailableModels: async () => {
+          await modelProviderService.ensureBuiltinProviders()
+          const [providers, models] = await Promise.all([
+            modelProviderService.listProviders(),
+            modelProviderService.listModels()
+          ])
+          const credentialEntries = await Promise.all(providers.map(async (provider) => [
+            provider.id,
+            await credentialVaultService.readProviderApiKey(provider.id)
+          ] as const))
+          return createAvailableModelCatalog(providers, models, new Map(credentialEntries))
+        }
       }
     })
   })

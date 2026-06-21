@@ -6,13 +6,15 @@ import {
   type AgentRun,
   type AgentRuntimeEvent,
   type Message,
+  type ModelRef,
   type Role,
   type RunError,
   type RunStep,
   type Session,
   type Skill,
   type ToolDefinition,
-  type WorkerAgentInvocation
+  type WorkerAgentInvocation,
+  type WorkerAgentRoleSnapshot
 } from '@hesper/shared'
 import type { ToolExecutionContext } from '@hesper/tools'
 import type { AgentAdapter } from './adapters'
@@ -37,10 +39,22 @@ const WORKER_AGENT_STATUSES = new Set<WorkerAgentInvocation['status']>([
   'cancelled'
 ])
 
+export type TemporaryWorkerRoleInput = {
+  name: string
+  description?: string
+  systemPrompt: string
+  defaultToolIds?: string[]
+  defaultModelRef?: ModelRef
+  defaultModelId?: string
+}
+
 export type SpawnWorkerAgentInput = {
   task: string
-  roleId: string
+  roleId?: string
+  temporaryRole?: TemporaryWorkerRoleInput
   allowedToolIds: string[]
+  modelRef?: ModelRef
+  modelId?: string
   expectedOutput?: string
   contextSummary?: string
   wait?: boolean
@@ -190,11 +204,109 @@ function ensureStringArray(value: unknown, key: string): string[] {
   return value
 }
 
+function ensureOptionalString(value: unknown, key: string): string | undefined {
+  if (value === undefined) return undefined
+  if (typeof value !== 'string' || value.trim() === '') throw new Error(`Worker Agent argument must be a non-empty string: ${key}`)
+  return value.trim()
+}
+
+function ensureOptionalModelRef(value: unknown, key: string): ModelRef | undefined {
+  if (value === undefined) return undefined
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`Worker Agent argument must be an object: ${key}`)
+  }
+
+  const modelRef = value as Record<string, unknown>
+  if (typeof modelRef.providerId !== 'string' || modelRef.providerId.trim() === '') {
+    throw new Error(`Worker Agent argument ${key}.providerId must be a non-empty string`)
+  }
+  if (typeof modelRef.modelId !== 'string' || modelRef.modelId.trim() === '') {
+    throw new Error(`Worker Agent argument ${key}.modelId must be a non-empty string`)
+  }
+
+  return { providerId: modelRef.providerId.trim(), modelId: modelRef.modelId.trim() }
+}
+
+function cloneModelRef(modelRef: ModelRef): ModelRef {
+  return { providerId: modelRef.providerId, modelId: modelRef.modelId }
+}
+
+function createTemporaryWorkerRole(input: TemporaryWorkerRoleInput, invocationId: string): Role {
+  return {
+    id: `temporary:${invocationId}`,
+    name: input.name,
+    ...(input.description !== undefined ? { description: input.description } : {}),
+    ...(input.defaultModelId !== undefined ? { defaultModelId: input.defaultModelId } : {}),
+    ...(input.defaultModelRef !== undefined ? { defaultModelRef: cloneModelRef(input.defaultModelRef) } : {}),
+    systemPrompt: input.systemPrompt,
+    allowedSkillIds: [],
+    ...(input.defaultToolIds !== undefined ? { defaultToolIds: [...input.defaultToolIds] } : {}),
+    canBeMainAgent: false,
+    canBeWorkerAgent: true,
+    canBeAssignedToWorkerAgent: true
+  }
+}
+
+function createRoleSnapshot(role: Role): WorkerAgentRoleSnapshot {
+  return {
+    id: role.id,
+    name: role.name,
+    ...(role.description !== undefined ? { description: role.description } : {}),
+    ...(role.systemPrompt !== undefined ? { systemPrompt: role.systemPrompt } : {}),
+    ...(role.defaultToolIds !== undefined ? { defaultToolIds: [...role.defaultToolIds] } : {}),
+    ...(role.defaultModelId !== undefined ? { defaultModelId: role.defaultModelId } : {}),
+    ...(role.defaultModelRef !== undefined ? { defaultModelRef: cloneModelRef(role.defaultModelRef) } : {})
+  }
+}
+
+function ensureOptionalStringArray(value: unknown, key: string): string[] | undefined {
+  if (value === undefined) return undefined
+  return ensureStringArray(value, key)
+}
+
+function parseTemporaryWorkerRoleInput(value: unknown): TemporaryWorkerRoleInput | undefined {
+  if (value === undefined) return undefined
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Worker Agent argument must be an object: temporaryRole')
+  }
+
+  const input = value as Record<string, unknown>
+  const defaultToolIds = ensureOptionalStringArray(input.defaultToolIds, 'temporaryRole.defaultToolIds')
+  const defaultModelRef = ensureOptionalModelRef(input.defaultModelRef, 'temporaryRole.defaultModelRef')
+  const defaultModelId = ensureOptionalString(input.defaultModelId, 'temporaryRole.defaultModelId')
+  const description = ensureOptionalString(input.description, 'temporaryRole.description')
+
+  return {
+    name: ensureString(input.name, 'temporaryRole.name'),
+    systemPrompt: ensureString(input.systemPrompt, 'temporaryRole.systemPrompt'),
+    ...(description !== undefined ? { description } : {}),
+    ...(defaultToolIds !== undefined ? { defaultToolIds } : {}),
+    ...(defaultModelRef !== undefined ? { defaultModelRef } : {}),
+    ...(defaultModelId !== undefined ? { defaultModelId } : {})
+  }
+}
+
 function parseSpawnInput(input: Record<string, unknown>): SpawnWorkerAgentInput {
+  const roleId = ensureOptionalString(input.roleId, 'roleId')
+  if (roleId && input.temporaryRole !== undefined) {
+    throw new Error('Worker Agent spawn requires exactly one of roleId or temporaryRole; received both')
+  }
+
+  const temporaryRole = parseTemporaryWorkerRoleInput(input.temporaryRole)
+  if (!roleId && !temporaryRole) {
+    throw new Error('Worker Agent spawn requires exactly one of roleId or temporaryRole')
+  }
+
+  const modelRef = ensureOptionalModelRef(input.modelRef, 'modelRef')
+  const modelId = ensureOptionalString(input.modelId, 'modelId')
+
   return {
     task: ensureString(input.task, 'task'),
-    roleId: ensureString(input.roleId, 'roleId'),
+    ...(roleId !== undefined ? { roleId } : {}),
+    ...(temporaryRole !== undefined ? { temporaryRole } : {}),
     allowedToolIds: ensureStringArray(input.allowedToolIds, 'allowedToolIds'),
+    ...(modelRef !== undefined ? { modelRef } : {}),
+    ...(modelId !== undefined ? { modelId } : {}),
     ...(typeof input.expectedOutput === 'string' ? { expectedOutput: input.expectedOutput } : {}),
     ...(typeof input.contextSummary === 'string' ? { contextSummary: input.contextSummary } : {}),
     ...(typeof input.wait === 'boolean' ? { wait: input.wait } : {}),
@@ -240,6 +352,19 @@ function parseListInput(input: Record<string, unknown>): ListWorkerAgentsInput {
 
 function uniqueStrings(values: string[]): string[] {
   return [...new Set(values)]
+}
+
+type EffectiveWorkerModel = {
+  modelId: string
+  modelRef?: ModelRef
+}
+
+function resolveEffectiveWorkerModel(input: SpawnWorkerAgentInput, role: Role, parentRun: AgentRun): EffectiveWorkerModel {
+  if (input.modelRef) return { modelId: input.modelRef.modelId, modelRef: cloneModelRef(input.modelRef) }
+  if (input.modelId) return { modelId: input.modelId }
+  if (role.defaultModelRef) return { modelId: role.defaultModelRef.modelId, modelRef: cloneModelRef(role.defaultModelRef) }
+  if (role.defaultModelId) return { modelId: role.defaultModelId }
+  return { modelId: parentRun.modelId }
 }
 
 function createAccessDeniedError(): Error {
@@ -563,6 +688,7 @@ export function createWorkerAgentService(options: WorkerAgentServiceOptions): Wo
           sessionId: childRun.sessionId,
           prompt: composeWorkerPrompt(input.task, input.contextSummary),
           modelId: childRun.modelId,
+          ...(invocation.modelRef ? { modelRef: invocation.modelRef } : {}),
           ...(prompt.systemPrompt ? { systemPrompt: prompt.systemPrompt } : {}),
           enabledToolIds: effectiveAllowedToolIds,
           ...(childRun.workspacePath !== undefined ? { workspacePath: childRun.workspacePath } : {}),
@@ -616,20 +742,28 @@ export function createWorkerAgentService(options: WorkerAgentServiceOptions): Wo
         throw createLimitError(`Worker Agent invocation limit exceeded: ${existingInvocations.length} >= ${maxWorkerAgentsPerRun}`)
       }
 
-      const roles = await options.roles.listRoles()
-      const role = ensureWorkerRole(session, await options.roles.getRole(parsed.roleId), parsed.roleId, roles.filter(isAssignableWorkerRole))
+      const invocationId = createWorkerAgentId()
+      const role = parsed.temporaryRole
+        ? createTemporaryWorkerRole(parsed.temporaryRole, invocationId)
+        : ensureWorkerRole(
+            session,
+            await options.roles.getRole(parsed.roleId!),
+            parsed.roleId!,
+            (await options.roles.listRoles()).filter(isAssignableWorkerRole)
+          )
+      const roleDefaultToolIds = parsed.temporaryRole && role.defaultToolIds === undefined ? parsed.allowedToolIds : role.defaultToolIds
       const depth = (parentRun.depth ?? 0) + 1
       const maxDepth = session.maxWorkerAgentDepth ?? 1
       if (depth > maxDepth) {
         throw createLimitError(`Worker Agent depth limit exceeded: ${depth} > ${maxDepth}`)
       }
 
-      const effectiveAllowedToolIds = await resolveEffectiveAllowedToolIds(parsed.allowedToolIds, context.allowedToolIds, role.defaultToolIds)
+      const effectiveAllowedToolIds = await resolveEffectiveAllowedToolIds(parsed.allowedToolIds, context.allowedToolIds, roleDefaultToolIds)
       if (effectiveAllowedToolIds.length === 0) {
         throw createLimitError('Worker Agent has no allowed tools after filtering')
       }
 
-      const invocationId = createWorkerAgentId()
+      const effectiveModel = resolveEffectiveWorkerModel(parsed, role, parentRun)
       const childRunId = createId('run')
       const createdAt = currentNow(options)
       const startedAt = createdAt
@@ -642,7 +776,8 @@ export function createWorkerAgentService(options: WorkerAgentServiceOptions): Wo
         task: parsed.task,
         roleId: role.id,
         allowedToolIds: effectiveAllowedToolIds,
-        ...(role.defaultModelRef ? { modelRef: role.defaultModelRef } : {}),
+        roleSnapshot: createRoleSnapshot(role),
+        ...(effectiveModel.modelRef ? { modelRef: effectiveModel.modelRef } : {}),
         ...(parsed.expectedOutput !== undefined ? { expectedOutput: parsed.expectedOutput } : {}),
         ...(parsed.contextSummary !== undefined ? { contextSummary: parsed.contextSummary } : {}),
         status: 'running',
@@ -658,7 +793,7 @@ export function createWorkerAgentService(options: WorkerAgentServiceOptions): Wo
         workerAgentInvocationId: invocation.id,
         depth,
         status: 'running',
-        modelId: role.defaultModelId ?? role.defaultModelRef?.modelId ?? parentRun.modelId,
+        modelId: effectiveModel.modelId,
         retryCount: 0,
         maxRetries: 0,
         ...(childRunWorkspacePath !== undefined ? { workspacePath: childRunWorkspacePath } : {}),

@@ -292,7 +292,7 @@ describe('shared schemas', () => {
     expect(parsed.scope).toBe('worker-agent')
   })
 
-  it('validates Worker Agent invocations with role and tool constraints', () => {
+  it('validates Worker Agent invocations with role snapshots and tool constraints', () => {
     const parsed = workerAgentInvocationSchema.parse({
       id: 'worker-agent-1',
       parentRunId: 'run-parent',
@@ -301,6 +301,15 @@ describe('shared schemas', () => {
       roleId: 'reviewer',
       allowedToolIds: ['filesystem.read-file', 'git.status'],
       modelRef: { providerId: 'provider-deepseek', modelId: 'deepseek-chat' },
+      roleSnapshot: {
+        id: 'reviewer',
+        name: 'Reviewer',
+        description: 'Reviews code for correctness.',
+        systemPrompt: 'Review carefully.',
+        defaultToolIds: ['filesystem.read-file'],
+        defaultModelId: 'deepseek-chat',
+        defaultModelRef: { providerId: 'provider-deepseek', modelId: 'deepseek-chat' }
+      },
       expectedOutput: 'Findings with evidence.',
       status: 'succeeded',
       createdAt: now,
@@ -309,6 +318,10 @@ describe('shared schemas', () => {
 
     expect(parsed.roleId).toBe('reviewer')
     expect(parsed.allowedToolIds).toEqual(['filesystem.read-file', 'git.status'])
+    expect(parsed.roleSnapshot).toMatchObject({
+      id: 'reviewer',
+      defaultModelRef: { providerId: 'provider-deepseek', modelId: 'deepseek-chat' }
+    })
   })
 
   it('validates Worker Agent invocation UI and diagnosis metadata', () => {

@@ -1,10 +1,18 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import type { ManagedRoleDto, ToolDto } from '../../electron/ipc-contract'
 
+export type ModelOptionGroup = {
+  id: string
+  label: string
+  options: readonly { value: string; label: string }[]
+}
+
 type RolesPanelProps = {
   roles: ManagedRoleDto[]
   selectedRole?: ManagedRoleDto
   tools: ToolDto[]
+  modelOptions?: string[]
+  modelOptionGroups?: ModelOptionGroup[]
   pending?: boolean
   loading?: boolean
   error?: string
@@ -18,7 +26,8 @@ function emptyDraft(): ManagedRoleDto {
     name: '',
     description: '',
     systemPrompt: '',
-    defaultToolIds: []
+    defaultToolIds: [],
+    defaultModelId: ''
   }
 }
 
@@ -28,7 +37,9 @@ function cloneRole(role: ManagedRoleDto): ManagedRoleDto {
     name: role.name,
     description: role.description,
     systemPrompt: role.systemPrompt,
-    defaultToolIds: [...role.defaultToolIds]
+    defaultToolIds: [...role.defaultToolIds],
+    defaultModelId: role.defaultModelId ?? role.defaultModelRef?.modelId ?? '',
+    ...(role.defaultModelRef ? { defaultModelRef: { ...role.defaultModelRef } } : {})
   }
 }
 
@@ -39,18 +50,50 @@ function sameToolIds(left: string[], right: string[]): boolean {
   return sortedLeft.every((id, index) => id === sortedRight[index])
 }
 
+function sameModelRef(
+  left: ManagedRoleDto['defaultModelRef'],
+  right: ManagedRoleDto['defaultModelRef']
+): boolean {
+  if (left === right) return true
+  if (!left || !right) return false
+  return left.providerId === right.providerId && left.modelId === right.modelId
+}
+
+function findModelGroupId(modelOptionGroups: ModelOptionGroup[] | undefined, modelId: string): string | undefined {
+  for (const group of modelOptionGroups ?? []) {
+    if (group.options.some((option) => option.value === modelId)) {
+      return group.id
+    }
+  }
+  return undefined
+}
+
+function hasModelOption(
+  modelOptions: string[] | undefined,
+  modelOptionGroups: ModelOptionGroup[] | undefined,
+  modelId: string
+): boolean {
+  if (modelOptions?.includes(modelId)) return true
+  return (modelOptionGroups ?? []).some((group) => group.options.some((option) => option.value === modelId))
+}
+
 function roleDraftChanged(draft: ManagedRoleDto, selectedRole: ManagedRoleDto | undefined): boolean {
   if (!selectedRole) return true
+  const selectedDefaultModelId = selectedRole.defaultModelId ?? selectedRole.defaultModelRef?.modelId ?? ''
   return draft.name.trim() !== selectedRole.name.trim()
     || draft.description.trim() !== selectedRole.description.trim()
     || draft.systemPrompt.trim() !== selectedRole.systemPrompt.trim()
     || !sameToolIds(draft.defaultToolIds, selectedRole.defaultToolIds)
+    || draft.defaultModelId.trim() !== selectedDefaultModelId.trim()
+    || !sameModelRef(draft.defaultModelRef, selectedRole.defaultModelRef)
 }
 
 export function RolesPanel({
   roles,
   selectedRole,
   tools,
+  modelOptions,
+  modelOptionGroups,
   pending = false,
   loading = false,
   error,
@@ -63,6 +106,10 @@ export function RolesPanel({
   const trimmedName = draft.name.trim()
   const hasDraftChanges = roleDraftChanged(draft, selectedRole)
   const canSave = Boolean(trimmedName) && !pending && hasDraftChanges
+  const hasModelOptionGroups = (modelOptionGroups?.length ?? 0) > 0
+  const unavailableDefaultModelId = draft.defaultModelId.trim() !== '' && !hasModelOption(modelOptions, modelOptionGroups, draft.defaultModelId)
+    ? draft.defaultModelId
+    : undefined
 
   useEffect(() => {
     if (selectedRole) {
@@ -85,14 +132,38 @@ export function RolesPanel({
     })
   }
 
+  const updateDefaultModel = (value: string) => {
+    setDraft((current) => {
+      if (value === '') {
+        const { defaultModelRef: _defaultModelRef, ...next } = current
+        return { ...next, defaultModelId: '' }
+      }
+
+      const modelGroupId = findModelGroupId(modelOptionGroups, value)
+      if (modelGroupId !== undefined) {
+        return {
+          ...current,
+          defaultModelId: value,
+          defaultModelRef: { providerId: modelGroupId, modelId: value }
+        }
+      }
+
+      const { defaultModelRef: _defaultModelRef, ...next } = current
+      return { ...next, defaultModelId: value }
+    })
+  }
+
   const saveDraft = () => {
     if (!canSave) return
+    const defaultModelId = draft.defaultModelId.trim()
     onSave?.({
       id: draft.id,
       name: trimmedName,
       description: draft.description.trim(),
       systemPrompt: draft.systemPrompt.trim(),
-      defaultToolIds: [...draft.defaultToolIds]
+      defaultToolIds: [...draft.defaultToolIds],
+      defaultModelId,
+      ...(defaultModelId && draft.defaultModelRef ? { defaultModelRef: { ...draft.defaultModelRef } } : {})
     })
   }
 
@@ -140,7 +211,7 @@ export function RolesPanel({
       <header style={headerStyle}>
         <div>
           <h2 style={titleStyle}>编辑角色</h2>
-          <p style={mutedTextStyle}>角色仅用于管理预设内容；当前不会影响会话运行逻辑。</p>
+          <p style={mutedTextStyle}>角色可管理提示词、默认工具和默认模型；默认模型为空时继承调用方模型。</p>
         </div>
       </header>
 
@@ -165,6 +236,47 @@ export function RolesPanel({
             disabled={pending}
             style={inputStyle}
           />
+        </label>
+
+        <label style={fieldStyle}>
+          <span style={labelStyle}>默认模型</span>
+          <select
+            value={draft.defaultModelId}
+            onChange={(event) => updateDefaultModel(event.target.value)}
+            disabled={pending}
+            style={inputStyle}
+          >
+            <option value="">继承调用/父会话模型</option>
+            {hasModelOptionGroups ? (
+              <>
+                {(modelOptionGroups ?? []).map((group) => (
+                  <optgroup key={group.id} label={group.label}>
+                    {group.options.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+                {unavailableDefaultModelId ? (
+                  <optgroup label="当前模型">
+                    <option value={unavailableDefaultModelId}>当前模型（不可用）：{unavailableDefaultModelId}</option>
+                  </optgroup>
+                ) : null}
+              </>
+            ) : (
+              <>
+                {(modelOptions ?? []).map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+                {unavailableDefaultModelId ? (
+                  <option value={unavailableDefaultModelId}>当前模型（不可用）：{unavailableDefaultModelId}</option>
+                ) : null}
+              </>
+            )}
+          </select>
         </label>
 
         <label style={fieldStyle}>

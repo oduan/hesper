@@ -406,8 +406,8 @@ describe('createBuiltinToolExecutor', () => {
 
   it('lists, finds, creates and updates roles through injected role handlers', async () => {
     const roles = [
-      { id: 'role-ops', name: '运维助手', description: '部署与命令', systemPrompt: '负责生产部署和命令执行。', defaultToolIds: ['git.status'] },
-      { id: 'role-search', name: '搜索专家', description: '查找资料', systemPrompt: '负责检索上下文。', defaultToolIds: ['web.search'] }
+      { id: 'role-ops', name: '运维助手', description: '部署与命令', systemPrompt: '负责生产部署和命令执行。', defaultToolIds: ['git.status'], defaultModelId: '' },
+      { id: 'role-search', name: '搜索专家', description: '查找资料', systemPrompt: '负责检索上下文。', defaultToolIds: ['web.search'], defaultModelId: '' }
     ]
     const listRoles = vi.fn(async () => roles)
     const createRole = vi.fn(async (input) => ({ id: 'role-1', description: '', systemPrompt: '', defaultToolIds: [], ...input }))
@@ -444,6 +444,100 @@ describe('createBuiltinToolExecutor', () => {
     })
     expect(updateRole).toHaveBeenCalledWith({ id: 'role-1', systemPrompt: '更新提示词' })
     expect(JSON.parse(updated.content)).toMatchObject({ id: 'role-1', systemPrompt: '更新提示词' })
+  })
+
+  it('forwards role default model fields to create and update handlers', async () => {
+    const listRoles = vi.fn(async () => [])
+    const createRole = vi.fn(async (input) => ({ id: 'role-1', ...input }))
+    const updateRole = vi.fn(async (input) => input)
+    const executor = createBuiltinToolExecutor({ roleTools: { listRoles, createRole, updateRole } })
+
+    await executor.execute(tool('roles.create'), {
+      name: '模型角色',
+      defaultModelId: 'gpt-4o',
+      defaultModelRef: { providerId: 'openai', modelId: 'gpt-4o' }
+    }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['roles.create']
+    })
+
+    expect(createRole).toHaveBeenCalledWith({
+      name: '模型角色',
+      defaultModelId: 'gpt-4o',
+      defaultModelRef: { providerId: 'openai', modelId: 'gpt-4o' }
+    })
+
+    await executor.execute(tool('roles.update'), {
+      id: 'role-1',
+      defaultModelId: 'deepseek-chat',
+      defaultModelRef: { providerId: 'deepseek', modelId: 'deepseek-chat' }
+    }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['roles.update']
+    })
+
+    expect(updateRole).toHaveBeenCalledWith({
+      id: 'role-1',
+      defaultModelId: 'deepseek-chat',
+      defaultModelRef: { providerId: 'deepseek', modelId: 'deepseek-chat' }
+    })
+  })
+
+  it('does not infer defaultModelId when only defaultModelRef is provided to role tools', async () => {
+    const listRoles = vi.fn(async () => [])
+    const createRole = vi.fn(async (input) => ({ id: 'role-1', ...input }))
+    const updateRole = vi.fn(async (input) => input)
+    const executor = createBuiltinToolExecutor({ roleTools: { listRoles, createRole, updateRole } })
+
+    await executor.execute(tool('roles.create'), {
+      name: '模型角色',
+      defaultModelRef: { providerId: 'openai', modelId: 'gpt-4o' }
+    }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['roles.create']
+    })
+
+    expect(createRole).toHaveBeenCalledWith({
+      name: '模型角色',
+      defaultModelRef: { providerId: 'openai', modelId: 'gpt-4o' }
+    })
+    expect(createRole.mock.calls[0]?.[0]).not.toHaveProperty('defaultModelId')
+
+    await executor.execute(tool('roles.update'), {
+      id: 'role-1',
+      defaultModelRef: { providerId: 'deepseek', modelId: 'deepseek-chat' }
+    }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['roles.update']
+    })
+
+    expect(updateRole).toHaveBeenCalledWith({
+      id: 'role-1',
+      defaultModelRef: { providerId: 'deepseek', modelId: 'deepseek-chat' }
+    })
+    expect(updateRole.mock.calls[0]?.[0]).not.toHaveProperty('defaultModelId')
+  })
+
+  it('rejects malformed defaultModelRef role tool arguments', async () => {
+    const listRoles = vi.fn(async () => [])
+    const createRole = vi.fn(async (input) => ({ id: 'role-1', ...input }))
+    const updateRole = vi.fn(async (input) => input)
+    const executor = createBuiltinToolExecutor({ roleTools: { listRoles, createRole, updateRole } })
+
+    await expect(executor.execute(tool('roles.create'), {
+      name: '模型角色',
+      defaultModelRef: { providerId: 'openai', modelId: '' }
+    }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['roles.create']
+    })).rejects.toThrow('Tool argument defaultModelRef.modelId must be a non-empty string')
+
+    expect(createRole).not.toHaveBeenCalled()
   })
 
   it('does not forward unsupported create role fields', async () => {
@@ -526,6 +620,63 @@ describe('createBuiltinToolExecutor', () => {
       sessionId: 'session-1',
       allowedToolIds: ['ssh.list-servers']
     })).resolves.toMatchObject({ isError: true, details: { code: 'not_available', toolId: 'ssh.list-servers' } })
+  })
+
+  it('lists available models through an injected model handler without echoing secrets', async () => {
+    const secret = 'sk-test-secret-never-return'
+    const catalog = {
+      providers: [
+        {
+          id: 'openai',
+          name: 'OpenAI',
+          kind: 'openai',
+          enabled: true,
+          hasApiKey: true,
+          credentialStatus: 'ready',
+          defaultModelId: 'gpt-4o',
+          models: [
+            {
+              id: 'gpt-4o',
+              providerId: 'openai',
+              modelName: 'gpt-4o',
+              displayName: 'GPT-4o',
+              capabilities: ['streaming', 'toolCalls', 'jsonOutput'],
+              enabled: true,
+              readyForRuntime: true,
+              modelRef: { providerId: 'openai', modelId: 'gpt-4o' }
+            }
+          ]
+        }
+      ]
+    }
+    const listAvailableModels = vi.fn(async () => catalog)
+    const executor = createBuiltinToolExecutor({ modelTools: { listAvailableModels } })
+
+    const result = await executor.execute(tool('models.list-available'), { apiKey: secret }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['models.list-available']
+    })
+
+    expect(listAvailableModels).toHaveBeenCalledTimes(1)
+    expect(listAvailableModels).toHaveBeenCalledWith()
+    expect(JSON.parse(result.content)).toEqual(catalog)
+    expect(result.details).toEqual({ toolId: 'models.list-available', catalog })
+    expect(JSON.stringify(result)).not.toContain(secret)
+  })
+
+  it('returns a controlled error when model listing tools are unavailable', async () => {
+    const executor = createBuiltinToolExecutor()
+
+    await expect(executor.execute(tool('models.list-available'), {}, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['models.list-available']
+    })).resolves.toEqual({
+      content: 'Model listing tools are not available in this runtime.',
+      details: { code: 'not_available', toolId: 'models.list-available' },
+      isError: true
+    })
   })
 
   it('returns the current time and timezone', async () => {

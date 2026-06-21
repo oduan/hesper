@@ -10,6 +10,9 @@ function currentCommandRuntimeDescription(): string {
   return `Current platform is ${process.platform}; commands run once through bash from the selected workspace.`
 }
 
+const roleDefaultModelIdDescription = 'Legacy default model id for this role. Empty string means inherit the caller/parent model; prefer defaultModelRef for provider-aware selection.'
+const roleDefaultModelRefDescription = "Provider-aware default model metadata/reference from models.list-available. Saved or updated only when a non-empty defaultModelId is also provided; defaultModelRef.modelId must match defaultModelId. Use defaultModelId: '' to inherit/clear the default model, which also clears this ref."
+
 export function createBuiltinToolDefinitions(): ToolDefinition[] {
   return [
     {
@@ -262,7 +265,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
     {
       id: 'roles.create',
       name: 'Create Role',
-      description: 'Create a user-defined role with a name, description, full prompt, and default tools.',
+      description: 'Create a reusable role with a name, description, full prompt, default tools, and optional default model. Do not use for one-off Worker Agent tasks; pass temporaryRole to agent.spawn-worker-agent instead. Only create roles the user explicitly wants to reuse.',
       category: 'agent',
       icon: '🎭',
       display: { name: 'Create Role', names: { 'zh-CN': '创建角色' }, resourceFields: ['name'] },
@@ -273,14 +276,24 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
           name: { type: 'string', description: 'Role name.' },
           description: { type: 'string', description: 'Short role description shown in the roles list.' },
           systemPrompt: { type: 'string', description: 'Full prompt for this role.' },
-          defaultToolIds: { type: 'array', items: { type: 'string' }, description: 'Default tool IDs for this role.' }
+          defaultToolIds: { type: 'array', items: { type: 'string' }, description: 'Default tool IDs for this role.' },
+          defaultModelId: { type: 'string', description: roleDefaultModelIdDescription },
+          defaultModelRef: {
+            type: 'object',
+            description: roleDefaultModelRefDescription,
+            required: ['providerId', 'modelId'],
+            properties: {
+              providerId: { type: 'string' },
+              modelId: { type: 'string' }
+            }
+          }
         }
       }
     },
     {
       id: 'roles.update',
       name: 'Update Role',
-      description: 'Update an existing user-defined role. This tool cannot delete roles.',
+      description: 'Update an existing reusable user-defined role. This tool cannot delete roles.',
       category: 'agent',
       icon: '🎭',
       display: { name: 'Update Role', names: { 'zh-CN': '更新角色' }, resourceFields: ['id'] },
@@ -292,24 +305,78 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
           name: { type: 'string', description: 'New role name.' },
           description: { type: 'string', description: 'New short role description.' },
           systemPrompt: { type: 'string', description: 'New full prompt.' },
-          defaultToolIds: { type: 'array', items: { type: 'string' }, description: 'Replacement default tool IDs for this role.' }
+          defaultToolIds: { type: 'array', items: { type: 'string' }, description: 'Replacement default tool IDs for this role.' },
+          defaultModelId: { type: 'string', description: roleDefaultModelIdDescription },
+          defaultModelRef: {
+            type: 'object',
+            description: roleDefaultModelRefDescription,
+            required: ['providerId', 'modelId'],
+            properties: {
+              providerId: { type: 'string' },
+              modelId: { type: 'string' }
+            }
+          }
         }
       }
     },
     {
+      id: 'models.list-available',
+      name: 'List Available Models',
+      description: 'List currently available model providers and models, including provider-aware modelRef values, so the main Agent can choose a model for itself or Worker Agents. Returns metadata only and never returns API keys.',
+      category: 'agent',
+      icon: '🤖',
+      display: { name: 'List Available Models', names: { 'zh-CN': '列出可用模型' } },
+      inputSchema: { type: 'object', properties: {} }
+    },
+    {
       id: 'agent.spawn-worker-agent',
       name: 'Spawn Worker Agent',
-      description: 'Create a constrained Worker Agent child run with a role, task, and limited tool set. By default waits only for a bounded timeout and returns a diagnosis if still running.',
+      description: 'Create a constrained Worker Agent child run with either an existing roleId or a one-off temporaryRole, task, limited tool set, and optional model override. Use temporaryRole when no suitable existing role fits a single run; temporaryRole is not saved as a reusable role and is not written to the role library; the invocation persists a roleSnapshot for tracing. Do not call roles.create for one-off Worker Agent tasks; only create roles the user explicitly wants to reuse. Use models.list-available first to choose a provider-aware modelRef when possible; modelRef takes precedence over modelId, temporaryRole/default role defaults, and the parent run model. If no explicit model is provided, temporaryRole.defaultModelRef/default role defaultModelRef is used before temporaryRole.defaultModelId/default role defaultModelId, then the parent run model. By default waits only for a bounded timeout and returns a diagnosis if still running.',
       category: 'agent',
       icon: '🧑‍💻',
       display: { name: 'Spawn Worker Agent', names: { 'zh-CN': '启动 Worker Agent' }, resourceFields: ['task'] },
       inputSchema: {
         type: 'object',
-        required: ['task', 'roleId', 'allowedToolIds'],
+        required: ['task', 'allowedToolIds'],
+        oneOf: [
+          { required: ['roleId'], not: { required: ['temporaryRole'] } },
+          { required: ['temporaryRole'], not: { required: ['roleId'] } }
+        ],
         properties: {
           task: { type: 'string', description: 'Specific task for the Worker Agent.' },
-          roleId: { type: 'string', description: 'Assignable Worker Agent role id.' },
-          allowedToolIds: { type: 'array', items: { type: 'string' }, description: 'Requested tool ids. Effective tools are intersected with parent, role, and global limits.' },
+          roleId: { type: 'string', description: 'Assignable Worker Agent role id. Provide exactly one of roleId or temporaryRole.' },
+          temporaryRole: {
+            type: 'object',
+            description: 'One-off Worker Agent role used only for this spawn. It is not saved to the role library; use this instead of roles.create for single-use tasks.',
+            required: ['name', 'systemPrompt'],
+            properties: {
+              name: { type: 'string', description: 'Temporary role display name for this run.' },
+              description: { type: 'string', description: 'Optional temporary role description for tracing.' },
+              systemPrompt: { type: 'string', description: 'Full system prompt/instructions for this temporary Worker Agent role.' },
+              defaultToolIds: { type: 'array', items: { type: 'string' }, description: 'Optional default tools for the temporary role. If omitted, requested allowedToolIds are used as the role tool side of the intersection.' },
+              defaultModelId: { type: 'string', description: 'Optional legacy default model id for this temporary role. Empty string means inherit the parent model; prefer defaultModelRef for provider-aware selection.' },
+              defaultModelRef: {
+                type: 'object',
+                description: 'Optional provider-aware default model reference for this temporary role. Takes precedence over defaultModelId unless spawn provides an explicit modelRef/modelId.',
+                required: ['providerId', 'modelId'],
+                properties: {
+                  providerId: { type: 'string', description: 'Model provider id returned by models.list-available.' },
+                  modelId: { type: 'string', description: 'Model id returned by models.list-available.' }
+                }
+              }
+            }
+          },
+          allowedToolIds: { type: 'array', items: { type: 'string' }, description: 'Requested tool ids. Effective tools are intersected with parent, requested, role/temporaryRole defaults, and global limits.' },
+          modelRef: {
+            type: 'object',
+            description: 'Provider-aware model reference from models.list-available. Takes precedence over modelId, role defaults, and the parent run model.',
+            required: ['providerId', 'modelId'],
+            properties: {
+              providerId: { type: 'string', description: 'Model provider id returned by models.list-available.' },
+              modelId: { type: 'string', description: 'Model id returned by models.list-available.' }
+            }
+          },
+          modelId: { type: 'string', description: 'Legacy model id override. Used only when modelRef is not provided; otherwise role defaults or the parent run model are used.' },
           expectedOutput: { type: 'string', description: 'Expected result format.' },
           contextSummary: { type: 'string', description: 'Relevant context from the parent run.' },
           wait: { type: 'boolean', description: 'When true, wait for a bounded timeout. Defaults to true.' },
