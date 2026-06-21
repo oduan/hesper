@@ -145,7 +145,7 @@ export function AppShell({
             background: darkTheme.color.surface
           }}
         >
-          <div style={{ flex: 1, minHeight: 0, padding: darkTheme.spacing.lg, overflow: 'hidden' }}>{children}</div>
+          <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', padding: activeSection === 'sessions' ? 0 : darkTheme.spacing.lg }}>{children}</div>
         </section>
       </div>
     </div>

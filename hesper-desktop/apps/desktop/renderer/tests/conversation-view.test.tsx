@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ConversationView, type ConversationShortcutCommand } from '@hesper/ui'
@@ -188,6 +188,103 @@ describe('ConversationView', () => {
     await user.click(jumpButton)
     expect(scrollToMock).toHaveBeenCalledWith(expect.objectContaining({ top: 320, behavior: 'smooth' }))
     await waitFor(() => expect(screen.queryByRole('button', { name: '滚动到底部' })).not.toBeInTheDocument())
+  })
+
+  it('keeps pinned conversations at the bottom for new content, streaming text, and resize growth', () => {
+    let resizeObserverCallback: ResizeObserverCallback | undefined
+    const originalResizeObserver = globalThis.ResizeObserver
+    const resizeObserverMock = vi.fn().mockImplementation((callback: ResizeObserverCallback) => {
+      resizeObserverCallback = callback
+      return {
+        observe: vi.fn(),
+        unobserve: vi.fn(),
+        disconnect: vi.fn()
+      }
+    })
+    globalThis.ResizeObserver = resizeObserverMock as unknown as typeof ResizeObserver
+
+    try {
+      const baseMessages = [
+        {
+          id: 'u1',
+          sessionId: 'session-1',
+          role: 'user' as const,
+          content: 'hello',
+          contentType: 'plain' as const,
+          createdAt: '2026-06-10T03:00:00.000Z'
+        }
+      ]
+      const { rerender } = render(
+        <ConversationView
+          session={session}
+          messages={baseMessages}
+          steps={[]}
+          streamingText=""
+          modelId="mock/hesper-fast"
+          onSend={() => undefined}
+        />
+      )
+      const messageList = screen.getByLabelText('消息列表')
+      Object.defineProperty(messageList, 'clientHeight', { configurable: true, value: 100 })
+      Object.defineProperty(messageList, 'scrollHeight', { configurable: true, value: 500 })
+      messageList.scrollTop = 400
+      fireEvent.scroll(messageList)
+
+      scrollToMock.mockClear()
+      Object.defineProperty(messageList, 'scrollHeight', { configurable: true, value: 680 })
+      const messagesWithAnswer = [
+        ...baseMessages,
+        {
+          id: 'a1',
+          sessionId: 'session-1',
+          role: 'assistant' as const,
+          content: 'new answer',
+          contentType: 'markdown' as const,
+          createdAt: '2026-06-10T03:00:01.000Z'
+        }
+      ]
+      rerender(
+        <ConversationView
+          session={session}
+          messages={messagesWithAnswer}
+          steps={[]}
+          streamingText=""
+          modelId="mock/hesper-fast"
+          onSend={() => undefined}
+        />
+      )
+      expect(scrollToMock).toHaveBeenLastCalledWith(expect.objectContaining({ top: 680, behavior: 'auto' }))
+      expect(screen.queryByRole('button', { name: '滚动到底部' })).not.toBeInTheDocument()
+
+      scrollToMock.mockClear()
+      Object.defineProperty(messageList, 'scrollHeight', { configurable: true, value: 760 })
+      rerender(
+        <ConversationView
+          session={session}
+          messages={messagesWithAnswer}
+          steps={[]}
+          streamingText="streaming update"
+          modelId="mock/hesper-fast"
+          onSend={() => undefined}
+        />
+      )
+      expect(scrollToMock).toHaveBeenLastCalledWith(expect.objectContaining({ top: 760, behavior: 'auto' }))
+      expect(screen.queryByRole('button', { name: '滚动到底部' })).not.toBeInTheDocument()
+
+      scrollToMock.mockClear()
+      Object.defineProperty(messageList, 'scrollHeight', { configurable: true, value: 920 })
+      expect(resizeObserverCallback).toBeTypeOf('function')
+      act(() => {
+        resizeObserverCallback?.([], {} as ResizeObserver)
+      })
+      expect(scrollToMock).toHaveBeenLastCalledWith(expect.objectContaining({ top: 920, behavior: 'auto' }))
+    } finally {
+      if (originalResizeObserver) {
+        globalThis.ResizeObserver = originalResizeObserver
+      } else {
+        Reflect.deleteProperty(globalThis, 'ResizeObserver')
+      }
+    }
   })
 
   it('renders messages in chronological order even when props arrive reversed', () => {
