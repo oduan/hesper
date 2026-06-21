@@ -64,6 +64,7 @@ describe('createSettingsService', () => {
       defaultModelId: 'mock/hesper-fast',
       defaultOutputMode: 'markdown',
       themeMode: 'system',
+      themeId: 'catppuccin',
       fontSize: 14
     })
   })
@@ -76,6 +77,7 @@ describe('createSettingsService', () => {
       defaultModelId: 'deepseek-chat',
       defaultOutputMode: 'html',
       themeMode: 'dark',
+      themeId: 'dracula',
       fontSize: 16
     })
 
@@ -84,6 +86,7 @@ describe('createSettingsService', () => {
       defaultModelId: 'deepseek-chat',
       defaultOutputMode: 'html',
       themeMode: 'dark',
+      themeId: 'dracula',
       fontSize: 16
     })
   })
@@ -95,7 +98,7 @@ describe('createSettingsService', () => {
     const firstUpdate = service.updateSettings({ defaultModelId: 'deepseek-chat' })
     await waitForExpectation(() => expect(saveSpy).toHaveBeenCalledTimes(1))
 
-    const secondUpdate = service.updateSettings({ themeMode: 'dark' })
+    const secondUpdate = service.updateSettings({ themeMode: 'dark', themeId: 'tokyo-night' })
     expect(getSpy).toHaveBeenCalledTimes(1)
 
     releaseFirstSave()
@@ -105,6 +108,7 @@ describe('createSettingsService', () => {
       defaultModelId: 'deepseek-chat',
       defaultOutputMode: 'markdown',
       themeMode: 'dark',
+      themeId: 'tokyo-night',
       fontSize: 14
     })
   })
@@ -142,12 +146,14 @@ describe('createSettingsService', () => {
       defaultModelId: 'mock/hesper-fast',
       defaultOutputMode: 'markdown',
       themeMode: 'dark',
+      themeId: 'catppuccin',
       fontSize: 14
     })
     await expect(service.getSettings()).resolves.toEqual({
       defaultModelId: 'mock/hesper-fast',
       defaultOutputMode: 'markdown',
       themeMode: 'dark',
+      themeId: 'catppuccin',
       fontSize: 14
     })
   })

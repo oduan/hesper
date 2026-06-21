@@ -1,6 +1,8 @@
 /// <reference path="./sqljs.d.ts" />
 import {
   agentRuntimeEventSchema,
+  defaultAppThemeId,
+  isAppThemeId,
   modelRefSchema,
   roleSnapshotSchema,
   runErrorSchema,
@@ -8,8 +10,10 @@ import {
   sshExecutionSchema,
   sshKeySchema,
   sshServerSchema,
+  themeModeValues,
   type AgentRun,
   type AgentRuntimeEvent,
+  type AppThemeId,
   type Message,
   type ModelCapability,
   type ModelConfig,
@@ -25,7 +29,8 @@ import {
   type SshServer,
   type WorkerAgentInvocation,
   type ToolPermissionPolicy,
-  type ToolPermissionScope
+  type ToolPermissionScope,
+  type ThemeMode
 } from '@hesper/shared'
 import type { Database } from 'sql.js'
 
@@ -43,7 +48,8 @@ export type CredentialRecord = {
 export type AppSettingsRecord = {
   defaultModelId: string
   defaultOutputMode: 'markdown' | 'html'
-  themeMode: 'system' | 'light' | 'dark'
+  themeMode: ThemeMode
+  themeId: AppThemeId
   fontSize: number
   updatedAt: string
 }
@@ -484,23 +490,28 @@ function toCredentialRecord(row: any): CredentialRecord {
 }
 
 const appSettingsOutputModes = new Set<AppSettingsRecord['defaultOutputMode']>(['markdown', 'html'])
-const appSettingsThemeModes = new Set<AppSettingsRecord['themeMode']>(['system', 'light', 'dark'])
+const appSettingsThemeModes = new Set<ThemeMode>(themeModeValues)
 
 function toAppSettingsRecord(row: any): AppSettingsRecord {
   const defaultOutputMode = String(row.default_output_mode)
   const themeMode = String(row.theme_mode)
+  const themeId = String(row.theme_id ?? defaultAppThemeId)
   if (!appSettingsOutputModes.has(defaultOutputMode as AppSettingsRecord['defaultOutputMode'])) {
     throw new Error(`Invalid app settings output mode: ${defaultOutputMode}`)
   }
-  if (!appSettingsThemeModes.has(themeMode as AppSettingsRecord['themeMode'])) {
+  if (!appSettingsThemeModes.has(themeMode as ThemeMode)) {
     throw new Error(`Invalid app settings theme mode: ${themeMode}`)
+  }
+  if (!isAppThemeId(themeId)) {
+    throw new Error(`Invalid app settings theme id: ${themeId}`)
   }
   const parsedFontSize = Number(row.font_size ?? 14)
   const fontSize = Number.isInteger(parsedFontSize) && parsedFontSize >= 12 && parsedFontSize <= 18 ? parsedFontSize : 14
   return {
     defaultModelId: String(row.default_model_id),
     defaultOutputMode: defaultOutputMode as AppSettingsRecord['defaultOutputMode'],
-    themeMode: themeMode as AppSettingsRecord['themeMode'],
+    themeMode: themeMode as ThemeMode,
+    themeId,
     fontSize,
     updatedAt: String(row.updated_at)
   }
@@ -610,10 +621,11 @@ export function createRepositories(db: Database): Persistence {
     settings: {
       async save(settings) {
         exec('DELETE FROM app_settings')
-        exec('INSERT INTO app_settings (default_model_id, default_output_mode, theme_mode, font_size, updated_at) VALUES (?, ?, ?, ?, ?)', [
+        exec('INSERT INTO app_settings (default_model_id, default_output_mode, theme_mode, theme_id, font_size, updated_at) VALUES (?, ?, ?, ?, ?, ?)', [
           settings.defaultModelId,
           settings.defaultOutputMode,
           settings.themeMode,
+          settings.themeId,
           settings.fontSize,
           settings.updatedAt
         ])

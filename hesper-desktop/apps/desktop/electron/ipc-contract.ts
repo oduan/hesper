@@ -1,4 +1,4 @@
-import { agentRunSchema, agentRuntimeEventSchema, messageSchema, modelConfigSchema, modelProviderConfigSchema, modelRefSchema, runStepSchema, sessionSchema, sshKeySchema, sshServerSchema, toolDefinitionBaseSchema, workerAgentInvocationSchema } from '@hesper/shared'
+import { agentRunSchema, agentRuntimeEventSchema, appThemeIds, messageSchema, modelConfigSchema, modelProviderConfigSchema, modelRefSchema, runStepSchema, sessionSchema, sshKeySchema, sshServerSchema, themeModeValues, toolDefinitionBaseSchema, workerAgentInvocationSchema } from '@hesper/shared'
 import { z } from 'zod'
 
 export const ipcChannels = {
@@ -131,14 +131,16 @@ export const appFontSizeSchema = z.number().int().min(12).max(18)
 export const appSettingsSchema = z.object({
   defaultModelId: z.string().min(1),
   defaultOutputMode: z.enum(['markdown', 'html']),
-  themeMode: z.enum(['system', 'light', 'dark']),
+  themeMode: z.enum(themeModeValues),
+  themeId: z.enum(appThemeIds),
   fontSize: appFontSizeSchema
 }).strict()
 
 export const updateSettingsInputSchema = z.object({
   defaultModelId: z.string().min(1).optional(),
   defaultOutputMode: z.enum(['markdown', 'html']).optional(),
-  themeMode: z.enum(['system', 'light', 'dark']).optional(),
+  themeMode: z.enum(themeModeValues).optional(),
+  themeId: z.enum(appThemeIds).optional(),
   fontSize: appFontSizeSchema.optional()
 }).strict()
 
