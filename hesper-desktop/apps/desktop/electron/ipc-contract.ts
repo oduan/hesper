@@ -1,4 +1,4 @@
-import { agentRunSchema, agentRuntimeEventSchema, messageSchema, modelConfigSchema, modelProviderConfigSchema, runStepSchema, sessionSchema, toolDefinitionBaseSchema, workerAgentInvocationSchema } from '@hesper/shared'
+import { agentRunSchema, agentRuntimeEventSchema, messageSchema, modelConfigSchema, modelProviderConfigSchema, runStepSchema, sessionSchema, sshKeySchema, sshServerSchema, toolDefinitionBaseSchema, workerAgentInvocationSchema } from '@hesper/shared'
 import { z } from 'zod'
 
 export const ipcChannels = {
@@ -43,6 +43,13 @@ export const ipcChannels = {
   toolsCredentialStatus: 'tools:credentialStatus',
   toolsSaveApiKey: 'tools:saveApiKey',
   toolsDeleteApiKey: 'tools:deleteApiKey',
+  sshKeysList: 'sshKeys:list',
+  sshKeysCreate: 'sshKeys:create',
+  sshKeysDelete: 'sshKeys:delete',
+  sshServersList: 'sshServers:list',
+  sshServersCreate: 'sshServers:create',
+  sshServersUpdate: 'sshServers:update',
+  sshServersDelete: 'sshServers:delete',
   rolesList: 'roles:list',
   rolesCreate: 'roles:create',
   rolesUpdate: 'roles:update',
@@ -309,6 +316,35 @@ export const toolCredentialStatusSchema = z.object({
   updatedAt: z.string().datetime().optional()
 }).strict()
 
+export const createSshKeyInputSchema = z.object({
+  name: nonEmptyStringSchema,
+  privateKey: nonEmptyStringSchema,
+  passphrase: z.string().optional(),
+  note: z.string().optional()
+}).strict()
+
+export const createSshServerInputSchema = z.object({
+  name: nonEmptyStringSchema,
+  host: nonEmptyStringSchema,
+  port: z.number().int().min(1).max(65535),
+  username: nonEmptyStringSchema,
+  keyId: nonEmptyStringSchema,
+  note: z.string().optional()
+}).strict()
+
+export const updateSshServerInputSchema = z.object({
+  id: nonEmptyStringSchema,
+  name: nonEmptyStringSchema.optional(),
+  host: nonEmptyStringSchema.optional(),
+  port: z.number().int().min(1).max(65535).optional(),
+  username: nonEmptyStringSchema.optional(),
+  keyId: nonEmptyStringSchema.optional(),
+  note: z.string().optional()
+}).strict()
+
+export const sshKeysResultSchema = z.array(sshKeySchema)
+export const sshServersResultSchema = z.array(sshServerSchema)
+
 export const providerConnectionTestResultSchema = z.object({
   providerId: nonEmptyStringSchema,
   status: z.enum(['ok', 'disabled', 'needs_api_key', 'not_found', 'failed']),
@@ -362,6 +398,11 @@ export type SetToolEnabledInput = z.infer<typeof setToolEnabledInputSchema>
 export type ToolCredentialInput = z.infer<typeof toolCredentialInputSchema>
 export type SaveToolApiKeyInput = z.infer<typeof saveToolApiKeyInputSchema>
 export type ToolCredentialStatus = z.infer<typeof toolCredentialStatusSchema>
+export type CreateSshKeyInput = z.infer<typeof createSshKeyInputSchema>
+export type CreateSshServerInput = z.infer<typeof createSshServerInputSchema>
+export type UpdateSshServerInput = z.infer<typeof updateSshServerInputSchema>
+export type SshKeyDto = z.infer<typeof sshKeySchema>
+export type SshServerDto = z.infer<typeof sshServerSchema>
 export type ProviderConnectionTestResult = z.infer<typeof providerConnectionTestResultSchema>
 export type AgentEvent = z.infer<typeof agentRuntimeEventSchema>
 export type SessionDto = z.infer<typeof sessionSchema>
@@ -435,6 +476,17 @@ export type HesperDesktopApi = {
     credentialStatus(input: ToolCredentialInput): Promise<ToolCredentialStatus>
     saveApiKey(input: SaveToolApiKeyInput): Promise<ToolCredentialStatus>
     deleteApiKey(input: ToolCredentialInput): Promise<ToolCredentialStatus>
+  }
+  sshKeys: {
+    list(): Promise<SshKeyDto[]>
+    create(input: CreateSshKeyInput): Promise<SshKeyDto>
+    delete(id: string): Promise<{ deleted: true; id: string }>
+  }
+  sshServers: {
+    list(): Promise<SshServerDto[]>
+    create(input: CreateSshServerInput): Promise<SshServerDto>
+    update(input: UpdateSshServerInput): Promise<SshServerDto>
+    delete(id: string): Promise<{ deleted: true; id: string }>
   }
   roles: {
     list(): Promise<ManagedRoleDto[]>

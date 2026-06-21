@@ -497,6 +497,42 @@ describe('registerIpcHandlers', () => {
     expect(await container.toolSettingsService.isToolEnabled('system.show-notification')).toBe(true)
   })
 
+  it('manages SSH keys and servers through strict IPC without returning secrets', async () => {
+    const handles = new Map<string, any>()
+    const ipcMain = { handle: vi.fn((channel, handler) => handles.set(channel, handler)) } as any
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock', credentialCodec: createMockCredentialCodec() })
+    registerIpcHandlers({ ipcMain, container, savePersistence: async () => undefined } as any)
+
+    const key = await handles.get(ipcChannels.sshKeysCreate)?.({ sender: { id: 1 } }, {
+      name: 'Prod key',
+      privateKey: 'private-key-secret',
+      passphrase: 'passphrase-secret',
+      note: 'deploy'
+    })
+    expect(key).toMatchObject({ name: 'Prod key', hasPassphrase: true })
+    expect(JSON.stringify(key)).not.toContain('private-key-secret')
+    expect(JSON.stringify(key)).not.toContain('passphrase-secret')
+
+    const server = await handles.get(ipcChannels.sshServersCreate)?.({ sender: { id: 1 } }, {
+      name: 'Prod server',
+      host: '10.0.0.8',
+      port: 22,
+      username: 'deploy',
+      keyId: key.id,
+      note: 'logs'
+    })
+    expect(server).toMatchObject({ host: '10.0.0.8', username: 'deploy', keyId: key.id })
+
+    await expect(handles.get(ipcChannels.sshKeysDelete)?.({ sender: { id: 1 } }, key.id)).rejects.toThrow('SSH key is used')
+
+    const updated = await handles.get(ipcChannels.sshServersUpdate)?.({ sender: { id: 1 } }, { id: server.id, port: 2222, note: 'new note' })
+    expect(updated).toMatchObject({ port: 2222, note: 'new note' })
+
+    await expect(handles.get(ipcChannels.sshServersList)?.({ sender: { id: 1 } })).resolves.toEqual(expect.arrayContaining([expect.objectContaining({ id: server.id })]))
+    expect(JSON.stringify(await handles.get(ipcChannels.sshKeysList)?.({ sender: { id: 1 } }))).not.toContain('private-key-secret')
+  })
+
   it('manages roles through typed IPC handlers and persists mutations', async () => {
     const persistence = await createInMemoryPersistence()
     const container = createServiceContainer({ persistence, agentMode: 'mock' })

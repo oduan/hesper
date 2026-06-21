@@ -96,6 +96,17 @@ const hesperApi: HesperDesktopApi = {
     saveApiKey: (input) => ipcRenderer.invoke(ipcChannels.toolsSaveApiKey, input),
     deleteApiKey: (input) => ipcRenderer.invoke(ipcChannels.toolsDeleteApiKey, input)
   },
+  sshKeys: {
+    list: () => ipcRenderer.invoke(ipcChannels.sshKeysList),
+    create: (input) => ipcRenderer.invoke(ipcChannels.sshKeysCreate, input),
+    delete: (id) => ipcRenderer.invoke(ipcChannels.sshKeysDelete, id)
+  },
+  sshServers: {
+    list: () => ipcRenderer.invoke(ipcChannels.sshServersList),
+    create: (input) => ipcRenderer.invoke(ipcChannels.sshServersCreate, input),
+    update: (input) => ipcRenderer.invoke(ipcChannels.sshServersUpdate, input),
+    delete: (id) => ipcRenderer.invoke(ipcChannels.sshServersDelete, id)
+  },
   roles: {
     list: () => ipcRenderer.invoke(ipcChannels.rolesList),
     create: (input) => ipcRenderer.invoke(ipcChannels.rolesCreate, input),
