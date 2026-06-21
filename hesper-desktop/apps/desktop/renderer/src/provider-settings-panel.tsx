@@ -1379,9 +1379,9 @@ const onboardingOverlayStyle: CSSProperties = {
 }
 
 const connectionTypePickerPanelStyle: CSSProperties = {
-  width: 'min(760px, 100%)',
+  width: 'min(620px, 100%)',
   display: 'grid',
-  gap: 22,
+  gap: 18,
   paddingTop: 28
 }
 
@@ -1401,19 +1401,19 @@ const hesperMarkStyle: CSSProperties = {
 }
 
 const onboardingTitleStyle: CSSProperties = {
-  margin: '24px 0 0',
+  margin: '18px 0 0',
   color: onboardingTextColor,
-  fontSize: 30,
-  lineHeight: 1.2,
-  fontWeight: 760
+  fontSize: 18,
+  lineHeight: 1.25,
+  fontWeight: 720
 }
 
 const onboardingSubtitleStyle: CSSProperties = {
   margin: 0,
   color: onboardingMutedColor,
-  fontSize: 22,
+  fontSize: bodyFontSize,
   lineHeight: 1.35,
-  fontWeight: 650
+  fontWeight: 600
 }
 
 const connectionTypeListStyle: CSSProperties = {
@@ -1457,16 +1457,16 @@ const connectionTypeTextBlockStyle: CSSProperties = {
 
 const connectionTypeTitleStyle: CSSProperties = {
   color: onboardingTextColor,
-  fontSize: 16,
-  lineHeight: 1.15,
-  fontWeight: 760
+  fontSize: bodyFontSize,
+  lineHeight: 1.2,
+  fontWeight: 720
 }
 
 const connectionTypeDescriptionStyle: CSSProperties = {
   color: onboardingMutedColor,
-  fontSize: 13,
+  fontSize: bodyFontSize,
   lineHeight: 1.25,
-  fontWeight: 560
+  fontWeight: 520
 }
 
 const connectionPickerFooterStyle: CSSProperties = {
@@ -1489,15 +1489,15 @@ const customProviderIconStyle: CSSProperties = {
 }
 
 const onboardingSecondaryButtonStyle: CSSProperties = {
-  minHeight: 58,
-  borderRadius: 15,
+  minHeight: 40,
+  borderRadius: 12,
   border: `1px solid ${onboardingBorderColor}`,
   background: 'rgba(244, 246, 251, 0.72)',
   color: onboardingMutedColor,
-  padding: '0 24px',
+  padding: '0 18px',
   cursor: 'pointer',
-  fontSize: 22,
-  fontWeight: 650,
+  fontSize: bodyFontSize,
+  fontWeight: 620,
   boxShadow: '0 2px 5px rgba(36, 42, 64, 0.04)'
 }
 
@@ -1524,55 +1524,54 @@ const spinnerIconStyle: CSSProperties = {
 }
 
 const codexAuthPanelStyle: CSSProperties = {
-  width: 'min(760px, 100%)',
-  minHeight: 'min(560px, calc(100vh - 124px))',
+  width: 'min(620px, 100%)',
+  minHeight: 'min(460px, calc(100vh - 124px))',
   display: 'grid',
   gridTemplateRows: 'auto minmax(0, 1fr) auto',
-  paddingTop: 96,
+  paddingTop: 72,
   boxSizing: 'border-box'
 }
 
 const codexAuthHeaderStyle: CSSProperties = {
   textAlign: 'center',
   display: 'grid',
-  gap: 20,
-  marginBottom: 78
+  gap: 12,
+  marginBottom: 48
 }
 
 const codexAuthTitleStyle: CSSProperties = {
   margin: 0,
   color: '#343b56',
-  fontSize: 30,
-  lineHeight: 1.2,
-  fontWeight: 780
+  fontSize: 18,
+  lineHeight: 1.25,
+  fontWeight: 720
 }
 
 const codexAuthSubtitleStyle: CSSProperties = {
   margin: 0,
   color: onboardingMutedColor,
-  fontSize: 22,
+  fontSize: bodyFontSize,
   lineHeight: 1.35,
-  fontWeight: 560
+  fontWeight: 520
 }
 
 const codexAuthBodyStyle: CSSProperties = {
   display: 'grid',
   alignContent: 'start',
-  gap: 24
+  gap: 14
 }
 
 const codexAuthInstructionStyle: CSSProperties = {
   margin: 0,
   color: onboardingMutedColor,
-  fontSize: 22,
+  fontSize: bodyFontSize,
   lineHeight: 1.45,
-  fontWeight: 560,
-  maxWidth: 680
+  fontWeight: 520,
+  maxWidth: 560
 }
 
 const codexAuthFeedbackStyle: CSSProperties = {
   ...codexAuthInstructionStyle,
-  fontSize: 18,
   color: onboardingTextColor,
   overflowWrap: 'anywhere'
 }
