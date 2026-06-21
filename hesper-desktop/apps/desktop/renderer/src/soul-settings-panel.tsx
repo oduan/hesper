@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { darkTheme } from '@hesper/ui'
 import type { AppSettings, UpdateSettingsInput } from '../../electron/ipc-contract'
 
@@ -16,15 +16,16 @@ export function SoulSettingsPanel({ settings, error, onUpdate }: SoulSettingsPan
   const settingsSoulRef = useRef(settings.soul)
   const lastSubmittedSoulRef = useRef(settings.soul)
   const saveTimeoutRef = useRef<number | null>(null)
+  const onUpdateRef = useRef(onUpdate)
 
-  const clearPendingSave = () => {
+  const clearPendingSave = useCallback(() => {
     if (saveTimeoutRef.current !== null) {
       window.clearTimeout(saveTimeoutRef.current)
       saveTimeoutRef.current = null
     }
-  }
+  }, [])
 
-  const flushDraft = () => {
+  const flushDraft = useCallback(() => {
     clearPendingSave()
 
     const nextSoul = draftRef.current
@@ -33,8 +34,12 @@ export function SoulSettingsPanel({ settings, error, onUpdate }: SoulSettingsPan
     }
 
     lastSubmittedSoulRef.current = nextSoul
-    void onUpdate({ soul: nextSoul })
-  }
+    void onUpdateRef.current({ soul: nextSoul })
+  }, [clearPendingSave])
+
+  useEffect(() => {
+    onUpdateRef.current = onUpdate
+  }, [onUpdate])
 
   useEffect(() => {
     draftRef.current = draft
@@ -51,19 +56,15 @@ export function SoulSettingsPanel({ settings, error, onUpdate }: SoulSettingsPan
     clearPendingSave()
 
     if (draft === settings.soul) {
-      return () => clearPendingSave()
+      return clearPendingSave
     }
 
-    saveTimeoutRef.current = window.setTimeout(() => {
-      flushDraft()
-    }, SOUL_SAVE_DEBOUNCE_MS)
+    saveTimeoutRef.current = window.setTimeout(flushDraft, SOUL_SAVE_DEBOUNCE_MS)
 
-    return () => clearPendingSave()
-  }, [draft, settings.soul, onUpdate])
+    return clearPendingSave
+  }, [clearPendingSave, draft, flushDraft, settings.soul])
 
-  useEffect(() => () => {
-    clearPendingSave()
-  }, [])
+  useEffect(() => clearPendingSave, [clearPendingSave])
 
   return (
     <section aria-label="SOUL 设置面板" style={panelStyle}>
