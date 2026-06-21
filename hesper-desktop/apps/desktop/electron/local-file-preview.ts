@@ -6,6 +6,7 @@ const ONE_MIB = 1024 * 1024
 const TEXT_PREVIEW_LIMIT_BYTES = ONE_MIB
 const IMAGE_PREVIEW_LIMIT_BYTES = 10 * ONE_MIB
 const MEDIA_PREVIEW_LIMIT_BYTES = 25 * ONE_MIB
+const READ_CHUNK_BYTES = 64 * 1024
 
 const imageMimeTypes: Record<string, string> = {
   png: 'image/png',
@@ -119,6 +120,27 @@ function assertSizeWithinLimit(kind: LocalFilePreviewKind, bytes: number, limitB
   if (limitBytes !== undefined && bytes > limitBytes) {
     throw new Error(`File is too large to preview as ${kind}: ${bytes} bytes exceeds ${limitBytes} bytes`)
   }
+}
+
+async function readFileBufferWithinLimit(fileHandle: Awaited<ReturnType<typeof fs.open>>, kind: LocalFilePreviewKind, limitBytes: number): Promise<Buffer> {
+  const chunks: Buffer[] = []
+  let totalBytes = 0
+
+  while (totalBytes <= limitBytes) {
+    const bytesToRead = Math.min(READ_CHUNK_BYTES, limitBytes + 1 - totalBytes)
+    const chunk = Buffer.allocUnsafe(bytesToRead)
+    const { bytesRead } = await fileHandle.read(chunk, 0, bytesToRead, null)
+
+    if (bytesRead === 0) {
+      break
+    }
+
+    totalBytes += bytesRead
+    assertSizeWithinLimit(kind, totalBytes, limitBytes)
+    chunks.push(bytesRead === chunk.length ? chunk : chunk.subarray(0, bytesRead))
+  }
+
+  return Buffer.concat(chunks, totalBytes)
 }
 
 function stripJsonComments(input: string): string {
@@ -294,12 +316,18 @@ export async function readLocalFilePreview(input: ReadLocalFilePreviewInput): Pr
     }
 
     assertSizeWithinLimit(spec.kind, stat.size, spec.limitBytes)
-    const fileBuffer = await fileHandle.readFile()
-    assertSizeWithinLimit(spec.kind, fileBuffer.byteLength, spec.limitBytes)
+    if (spec.limitBytes === undefined) {
+      throw new Error(`File preview size limit is not configured for ${spec.kind}`)
+    }
+    const fileBuffer = await readFileBufferWithinLimit(fileHandle, spec.kind, spec.limitBytes)
+    const contentPreview = {
+      ...basePreview,
+      bytes: fileBuffer.byteLength
+    }
 
     if (spec.readMode === 'dataUrl') {
       return {
-        ...basePreview,
+        ...contentPreview,
         dataUrl: `data:${spec.mimeType};base64,${fileBuffer.toString('base64')}`
       }
     }
@@ -307,13 +335,13 @@ export async function readLocalFilePreview(input: ReadLocalFilePreviewInput): Pr
     const rawContent = fileBuffer.toString('utf8')
     if (spec.kind === 'json') {
       return {
-        ...basePreview,
+        ...contentPreview,
         ...formatJsonPreview(rawContent)
       }
     }
 
     return {
-      ...basePreview,
+      ...contentPreview,
       content: rawContent
     }
   } finally {
