@@ -1,5 +1,24 @@
 import { useState, type CSSProperties, type FormEvent } from 'react'
-import type { ToolCredentialStatus, ToolDto } from '../../electron/ipc-contract'
+import type { CreateSshKeyInput, CreateSshServerInput, SshKeyDto, SshServerDto, ToolCredentialStatus, ToolDto, UpdateSshServerInput } from '../../electron/ipc-contract'
+
+type ToolDetailsPanelProps = {
+  tool?: ToolDto
+  pending?: boolean
+  credentialPending?: boolean
+  credentialStatus?: ToolCredentialStatus
+  error?: string
+  sshKeys?: SshKeyDto[]
+  sshServers?: SshServerDto[]
+  sshPending?: boolean
+  onToggle?: (enabled: boolean) => void
+  onSaveApiKey?: (apiKey: string) => void
+  onDeleteApiKey?: () => void
+  onCreateSshKey?: (input: CreateSshKeyInput) => void | Promise<void>
+  onDeleteSshKey?: (keyId: string) => void | Promise<void>
+  onCreateSshServer?: (input: CreateSshServerInput) => void | Promise<void>
+  onUpdateSshServer?: (input: UpdateSshServerInput) => void | Promise<void>
+  onDeleteSshServer?: (serverId: string) => void | Promise<void>
+}
 
 export function ToolDetailsPanel({
   tool,
@@ -7,19 +26,18 @@ export function ToolDetailsPanel({
   error,
   credentialPending = false,
   credentialStatus,
+  sshKeys = [],
+  sshServers = [],
+  sshPending = false,
   onToggle,
   onSaveApiKey,
-  onDeleteApiKey
-}: {
-  tool?: ToolDto
-  pending?: boolean
-  credentialPending?: boolean
-  credentialStatus?: ToolCredentialStatus
-  error?: string
-  onToggle?: (enabled: boolean) => void
-  onSaveApiKey?: (apiKey: string) => void
-  onDeleteApiKey?: () => void
-}) {
+  onDeleteApiKey,
+  onCreateSshKey,
+  onDeleteSshKey,
+  onCreateSshServer,
+  onUpdateSshServer,
+  onDeleteSshServer
+}: ToolDetailsPanelProps) {
   if (!tool) {
     return (
       <section aria-label="工具详情" style={emptyStateStyle}>
@@ -62,6 +80,19 @@ export function ToolDetailsPanel({
           {...(credentialStatus ? { status: credentialStatus } : {})}
           {...(onSaveApiKey ? { onSaveApiKey } : {})}
           {...(onDeleteApiKey ? { onDeleteApiKey } : {})}
+        />
+      ) : null}
+
+      {tool.id.startsWith('ssh.') ? (
+        <SshConfigurationSection
+          sshKeys={sshKeys}
+          sshServers={sshServers}
+          pending={sshPending}
+          {...(onCreateSshKey ? { onCreateSshKey } : {})}
+          {...(onDeleteSshKey ? { onDeleteSshKey } : {})}
+          {...(onCreateSshServer ? { onCreateSshServer } : {})}
+          {...(onUpdateSshServer ? { onUpdateSshServer } : {})}
+          {...(onDeleteSshServer ? { onDeleteSshServer } : {})}
         />
       ) : null}
 
@@ -153,6 +184,184 @@ function ToolDetailSwitch({ enabled, pending, disabled, onToggle }: { enabled: b
       </span>
       <span style={detailSwitchLabelStyle(enabled)}>{enabled ? '全局开启' : '全局关闭'}</span>
     </button>
+  )
+}
+
+function SshConfigurationSection(props: {
+  sshKeys: SshKeyDto[]
+  sshServers: SshServerDto[]
+  pending: boolean
+  onCreateSshKey?: (input: CreateSshKeyInput) => void | Promise<void>
+  onDeleteSshKey?: (keyId: string) => void | Promise<void>
+  onCreateSshServer?: (input: CreateSshServerInput) => void | Promise<void>
+  onUpdateSshServer?: (input: UpdateSshServerInput) => void | Promise<void>
+  onDeleteSshServer?: (serverId: string) => void | Promise<void>
+}) {
+  const { sshKeys, sshServers, pending, onCreateSshKey, onDeleteSshKey, onCreateSshServer, onDeleteSshServer } = props
+  const [keyName, setKeyName] = useState('')
+  const [privateKey, setPrivateKey] = useState('')
+  const [passphrase, setPassphrase] = useState('')
+  const [keyNote, setKeyNote] = useState('')
+  const [serverName, setServerName] = useState('')
+  const [serverHost, setServerHost] = useState('')
+  const [serverPort, setServerPort] = useState('22')
+  const [serverUsername, setServerUsername] = useState('')
+  const [serverKeyId, setServerKeyId] = useState('')
+  const [serverNote, setServerNote] = useState('')
+  const keyNameById = new Map(sshKeys.map((key) => [key.id, key.name]))
+
+  const submitKey = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const name = keyName.trim()
+    const privateKeyValue = privateKey.trim()
+    if (!name || !privateKeyValue || pending) return
+    const passphraseValue = passphrase.trim()
+    const noteValue = keyNote.trim()
+    const input: CreateSshKeyInput = {
+      name,
+      privateKey: privateKeyValue,
+      ...(passphraseValue ? { passphrase: passphraseValue } : {}),
+      ...(noteValue ? { note: noteValue } : {})
+    }
+    void onCreateSshKey?.(input)
+    setKeyName('')
+    setPrivateKey('')
+    setPassphrase('')
+    setKeyNote('')
+  }
+
+  const submitServer = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const name = serverName.trim()
+    const host = serverHost.trim()
+    const username = serverUsername.trim()
+    const keyId = serverKeyId || sshKeys[0]?.id
+    const port = Number(serverPort)
+    if (!name || !host || !username || !keyId || !Number.isInteger(port) || port < 1 || port > 65535 || pending) return
+    const noteValue = serverNote.trim()
+    const input: CreateSshServerInput = {
+      name,
+      host,
+      port,
+      username,
+      keyId,
+      ...(noteValue ? { note: noteValue } : {})
+    }
+    void onCreateSshServer?.(input)
+    setServerName('')
+    setServerHost('')
+    setServerPort('22')
+    setServerUsername('')
+    setServerKeyId('')
+    setServerNote('')
+  }
+
+  const keySubmitDisabled = pending || !onCreateSshKey || !keyName.trim() || !privateKey.trim()
+  const serverSubmitDisabled = pending || !onCreateSshServer || !serverName.trim() || !serverHost.trim() || !serverUsername.trim() || !(serverKeyId || sshKeys[0]?.id)
+
+  return (
+    <section aria-label="SSH 配置" style={sshPanelStyle}>
+      <div style={{ display: 'grid', gap: 8 }}>
+        <h3 style={sectionTitleStyle}>SSH 配置</h3>
+        <p style={mutedTextStyle}>在本地保存 SSH 私钥元数据和服务器连接信息，供 ssh.* 工具执行命令时选择。</p>
+        <p style={mutedTextStyle}>编辑服务器可通过删除后重新添加完成。</p>
+      </div>
+
+      <div style={sshTwoColumnStyle}>
+        <form onSubmit={submitKey} style={sshCardStyle}>
+          <h4 style={sshCardTitleStyle}>SSH 密钥</h4>
+          <label style={apiKeyInputLabelStyle}>
+            <span>SSH 密钥名称</span>
+            <input value={keyName} disabled={pending} onChange={(event) => setKeyName(event.target.value)} style={apiKeyInputStyle} />
+          </label>
+          <label style={apiKeyInputLabelStyle}>
+            <span>SSH 私钥内容</span>
+            <textarea value={privateKey} disabled={pending} onChange={(event) => setPrivateKey(event.target.value)} style={sshTextareaStyle} />
+          </label>
+          <label style={apiKeyInputLabelStyle}>
+            <span>SSH Passphrase</span>
+            <input type="password" value={passphrase} disabled={pending} onChange={(event) => setPassphrase(event.target.value)} style={apiKeyInputStyle} />
+          </label>
+          <label style={apiKeyInputLabelStyle}>
+            <span>SSH 密钥备注</span>
+            <input value={keyNote} disabled={pending} onChange={(event) => setKeyNote(event.target.value)} style={apiKeyInputStyle} />
+          </label>
+          <button type="submit" disabled={keySubmitDisabled} style={primaryButtonStyle(keySubmitDisabled)}>保存 SSH 密钥</button>
+        </form>
+
+        <form onSubmit={submitServer} style={sshCardStyle}>
+          <h4 style={sshCardTitleStyle}>SSH 服务器</h4>
+          <label style={apiKeyInputLabelStyle}>
+            <span>SSH 服务器名称</span>
+            <input value={serverName} disabled={pending} onChange={(event) => setServerName(event.target.value)} style={apiKeyInputStyle} />
+          </label>
+          <label style={apiKeyInputLabelStyle}>
+            <span>SSH Host 或 IP</span>
+            <input value={serverHost} disabled={pending} onChange={(event) => setServerHost(event.target.value)} style={apiKeyInputStyle} />
+          </label>
+          <label style={apiKeyInputLabelStyle}>
+            <span>SSH 端口</span>
+            <input type="number" min={1} max={65535} value={serverPort} disabled={pending} onChange={(event) => setServerPort(event.target.value)} style={apiKeyInputStyle} />
+          </label>
+          <label style={apiKeyInputLabelStyle}>
+            <span>SSH 用户名</span>
+            <input value={serverUsername} disabled={pending} onChange={(event) => setServerUsername(event.target.value)} style={apiKeyInputStyle} />
+          </label>
+          <label style={apiKeyInputLabelStyle}>
+            <span>SSH 密钥</span>
+            <select value={serverKeyId} disabled={pending || sshKeys.length === 0} onChange={(event) => setServerKeyId(event.target.value)} style={apiKeyInputStyle}>
+              <option value="">选择 SSH 密钥</option>
+              {sshKeys.map((key) => <option key={key.id} value={key.id}>{key.name}</option>)}
+            </select>
+          </label>
+          <label style={apiKeyInputLabelStyle}>
+            <span>SSH 服务器备注</span>
+            <input value={serverNote} disabled={pending} onChange={(event) => setServerNote(event.target.value)} style={apiKeyInputStyle} />
+          </label>
+          <button type="submit" disabled={serverSubmitDisabled} style={primaryButtonStyle(serverSubmitDisabled)}>保存 SSH 服务器</button>
+        </form>
+      </div>
+
+      <div style={sshListGridStyle}>
+        <div style={sshListSectionStyle}>
+          <h4 style={sshCardTitleStyle}>已保存密钥</h4>
+          {sshKeys.length > 0 ? (
+            <ul style={sshListStyle}>
+              {sshKeys.map((key) => (
+                <li key={key.id} style={sshListItemStyle}>
+                  <div style={sshListTextStyle}>
+                    <strong>{key.name}</strong>
+                    <span>{key.note || '无备注'}</span>
+                    <span style={sshBadgeStyle(key.hasPassphrase)}>{key.hasPassphrase ? 'Passphrase' : '无 Passphrase'}</span>
+                  </div>
+                  <button type="button" aria-label={`删除 SSH 密钥 ${key.name}`} disabled={pending || !onDeleteSshKey} onClick={() => { void onDeleteSshKey?.(key.id) }} style={secondaryButtonStyle(pending || !onDeleteSshKey)}>删除</button>
+                </li>
+              ))}
+            </ul>
+          ) : <p style={mutedTextStyle}>暂无 SSH 密钥</p>}
+        </div>
+
+        <div style={sshListSectionStyle}>
+          <h4 style={sshCardTitleStyle}>已保存服务器</h4>
+          {sshServers.length > 0 ? (
+            <ul style={sshListStyle}>
+              {sshServers.map((server) => (
+                <li key={server.id} style={sshListItemStyle}>
+                  <div style={sshListTextStyle}>
+                    <strong>{server.name}</strong>
+                    <span>{server.host}:{server.port}</span>
+                    <span>{server.username}</span>
+                    <span>密钥：{keyNameById.get(server.keyId) ?? server.keyId}</span>
+                    <span>{server.note || '无备注'}</span>
+                  </div>
+                  <button type="button" aria-label={`删除 SSH 服务器 ${server.name}`} disabled={pending || !onDeleteSshServer} onClick={() => { void onDeleteSshServer?.(server.id) }} style={secondaryButtonStyle(pending || !onDeleteSshServer)}>删除</button>
+                </li>
+              ))}
+            </ul>
+          ) : <p style={mutedTextStyle}>暂无 SSH 服务器</p>}
+        </div>
+      </div>
+    </section>
   )
 }
 
@@ -267,6 +476,95 @@ const apiKeySectionStyle: CSSProperties = {
   borderRadius: 16,
   border: '1px solid var(--hesper-color-border, #414868)',
   background: 'var(--hesper-color-surface-muted, #24283b)'
+}
+
+const sshPanelStyle: CSSProperties = {
+  ...apiKeySectionStyle,
+  gap: 18
+}
+
+const sshTwoColumnStyle: CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+  gap: 14
+}
+
+const sshCardStyle: CSSProperties = {
+  display: 'grid',
+  gap: 12,
+  padding: 14,
+  borderRadius: 14,
+  border: '1px solid var(--hesper-color-border, #414868)',
+  background: 'var(--hesper-color-surface, #1f2335)'
+}
+
+const sshCardTitleStyle: CSSProperties = {
+  margin: 0,
+  fontSize: 13,
+  fontWeight: 900
+}
+
+const sshTextareaStyle: CSSProperties = {
+  minHeight: 96,
+  borderRadius: 10,
+  border: '1px solid var(--hesper-color-border, #414868)',
+  background: 'var(--hesper-color-surface, #1f2335)',
+  color: 'var(--hesper-color-text, #c0caf5)',
+  padding: 10,
+  outline: 'none',
+  resize: 'vertical',
+  fontFamily: 'ui-monospace, SFMono-Regular, Consolas, monospace',
+  lineHeight: 1.45
+}
+
+const sshListGridStyle: CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+  gap: 14
+}
+
+const sshListSectionStyle: CSSProperties = {
+  display: 'grid',
+  gap: 10
+}
+
+const sshListStyle: CSSProperties = {
+  listStyle: 'none',
+  margin: 0,
+  padding: 0,
+  display: 'grid',
+  gap: 10
+}
+
+const sshListItemStyle: CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'minmax(0, 1fr) auto',
+  alignItems: 'start',
+  gap: 10,
+  padding: 12,
+  borderRadius: 12,
+  border: '1px solid var(--hesper-color-border, #414868)',
+  background: 'rgba(0, 0, 0, 0.14)'
+}
+
+const sshListTextStyle: CSSProperties = {
+  minWidth: 0,
+  display: 'grid',
+  gap: 5,
+  color: 'var(--hesper-color-text-muted, #9aa5ce)',
+  overflowWrap: 'anywhere'
+}
+
+function sshBadgeStyle(active: boolean): CSSProperties {
+  return {
+    justifySelf: 'start',
+    borderRadius: 999,
+    padding: '3px 8px',
+    fontSize: 11,
+    fontWeight: 800,
+    color: active ? 'var(--hesper-color-success, #9ece6a)' : 'var(--hesper-color-text-muted, #737aa2)',
+    background: active ? 'rgba(158, 206, 106, 0.14)' : 'rgba(148, 163, 184, 0.12)'
+  }
 }
 
 const sectionTitleStyle: CSSProperties = {

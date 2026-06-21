@@ -42,6 +42,13 @@ export type WorkerAgentToolHandlers = {
   cancel(input: Record<string, unknown>, context: ToolExecutionContext): Promise<unknown>
 }
 
+export type SshToolHandlers = {
+  listServers(input: Record<string, unknown>, context: ToolExecutionContext): Promise<unknown>
+  runCommands(input: Record<string, unknown>, context: ToolExecutionContext): Promise<unknown>
+  listExecutions(input: Record<string, unknown>, context: ToolExecutionContext): Promise<unknown>
+  getExecutionOutput(input: Record<string, unknown>, context: ToolExecutionContext): Promise<unknown>
+}
+
 export type SleepOptions = {
   signal?: AbortSignal
 }
@@ -56,6 +63,7 @@ export type BuiltinToolExecutorOptions = {
   showNotification?: (message: string) => Promise<void> | void
   roleTools?: RoleToolHandlers
   workerAgentTools?: WorkerAgentToolHandlers
+  sshTools?: SshToolHandlers
   now?: () => string
   sleep?: (durationMs: number, options?: SleepOptions) => Promise<void>
 }
@@ -246,6 +254,28 @@ async function runWorkerAgentTool(
   const input = argsObject(args)
   const result = await handlers[method](input, context)
   const details = { toolId: tool.id, workerAgent: result }
+  return { content: jsonContent(result), details }
+}
+
+function sshToolsUnavailable(tool: ToolDefinition): ToolExecutionResult {
+  return {
+    content: 'SSH tools are not available in this runtime.',
+    details: { code: 'not_available', toolId: tool.id },
+    isError: true
+  }
+}
+
+async function runSshTool(
+  tool: ToolDefinition,
+  args: unknown,
+  context: ToolExecutionContext,
+  handlers: SshToolHandlers | undefined,
+  method: keyof SshToolHandlers
+): Promise<ToolExecutionResult> {
+  if (!handlers) return sshToolsUnavailable(tool)
+  const input = argsObject(args)
+  const result = await handlers[method](input, context)
+  const details = { toolId: tool.id, ssh: result }
   return { content: jsonContent(result), details }
 }
 
@@ -1288,6 +1318,14 @@ export function createBuiltinToolExecutor(options: BuiltinToolExecutorOptions = 
           return createRoleTool(tool, args, options.roleTools)
         case 'roles.update':
           return updateRoleTool(tool, args, options.roleTools)
+        case 'ssh.list-servers':
+          return runSshTool(tool, args, context, options.sshTools, 'listServers')
+        case 'ssh.run-commands':
+          return runSshTool(tool, args, context, options.sshTools, 'runCommands')
+        case 'ssh.list-executions':
+          return runSshTool(tool, args, context, options.sshTools, 'listExecutions')
+        case 'ssh.get-execution-output':
+          return runSshTool(tool, args, context, options.sshTools, 'getExecutionOutput')
         case 'time.current':
           return currentTimeTool(tool, now)
         case 'time.sleep':

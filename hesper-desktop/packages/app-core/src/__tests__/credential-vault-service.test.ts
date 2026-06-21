@@ -83,4 +83,41 @@ describe('createCredentialVaultService', () => {
     await expect(vault.saveProviderApiKey({ providerId: 'provider-openai', apiKey: ' ' })).rejects.toThrow(/apiKey/)
     expect(encryptSpy).not.toHaveBeenCalled()
   })
+
+  it('round-trips SSH private keys and passphrases through encrypted records', async () => {
+    const persistence = await createInMemoryPersistence()
+    const vault = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => '2026-06-21T05:00:00.000Z' })
+
+    const privateKeyStatus = await vault.saveSshPrivateKey({ keyId: 'ssh-key-1', privateKey: '-----BEGIN OPENSSH PRIVATE KEY-----\nsecret\n-----END OPENSSH PRIVATE KEY-----' })
+    const passphraseStatus = await vault.saveSshPassphrase({ keyId: 'ssh-key-1', passphrase: 'ssh-passphrase-secret' })
+
+    expect(privateKeyStatus).toEqual({
+      keyId: 'ssh-key-1',
+      credentialRef: 'ssh-key:ssh-key-1:private-key',
+      hasSecret: true,
+      encryptionAvailable: true,
+      updatedAt: '2026-06-21T05:00:00.000Z'
+    })
+    expect(passphraseStatus).toMatchObject({ keyId: 'ssh-key-1', hasSecret: true })
+    expect(await vault.readSshPrivateKey('ssh-key-1')).toContain('BEGIN OPENSSH PRIVATE KEY')
+    expect(await vault.readSshPassphrase('ssh-key-1')).toBe('ssh-passphrase-secret')
+    expect(JSON.stringify(await persistence.credentialRecords.list())).not.toContain('ssh-passphrase-secret')
+    expect(Buffer.from(exportDatabaseBytes(persistence)).toString('latin1')).not.toContain('BEGIN OPENSSH PRIVATE KEY')
+  })
+
+  it('deletes SSH private keys and passphrases without returning secret material', async () => {
+    const persistence = await createInMemoryPersistence()
+    const vault = createCredentialVaultService({ persistence, codec: createMockCodec() })
+
+    await vault.saveSshPrivateKey({ keyId: 'ssh-key-1', privateKey: 'private-key-secret' })
+    await vault.saveSshPassphrase({ keyId: 'ssh-key-1', passphrase: 'passphrase-secret' })
+
+    const privateDeleted = await vault.deleteSshPrivateKey({ keyId: 'ssh-key-1' })
+    const passphraseDeleted = await vault.deleteSshPassphrase({ keyId: 'ssh-key-1' })
+
+    expect(JSON.stringify(privateDeleted)).not.toContain('private-key-secret')
+    expect(JSON.stringify(passphraseDeleted)).not.toContain('passphrase-secret')
+    expect(await vault.readSshPrivateKey('ssh-key-1')).toBeUndefined()
+    expect(await vault.readSshPassphrase('ssh-key-1')).toBeUndefined()
+  })
 })

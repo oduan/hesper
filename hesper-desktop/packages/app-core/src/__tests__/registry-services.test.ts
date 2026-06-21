@@ -30,6 +30,10 @@ describe('registry services', () => {
       'agent.get-worker-agent',
       'agent.wait-worker-agent',
       'agent.cancel-worker-agent',
+      'ssh.list-servers',
+      'ssh.run-commands',
+      'ssh.list-executions',
+      'ssh.get-execution-output',
       'time.current',
       'time.sleep',
       'time.wait-until',
@@ -39,6 +43,12 @@ describe('registry services', () => {
     expect(roles.find((role) => role.id === 'worker-agent')?.defaultToolIds).not.toEqual(expect.arrayContaining([
       'agent.spawn-worker-agent',
       'agent.wait-worker-agent'
+    ]))
+    expect(roles.find((role) => role.id === 'worker-agent')?.defaultToolIds).not.toEqual(expect.arrayContaining([
+      'ssh.list-servers',
+      'ssh.run-commands',
+      'ssh.list-executions',
+      'ssh.get-execution-output'
     ]))
     expect(roles.find((role) => role.id === 'worker-agent')?.defaultToolIds).not.toContain('roles.list')
     expect(roles.find((role) => role.id === 'worker-agent')?.defaultToolIds).not.toContain('roles.find')

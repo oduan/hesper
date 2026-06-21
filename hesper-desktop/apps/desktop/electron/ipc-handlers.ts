@@ -1,4 +1,4 @@
-import { agentRuntimeEventSchema, modelConfigSchema, modelProviderConfigSchema, type Role } from '@hesper/shared'
+import { agentRuntimeEventSchema, modelConfigSchema, modelProviderConfigSchema, sshKeySchema, sshServerSchema, type Role } from '@hesper/shared'
 import { BrowserWindow, type Dialog, type IpcMain, type IpcMainInvokeEvent } from 'electron'
 import { z } from 'zod'
 import {
@@ -12,6 +12,8 @@ import {
   conversationStepsResultSchema,
   createRoleInputSchema,
   createSessionInputSchema,
+  createSshKeyInputSchema,
+  createSshServerInputSchema,
   directorySelectionSchema,
   generateSessionTitleInputSchema,
   ipcChannels,
@@ -42,6 +44,8 @@ import {
   setSessionWorkspaceInputSchema,
   setToolEnabledInputSchema,
   saveToolApiKeyInputSchema,
+  sshKeysResultSchema,
+  sshServersResultSchema,
   subscribeAgentEventsResultSchema,
   toolCredentialInputSchema,
   toolCredentialStatusSchema,
@@ -49,6 +53,7 @@ import {
   unsubscribeAgentEventsResultSchema,
   updateRoleInputSchema,
   updateSessionTitleInputSchema,
+  updateSshServerInputSchema,
   updateSettingsInputSchema
 } from './ipc-contract'
 import type { ServiceContainer } from './service-container'
@@ -88,6 +93,11 @@ const mutatingChannels = [
   ipcChannels.toolsSetEnabled,
   ipcChannels.toolsSaveApiKey,
   ipcChannels.toolsDeleteApiKey,
+  ipcChannels.sshKeysCreate,
+  ipcChannels.sshKeysDelete,
+  ipcChannels.sshServersCreate,
+  ipcChannels.sshServersUpdate,
+  ipcChannels.sshServersDelete,
   ipcChannels.rolesCreate,
   ipcChannels.rolesUpdate,
   ipcChannels.rolesDelete
@@ -416,6 +426,33 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       const status = await options.container.credentialVaultService.deleteToolApiKey(toolCredentialInputSchema.parse(payload))
       await savePersistence()
       return toolCredentialStatusSchema.parse(status)
+    },
+    [ipcChannels.sshKeysList]: async () => sshKeysResultSchema.parse(await options.container.sshConfigurationService.listKeys()),
+    [ipcChannels.sshKeysCreate]: async (_event, payload) => {
+      const key = await options.container.sshConfigurationService.createKey(omitUndefined(createSshKeyInputSchema.parse(payload)))
+      await savePersistence()
+      return sshKeySchema.parse(key)
+    },
+    [ipcChannels.sshKeysDelete]: async (_event, payload) => {
+      const result = await options.container.sshConfigurationService.deleteKey(sessionIdInputSchema.parse(payload))
+      await savePersistence()
+      return result
+    },
+    [ipcChannels.sshServersList]: async () => sshServersResultSchema.parse(await options.container.sshConfigurationService.listServers()),
+    [ipcChannels.sshServersCreate]: async (_event, payload) => {
+      const server = await options.container.sshConfigurationService.createServer(omitUndefined(createSshServerInputSchema.parse(payload)))
+      await savePersistence()
+      return sshServerSchema.parse(server)
+    },
+    [ipcChannels.sshServersUpdate]: async (_event, payload) => {
+      const server = await options.container.sshConfigurationService.updateServer(omitUndefined(updateSshServerInputSchema.parse(payload)))
+      await savePersistence()
+      return sshServerSchema.parse(server)
+    },
+    [ipcChannels.sshServersDelete]: async (_event, payload) => {
+      const result = await options.container.sshConfigurationService.deleteServer(sessionIdInputSchema.parse(payload))
+      await savePersistence()
+      return result
     },
     [ipcChannels.credentialsProviderStatus]: async (_event, payload) => {
       const status = await options.container.credentialVaultService.getProviderApiKeyStatus(providerCredentialInputSchema.parse(payload))

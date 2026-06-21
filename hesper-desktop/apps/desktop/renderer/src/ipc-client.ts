@@ -3,6 +3,8 @@ import type {
   AgentRunDto,
   AppSettings,
   CreateSessionInput,
+  CreateSshKeyInput,
+  CreateSshServerInput,
   DirectorySelectionResult,
   HesperDesktopApi,
   MessageDto,
@@ -12,6 +14,8 @@ import type {
   ModelProviderDto,
   RunStepDto,
   SessionDto,
+  SshKeyDto,
+  SshServerDto,
   WorkerAgentInvocationDto,
   SetSessionModelInput,
   SetSessionOutputModeInput,
@@ -19,7 +23,8 @@ import type {
   SetToolEnabledInput,
   ToolDto,
   UpdateSessionTitleInput,
-  UpdateSettingsInput
+  UpdateSettingsInput,
+  UpdateSshServerInput
 } from '../../electron/ipc-contract'
 import { createId } from '@hesper/shared'
 
@@ -47,6 +52,10 @@ const fallbackBuiltinTools: ToolDto[] = [
   { id: 'roles.find', name: 'Find Roles', description: 'Fuzzy search user-defined roles by id, name, description, prompt text, or default tool IDs.', category: 'agent', icon: '🎭', inputSchema: { type: 'object', required: ['query'], properties: { query: { type: 'string' }, limit: { type: 'number' } } }, enabled: true },
   { id: 'roles.create', name: 'Create Role', description: 'Create a user-defined role with a name, description, full prompt, and default tools.', category: 'agent', icon: '🎭', inputSchema: { type: 'object', required: ['name'], properties: { name: { type: 'string' }, description: { type: 'string' }, systemPrompt: { type: 'string' }, defaultToolIds: { type: 'array', items: { type: 'string' } } } }, enabled: true },
   { id: 'roles.update', name: 'Update Role', description: 'Update an existing user-defined role. This tool cannot delete roles.', category: 'agent', icon: '🎭', inputSchema: { type: 'object', required: ['id'], properties: { id: { type: 'string' }, name: { type: 'string' }, description: { type: 'string' }, systemPrompt: { type: 'string' }, defaultToolIds: { type: 'array', items: { type: 'string' } } } }, enabled: true },
+  { id: 'ssh.list-servers', name: 'List SSH Servers', description: 'List SSH servers configured for agent use. Sensitive connection details such as hostnames, usernames, and credentials are not returned.', category: 'system', icon: '🔐', inputSchema: { type: 'object', properties: {} }, enabled: true },
+  { id: 'ssh.run-commands', name: 'Run SSH Commands', description: 'Run one or more shell commands on a configured SSH server using stored credentials. Commands run sequentially and may stop after the first failure.', category: 'system', icon: '🔐', inputSchema: { type: 'object', required: ['serverId', 'commands'], properties: { serverId: { type: 'string', description: 'SSH server id returned by ssh.list-servers.' }, commands: { type: 'array', items: { type: 'string' }, description: 'Shell commands to run sequentially on the selected SSH server.' }, stopOnError: { type: 'boolean', description: 'When true, skip remaining commands after the first failed command. Defaults to true.' }, timeoutMs: { type: 'number', description: 'Whole execution timeout in milliseconds. Defaults to 0, which means no timeout.' }, wait: { type: 'boolean', description: 'When true, wait for command execution to finish before returning. Defaults to true.' } } }, enabled: true },
+  { id: 'ssh.list-executions', name: 'List SSH Executions', description: 'List SSH command executions for the current session, optionally filtered by status.', category: 'system', icon: '🔐', inputSchema: { type: 'object', properties: { status: { type: 'string', description: 'Optional execution status filter: queued, running, succeeded, failed, or cancelled.' } } }, enabled: true },
+  { id: 'ssh.get-execution-output', name: 'Get SSH Execution Output', description: 'Get stdout, stderr, status, and result metadata for a previous SSH command execution in the current session.', category: 'system', icon: '🔐', inputSchema: { type: 'object', required: ['executionId'], properties: { executionId: { type: 'string', description: 'SSH execution id returned by ssh.run-commands or ssh.list-executions.' } } }, enabled: true },
   { id: 'time.current', name: 'Current Time', description: 'Get the current date, time, timezone, and UTC offset for this desktop runtime.', category: 'system', icon: '🕒', inputSchema: { type: 'object', properties: {} }, enabled: true },
   { id: 'time.sleep', name: 'Sleep', description: 'Pause the Agent for a specified number of seconds before continuing.', category: 'system', icon: '💤', inputSchema: { type: 'object', required: ['seconds'], properties: { seconds: { type: 'number' } } }, enabled: true },
   { id: 'time.wait-until', name: 'Wait Until Time', description: 'Pause the Agent until a specific wake-up time, then return success.', category: 'system', icon: '⏰', inputSchema: { type: 'object', required: ['wakeAt'], properties: { wakeAt: { type: 'string' } } }, enabled: true },
@@ -85,6 +94,8 @@ export function createFallbackHesperApi(): HesperDesktopApi {
   let sessions: SessionDto[] = []
   let tools: ToolDto[] = fallbackBuiltinTools.map((tool) => ({ ...tool }))
   let roles: ManagedRoleDto[] = []
+  let sshKeys: SshKeyDto[] = []
+  let sshServers: SshServerDto[] = []
   const messagesBySession: Record<string, MessageDto[]> = {}
   const runsBySession: Record<string, AgentRunDto[]> = {}
   const stepsByRun: Record<string, RunStepDto[]> = {}
@@ -111,6 +122,25 @@ export function createFallbackHesperApi(): HesperDesktopApi {
       }
     }
     return [...ids]
+  }
+  const cloneSshKey = (key: SshKeyDto): SshKeyDto => ({ ...key })
+  const cloneSshServer = (server: SshServerDto): SshServerDto => ({ ...server })
+  const normalizeSshText = (value: string | undefined, field: string): string => {
+    const trimmed = value?.trim() ?? ''
+    if (!trimmed) {
+      throw new Error(`SSH ${field} is required`)
+    }
+    return trimmed
+  }
+  const normalizeSshNote = (value: string | undefined): string | undefined => {
+    const trimmed = value?.trim() ?? ''
+    return trimmed || undefined
+  }
+  const normalizeSshPort = (value: number): number => {
+    if (!Number.isInteger(value) || value < 1 || value > 65535) {
+      throw new Error('SSH port must be between 1 and 65535')
+    }
+    return value
   }
 
   return {
@@ -314,6 +344,79 @@ export function createFallbackHesperApi(): HesperDesktopApi {
           encryptionAvailable: false,
           warning: 'Secure credential storage is unavailable in renderer fallback mode.'
         }
+      }
+    },
+    sshKeys: {
+      list: async () => sshKeys.map(cloneSshKey),
+      create: async (input: CreateSshKeyInput): Promise<SshKeyDto> => {
+        normalizeSshText(input.privateKey, 'privateKey')
+        const timestamp = new Date().toISOString()
+        const key = withDefined({
+          id: `ssh-key-${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)}`,
+          name: normalizeSshText(input.name, 'name'),
+          note: normalizeSshNote(input.note),
+          hasPassphrase: Boolean(input.passphrase?.trim()),
+          createdAt: timestamp,
+          updatedAt: timestamp
+        }) as SshKeyDto
+        sshKeys = [key, ...sshKeys]
+        return cloneSshKey(key)
+      },
+      delete: async (id: string) => {
+        const serverCount = sshServers.filter((server) => server.keyId === id).length
+        if (serverCount > 0) {
+          throw new Error(`SSH key is used by ${serverCount} server(s)`)
+        }
+        sshKeys = sshKeys.filter((key) => key.id !== id)
+        return { deleted: true as const, id }
+      }
+    },
+    sshServers: {
+      list: async () => sshServers.map(cloneSshServer),
+      create: async (input: CreateSshServerInput): Promise<SshServerDto> => {
+        if (!sshKeys.some((key) => key.id === input.keyId)) {
+          throw new Error('SSH key not found')
+        }
+        const timestamp = new Date().toISOString()
+        const server = withDefined({
+          id: `ssh-server-${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)}`,
+          name: normalizeSshText(input.name, 'name'),
+          host: normalizeSshText(input.host, 'host'),
+          port: normalizeSshPort(input.port),
+          username: normalizeSshText(input.username, 'username'),
+          keyId: input.keyId,
+          note: normalizeSshNote(input.note),
+          createdAt: timestamp,
+          updatedAt: timestamp
+        }) as SshServerDto
+        sshServers = [server, ...sshServers]
+        return cloneSshServer(server)
+      },
+      update: async (input: UpdateSshServerInput): Promise<SshServerDto> => {
+        const existing = sshServers.find((server) => server.id === input.id)
+        if (!existing) {
+          throw new Error(`SSH server not found: ${input.id}`)
+        }
+        const keyId = input.keyId ?? existing.keyId
+        if (!sshKeys.some((key) => key.id === keyId)) {
+          throw new Error('SSH key not found')
+        }
+        const updated = withDefined({
+          ...existing,
+          ...(input.name !== undefined ? { name: normalizeSshText(input.name, 'name') } : {}),
+          ...(input.host !== undefined ? { host: normalizeSshText(input.host, 'host') } : {}),
+          ...(input.port !== undefined ? { port: normalizeSshPort(input.port) } : {}),
+          ...(input.username !== undefined ? { username: normalizeSshText(input.username, 'username') } : {}),
+          keyId,
+          ...(Object.prototype.hasOwnProperty.call(input, 'note') ? { note: normalizeSshNote(input.note) } : {}),
+          updatedAt: new Date().toISOString()
+        }) as SshServerDto
+        sshServers = sshServers.map((server) => server.id === updated.id ? updated : server)
+        return cloneSshServer(updated)
+      },
+      delete: async (id: string) => {
+        sshServers = sshServers.filter((server) => server.id !== id)
+        return { deleted: true as const, id }
       }
     },
     roles: {

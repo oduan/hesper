@@ -10,6 +10,11 @@ import type {
   RunStep,
   Session,
   Skill,
+  SshCommandResult,
+  SshExecution,
+  SshKey,
+  SshServer,
+  SshServerAgentSummary,
   WorkerAgentInvocation,
   ToolDefinition,
   ToolPermissionPolicy
@@ -241,6 +246,74 @@ const workerAgentInvocationBaseSchema = z.object({
 })
 
 export const workerAgentInvocationSchema = workerAgentInvocationBaseSchema.transform(stripUndefined)
+
+const sshKeyBaseSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  note: z.string().optional(),
+  hasPassphrase: z.boolean(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+}).strict()
+
+export const sshKeySchema = sshKeyBaseSchema.transform(stripUndefined) satisfies z.ZodType<NormalizeOptional<SshKey>>
+
+const sshServerBaseSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  host: z.string().min(1),
+  port: z.number().int().min(1).max(65535),
+  username: z.string().min(1),
+  keyId: z.string().min(1),
+  note: z.string().optional(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+}).strict()
+
+export const sshServerSchema = sshServerBaseSchema.transform(stripUndefined) satisfies z.ZodType<NormalizeOptional<SshServer>>
+
+const sshServerAgentSummaryBaseSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  note: z.string().optional()
+}).strict()
+
+export const sshServerAgentSummarySchema = sshServerAgentSummaryBaseSchema.transform(stripUndefined) satisfies z.ZodType<NormalizeOptional<SshServerAgentSummary>>
+
+const sshExecutionBaseSchema = z.object({
+  id: z.string().min(1),
+  sessionId: z.string().min(1),
+  runId: z.string().min(1),
+  serverId: z.string().min(1),
+  serverName: z.string().min(1),
+  commands: z.array(z.string().min(1)).min(1),
+  stopOnError: z.boolean(),
+  timeoutMs: z.number().int().nonnegative(),
+  status: z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled']),
+  startedAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  completedAt: z.string().datetime().optional(),
+  error: runErrorSchema.optional()
+}).strict()
+
+export const sshExecutionSchema = sshExecutionBaseSchema.transform(stripUndefined) satisfies z.ZodType<NormalizeOptional<SshExecution>>
+
+const sshCommandResultBaseSchema = z.object({
+  executionId: z.string().min(1),
+  index: z.number().int().nonnegative(),
+  command: z.string().min(1),
+  status: z.enum(['queued', 'running', 'succeeded', 'failed', 'skipped', 'cancelled']),
+  stdout: z.string(),
+  stderr: z.string(),
+  exitCode: z.number().int().optional(),
+  signal: z.string().optional(),
+  startedAt: z.string().datetime().optional(),
+  completedAt: z.string().datetime().optional(),
+  durationMs: z.number().int().nonnegative().optional(),
+  skippedReason: z.string().optional()
+}).strict()
+
+export const sshCommandResultSchema = sshCommandResultBaseSchema.transform(stripUndefined) satisfies z.ZodType<NormalizeOptional<SshCommandResult>>
 
 const runCreatedEventSchema = z.object({
   type: z.literal('run.created'),

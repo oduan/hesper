@@ -502,6 +502,32 @@ describe('createBuiltinToolExecutor', () => {
     }
   })
 
+  it('delegates SSH tools to injected handlers', async () => {
+    const sshTools = {
+      listServers: vi.fn(async () => ({ servers: [{ id: 'ssh-server-1', name: 'Production' }], count: 1 })),
+      runCommands: vi.fn(async () => ({ executionId: 'ssh-exec-1', status: 'succeeded', results: [] })),
+      listExecutions: vi.fn(async () => ({ executions: [], count: 0 })),
+      getExecutionOutput: vi.fn(async () => ({ executionId: 'ssh-exec-1', status: 'running', results: [] }))
+    }
+    const executor = createBuiltinToolExecutor({ sshTools })
+    const context = { runId: 'run-1', sessionId: 'session-1', allowedToolIds: ['ssh.list-servers', 'ssh.run-commands', 'ssh.list-executions', 'ssh.get-execution-output'] }
+
+    await expect(executor.execute(tool('ssh.list-servers'), {}, context)).resolves.toMatchObject({ details: { toolId: 'ssh.list-servers' } })
+    await expect(executor.execute(tool('ssh.run-commands'), { serverId: 'ssh-server-1', commands: ['pwd'] }, context)).resolves.toMatchObject({ details: { toolId: 'ssh.run-commands' } })
+    await expect(executor.execute(tool('ssh.list-executions'), {}, context)).resolves.toMatchObject({ details: { toolId: 'ssh.list-executions' } })
+    await expect(executor.execute(tool('ssh.get-execution-output'), { executionId: 'ssh-exec-1' }, context)).resolves.toMatchObject({ details: { toolId: 'ssh.get-execution-output' } })
+    expect(sshTools.runCommands).toHaveBeenCalledWith({ serverId: 'ssh-server-1', commands: ['pwd'] }, context)
+  })
+
+  it('returns a controlled error when SSH handlers are unavailable', async () => {
+    const executor = createBuiltinToolExecutor()
+    await expect(executor.execute(tool('ssh.list-servers'), {}, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['ssh.list-servers']
+    })).resolves.toMatchObject({ isError: true, details: { code: 'not_available', toolId: 'ssh.list-servers' } })
+  })
+
   it('returns the current time and timezone', async () => {
     const executor = createBuiltinToolExecutor({ now: () => '2026-06-20T13:00:00.000Z' })
 

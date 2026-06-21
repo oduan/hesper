@@ -10,13 +10,15 @@ import {
   createRoleManagementService,
   createSessionService,
   createSettingsService,
+  createSsh2ClientAdapter,
+  createSshConfigurationService,
   createToolCatalogService,
   createToolSettingsService,
   type CredentialVaultCodec,
   type ProviderOAuthGateway
 } from '@hesper/app-core'
 import type { Persistence } from '@hesper/persistence'
-import type { Role } from '@hesper/shared'
+import type { Role, SshExecutionStatus } from '@hesper/shared'
 import { Notification } from 'electron'
 import { createAllowlistPermissionPolicy, createBuiltinToolDefinitions, createBuiltinToolExecutor, createToolRunner } from '@hesper/tools'
 
@@ -32,6 +34,19 @@ export type ServiceContainerOptions = {
 
 export type ServiceContainer = ReturnType<typeof createServiceContainer>
 
+const sshExecutionStatuses = new Set<SshExecutionStatus>(['queued', 'running', 'succeeded', 'failed', 'cancelled'])
+
+function toSshExecutionStatus(value: unknown): SshExecutionStatus | undefined {
+  return typeof value === 'string' && sshExecutionStatuses.has(value as SshExecutionStatus) ? value as SshExecutionStatus : undefined
+}
+
+function optionalBooleanArg(input: Record<string, unknown>, key: string): boolean | undefined {
+  const value = input[key]
+  if (value === undefined) return undefined
+  if (typeof value !== 'boolean') throw new Error(`Tool argument must be a boolean: ${key}`)
+  return value
+}
+
 export function createServiceContainer(options: ServiceContainerOptions) {
   const sessionService = createSessionService(options.persistence)
   const conversationService = createConversationService(options.persistence)
@@ -45,6 +60,11 @@ export function createServiceContainer(options: ServiceContainerOptions) {
   const credentialVaultService = createCredentialVaultService({
     persistence: options.persistence,
     ...(options.credentialCodec ? { codec: options.credentialCodec } : {})
+  })
+  const sshConfigurationService = createSshConfigurationService({
+    persistence: options.persistence,
+    credentialVault: credentialVaultService,
+    adapter: createSsh2ClientAdapter()
   })
   const toolSettingsService = createToolSettingsService({ persistence: options.persistence, tools: toolDefinitions, credentialVaultService })
   const modelProviderService = createModelProviderService({
@@ -95,6 +115,36 @@ export function createServiceContainer(options: ServiceContainerOptions) {
         get: (input, context) => workerAgentService.get(input, context),
         wait: (input, context) => workerAgentService.wait(input, context),
         cancel: (input, context) => workerAgentService.cancel(input, context)
+      },
+      sshTools: {
+        listServers: async () => {
+          const servers = await sshConfigurationService.listServersForAgent()
+          return { servers, count: servers.length }
+        },
+        runCommands: (input, context) => {
+          const stopOnError = optionalBooleanArg(input, 'stopOnError')
+          const wait = optionalBooleanArg(input, 'wait')
+          return sshConfigurationService.runCommands({
+            sessionId: context.sessionId,
+            runId: context.runId,
+            serverId: input.serverId as string,
+            commands: input.commands as string[],
+            ...(stopOnError !== undefined ? { stopOnError } : {}),
+            ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs as number } : {}),
+            ...(wait !== undefined ? { wait } : {})
+          })
+        },
+        listExecutions: (input, context) => {
+          const status = toSshExecutionStatus(input.status)
+          return sshConfigurationService.listExecutions({
+            sessionId: context.sessionId,
+            ...(status !== undefined ? { status } : {})
+          })
+        },
+        getExecutionOutput: (input, context) => sshConfigurationService.getExecutionOutput({
+          sessionId: context.sessionId,
+          executionId: input.executionId as string
+        })
       }
     })
   })
@@ -158,6 +208,7 @@ export function createServiceContainer(options: ServiceContainerOptions) {
     promptAssemblyService,
     toolRunner,
     credentialVaultService,
+    sshConfigurationService,
     modelProviderService,
     sessionTitleGenerator,
     agentRuntime,

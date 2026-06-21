@@ -382,6 +382,67 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
       }
     },
     {
+      id: 'ssh.list-servers',
+      name: 'List SSH Servers',
+      description: 'List SSH servers configured for agent use. Sensitive connection details such as hostnames, usernames, and credentials are not returned.',
+      category: 'system',
+      icon: '🔐',
+      display: { name: 'List SSH Servers', names: { 'zh-CN': '列出 SSH 服务器' } },
+      inputSchema: { type: 'object', properties: {} }
+    },
+    {
+      id: 'ssh.run-commands',
+      name: 'Run SSH Commands',
+      description: 'Run one or more shell commands on a configured SSH server using stored credentials. Commands run sequentially and may stop after the first failure.',
+      category: 'system',
+      icon: '🔐',
+      display: { name: 'Run SSH Commands', names: { 'zh-CN': '执行 SSH 命令' }, resourceFields: ['serverId'] },
+      inputSchema: {
+        type: 'object',
+        required: ['serverId', 'commands'],
+        properties: {
+          serverId: { type: 'string', description: 'SSH server id returned by ssh.list-servers.' },
+          commands: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Shell commands to run sequentially on the selected SSH server.'
+          },
+          stopOnError: { type: 'boolean', description: 'When true, skip remaining commands after the first failed command. Defaults to true.' },
+          timeoutMs: { type: 'number', description: 'Whole execution timeout in milliseconds. Defaults to 0, which means no timeout.' },
+          wait: { type: 'boolean', description: 'When true, wait for command execution to finish before returning. Defaults to true.' }
+        }
+      }
+    },
+    {
+      id: 'ssh.list-executions',
+      name: 'List SSH Executions',
+      description: 'List SSH command executions for the current session, optionally filtered by status.',
+      category: 'system',
+      icon: '🔐',
+      display: { name: 'List SSH Executions', names: { 'zh-CN': '列出 SSH 执行' }, resourceFields: ['status'] },
+      inputSchema: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', description: 'Optional execution status filter: queued, running, succeeded, failed, or cancelled.' }
+        }
+      }
+    },
+    {
+      id: 'ssh.get-execution-output',
+      name: 'Get SSH Execution Output',
+      description: 'Get stdout, stderr, status, and result metadata for a previous SSH command execution in the current session.',
+      category: 'system',
+      icon: '🔐',
+      display: { name: 'Get SSH Execution Output', names: { 'zh-CN': '获取 SSH 执行输出' }, resourceFields: ['executionId'] },
+      inputSchema: {
+        type: 'object',
+        required: ['executionId'],
+        properties: {
+          executionId: { type: 'string', description: 'SSH execution id returned by ssh.run-commands or ssh.list-executions.' }
+        }
+      }
+    },
+    {
       id: 'time.current',
       name: 'Current Time',
       description: 'Get the current date, time, timezone, and UTC offset for this desktop runtime.',

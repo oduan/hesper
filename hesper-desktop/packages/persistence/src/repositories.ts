@@ -3,6 +3,10 @@ import {
   agentRuntimeEventSchema,
   modelRefSchema,
   runErrorSchema,
+  sshCommandResultSchema,
+  sshExecutionSchema,
+  sshKeySchema,
+  sshServerSchema,
   type AgentRun,
   type AgentRuntimeEvent,
   type Message,
@@ -14,6 +18,10 @@ import {
   type RunStep,
   type Session,
   type Skill,
+  type SshCommandResult,
+  type SshExecution,
+  type SshKey,
+  type SshServer,
   type WorkerAgentInvocation,
   type ToolPermissionPolicy,
   type ToolPermissionScope
@@ -24,7 +32,7 @@ export type RuntimeEventRecord = AgentRuntimeEvent
 
 export type CredentialRecord = {
   id: string
-  kind: 'provider-api-key' | 'tool-api-key'
+  kind: 'provider-api-key' | 'tool-api-key' | 'ssh-private-key' | 'ssh-passphrase'
   subjectId: string
   encryptedValueBase64: string
   createdAt: string
@@ -109,6 +117,32 @@ export type WorkerAgentInvocationRepository = {
   listByChildRun(childRunId: string): Promise<WorkerAgentInvocation[]>
 }
 
+export type SshKeyRepository = {
+  save(key: SshKey): Promise<void>
+  get(id: string): Promise<SshKey | undefined>
+  list(): Promise<SshKey[]>
+  delete(id: string): Promise<void>
+}
+
+export type SshServerRepository = {
+  save(server: SshServer): Promise<void>
+  get(id: string): Promise<SshServer | undefined>
+  list(): Promise<SshServer[]>
+  listByKeyId(keyId: string): Promise<SshServer[]>
+  delete(id: string): Promise<void>
+}
+
+export type SshExecutionRepository = {
+  save(execution: SshExecution): Promise<void>
+  get(id: string): Promise<SshExecution | undefined>
+  listBySession(sessionId: string): Promise<SshExecution[]>
+}
+
+export type SshCommandResultRepository = {
+  save(result: SshCommandResult): Promise<void>
+  listByExecution(executionId: string): Promise<SshCommandResult[]>
+}
+
 export type CredentialRecordRepository = {
   save(record: CredentialRecord): Promise<void>
   get(id: string): Promise<CredentialRecord | undefined>
@@ -134,6 +168,10 @@ export type Persistence = {
   roles: RoleRepository
   toolPermissionPolicies: ToolPermissionPolicyRepository
   workerAgentInvocations: WorkerAgentInvocationRepository
+  sshKeys: SshKeyRepository
+  sshServers: SshServerRepository
+  sshExecutions: SshExecutionRepository
+  sshCommandResults: SshCommandResultRepository
   credentialRecords: CredentialRecordRepository
   exportDatabaseBytes(): Uint8Array
 }
@@ -365,6 +403,67 @@ function toWorkerAgentInvocation(row: any): WorkerAgentInvocation {
   }) as WorkerAgentInvocation
 }
 
+function toSshKey(row: any): SshKey {
+  return sshKeySchema.parse(stripUndefined({
+    id: row.id,
+    name: row.name,
+    note: row.note ?? undefined,
+    hasPassphrase: Number(row.has_passphrase) === 1,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }))
+}
+
+function toSshServer(row: any): SshServer {
+  return sshServerSchema.parse(stripUndefined({
+    id: row.id,
+    name: row.name,
+    host: row.host,
+    port: Number(row.port),
+    username: row.username,
+    keyId: row.key_id,
+    note: row.note ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }))
+}
+
+function toSshExecution(row: any): SshExecution {
+  const error = row.error_json ? runErrorSchema.parse(JSON.parse(String(row.error_json))) : undefined
+  return sshExecutionSchema.parse(stripUndefined({
+    id: row.id,
+    sessionId: row.session_id,
+    runId: row.run_id,
+    serverId: row.server_id,
+    serverName: row.server_name,
+    commands: parseStringArrayJson(row.commands_json, 'ssh_executions.commands_json'),
+    stopOnError: Number(row.stop_on_error) === 1,
+    timeoutMs: Number(row.timeout_ms),
+    status: row.status,
+    startedAt: row.started_at,
+    updatedAt: row.updated_at,
+    completedAt: row.completed_at ?? undefined,
+    error
+  }))
+}
+
+function toSshCommandResult(row: any): SshCommandResult {
+  return sshCommandResultSchema.parse(stripUndefined({
+    executionId: row.execution_id,
+    index: Number(row.command_index),
+    command: row.command,
+    status: row.status,
+    stdout: row.stdout ?? '',
+    stderr: row.stderr ?? '',
+    exitCode: optionalNumber(row.exit_code),
+    signal: row.signal ?? undefined,
+    startedAt: row.started_at ?? undefined,
+    completedAt: row.completed_at ?? undefined,
+    durationMs: optionalNumber(row.duration_ms),
+    skippedReason: row.skipped_reason ?? undefined
+  }))
+}
+
 function toCredentialRecord(row: any): CredentialRecord {
   return {
     id: row.id,
@@ -440,6 +539,10 @@ export function createRepositories(db: Database): Persistence {
     'roles',
     'tool_permission_policies',
     'worker_agent_invocations',
+    'ssh_keys',
+    'ssh_servers',
+    'ssh_executions',
+    'ssh_command_results',
     'credential_records'
   ]
   const bindValues = (values: unknown[]) => values.map((value) => (value === undefined ? null : value))
@@ -827,6 +930,109 @@ export function createRepositories(db: Database): Persistence {
       },
       async listByChildRun(childRunId) {
         return fetchAll('SELECT * FROM worker_agent_invocations WHERE child_run_id = ? ORDER BY sort_seq ASC, id ASC', [childRunId]).map(toWorkerAgentInvocation)
+      }
+    },
+    sshKeys: {
+      async save(key) {
+        upsert('ssh_keys', ['id', 'name', 'note', 'has_passphrase', 'created_at', 'updated_at', 'sort_seq'], [
+          key.id,
+          key.name,
+          key.note,
+          key.hasPassphrase ? 1 : 0,
+          key.createdAt,
+          key.updatedAt,
+          nextSeq()
+        ], key.id)
+      },
+      async get(id) {
+        const row = fetchAll('SELECT * FROM ssh_keys WHERE id = ?', [id])[0]
+        return row ? toSshKey(row) : undefined
+      },
+      async list() {
+        return fetchAll('SELECT * FROM ssh_keys ORDER BY sort_seq ASC, id ASC').map(toSshKey)
+      },
+      async delete(id) {
+        exec('DELETE FROM ssh_keys WHERE id = ?', [id])
+      }
+    },
+    sshServers: {
+      async save(server) {
+        upsert('ssh_servers', ['id', 'name', 'host', 'port', 'username', 'key_id', 'note', 'created_at', 'updated_at', 'sort_seq'], [
+          server.id,
+          server.name,
+          server.host,
+          server.port,
+          server.username,
+          server.keyId,
+          server.note,
+          server.createdAt,
+          server.updatedAt,
+          nextSeq()
+        ], server.id)
+      },
+      async get(id) {
+        const row = fetchAll('SELECT * FROM ssh_servers WHERE id = ?', [id])[0]
+        return row ? toSshServer(row) : undefined
+      },
+      async list() {
+        return fetchAll('SELECT * FROM ssh_servers ORDER BY sort_seq ASC, id ASC').map(toSshServer)
+      },
+      async listByKeyId(keyId) {
+        return fetchAll('SELECT * FROM ssh_servers WHERE key_id = ? ORDER BY sort_seq ASC, id ASC', [keyId]).map(toSshServer)
+      },
+      async delete(id) {
+        exec('DELETE FROM ssh_servers WHERE id = ?', [id])
+      }
+    },
+    sshExecutions: {
+      async save(execution) {
+        upsert('ssh_executions', ['id', 'session_id', 'run_id', 'server_id', 'server_name', 'commands_json', 'stop_on_error', 'timeout_ms', 'status', 'started_at', 'updated_at', 'completed_at', 'error_json', 'sort_seq'], [
+          execution.id,
+          execution.sessionId,
+          execution.runId,
+          execution.serverId,
+          execution.serverName,
+          JSON.stringify(execution.commands),
+          execution.stopOnError ? 1 : 0,
+          execution.timeoutMs,
+          execution.status,
+          execution.startedAt,
+          execution.updatedAt,
+          execution.completedAt,
+          execution.error ? JSON.stringify(execution.error) : undefined,
+          nextSeq()
+        ], execution.id)
+      },
+      async get(id) {
+        const row = fetchAll('SELECT * FROM ssh_executions WHERE id = ?', [id])[0]
+        return row ? toSshExecution(row) : undefined
+      },
+      async listBySession(sessionId) {
+        return fetchAll('SELECT * FROM ssh_executions WHERE session_id = ? ORDER BY sort_seq ASC, id ASC', [sessionId]).map(toSshExecution)
+      }
+    },
+    sshCommandResults: {
+      async save(result) {
+        const id = `${result.executionId}:${result.index}`
+        upsert('ssh_command_results', ['id', 'execution_id', 'command_index', 'command', 'status', 'stdout', 'stderr', 'exit_code', 'signal', 'started_at', 'completed_at', 'duration_ms', 'skipped_reason', 'sort_seq'], [
+          id,
+          result.executionId,
+          result.index,
+          result.command,
+          result.status,
+          result.stdout,
+          result.stderr,
+          result.exitCode,
+          result.signal,
+          result.startedAt,
+          result.completedAt,
+          result.durationMs,
+          result.skippedReason,
+          nextSeq()
+        ], id)
+      },
+      async listByExecution(executionId) {
+        return fetchAll('SELECT * FROM ssh_command_results WHERE execution_id = ? ORDER BY command_index ASC, sort_seq ASC, id ASC', [executionId]).map(toSshCommandResult)
       }
     },
     credentialRecords: {

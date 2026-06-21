@@ -25,6 +25,15 @@ export type ToolCredentialStatus = {
   updatedAt?: string
 }
 
+export type SshSecretStatus = {
+  keyId: string
+  credentialRef: string
+  hasSecret: boolean
+  encryptionAvailable: boolean
+  warning?: string
+  updatedAt?: string
+}
+
 export type SaveProviderApiKeyInput = {
   providerId: string
   apiKey: string
@@ -35,12 +44,26 @@ export type SaveToolApiKeyInput = {
   apiKey: string
 }
 
+export type SaveSshPrivateKeyInput = {
+  keyId: string
+  privateKey: string
+}
+
+export type SaveSshPassphraseInput = {
+  keyId: string
+  passphrase: string
+}
+
 export type ProviderCredentialInput = {
   providerId: string
 }
 
 export type ToolCredentialInput = {
   toolId: string
+}
+
+export type SshKeySecretInput = {
+  keyId: string
 }
 
 export type CredentialVaultService = {
@@ -52,6 +75,14 @@ export type CredentialVaultService = {
   saveToolApiKey(input: SaveToolApiKeyInput): Promise<ToolCredentialStatus>
   deleteToolApiKey(input: ToolCredentialInput): Promise<ToolCredentialStatus>
   readToolApiKey(toolId: string): Promise<string | undefined>
+  getSshPrivateKeyStatus(input: SshKeySecretInput): Promise<SshSecretStatus>
+  saveSshPrivateKey(input: SaveSshPrivateKeyInput): Promise<SshSecretStatus>
+  deleteSshPrivateKey(input: SshKeySecretInput): Promise<SshSecretStatus>
+  readSshPrivateKey(keyId: string): Promise<string | undefined>
+  getSshPassphraseStatus(input: SshKeySecretInput): Promise<SshSecretStatus>
+  saveSshPassphrase(input: SaveSshPassphraseInput): Promise<SshSecretStatus>
+  deleteSshPassphrase(input: SshKeySecretInput): Promise<SshSecretStatus>
+  readSshPassphrase(keyId: string): Promise<string | undefined>
 }
 
 export function providerApiKeyRef(providerId: string): string {
@@ -60,6 +91,14 @@ export function providerApiKeyRef(providerId: string): string {
 
 export function toolApiKeyRef(toolId: string): string {
   return `tool:${toolId}:api-key`
+}
+
+export function sshPrivateKeyRef(keyId: string): string {
+  return `ssh-key:${keyId}:private-key`
+}
+
+export function sshPassphraseRef(keyId: string): string {
+  return `ssh-key:${keyId}:passphrase`
 }
 
 export function createUnavailableCredentialCodec(): CredentialVaultCodec {
@@ -94,8 +133,20 @@ function assertToolId(toolId: string): void {
   if (!toolId.trim()) throw new Error('toolId is required')
 }
 
+function assertSshKeyId(keyId: string): void {
+  if (!keyId.trim()) throw new Error('keyId is required')
+}
+
 function assertApiKey(apiKey: string): void {
   if (!apiKey.trim()) throw new Error('apiKey is required')
+}
+
+function assertPrivateKey(privateKey: string): void {
+  if (!privateKey.trim()) throw new Error('privateKey is required')
+}
+
+function assertPassphrase(passphrase: string): void {
+  if (!passphrase.trim()) throw new Error('passphrase is required')
 }
 
 export function createCredentialVaultService(options: {
@@ -128,7 +179,20 @@ export function createCredentialVaultService(options: {
     return { toolId, ...await credentialStatus(toolApiKeyRef(toolId)) }
   }
 
-  const saveApiKey = async (kind: 'provider-api-key' | 'tool-api-key', subjectId: string, apiKeyRef: string, apiKey: string): Promise<void> => {
+  const sshSecretStatusFor = async (keyId: string, credentialRef: string): Promise<SshSecretStatus> => {
+    assertSshKeyId(keyId)
+    const status = await credentialStatus(credentialRef)
+    return {
+      keyId,
+      credentialRef,
+      hasSecret: status.hasApiKey,
+      encryptionAvailable: status.encryptionAvailable,
+      ...(status.warning ? { warning: status.warning } : {}),
+      ...(status.updatedAt ? { updatedAt: status.updatedAt } : {})
+    }
+  }
+
+  const saveApiKey = async (kind: 'provider-api-key' | 'tool-api-key' | 'ssh-private-key' | 'ssh-passphrase', subjectId: string, apiKeyRef: string, apiKey: string): Promise<void> => {
     assertApiKey(apiKey)
     if (!codec.isEncryptionAvailable()) {
       throw new Error(unavailableWarning())
@@ -190,6 +254,42 @@ export function createCredentialVaultService(options: {
     async readToolApiKey(toolId) {
       assertToolId(toolId)
       return readApiKey(toolApiKeyRef(toolId))
+    },
+    async getSshPrivateKeyStatus(input) {
+      return sshSecretStatusFor(input.keyId, sshPrivateKeyRef(input.keyId))
+    },
+    async saveSshPrivateKey(input) {
+      assertSshKeyId(input.keyId)
+      assertPrivateKey(input.privateKey)
+      await saveApiKey('ssh-private-key', input.keyId, sshPrivateKeyRef(input.keyId), input.privateKey)
+      return sshSecretStatusFor(input.keyId, sshPrivateKeyRef(input.keyId))
+    },
+    async deleteSshPrivateKey(input) {
+      assertSshKeyId(input.keyId)
+      await options.persistence.credentialRecords.delete(sshPrivateKeyRef(input.keyId))
+      return sshSecretStatusFor(input.keyId, sshPrivateKeyRef(input.keyId))
+    },
+    async readSshPrivateKey(keyId) {
+      assertSshKeyId(keyId)
+      return readApiKey(sshPrivateKeyRef(keyId))
+    },
+    async getSshPassphraseStatus(input) {
+      return sshSecretStatusFor(input.keyId, sshPassphraseRef(input.keyId))
+    },
+    async saveSshPassphrase(input) {
+      assertSshKeyId(input.keyId)
+      assertPassphrase(input.passphrase)
+      await saveApiKey('ssh-passphrase', input.keyId, sshPassphraseRef(input.keyId), input.passphrase)
+      return sshSecretStatusFor(input.keyId, sshPassphraseRef(input.keyId))
+    },
+    async deleteSshPassphrase(input) {
+      assertSshKeyId(input.keyId)
+      await options.persistence.credentialRecords.delete(sshPassphraseRef(input.keyId))
+      return sshSecretStatusFor(input.keyId, sshPassphraseRef(input.keyId))
+    },
+    async readSshPassphrase(keyId) {
+      assertSshKeyId(keyId)
+      return readApiKey(sshPassphraseRef(keyId))
     }
   }
 }

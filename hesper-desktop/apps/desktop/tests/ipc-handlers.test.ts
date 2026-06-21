@@ -68,6 +68,31 @@ describe('desktop service container', () => {
     ])
   })
 
+  it('delegates SSH tools through the production tool runner without exposing connection details', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock', credentialCodec: createMockCredentialCodec() })
+    const privateKey = '-----BEGIN OPENSSH PRIVATE KEY-----\nprivate-key-secret\n-----END OPENSSH PRIVATE KEY-----'
+    const key = await container.sshConfigurationService.createKey({ name: 'Production key', privateKey })
+    await container.sshConfigurationService.createServer({
+      name: 'Production',
+      host: 'prod.internal.example',
+      username: 'deploy-user',
+      keyId: key.id
+    })
+
+    const result = await container.toolRunner.run(container.toolCatalogService.get('ssh.list-servers')!, {}, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['ssh.list-servers']
+    })
+
+    expect(result.isError).not.toBe(true)
+    expect(result.content).toContain('Production')
+    expect(result.content).not.toContain('prod.internal.example')
+    expect(result.content).not.toContain('deploy-user')
+    expect(result.content).not.toContain('private-key-secret')
+  })
+
   it('delegates Worker Agent tools to the worker service when allowed', async () => {
     const persistence = await createInMemoryPersistence()
     const container = createServiceContainer({ persistence, agentMode: 'mock' })
@@ -348,7 +373,7 @@ describe('registerIpcHandlers', () => {
 
     await expect(handles.get(ipcChannels.agentEnqueue)?.({ sender: { id: 1 } }, { sessionId: session.id, prompt: 'Use assembled prompt', modelId: 'mock/hesper-fast', messageId: 'message-client-1', messageCreatedAt: '2026-06-10T03:00:02.000Z' })).resolves.toEqual({ runId: 'run-assembled' })
 
-    const expectedDefaultEnabledTools = ['filesystem.read-file', 'filesystem.write-file', 'filesystem.edit-file', 'filesystem.delete-file', 'filesystem.delete-directory', 'filesystem.list-directory', 'filesystem.find', 'filesystem.search', 'git.status', 'git.run', 'roles.list', 'roles.find', 'roles.create', 'roles.update', 'agent.spawn-worker-agent', 'agent.list-worker-agents', 'agent.get-worker-agent', 'agent.wait-worker-agent', 'agent.cancel-worker-agent', 'time.current', 'time.sleep', 'time.wait-until', 'system.execute-command', 'system.show-notification']
+    const expectedDefaultEnabledTools = ['filesystem.read-file', 'filesystem.write-file', 'filesystem.edit-file', 'filesystem.delete-file', 'filesystem.delete-directory', 'filesystem.list-directory', 'filesystem.find', 'filesystem.search', 'git.status', 'git.run', 'roles.list', 'roles.find', 'roles.create', 'roles.update', 'agent.spawn-worker-agent', 'agent.list-worker-agents', 'agent.get-worker-agent', 'agent.wait-worker-agent', 'agent.cancel-worker-agent', 'ssh.list-servers', 'ssh.run-commands', 'ssh.list-executions', 'ssh.get-execution-output', 'time.current', 'time.sleep', 'time.wait-until', 'system.execute-command', 'system.show-notification']
     expect(promptSpy).toHaveBeenCalledWith(expect.objectContaining({
       session: expect.objectContaining({
         id: session.id,
@@ -459,7 +484,7 @@ describe('registerIpcHandlers', () => {
       { sessionId: session.id, prompt: 'Do not expose disabled web fetch', modelId: 'mock/hesper-fast' }
     )).resolves.toEqual({ runId: 'run-global-filter' })
 
-    const expectedEnabledTools = ['filesystem.read-file', 'filesystem.write-file', 'filesystem.edit-file', 'filesystem.delete-file', 'filesystem.delete-directory', 'filesystem.list-directory', 'filesystem.find', 'filesystem.search', 'git.status', 'git.run', 'roles.list', 'roles.find', 'roles.create', 'roles.update', 'agent.spawn-worker-agent', 'agent.list-worker-agents', 'agent.get-worker-agent', 'agent.wait-worker-agent', 'agent.cancel-worker-agent', 'time.current', 'time.sleep', 'time.wait-until', 'system.execute-command']
+    const expectedEnabledTools = ['filesystem.read-file', 'filesystem.write-file', 'filesystem.edit-file', 'filesystem.delete-file', 'filesystem.delete-directory', 'filesystem.list-directory', 'filesystem.find', 'filesystem.search', 'git.status', 'git.run', 'roles.list', 'roles.find', 'roles.create', 'roles.update', 'agent.spawn-worker-agent', 'agent.list-worker-agents', 'agent.get-worker-agent', 'agent.wait-worker-agent', 'agent.cancel-worker-agent', 'ssh.list-servers', 'ssh.run-commands', 'ssh.list-executions', 'ssh.get-execution-output', 'time.current', 'time.sleep', 'time.wait-until', 'system.execute-command']
     expect(promptSpy).toHaveBeenLastCalledWith(expect.objectContaining({
       session: expect.objectContaining({ enabledToolIds: expectedEnabledTools })
     }))
@@ -470,6 +495,42 @@ describe('registerIpcHandlers', () => {
     const updatedTool = await handles.get(ipcChannels.toolsSetEnabled)?.({ sender: { id: 1 } }, { id: 'system.show-notification', enabled: true })
     expect(updatedTool).toMatchObject({ id: 'system.show-notification', enabled: true })
     expect(await container.toolSettingsService.isToolEnabled('system.show-notification')).toBe(true)
+  })
+
+  it('manages SSH keys and servers through strict IPC without returning secrets', async () => {
+    const handles = new Map<string, any>()
+    const ipcMain = { handle: vi.fn((channel, handler) => handles.set(channel, handler)) } as any
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock', credentialCodec: createMockCredentialCodec() })
+    registerIpcHandlers({ ipcMain, container, savePersistence: async () => undefined } as any)
+
+    const key = await handles.get(ipcChannels.sshKeysCreate)?.({ sender: { id: 1 } }, {
+      name: 'Prod key',
+      privateKey: 'private-key-secret',
+      passphrase: 'passphrase-secret',
+      note: 'deploy'
+    })
+    expect(key).toMatchObject({ name: 'Prod key', hasPassphrase: true })
+    expect(JSON.stringify(key)).not.toContain('private-key-secret')
+    expect(JSON.stringify(key)).not.toContain('passphrase-secret')
+
+    const server = await handles.get(ipcChannels.sshServersCreate)?.({ sender: { id: 1 } }, {
+      name: 'Prod server',
+      host: '10.0.0.8',
+      port: 22,
+      username: 'deploy',
+      keyId: key.id,
+      note: 'logs'
+    })
+    expect(server).toMatchObject({ host: '10.0.0.8', username: 'deploy', keyId: key.id })
+
+    await expect(handles.get(ipcChannels.sshKeysDelete)?.({ sender: { id: 1 } }, key.id)).rejects.toThrow('SSH key is used')
+
+    const updated = await handles.get(ipcChannels.sshServersUpdate)?.({ sender: { id: 1 } }, { id: server.id, port: 2222, note: 'new note' })
+    expect(updated).toMatchObject({ port: 2222, note: 'new note' })
+
+    await expect(handles.get(ipcChannels.sshServersList)?.({ sender: { id: 1 } })).resolves.toEqual(expect.arrayContaining([expect.objectContaining({ id: server.id })]))
+    expect(JSON.stringify(await handles.get(ipcChannels.sshKeysList)?.({ sender: { id: 1 } }))).not.toContain('private-key-secret')
   })
 
   it('manages roles through typed IPC handlers and persists mutations', async () => {
