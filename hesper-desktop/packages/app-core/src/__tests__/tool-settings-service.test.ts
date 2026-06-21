@@ -39,7 +39,15 @@ function credentialVault(hasApiKey: boolean): CredentialVaultService {
     getToolApiKeyStatus: async (input) => ({ toolId: input.toolId, apiKeyRef: `tool:${input.toolId}:api-key`, hasApiKey, encryptionAvailable: true }),
     saveToolApiKey: async (input) => ({ toolId: input.toolId, apiKeyRef: `tool:${input.toolId}:api-key`, hasApiKey: true, encryptionAvailable: true }),
     deleteToolApiKey: async (input) => ({ toolId: input.toolId, apiKeyRef: `tool:${input.toolId}:api-key`, hasApiKey: false, encryptionAvailable: true }),
-    readToolApiKey: async () => hasApiKey ? 'tinyfish-key' : undefined
+    readToolApiKey: async () => hasApiKey ? 'tinyfish-key' : undefined,
+    getSshPrivateKeyStatus: async (input) => ({ keyId: input.keyId, credentialRef: `ssh-key:${input.keyId}:private-key`, hasSecret: false, encryptionAvailable: true }),
+    saveSshPrivateKey: async (input) => ({ keyId: input.keyId, credentialRef: `ssh-key:${input.keyId}:private-key`, hasSecret: true, encryptionAvailable: true }),
+    deleteSshPrivateKey: async (input) => ({ keyId: input.keyId, credentialRef: `ssh-key:${input.keyId}:private-key`, hasSecret: false, encryptionAvailable: true }),
+    readSshPrivateKey: async () => undefined,
+    getSshPassphraseStatus: async (input) => ({ keyId: input.keyId, credentialRef: `ssh-key:${input.keyId}:passphrase`, hasSecret: false, encryptionAvailable: true }),
+    saveSshPassphrase: async (input) => ({ keyId: input.keyId, credentialRef: `ssh-key:${input.keyId}:passphrase`, hasSecret: true, encryptionAvailable: true }),
+    deleteSshPassphrase: async (input) => ({ keyId: input.keyId, credentialRef: `ssh-key:${input.keyId}:passphrase`, hasSecret: false, encryptionAvailable: true }),
+    readSshPassphrase: async () => undefined
   }
 }
 
