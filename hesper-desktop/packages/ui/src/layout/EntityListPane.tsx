@@ -23,6 +23,7 @@ export type EntityListPaneProps = {
   pendingToolIds?: string[]
   roles?: RoleListItem[]
   activeRoleId?: string
+  roleSelectionDisabled?: boolean
   activeSettingsCategory?: 'ai' | 'appearance'
   onSelectSession?: (sessionId: string) => void
   onSelectTool?: (toolId: string) => void
@@ -120,6 +121,7 @@ export function EntityListPane({
   pendingToolIds = [],
   roles = [],
   activeRoleId,
+  roleSelectionDisabled = false,
   activeSettingsCategory = 'ai',
   onSelectSession,
   onSelectTool,
@@ -143,6 +145,7 @@ export function EntityListPane({
   const [selectionAnchorRoleId, setSelectionAnchorRoleId] = useState<string>()
   const [relativeNowMs, setRelativeNowMs] = useState(() => Date.now())
   const renameInputRef = useRef<HTMLInputElement>(null)
+  const roleMenuFirstItemRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     if (activeSection !== 'sessions') return undefined
@@ -165,13 +168,30 @@ export function EntityListPane({
       setSessionMenu(undefined)
       setRoleMenu(undefined)
     }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        close()
+      }
+    }
     window.addEventListener('click', close)
-    window.addEventListener('keydown', close)
+    window.addEventListener('keydown', closeOnEscape)
     return () => {
       window.removeEventListener('click', close)
-      window.removeEventListener('keydown', close)
+      window.removeEventListener('keydown', closeOnEscape)
     }
   }, [sessionMenu, roleMenu])
+
+  useEffect(() => {
+    if (roleMenu) {
+      roleMenuFirstItemRef.current?.focus()
+    }
+  }, [roleMenu])
+
+  useEffect(() => {
+    if (roleSelectionDisabled) {
+      setRoleMenu(undefined)
+    }
+  }, [roleSelectionDisabled])
 
   useEffect(() => {
     if (!editingSession) return
@@ -230,6 +250,8 @@ export function EntityListPane({
   }
 
   const handleRoleClick = (roleId: string, shiftKey: boolean) => {
+    if (roleSelectionDisabled) return
+
     if (shiftKey) {
       const anchorRoleId = selectionAnchorRoleId ?? selectedRoleIds[0] ?? activeRoleId ?? roleId
       setSelectedRoleIds(getRoleRange(anchorRoleId, roleId))
@@ -252,6 +274,8 @@ export function EntityListPane({
   }
 
   const openRoleMenu = (roleId: string, x: number, y: number) => {
+    if (roleSelectionDisabled) return
+
     const roleIdSet = new Set(roles.map((role) => role.id))
     const selectedTargets = selectedRoleIds.filter((selectedRoleId) => roleIdSet.has(selectedRoleId))
     const isSelectedTarget = selectedTargets.includes(roleId)
@@ -264,6 +288,13 @@ export function EntityListPane({
 
     setSessionMenu(undefined)
     setRoleMenu({ roleId, roleIds, x, y })
+  }
+
+  const openRoleMenuFromKeyboard = (roleId: string, target: HTMLElement) => {
+    if (roleSelectionDisabled) return
+
+    const rect = target.getBoundingClientRect()
+    openRoleMenu(roleId, rect.left + 12, rect.top + Math.min(rect.height, 32))
   }
 
   const startRenameSession = (sessionId: string) => {
@@ -415,8 +446,14 @@ export function EntityListPane({
                       data-selected={isSelected ? 'true' : undefined}
                       aria-current={isActive ? 'page' : undefined}
                       aria-selected={isSelected ? 'true' : undefined}
+                      aria-disabled={roleSelectionDisabled ? 'true' : undefined}
                       aria-label={`${role.name} ${roleDescription}`.trim()}
                       onClick={(event) => handleRoleClick(role.id, event.shiftKey)}
+                      onKeyDown={(event) => {
+                        if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return
+                        event.preventDefault()
+                        openRoleMenuFromKeyboard(role.id, event.currentTarget)
+                      }}
                       onContextMenu={(event) => {
                         event.preventDefault()
                         openRoleMenu(role.id, event.clientX, event.clientY)
@@ -537,9 +574,10 @@ export function EntityListPane({
           onClick={(event) => event.stopPropagation()}
         >
           <style>{sessionMenuHoverCss}</style>
-          {roleMenuItems.map((item) => (
+          {roleMenuItems.map((item, index) => (
             <button
               key={item.key}
+              ref={index === 0 ? roleMenuFirstItemRef : undefined}
               type="button"
               role="menuitem"
               className="hesper-session-menu-item"

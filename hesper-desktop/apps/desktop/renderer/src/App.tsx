@@ -763,30 +763,47 @@ function AppContent() {
     return window.confirm(`确定要删除选中的 ${roleIds.length} 个角色吗？`)
   }
 
+  const resolveActiveRoleIdAfterDelete = (nextRoles: ManagedRoleDto[], deletedRoleIdSet: Set<string>, previousActiveRoleId?: string) => (
+    previousActiveRoleId && !deletedRoleIdSet.has(previousActiveRoleId) && nextRoles.some((role) => role.id === previousActiveRoleId)
+      ? previousActiveRoleId
+      : nextRoles[0]?.id
+  )
+
   const deleteRoleIds = async (roleIds: string[]) => {
     if (roleIds.length === 0) return
 
-    const deletedRoleIdSet = new Set(roleIds)
+    const successfullyDeletedIds: string[] = []
     const previousActiveRoleId = activeRoleId
+    const applyDeletedRoleState = (nextRoles: ManagedRoleDto[], deletedRoleIdSet: Set<string>) => {
+      setRoles(nextRoles)
+      setActiveRoleId(resolveActiveRoleIdAfterDelete(nextRoles, deletedRoleIdSet, previousActiveRoleId))
+    }
+
     setRolesPending(true)
     invalidateRolesRequests()
     setRolesError(undefined)
     try {
       for (const roleId of roleIds) {
         await hesperApi.roles.delete(roleId)
+        successfullyDeletedIds.push(roleId)
       }
+      const deletedRoleIdSet = new Set(successfullyDeletedIds)
       const result = await loadRoles()
       const nextRoles = result.applied && !('error' in result)
         ? result.loadedRoles
         : roles.filter((role) => !deletedRoleIdSet.has(role.id))
-      setRoles(nextRoles)
-      setActiveRoleId(
-        previousActiveRoleId && !deletedRoleIdSet.has(previousActiveRoleId) && nextRoles.some((role) => role.id === previousActiveRoleId)
-          ? previousActiveRoleId
-          : nextRoles[0]?.id
-      )
+      applyDeletedRoleState(nextRoles, deletedRoleIdSet)
     } catch (error) {
-      setRolesError(error instanceof Error ? error.message : '未知角色删除错误')
+      const message = error instanceof Error ? error.message : '未知角色删除错误'
+      const deletedRoleIdSet = new Set(successfullyDeletedIds)
+      setRolesError(message)
+
+      const result = await loadRoles()
+      const nextRoles = result.applied && !('error' in result)
+        ? result.loadedRoles
+        : roles.filter((role) => !deletedRoleIdSet.has(role.id))
+      applyDeletedRoleState(nextRoles, deletedRoleIdSet)
+      setRolesError(message)
     } finally {
       setRolesPending(false)
     }
@@ -977,6 +994,7 @@ function AppContent() {
       tools={tools}
       pendingToolIds={pendingToolIdList}
       roles={roles.map((role) => ({ id: role.id, name: role.name, description: role.description }))}
+      roleSelectionDisabled={rolesLoading || rolesPending}
       {...(activeTool ? { activeToolId: activeTool.id } : {})}
       {...(activeRoleId ? { activeRoleId } : {})}
       {...(state.activeSessionId ? { activeSessionId: state.activeSessionId } : {})}

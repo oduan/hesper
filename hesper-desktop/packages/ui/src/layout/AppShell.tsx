@@ -20,6 +20,7 @@ export type AppShellProps = {
   pendingToolIds?: string[]
   roles?: RoleListItem[]
   activeRoleId?: string
+  roleSelectionDisabled?: boolean
   activeSettingsCategory?: 'ai' | 'appearance'
   appearance?: { themeMode: ThemeMode; fontSize: number }
   onCreateSession?: () => void | Promise<void>
@@ -51,6 +52,7 @@ export function AppShell({
   pendingToolIds,
   roles,
   activeRoleId,
+  roleSelectionDisabled,
   activeSettingsCategory,
   appearance,
   onCreateSession,
@@ -119,6 +121,7 @@ export function AppShell({
           {...(pendingToolIds ? { pendingToolIds } : {})}
           {...(roles ? { roles } : {})}
           {...(activeRoleId ? { activeRoleId } : {})}
+          {...(roleSelectionDisabled ? { roleSelectionDisabled } : {})}
           {...(activeSettingsCategory ? { activeSettingsCategory } : {})}
           {...(onSelectSession ? { onSelectSession } : {})}
           {...(onSelectTool ? { onSelectTool } : {})}
