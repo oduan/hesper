@@ -100,7 +100,7 @@ describe('createCodexOAuthGateway', () => {
     expect(JSON.stringify(consumed)).not.toContain('do-not-return-id-token')
   })
 
-  it('falls back to the next available callback port when the preferred port is occupied', async () => {
+  it('rejects when the fixed Codex callback port is occupied instead of generating an unregistered redirect URI', async () => {
     const occupiedPort = callbackPort + 20
     const blocker = createServer((_request, response) => {
       response.writeHead(200, { 'content-type': 'text/plain' })
@@ -112,21 +112,9 @@ describe('createCodexOAuthGateway', () => {
     const gateway = createCodexOAuthGateway({ fetch: tokenFetch as unknown as typeof fetch, callbackPort: occupiedPort })
 
     try {
-      const started = await gateway.startAuthorization({ provider: 'openai-codex', connectionName: 'ChatGPT Codex' })
-      const authorizationUrl = new URL(started.authorizationUrl)
-      const state = authorizationUrl.searchParams.get('state')
-      const redirectUri = new URL(authorizationUrl.searchParams.get('redirect_uri') ?? '')
-
-      expect(redirectUri.hostname).toBe('localhost')
-      expect(redirectUri.pathname).toBe('/auth/callback')
-      expect(Number(redirectUri.port)).toBeGreaterThan(occupiedPort)
-      expect(Number(redirectUri.port)).toBeLessThanOrEqual(occupiedPort + 10)
-
-      const callbackResponse = await fetch(`${redirectUri.origin}/auth/callback?state=${state}&code=codex-code`)
-      expect(callbackResponse.status).toBe(200)
-      await expect(gateway.consumeAuthorization({ sessionId: started.sessionId })).resolves.toMatchObject({
-        accessToken: 'codex-oauth-access-token'
-      })
+      await expect(gateway.startAuthorization({ provider: 'openai-codex', connectionName: 'ChatGPT Codex' }))
+        .rejects.toThrow(`Codex 授权回调端口 ${occupiedPort} 已被占用`)
+      expect(tokenFetch).not.toHaveBeenCalled()
     } finally {
       await closeServer(blocker)
     }

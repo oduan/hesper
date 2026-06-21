@@ -4,7 +4,6 @@ import type { ProviderOAuthGateway, PiAuthProvider, ProviderOAuthStatus } from '
 
 const codexOAuthClientId = 'app_EMoamEEZ73f0CkXaXp7hrann'
 const defaultCallbackPort = 1455
-const defaultCallbackPortFallbackAttempts = 10
 const defaultFlowTtlMs = 10 * 60 * 1000
 const defaultTerminalFlowRetentionMs = 5 * 60 * 1000
 const timeoutMessage = '授权超时，请重新开始 Codex 授权'
@@ -34,7 +33,6 @@ type CodexOAuthFlow = {
 export type CodexOAuthGatewayOptions = {
   fetch?: typeof fetch
   callbackPort?: number
-  callbackPortFallbackAttempts?: number
   flowTtlMs?: number
   terminalFlowRetentionMs?: number
 }
@@ -123,23 +121,8 @@ function isAddressInUse(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'EADDRINUSE'
 }
 
-async function listenWithPortFallback(createCallbackServer: () => Server, preferredPort: number, fallbackAttempts: number): Promise<{ server: Server; port: number }> {
-  const normalizedFallbackAttempts = Math.max(0, Math.floor(fallbackAttempts))
-  let lastError: unknown
-  for (let offset = 0; offset <= normalizedFallbackAttempts; offset += 1) {
-    const port = preferredPort + offset
-    const server = createCallbackServer()
-    try {
-      await listen(server, port)
-      return { server, port }
-    } catch (error) {
-      lastError = error
-      await closeServer(server)
-      if (!isAddressInUse(error)) throw error
-    }
-  }
-  if (lastError instanceof Error) throw lastError
-  throw new Error('Unable to listen for Codex OAuth callback')
+function callbackPortInUseError(port: number): Error {
+  return new Error(`Codex 授权回调端口 ${port} 已被占用。请关闭其他 Codex 授权会话或释放该端口后重试。`)
 }
 
 function redirectUriForPort(port: number): string {
@@ -174,7 +157,6 @@ function tokenDetailsFromPayload(payload: unknown): { accessToken?: string; refr
 export function createCodexOAuthGateway(options: CodexOAuthGatewayOptions = {}): ProviderOAuthGateway {
   const fetchImpl = options.fetch ?? globalThis.fetch
   const callbackPort = options.callbackPort ?? defaultCallbackPort
-  const callbackPortFallbackAttempts = options.callbackPortFallbackAttempts ?? defaultCallbackPortFallbackAttempts
   const flowTtlMs = options.flowTtlMs ?? defaultFlowTtlMs
   const terminalFlowRetentionMs = options.terminalFlowRetentionMs ?? defaultTerminalFlowRetentionMs
   const flows = new Map<string, CodexOAuthFlow>()
@@ -273,20 +255,17 @@ export function createCodexOAuthGateway(options: CodexOAuthGatewayOptions = {}):
         status: 'pending',
         message: '等待浏览器授权'
       }
+      const server = createServer((request, response) => handleCallback(flow, request, response))
+      flow.server = server
       flows.set(sessionId, flow)
 
       try {
-        const callbackListener = await listenWithPortFallback(
-          () => createServer((request, response) => handleCallback(flow, request, response)),
-          callbackPort,
-          callbackPortFallbackAttempts
-        )
-        flow.server = callbackListener.server
-        flow.redirectUri = redirectUriForPort(callbackListener.port)
+        await listen(server, callbackPort)
       } catch (error) {
         flows.delete(sessionId)
         clearFlowTimeout(flow)
         await closeFlowServer(flow)
+        if (isAddressInUse(error)) throw callbackPortInUseError(callbackPort)
         throw error
       }
 
