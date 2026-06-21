@@ -76,7 +76,7 @@ function normalizeWorkspaceRelativePath(rawPath: string): string {
 
 function isPathInsideOrEqual(parentPath: string, candidatePath: string): boolean {
   const relativePath = path.relative(parentPath, candidatePath)
-  return relativePath === '' || (!relativePath.startsWith('..') && !path.isAbsolute(relativePath))
+  return relativePath === '' || (relativePath !== '..' && !relativePath.startsWith(`..${path.sep}`) && !path.isAbsolute(relativePath))
 }
 
 async function realpathWorkspace(workspacePath: string): Promise<string> {
@@ -263,44 +263,60 @@ export async function readLocalFilePreview(input: ReadLocalFilePreviewInput): Pr
     throw new Error('File preview target resolves outside the workspace')
   }
 
-  const stat = await fs.stat(realFilePath)
-  if (!stat.isFile()) {
-    throw new Error('File preview path must point to a file, not a directory')
+  let fileHandle: Awaited<ReturnType<typeof fs.open>>
+  try {
+    fileHandle = await fs.open(realFilePath, 'r')
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    if (code === 'EISDIR' || code === 'EPERM') {
+      throw new Error('File preview path must point to a file, not a directory')
+    }
+    throw error
   }
 
-  const spec = getPreviewSpec(relativePath)
-  const basePreview = {
-    path: relativePath,
-    name: path.posix.basename(relativePath),
-    kind: spec.kind,
-    mimeType: spec.mimeType,
-    bytes: stat.size
-  }
+  try {
+    const stat = await fileHandle.stat()
+    if (!stat.isFile()) {
+      throw new Error('File preview path must point to a file, not a directory')
+    }
 
-  if (spec.readMode === 'unsupported') {
-    return basePreview
-  }
+    const spec = getPreviewSpec(relativePath)
+    const basePreview = {
+      path: relativePath,
+      name: path.posix.basename(relativePath),
+      kind: spec.kind,
+      mimeType: spec.mimeType,
+      bytes: stat.size
+    }
 
-  assertSizeWithinLimit(spec.kind, stat.size, spec.limitBytes)
+    if (spec.readMode === 'unsupported') {
+      return basePreview
+    }
 
-  if (spec.readMode === 'dataUrl') {
-    const fileBuffer = await fs.readFile(realFilePath)
+    assertSizeWithinLimit(spec.kind, stat.size, spec.limitBytes)
+    const fileBuffer = await fileHandle.readFile()
+    assertSizeWithinLimit(spec.kind, fileBuffer.byteLength, spec.limitBytes)
+
+    if (spec.readMode === 'dataUrl') {
+      return {
+        ...basePreview,
+        dataUrl: `data:${spec.mimeType};base64,${fileBuffer.toString('base64')}`
+      }
+    }
+
+    const rawContent = fileBuffer.toString('utf8')
+    if (spec.kind === 'json') {
+      return {
+        ...basePreview,
+        ...formatJsonPreview(rawContent)
+      }
+    }
+
     return {
       ...basePreview,
-      dataUrl: `data:${spec.mimeType};base64,${fileBuffer.toString('base64')}`
+      content: rawContent
     }
-  }
-
-  const rawContent = await fs.readFile(realFilePath, 'utf8')
-  if (spec.kind === 'json') {
-    return {
-      ...basePreview,
-      ...formatJsonPreview(rawContent)
-    }
-  }
-
-  return {
-    ...basePreview,
-    content: rawContent
+  } finally {
+    await fileHandle.close()
   }
 }

@@ -520,6 +520,27 @@ describe('registerIpcHandlers', () => {
     })
   })
 
+  it('previews workspace files whose names start with two dots', async () => {
+    await withTempWorkspace(async (workspacePath) => {
+      await fs.writeFile(path.join(workspacePath, '..foo.md'), '# Boundary\n')
+
+      const persistence = await createInMemoryPersistence()
+      const container = createServiceContainer({ persistence, agentMode: 'mock' })
+      const session = await container.sessionService.createSession({ title: 'Preview boundary path', workspacePath })
+      const { handles } = registerTestIpcHandlers(container)
+
+      await expect(handles.get(ipcChannels.filesPreview)?.({ sender: { id: 1 } }, {
+        sessionId: session.id,
+        path: '..foo.md'
+      })).resolves.toMatchObject({
+        path: '..foo.md',
+        name: '..foo.md',
+        kind: 'markdown',
+        content: '# Boundary\n'
+      })
+    })
+  })
+
   it('rejects local file preview when the session has no selected workspace', async () => {
     const persistence = await createInMemoryPersistence()
     const container = createServiceContainer({ persistence, agentMode: 'mock' })
