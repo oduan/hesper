@@ -25,6 +25,7 @@ describe('registry services', () => {
       'roles.find',
       'roles.create',
       'roles.update',
+      'models.list-available',
       'agent.spawn-worker-agent',
       'agent.list-worker-agents',
       'agent.get-worker-agent',

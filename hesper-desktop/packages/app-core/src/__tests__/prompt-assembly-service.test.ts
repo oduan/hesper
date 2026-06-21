@@ -194,7 +194,7 @@ describe('PromptAssemblyService', () => {
     expect(output.workerAgentRules).toContain('Only call roles.create when the user explicitly wants a reusable role')
   })
 
-  it('keeps custom Worker roles discoverable by role tools instead of listing them by default', () => {
+  it('lists all assignable Worker roles by default when no explicit role allowlist is configured', () => {
     const service = createPromptAssemblyService()
     const { allowedWorkerAgentRoleIds: _allowedWorkerAgentRoleIds, ...sessionWithoutExplicitWorkerRoles } = session
     const builtinWorkerRole: Role = {
@@ -215,10 +215,10 @@ describe('PromptAssemblyService', () => {
     })
 
     expect(output.roleManifest).toContain('worker-agent')
-    expect(output.roleManifest).not.toContain('reviewer')
+    expect(output.roleManifest).toContain('reviewer')
     expect(output.workerAgentRules).toContain('roles.list or roles.find')
     expect(output.workerAgentRules).toContain('discover custom Worker Agent roles')
-    expect(output.workerAgentRules).toContain('Assignable roleIds: "worker-agent"')
+    expect(output.workerAgentRules).toContain('Assignable roleIds: "reviewer", "worker-agent"')
   })
 
   it('includes write file when it is enabled for the run', () => {
@@ -403,7 +403,7 @@ describe('PromptAssemblyService', () => {
 
     expect(output.toolManifest).toBe('No tools are currently available to this agent.')
     expect(output.skillManifest).toBe('No skills are currently enabled for this agent.')
-    expect(output.roleManifest).toBe('No Worker Agent roles are assignable for this run.')
+    expect(output.roleManifest).toContain('reviewer')
   })
 
   it('quotes untrusted registry text and redacts credential-shaped values', () => {

@@ -135,15 +135,12 @@ function filterSkills(skills: Skill[], role: Role | undefined, enabledSkillIds: 
   }))
 }
 
-const DEFAULT_PROMPT_WORKER_ROLE_IDS = new Set(['worker-agent'])
-
 function filterAssignableRoles(roles: Role[], allowedRoleIds: string[] | undefined): Role[] {
   const allowed = allowedRoleIds ? new Set(allowedRoleIds) : undefined
   return byId(roles.filter((role) => {
     const assignable = role.canBeAssignedToWorkerAgent ?? role.canBeWorkerAgent
     if (!assignable) return false
-    if (allowed) return allowed.has(role.id)
-    return DEFAULT_PROMPT_WORKER_ROLE_IDS.has(role.id)
+    return allowed ? allowed.has(role.id) : true
   }))
 }
 
