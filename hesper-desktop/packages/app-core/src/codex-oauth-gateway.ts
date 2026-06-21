@@ -4,6 +4,7 @@ import type { ProviderOAuthGateway, PiAuthProvider, ProviderOAuthStatus } from '
 
 const codexOAuthClientId = 'app_EMoamEEZ73f0CkXaXp7hrann'
 const defaultCallbackPort = 1455
+const defaultCallbackPortFallbackAttempts = 10
 const defaultFlowTtlMs = 10 * 60 * 1000
 const defaultTerminalFlowRetentionMs = 5 * 60 * 1000
 const timeoutMessage = '授权超时，请重新开始 Codex 授权'
@@ -33,6 +34,7 @@ type CodexOAuthFlow = {
 export type CodexOAuthGatewayOptions = {
   fetch?: typeof fetch
   callbackPort?: number
+  callbackPortFallbackAttempts?: number
   flowTtlMs?: number
   terminalFlowRetentionMs?: number
 }
@@ -80,10 +82,7 @@ function clearFailedFlowSensitiveState(flow: CodexOAuthFlow): void {
   flow.codeVerifier = ''
 }
 
-function closeFlowServer(flow: CodexOAuthFlow): Promise<void> {
-  const server = flow.server
-  if (!server) return Promise.resolve()
-  flow.server = undefined
+function closeServer(server: Server): Promise<void> {
   return new Promise((resolve) => {
     try {
       if (!server.listening) {
@@ -95,6 +94,13 @@ function closeFlowServer(flow: CodexOAuthFlow): Promise<void> {
       resolve()
     }
   })
+}
+
+function closeFlowServer(flow: CodexOAuthFlow): Promise<void> {
+  const server = flow.server
+  if (!server) return Promise.resolve()
+  flow.server = undefined
+  return closeServer(server)
 }
 
 function listen(server: Server, port: number): Promise<void> {
@@ -111,6 +117,33 @@ function listen(server: Server, port: number): Promise<void> {
     server.once('listening', onListening)
     server.listen(port, 'localhost')
   })
+}
+
+function isAddressInUse(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'EADDRINUSE'
+}
+
+async function listenWithPortFallback(createCallbackServer: () => Server, preferredPort: number, fallbackAttempts: number): Promise<{ server: Server; port: number }> {
+  const normalizedFallbackAttempts = Math.max(0, Math.floor(fallbackAttempts))
+  let lastError: unknown
+  for (let offset = 0; offset <= normalizedFallbackAttempts; offset += 1) {
+    const port = preferredPort + offset
+    const server = createCallbackServer()
+    try {
+      await listen(server, port)
+      return { server, port }
+    } catch (error) {
+      lastError = error
+      await closeServer(server)
+      if (!isAddressInUse(error)) throw error
+    }
+  }
+  if (lastError instanceof Error) throw lastError
+  throw new Error('Unable to listen for Codex OAuth callback')
+}
+
+function redirectUriForPort(port: number): string {
+  return `http://localhost:${port}${callbackPath}`
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -141,9 +174,9 @@ function tokenDetailsFromPayload(payload: unknown): { accessToken?: string; refr
 export function createCodexOAuthGateway(options: CodexOAuthGatewayOptions = {}): ProviderOAuthGateway {
   const fetchImpl = options.fetch ?? globalThis.fetch
   const callbackPort = options.callbackPort ?? defaultCallbackPort
+  const callbackPortFallbackAttempts = options.callbackPortFallbackAttempts ?? defaultCallbackPortFallbackAttempts
   const flowTtlMs = options.flowTtlMs ?? defaultFlowTtlMs
   const terminalFlowRetentionMs = options.terminalFlowRetentionMs ?? defaultTerminalFlowRetentionMs
-  const redirectUri = `http://localhost:${callbackPort}${callbackPath}`
   const flows = new Map<string, CodexOAuthFlow>()
 
   const deleteFlow = async (sessionId: string): Promise<void> => {
@@ -184,7 +217,7 @@ export function createCodexOAuthGateway(options: CodexOAuthGatewayOptions = {}):
   }
 
   const handleCallback = (flow: CodexOAuthFlow, request: IncomingMessage, response: ServerResponse): void => {
-    const requestUrl = new URL(request.url ?? '/', redirectUri)
+    const requestUrl = new URL(request.url ?? '/', flow.redirectUri)
     if (requestUrl.pathname !== callbackPath) {
       writeHtml(response, 404, 'Codex authorization failed', 'Unknown OAuth callback path.', () => undefined)
       return
@@ -236,16 +269,20 @@ export function createCodexOAuthGateway(options: CodexOAuthGatewayOptions = {}):
         sessionId,
         state: sessionId,
         codeVerifier,
-        redirectUri,
+        redirectUri: redirectUriForPort(callbackPort),
         status: 'pending',
         message: '等待浏览器授权'
       }
-      const server = createServer((request, response) => handleCallback(flow, request, response))
-      flow.server = server
       flows.set(sessionId, flow)
 
       try {
-        await listen(server, callbackPort)
+        const callbackListener = await listenWithPortFallback(
+          () => createServer((request, response) => handleCallback(flow, request, response)),
+          callbackPort,
+          callbackPortFallbackAttempts
+        )
+        flow.server = callbackListener.server
+        flow.redirectUri = redirectUriForPort(callbackListener.port)
       } catch (error) {
         flows.delete(sessionId)
         clearFlowTimeout(flow)
@@ -264,7 +301,7 @@ export function createCodexOAuthGateway(options: CodexOAuthGatewayOptions = {}):
       const authorizationUrl = new URL(authorizationEndpoint)
       authorizationUrl.searchParams.set('client_id', codexOAuthClientId)
       authorizationUrl.searchParams.set('response_type', 'code')
-      authorizationUrl.searchParams.set('redirect_uri', redirectUri)
+      authorizationUrl.searchParams.set('redirect_uri', flow.redirectUri)
       authorizationUrl.searchParams.set('scope', 'openid profile email offline_access')
       authorizationUrl.searchParams.set('code_challenge', codeChallenge(codeVerifier))
       authorizationUrl.searchParams.set('code_challenge_method', 'S256')

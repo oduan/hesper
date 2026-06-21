@@ -1,9 +1,40 @@
+import { createServer, type Server } from 'node:http'
 import { describe, expect, it, vi } from 'vitest'
 import { createCodexOAuthGateway } from '../codex-oauth-gateway'
 
 const callbackPort = 14655
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+function listenOnLocalhost(server: Server, port: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const onError = (error: Error) => {
+      server.off('listening', onListening)
+      reject(error)
+    }
+    const onListening = () => {
+      server.off('error', onError)
+      resolve()
+    }
+    server.once('error', onError)
+    server.once('listening', onListening)
+    server.listen(port, 'localhost')
+  })
+}
+
+function closeServer(server: Server): Promise<void> {
+  return new Promise((resolve) => {
+    try {
+      if (!server.listening) {
+        resolve()
+        return
+      }
+      server.close(() => resolve())
+    } catch {
+      resolve()
+    }
+  })
+}
 
 describe('createCodexOAuthGateway', () => {
   it('starts a PKCE authorization flow, handles the localhost callback, and consumes structured OAuth credentials', async () => {
@@ -67,6 +98,38 @@ describe('createCodexOAuthGateway', () => {
     expect(consumed.expiresAt).toEqual(expect.any(Number))
     expect(consumed.expiresAt!).toBeGreaterThan(Date.now())
     expect(JSON.stringify(consumed)).not.toContain('do-not-return-id-token')
+  })
+
+  it('falls back to the next available callback port when the preferred port is occupied', async () => {
+    const occupiedPort = callbackPort + 20
+    const blocker = createServer((_request, response) => {
+      response.writeHead(200, { 'content-type': 'text/plain' })
+      response.end('occupied')
+    })
+    await listenOnLocalhost(blocker, occupiedPort)
+
+    const tokenFetch = vi.fn(async () => new Response(JSON.stringify({ access_token: 'codex-oauth-access-token' }), { status: 200 }))
+    const gateway = createCodexOAuthGateway({ fetch: tokenFetch as unknown as typeof fetch, callbackPort: occupiedPort })
+
+    try {
+      const started = await gateway.startAuthorization({ provider: 'openai-codex', connectionName: 'ChatGPT Codex' })
+      const authorizationUrl = new URL(started.authorizationUrl)
+      const state = authorizationUrl.searchParams.get('state')
+      const redirectUri = new URL(authorizationUrl.searchParams.get('redirect_uri') ?? '')
+
+      expect(redirectUri.hostname).toBe('localhost')
+      expect(redirectUri.pathname).toBe('/auth/callback')
+      expect(Number(redirectUri.port)).toBeGreaterThan(occupiedPort)
+      expect(Number(redirectUri.port)).toBeLessThanOrEqual(occupiedPort + 10)
+
+      const callbackResponse = await fetch(`${redirectUri.origin}/auth/callback?state=${state}&code=codex-code`)
+      expect(callbackResponse.status).toBe(200)
+      await expect(gateway.consumeAuthorization({ sessionId: started.sessionId })).resolves.toMatchObject({
+        accessToken: 'codex-oauth-access-token'
+      })
+    } finally {
+      await closeServer(blocker)
+    }
   })
 
   it('ignores wrong-state callbacks and keeps the matching authorization flow usable', async () => {
