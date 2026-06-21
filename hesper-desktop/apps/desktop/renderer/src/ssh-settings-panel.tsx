@@ -42,10 +42,7 @@ export function SshSettingsPanel({
       <div className="hesper-scroll-invisible" style={scrollContentStyle}>
         <section aria-label="SSH 密钥管理" style={sectionBlockStyle}>
           <div style={sectionHeaderRowStyle}>
-            <div>
-              <h3 style={sectionTitleStyle}>SSH 密钥管理</h3>
-              <p style={sectionDescriptionStyle}>保存密钥名称和公钥摘要；私钥不会在界面中回显。</p>
-            </div>
+            <h3 style={sectionTitleStyle}>SSH 密钥管理</h3>
             <button type="button" disabled={pending || !onCreateKey} onClick={() => setActiveDialog('key')} style={secondaryActionStyle(pending || !onCreateKey)}>添加 SSH 密钥</button>
           </div>
           <div style={listStyle}>
@@ -67,10 +64,7 @@ export function SshSettingsPanel({
 
         <section aria-label="SSH 主机管理" style={sectionBlockStyle}>
           <div style={sectionHeaderRowStyle}>
-            <div>
-              <h3 style={sectionTitleStyle}>SSH 主机管理</h3>
-              <p style={sectionDescriptionStyle}>主机 IP 默认打码显示；主机使用的密钥从上方密钥列表中选择。</p>
-            </div>
+            <h3 style={sectionTitleStyle}>SSH 主机管理</h3>
             <button type="button" disabled={pending || !onCreateServer || keys.length === 0} onClick={() => setActiveDialog('server')} style={secondaryActionStyle(pending || !onCreateServer || keys.length === 0)}>添加 SSH 主机</button>
           </div>
           <div style={listStyle}>
@@ -413,7 +407,7 @@ const sectionBlockStyle: CSSProperties = {
 const sectionHeaderRowStyle: CSSProperties = {
   display: 'grid',
   gridTemplateColumns: 'minmax(0, 1fr) auto',
-  alignItems: 'end',
+  alignItems: 'center',
   gap: 14
 }
 
