@@ -938,7 +938,7 @@ describe('ui components', () => {
 
     render(
       <MarkdownOutput
-        content="非法 [绝对路径](workspace:/tmp/file.md)、[上级目录](workspace:docs/../secret.md)、[NUL](workspace:bad%00file.txt)"
+        content="非法 [绝对路径](workspace:/tmp/file.md)、[上级目录](workspace:docs/../secret.md)、[NUL](workspace:bad%00file.txt)、[空](workspace:)"
         onLocalFileClick={onLocalFileClick}
       />
     )
@@ -946,9 +946,12 @@ describe('ui components', () => {
     expect(screen.queryByRole('link', { name: '绝对路径' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '上级目录' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'NUL' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '空' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/\[空]\(workspace:\)/)).not.toBeInTheDocument()
     await user.click(screen.getByText('绝对路径'))
     await user.click(screen.getByText('上级目录'))
     await user.click(screen.getByText('NUL'))
+    await user.click(screen.getByText('空'))
     expect(onLocalFileClick).not.toHaveBeenCalled()
   })
 

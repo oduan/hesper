@@ -234,8 +234,8 @@ function renderInline(text: string, keyPrefix: string, onLocalFileClick?: ((path
     }
 
     if (text[index] === '[') {
-      const match = text.slice(index).match(/^\[([^\]]+)]\(([^)]+)\)/)
-      if (match && (isWorkspaceHref(match[2]!) || !/\s/.test(match[2]!))) {
+      const match = text.slice(index).match(/^\[([^\]]+)]\(([^)]*)\)/)
+      if (match) {
         const label = match[1]!
         const rawHref = match[2]!
         if (isWorkspaceHref(rawHref)) {
@@ -256,13 +256,16 @@ function renderInline(text: string, keyPrefix: string, onLocalFileClick?: ((path
           ) : (
             <span key={`${keyPrefix}-link-${index}`}>{label}</span>
           ))
-        } else {
+        } else if (!/\s/.test(rawHref) && rawHref) {
           const href = safeHref(rawHref)
           nodes.push(href ? (
             <a key={`${keyPrefix}-link-${index}`} href={href} target="_blank" rel="noreferrer" style={linkStyle}>{label}</a>
           ) : (
             <span key={`${keyPrefix}-link-${index}`}>{label}</span>
           ))
+        } else {
+          pushText(nodes, match[0], `${keyPrefix}-text-${textKey}`)
+          textKey += 1
         }
         index += match[0].length
         continue
