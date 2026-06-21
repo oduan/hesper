@@ -37,7 +37,8 @@ export function createDefaultRoleService(): RoleService {
     {
       id: 'main-agent',
       name: 'Main Agent',
-      allowedSkillIds: ['builtin:notes', 'builtin:files', 'builtin:web'],
+      allowedSkillIds: ['builtin:notes', 'builtin:files', 'builtin:web', 'builtin:install-skills'],
+      defaultSkillIds: ['builtin:notes', 'builtin:files', 'builtin:web', 'builtin:install-skills'],
       defaultToolIds: [
         'filesystem.read-file',
         'filesystem.write-file',
@@ -55,6 +56,8 @@ export function createDefaultRoleService(): RoleService {
         'roles.find',
         'roles.create',
         'roles.update',
+        'skills.list',
+        'skills.get',
         'models.list-available',
         'agent.spawn-worker-agent',
         'agent.list-worker-agents',
@@ -91,6 +94,7 @@ export function createDefaultRoleService(): RoleService {
 
 export function createDefaultSkillService(): SkillService {
   const skills: Skill[] = [
+    { id: 'builtin:install-skills', name: 'Install Skills', description: 'Install reusable skills into the user skill directory.', source: 'builtin' },
     { id: 'builtin:notes', name: 'Notes', source: 'builtin' },
     { id: 'workspace:notes', name: 'Workspace Notes', source: 'workspace' },
     { id: 'project:notes', name: 'Project Notes', source: 'project' }

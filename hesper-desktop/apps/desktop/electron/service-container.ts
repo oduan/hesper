@@ -253,6 +253,10 @@ export function createServiceContainer(options: ServiceContainerOptions) {
         createRole: (input) => roleManagementService.createRole(input),
         updateRole: (input) => roleManagementService.updateRole(input)
       },
+      skillTools: {
+        listSkills: async () => skillService.listSkills(),
+        getSkill: async (id) => skillService.getSkill(id)
+      },
       workerAgentTools: {
         spawn: (input, context) => workerAgentService.spawn(input, context),
         list: (input, context) => workerAgentService.list(input, context),

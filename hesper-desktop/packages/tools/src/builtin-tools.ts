@@ -320,6 +320,30 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
       }
     },
     {
+      id: 'skills.list',
+      name: 'List Skills',
+      description: 'List all available skills with metadata including id, name, description, source, path, sourcePath, prompt, allowed tool IDs, and enabled status. Returns metadata only and never returns credentials.',
+      category: 'agent',
+      icon: '🧩',
+      display: { name: 'List Skills', names: { 'zh-CN': '列出技能' } },
+      inputSchema: { type: 'object', properties: {} }
+    },
+    {
+      id: 'skills.get',
+      name: 'Get Skill',
+      description: 'Get detailed information for one available skill by id, including prompt text and source metadata. Returns a controlled not_found result when the skill id does not exist.',
+      category: 'agent',
+      icon: '🧩',
+      display: { name: 'Get Skill', names: { 'zh-CN': '查看技能' }, resourceFields: ['id'] },
+      inputSchema: {
+        type: 'object',
+        required: ['id'],
+        properties: {
+          id: { type: 'string', description: 'Skill id to inspect, for example builtin:install-skills or user:review.' }
+        }
+      }
+    },
+    {
       id: 'models.list-available',
       name: 'List Available Models',
       description: 'List currently available model providers and models, including provider-aware modelRef values, so the main Agent can choose a model for itself or Worker Agents. Returns metadata only and never returns API keys.',

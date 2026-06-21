@@ -603,6 +603,59 @@ describe('createBuiltinToolExecutor', () => {
     }
   })
 
+  it('lists and gets skills through injected skill handlers', async () => {
+    const skills = [
+      { id: 'builtin:notes', name: 'Notes', description: 'Take notes', source: 'builtin' as const, path: '/skills/notes', sourcePath: '/skills/notes/SKILL.md', prompt: 'Use notes.', allowedToolIds: ['filesystem.read-file'], enabled: true },
+      { id: 'user:review', name: 'Review', source: 'user' as const, sourcePath: '/user/review/SKILL.md', prompt: 'Review code.' }
+    ]
+    const listSkills = vi.fn(async () => skills)
+    const getSkill = vi.fn(async (id: string) => skills.find((skill) => skill.id === id))
+    const executor = createBuiltinToolExecutor({ skillTools: { listSkills, getSkill } })
+
+    const listed = await executor.execute(tool('skills.list'), {}, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['skills.list']
+    })
+    expect(listSkills).toHaveBeenCalledTimes(1)
+    expect(JSON.parse(listed.content)).toEqual(skills)
+    expect(listed.details).toEqual({ toolId: 'skills.list', skills, count: 2 })
+
+    const found = await executor.execute(tool('skills.get'), { id: 'builtin:notes' }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['skills.get']
+    })
+    expect(getSkill).toHaveBeenCalledWith('builtin:notes')
+    expect(JSON.parse(found.content)).toEqual(skills[0])
+    expect(found.details).toEqual({ toolId: 'skills.get', skill: skills[0] })
+  })
+
+  it('returns controlled skill tool errors for missing handlers and unknown skills', async () => {
+    const unavailable = await createBuiltinToolExecutor().execute(tool('skills.list'), {}, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['skills.list']
+    })
+    expect(unavailable).toEqual({
+      content: 'Skill catalog tools are not available in this runtime.',
+      details: { code: 'not_available', toolId: 'skills.list' },
+      isError: true
+    })
+
+    const executor = createBuiltinToolExecutor({ skillTools: { listSkills: vi.fn(async () => []), getSkill: vi.fn(async () => undefined) } })
+    const missing = await executor.execute(tool('skills.get'), { id: 'missing' }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['skills.get']
+    })
+    expect(missing).toEqual({
+      content: 'Skill not found: missing',
+      details: { code: 'not_found', toolId: 'skills.get', id: 'missing' },
+      isError: true
+    })
+  })
+
   it('delegates SSH tools to injected handlers', async () => {
     const sshTools = {
       listServers: vi.fn(async () => ({ servers: [{ id: 'ssh-server-1', name: 'Production' }], count: 1 })),

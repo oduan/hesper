@@ -1,4 +1,4 @@
-import type { ModelRef, ToolDefinition } from '@hesper/shared'
+import type { ModelRef, Skill, ToolDefinition } from '@hesper/shared'
 import { execFile } from 'node:child_process'
 import { lstat, mkdir, open, readFile, readdir, realpath, rm, stat, unlink, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path'
@@ -38,6 +38,11 @@ export type RoleToolHandlers = {
   updateRole(input: RoleToolInput & { id: string }): Promise<unknown>
 }
 
+export type SkillToolHandlers = {
+  listSkills(): Promise<Skill[]>
+  getSkill(id: string): Promise<Skill | undefined>
+}
+
 export type WorkerAgentToolHandlers = {
   spawn(input: Record<string, unknown>, context: ToolExecutionContext): Promise<unknown>
   list(input: Record<string, unknown>, context: ToolExecutionContext): Promise<unknown>
@@ -70,6 +75,7 @@ export type BuiltinToolExecutorOptions = {
   fetch?: typeof fetch
   showNotification?: (message: string) => Promise<void> | void
   roleTools?: RoleToolHandlers
+  skillTools?: SkillToolHandlers
   workerAgentTools?: WorkerAgentToolHandlers
   sshTools?: SshToolHandlers
   modelTools?: ModelToolHandlers
@@ -277,6 +283,34 @@ async function updateRoleTool(tool: ToolDefinition, args: unknown, roleTools: Ro
   if (!roleTools) return roleToolsUnavailable(tool)
   const role = await roleTools.updateRole(updateRoleToolInput(args))
   return { content: jsonContent(role), details: { toolId: tool.id, role } }
+}
+
+function skillToolsUnavailable(tool: ToolDefinition): ToolExecutionResult {
+  return {
+    content: 'Skill catalog tools are not available in this runtime.',
+    details: { code: 'not_available', toolId: tool.id },
+    isError: true
+  }
+}
+
+async function listSkillsTool(tool: ToolDefinition, skillTools: SkillToolHandlers | undefined): Promise<ToolExecutionResult> {
+  if (!skillTools) return skillToolsUnavailable(tool)
+  const skills = await skillTools.listSkills()
+  return { content: jsonContent(skills), details: { toolId: tool.id, skills, count: skills.length } }
+}
+
+async function getSkillTool(tool: ToolDefinition, args: unknown, skillTools: SkillToolHandlers | undefined): Promise<ToolExecutionResult> {
+  if (!skillTools) return skillToolsUnavailable(tool)
+  const id = stringArg(args, 'id')
+  const skill = await skillTools.getSkill(id)
+  if (!skill) {
+    return {
+      content: `Skill not found: ${id}`,
+      details: { code: 'not_found', toolId: tool.id, id },
+      isError: true
+    }
+  }
+  return { content: jsonContent(skill), details: { toolId: tool.id, skill } }
 }
 
 function workerAgentToolsUnavailable(tool: ToolDefinition): ToolExecutionResult {
@@ -1376,6 +1410,10 @@ export function createBuiltinToolExecutor(options: BuiltinToolExecutorOptions = 
           return createRoleTool(tool, args, options.roleTools)
         case 'roles.update':
           return updateRoleTool(tool, args, options.roleTools)
+        case 'skills.list':
+          return listSkillsTool(tool, options.skillTools)
+        case 'skills.get':
+          return getSkillTool(tool, args, options.skillTools)
         case 'models.list-available':
           return listAvailableModelsTool(tool, options.modelTools)
         case 'ssh.list-servers':
