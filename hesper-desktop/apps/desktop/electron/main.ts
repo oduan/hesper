@@ -16,6 +16,13 @@ const __dirname = path.dirname(__filename)
 
 const rendererIndexPath = path.resolve(__dirname, '../renderer/index.html')
 const preloadPath = path.resolve(__dirname, 'preload.cjs')
+const windowsIconPath = path.resolve(__dirname, '../assets/hesper-icon.ico')
+const fallbackIconPath = path.resolve(__dirname, '../assets/hesper-icon.png')
+
+function resolveAppIconPath(): string | undefined {
+  const iconPath = process.platform === 'win32' ? windowsIconPath : fallbackIconPath
+  return fs.existsSync(iconPath) ? iconPath : undefined
+}
 
 const configuredUserDataPath = process.env.HESPER_USER_DATA_DIR
 if (configuredUserDataPath) {
@@ -62,6 +69,7 @@ async function flushScheduledPersistence(): Promise<void> {
 }
 
 function createMainWindow(): BrowserWindow {
+  const appIconPath = resolveAppIconPath()
   const window = new BrowserWindow({
     width: 1440,
     height: 960,
@@ -70,6 +78,7 @@ function createMainWindow(): BrowserWindow {
     frame: false,
     show: false,
     backgroundColor: '#111827',
+    ...(appIconPath ? { icon: appIconPath } : {}),
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,

@@ -7,6 +7,7 @@ import type {
   SaveModelProviderInput
 } from '../../electron/ipc-contract'
 import { hesperApi } from './ipc-client'
+import hesperIconUrl from './assets/hesper-icon.png'
 import { modelNameFromNamespacedId, namespaceModelId } from './model-options'
 
 type ProtocolMode = 'openai-compatible' | 'anthropic-compatible'
@@ -852,7 +853,7 @@ function ConnectionTypePicker({
     <FullWindowDialogShell ariaLabel="添加连接" onClose={onCancel} style={onboardingOverlayStyle} showClose={false}>
       <div style={connectionTypePickerPanelStyle}>
         <header style={onboardingHeaderStyle}>
-          <CraftMark />
+          <HesperMark />
           <h2 style={onboardingTitleStyle}>欢迎使用 Hesper</h2>
           <p style={onboardingSubtitleStyle}>选择连接方式</p>
         </header>
@@ -900,12 +901,8 @@ function ConnectionTypeRow({
   )
 }
 
-function CraftMark() {
-  return (
-    <div aria-hidden="true" style={craftMarkStyle}>
-      <span style={craftMarkCutoutStyle} />
-    </div>
-  )
+function HesperMark() {
+  return <img src={hesperIconUrl} alt="" aria-hidden="true" style={hesperMarkStyle} />
 }
 
 function OpenAIIcon() {
@@ -1371,7 +1368,6 @@ const onboardingMutedColor = '#9da4b8'
 const onboardingBorderColor = '#dde2eb'
 const onboardingCardColor = 'rgba(244, 246, 251, 0.72)'
 const onboardingIconColor = '#111827'
-const onboardingPurpleColor = '#8036f5'
 
 const onboardingOverlayStyle: CSSProperties = {
   background: onboardingBackgroundColor,
@@ -1397,21 +1393,11 @@ const onboardingHeaderStyle: CSSProperties = {
   textAlign: 'center'
 }
 
-const craftMarkStyle: CSSProperties = {
-  position: 'relative',
+const hesperMarkStyle: CSSProperties = {
   width: 58,
-  height: 50,
-  background: onboardingPurpleColor,
-  clipPath: 'polygon(18% 0, 100% 0, 100% 38%, 58% 38%, 58% 62%, 100% 62%, 100% 100%, 18% 100%, 18% 76%, 0 76%, 0 24%, 18% 24%)'
-}
-
-const craftMarkCutoutStyle: CSSProperties = {
-  position: 'absolute',
-  right: 14,
-  top: 19,
-  width: 18,
-  height: 12,
-  background: onboardingBackgroundColor
+  height: 58,
+  objectFit: 'contain',
+  display: 'block'
 }
 
 const onboardingTitleStyle: CSSProperties = {
@@ -1432,30 +1418,30 @@ const onboardingSubtitleStyle: CSSProperties = {
 
 const connectionTypeListStyle: CSSProperties = {
   display: 'grid',
-  gap: 18
+  gap: 10
 }
 
 const connectionTypeRowStyle: CSSProperties = {
   width: '100%',
-  minHeight: 112,
+  minHeight: 52,
   border: `1px solid ${onboardingBorderColor}`,
-  borderRadius: 22,
+  borderRadius: 14,
   background: onboardingCardColor,
   color: onboardingTextColor,
-  padding: '22px 28px',
+  padding: '7px 14px',
   cursor: 'pointer',
   display: 'grid',
-  gridTemplateColumns: '74px minmax(0, 1fr)',
+  gridTemplateColumns: '40px minmax(0, 1fr)',
   alignItems: 'center',
-  gap: 24,
+  gap: 12,
   textAlign: 'left',
-  boxShadow: '0 2px 5px rgba(36, 42, 64, 0.06), 0 12px 24px rgba(36, 42, 64, 0.05)'
+  boxShadow: '0 1px 3px rgba(36, 42, 64, 0.05), 0 8px 18px rgba(36, 42, 64, 0.04)'
 }
 
 const connectionTypeIconStyle: CSSProperties = {
-  width: 66,
-  height: 66,
-  borderRadius: 14,
+  width: 34,
+  height: 34,
+  borderRadius: 10,
   background: '#e8ebf3',
   display: 'grid',
   placeItems: 'center',
@@ -1466,20 +1452,20 @@ const connectionTypeIconStyle: CSSProperties = {
 const connectionTypeTextBlockStyle: CSSProperties = {
   minWidth: 0,
   display: 'grid',
-  gap: 6
+  gap: 2
 }
 
 const connectionTypeTitleStyle: CSSProperties = {
   color: onboardingTextColor,
-  fontSize: 23,
-  lineHeight: 1.2,
+  fontSize: 16,
+  lineHeight: 1.15,
   fontWeight: 760
 }
 
 const connectionTypeDescriptionStyle: CSSProperties = {
   color: onboardingMutedColor,
-  fontSize: 19,
-  lineHeight: 1.35,
+  fontSize: 13,
+  lineHeight: 1.25,
   fontWeight: 560
 }
 
@@ -1490,13 +1476,13 @@ const connectionPickerFooterStyle: CSSProperties = {
 }
 
 const openAIIconStyle: CSSProperties = {
-  fontSize: 36,
+  fontSize: 23,
   lineHeight: 1,
   fontWeight: 900
 }
 
 const customProviderIconStyle: CSSProperties = {
-  fontSize: 34,
+  fontSize: 22,
   lineHeight: 1,
   color: onboardingMutedColor,
   fontWeight: 800
