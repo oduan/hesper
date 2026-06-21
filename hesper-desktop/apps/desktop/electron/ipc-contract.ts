@@ -132,14 +132,16 @@ export const appSettingsSchema = z.object({
   defaultModelId: z.string().min(1),
   defaultOutputMode: z.enum(['markdown', 'html']),
   themeMode: z.enum(['system', 'light', 'dark']),
-  fontSize: appFontSizeSchema
+  fontSize: appFontSizeSchema,
+  soul: z.string()
 }).strict()
 
 export const updateSettingsInputSchema = z.object({
   defaultModelId: z.string().min(1).optional(),
   defaultOutputMode: z.enum(['markdown', 'html']).optional(),
   themeMode: z.enum(['system', 'light', 'dark']).optional(),
-  fontSize: appFontSizeSchema.optional()
+  fontSize: appFontSizeSchema.optional(),
+  soul: z.string().optional()
 }).strict()
 
 export const managedRoleDtoSchema = z.object({

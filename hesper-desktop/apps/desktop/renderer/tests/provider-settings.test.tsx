@@ -241,12 +241,13 @@ function resetProviderMocks() {
   listTools.mockResolvedValue([])
   listRoles.mockResolvedValue([])
   setToolEnabled.mockImplementation(async (input: any) => ({ id: input.id, name: input.id, description: input.id, category: 'system', inputSchema: {}, enabled: input.enabled }))
-  getSettings.mockResolvedValue({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', fontSize: 14 })
+  getSettings.mockResolvedValue({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', fontSize: 14, soul: '' })
   updateSettings.mockImplementation(async (input: any) => ({
     defaultModelId: input.defaultModelId ?? 'mock/hesper-fast',
     defaultOutputMode: input.defaultOutputMode ?? 'markdown',
     themeMode: input.themeMode ?? 'dark',
-    fontSize: input.fontSize ?? 14
+    fontSize: input.fontSize ?? 14,
+    soul: input.soul ?? ''
   }))
 }
 

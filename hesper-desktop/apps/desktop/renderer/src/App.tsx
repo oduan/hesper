@@ -35,7 +35,8 @@ const defaultAppSettings: AppSettings = {
   defaultModelId: 'mock/hesper-fast',
   defaultOutputMode: 'markdown',
   themeMode: 'system',
-  fontSize: 14
+  fontSize: 14,
+  soul: ''
 }
 
 export function clearSessionSendError(errors: Record<string, string>, sessionId: string): Record<string, string> {
@@ -1355,7 +1356,8 @@ function applySettingsPatch(settings: AppSettings, patch: UpdateSettingsInput): 
     ...(patch.defaultModelId !== undefined ? { defaultModelId: patch.defaultModelId } : {}),
     ...(patch.defaultOutputMode !== undefined ? { defaultOutputMode: patch.defaultOutputMode } : {}),
     ...(patch.themeMode !== undefined ? { themeMode: patch.themeMode } : {}),
-    ...(patch.fontSize !== undefined ? { fontSize: patch.fontSize } : {})
+    ...(patch.fontSize !== undefined ? { fontSize: patch.fontSize } : {}),
+    ...(patch.soul !== undefined ? { soul: patch.soul } : {})
   }
 }
 

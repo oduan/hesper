@@ -32,7 +32,8 @@ const defaultSettings: AppSettings = {
   defaultModelId: 'mock/hesper-fast',
   defaultOutputMode: 'markdown',
   themeMode: 'dark',
-  fontSize: 14
+  fontSize: 14,
+  soul: ''
 }
 
 const fallbackBuiltinTools: ToolDto[] = [
@@ -200,7 +201,8 @@ export function createFallbackHesperApi(): HesperDesktopApi {
         defaultModelId: input.defaultModelId ?? defaultSettings.defaultModelId,
         defaultOutputMode: input.defaultOutputMode ?? defaultSettings.defaultOutputMode,
         themeMode: input.themeMode ?? defaultSettings.themeMode,
-        fontSize: input.fontSize ?? defaultSettings.fontSize
+        fontSize: input.fontSize ?? defaultSettings.fontSize,
+        soul: input.soul ?? defaultSettings.soul
       })
     },
     credentials: {

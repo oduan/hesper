@@ -1694,8 +1694,8 @@ describe('registerIpcHandlers', () => {
     registerIpcHandlers({ ipcMain, dialog, container, savePersistence })
 
     await expect(
-      handles.get(ipcChannels.settingsUpdate)?.({ sender: { id: 1 } }, { defaultModelId: 'deepseek-chat', defaultOutputMode: 'html', themeMode: 'dark', fontSize: 16 })
-    ).resolves.toEqual({ defaultModelId: 'deepseek-chat', defaultOutputMode: 'html', themeMode: 'dark', fontSize: 16 })
+      handles.get(ipcChannels.settingsUpdate)?.({ sender: { id: 1 } }, { defaultModelId: 'deepseek-chat', defaultOutputMode: 'html', themeMode: 'dark', fontSize: 16, soul: '保持中文输出。' })
+    ).resolves.toEqual({ defaultModelId: 'deepseek-chat', defaultOutputMode: 'html', themeMode: 'dark', fontSize: 16, soul: '保持中文输出。' })
     expect(savePersistence).toHaveBeenCalled()
 
     const restoredContainer = createServiceContainer({ persistence, agentMode: 'mock' })
@@ -1712,7 +1712,8 @@ describe('registerIpcHandlers', () => {
       defaultModelId: 'deepseek-chat',
       defaultOutputMode: 'html',
       themeMode: 'dark',
-      fontSize: 16
+      fontSize: 16,
+      soul: '保持中文输出。'
     })
   })
 
