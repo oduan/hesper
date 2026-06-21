@@ -54,6 +54,7 @@ function getStatusColor(status: RunStepStatus): string {
 
 type StepDisplayParts = {
   primary: string
+  resource?: string
   secondary: string[]
 }
 
@@ -125,6 +126,9 @@ type ToolStepDetailPayload = {
   kind?: unknown
   toolId?: unknown
   toolIcon?: unknown
+  displayName?: unknown
+  resource?: unknown
+  display?: unknown
   input?: unknown
   output?: unknown
   isError?: unknown
@@ -157,6 +161,65 @@ function formatOutputValue(value: unknown): string {
   return formatJsonValue(value)
 }
 
+function recordValue(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined
+}
+
+function normalizedText(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const normalized = value.replace(/\s+/g, ' ').trim()
+  return normalized || undefined
+}
+
+function stringifyResourceValue(value: unknown): string | undefined {
+  if (typeof value === 'string') return normalizedText(value)
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  if (Array.isArray(value)) return normalizedText(value.map((item) => typeof item === 'string' ? item : JSON.stringify(item)).join(' '))
+  if (value && typeof value === 'object') return JSON.stringify(value)
+  return undefined
+}
+
+function displayResourceFields(display: unknown): string[] {
+  const fields = recordValue(display)?.resourceFields
+  return Array.isArray(fields) ? fields.filter((field): field is string => typeof field === 'string' && Boolean(field.trim())) : []
+}
+
+function extractToolResource(payload: ToolStepDetailPayload): string | undefined {
+  const explicitResource = normalizedText(payload.resource)
+  if (explicitResource) return explicitResource
+
+  const input = recordValue(payload.input)
+  if (!input) return undefined
+  const parameters = [
+    ...displayResourceFields(payload.display),
+    'path',
+    'url',
+    'query',
+    'command',
+    'args',
+    'pattern',
+    'condition',
+    'task',
+    'invocationId',
+    'parentRunId',
+    'wakeAt',
+    'seconds',
+    'message',
+    'name',
+    'id'
+  ]
+  for (const parameter of parameters) {
+    if (!Object.prototype.hasOwnProperty.call(input, parameter)) continue
+    const resource = stringifyResourceValue(input[parameter])
+    if (resource) return resource
+  }
+  return undefined
+}
+
+function extractToolPurpose(payload: ToolStepDetailPayload): string | undefined {
+  return normalizedText(recordValue(payload.input)?.purpose)
+}
+
 function createStepDisplayParts(step: RunStep): StepDisplayParts {
   if (step.type === 'thought' && step.summary) {
     return {
@@ -165,11 +228,22 @@ function createStepDisplayParts(step: RunStep): StepDisplayParts {
     }
   }
 
+  const structuredToolDetail = step.type === 'tool_call' ? parseStructuredToolStepDetail(step.detail) : undefined
+  if (structuredToolDetail) {
+    const displayName = normalizedText(structuredToolDetail.displayName) ?? ''
+    const resource = extractToolResource(structuredToolDetail) ?? ''
+    const primary = displayName || step.title
+    return {
+      primary,
+      ...(resource ? { resource } : {}),
+      secondary: uniqueParts([step.summary, extractToolPurpose(structuredToolDetail)]).filter((part) => part !== primary && part !== resource)
+    }
+  }
+
   const primary = step.title
-  const shouldHideStructuredToolDetail = step.type === 'tool_call' && parseStructuredToolStepDetail(step.detail) !== undefined
   return {
     primary,
-    secondary: uniqueParts([step.summary, shouldHideStructuredToolDetail ? undefined : step.detail]).filter((part) => part !== primary)
+    secondary: uniqueParts([step.summary, step.detail]).filter((part) => part !== primary)
   }
 }
 
@@ -434,6 +508,12 @@ export function RunSteps({ steps, autoExpanded = false, runStartedAt, runEndedAt
                   <StatusDot step={step} />
                   <span data-hesper-step-row-text="true" style={stepTextStyle}>
                     <span style={primarySegmentStyle}>{parts.primary}</span>
+                    {parts.resource ? (
+                      <span>
+                        <span aria-hidden="true" style={mutedSeparatorStyle}> · </span>
+                        <span data-hesper-tool-resource="true" style={resourceSegmentStyle}>{parts.resource}</span>
+                      </span>
+                    ) : null}
                     {parts.secondary.map((part) => (
                       <span key={part}>
                         <span aria-hidden="true" style={mutedSeparatorStyle}> · </span>
@@ -590,6 +670,12 @@ const mutedSeparatorStyle: CSSProperties = {
 
 const mutedSegmentStyle: CSSProperties = {
   color: darkTheme.color.textMuted
+}
+
+const resourceSegmentStyle: CSSProperties = {
+  ...mutedSegmentStyle,
+  textDecorationLine: 'underline',
+  textUnderlineOffset: '3px'
 }
 
 const stepFullscreenOverlayStyle: CSSProperties = {

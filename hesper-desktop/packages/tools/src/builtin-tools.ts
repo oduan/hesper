@@ -18,6 +18,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
       description: 'Read a text file from the selected workspace.',
       category: 'filesystem',
       icon: '📖',
+      display: { name: 'Read File', names: { 'zh-CN': '读取文件' }, resourceFields: ['path'] },
       inputSchema: {
         type: 'object',
         required: ['path'],
@@ -32,6 +33,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
       description: 'Write a text file in the selected workspace.',
       category: 'filesystem',
       icon: '✍️',
+      display: { name: 'Write File', names: { 'zh-CN': '写入文件' }, resourceFields: ['path'] },
       inputSchema: {
         type: 'object',
         required: ['path', 'content'],
@@ -47,6 +49,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
       description: 'Edit specific 1-based inclusive line ranges in an existing text file from the selected workspace. Multiple edits are applied against the original line numbers.',
       category: 'filesystem',
       icon: '📝',
+      display: { name: 'Edit File', names: { 'zh-CN': '编辑文件' }, resourceFields: ['path'] },
       inputSchema: {
         type: 'object',
         required: ['path', 'edits'],
@@ -74,6 +77,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
       description: 'Delete a file inside the selected workspace. The path must resolve to a file.',
       category: 'filesystem',
       icon: '🗑️',
+      display: { name: 'Delete File', names: { 'zh-CN': '删除文件' }, resourceFields: ['path'] },
       inputSchema: {
         type: 'object',
         required: ['path'],
@@ -88,6 +92,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
       description: 'Delete a directory inside the selected workspace. Use recursive=true to delete non-empty directories.',
       category: 'filesystem',
       icon: '🧹',
+      display: { name: 'Delete Directory', names: { 'zh-CN': '删除目录' }, resourceFields: ['path'] },
       inputSchema: {
         type: 'object',
         required: ['path'],
@@ -103,6 +108,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
       description: 'List direct child files and directories under a workspace-relative directory. By default returns each item name and type only.',
       category: 'filesystem',
       icon: '📂',
+      display: { name: 'List Directory', names: { 'zh-CN': '列出目录' }, resourceFields: ['path'] },
       inputSchema: {
         type: 'object',
         properties: {
@@ -120,6 +126,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
       description: 'Recursively find file or directory names under a workspace-relative directory using a regular expression.',
       category: 'filesystem',
       icon: '🔎',
+      display: { name: 'Find Files', names: { 'zh-CN': '查找文件' }, resourceFields: ['pattern'] },
       inputSchema: {
         type: 'object',
         required: ['pattern'],
@@ -141,6 +148,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
       description: 'Search files under a workspace-relative path using composable conditions. Supports name globs, content contains, content regex, and all/any/not condition groups. Content matches return the matching line plus two surrounding lines.',
       category: 'filesystem',
       icon: '🔍',
+      display: { name: 'Search Files', names: { 'zh-CN': '搜索文件' }, resourceFields: ['condition'] },
       inputSchema: {
         type: 'object',
         required: ['condition'],
@@ -162,6 +170,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
       description: 'Read git working tree status.',
       category: 'git',
       icon: '🌿',
+      display: { name: 'Git Status', names: { 'zh-CN': '查看 Git 状态' } },
       inputSchema: { type: 'object', properties: {} }
     },
     {
@@ -170,6 +179,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
       description: 'Run git in the selected workspace. Pass only the arguments after git, not the git command itself. Arguments are executed as git -C <workspace> ...args.',
       category: 'git',
       icon: '🌿',
+      display: { name: 'Git Command', names: { 'zh-CN': '运行 Git 命令' }, resourceFields: ['args'] },
       inputSchema: {
         type: 'object',
         required: ['args'],
@@ -189,6 +199,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
       description: 'Fetch and extract clean page content with the TinyFish Fetch API. Requires a TinyFish API key saved in Tools settings; the key is never exposed to the agent prompt.',
       category: 'web',
       icon: '🌐',
+      display: { name: 'Fetch URL', names: { 'zh-CN': '抓取网页' }, resourceFields: ['url'] },
       requiresApiKey: true,
       inputSchema: {
         type: 'object',
@@ -209,6 +220,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
       description: 'Search the web with the TinyFish Search API. Requires a TinyFish API key saved in Tools settings; the key is never exposed to the agent prompt.',
       category: 'web',
       icon: '🌐',
+      display: { name: 'Web Search', names: { 'zh-CN': '搜索网页' }, resourceFields: ['query'] },
       requiresApiKey: true,
       inputSchema: {
         type: 'object',
@@ -228,6 +240,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
       description: 'List all user-defined roles with their id, name, description, full prompt, and default tools.',
       category: 'agent',
       icon: '🎭',
+      display: { name: 'List Roles', names: { 'zh-CN': '列出角色' } },
       inputSchema: { type: 'object', properties: {} }
     },
     {
@@ -236,6 +249,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
       description: 'Fuzzy search user-defined roles by id, name, description, prompt text, or default tool IDs.',
       category: 'agent',
       icon: '🎭',
+      display: { name: 'Find Roles', names: { 'zh-CN': '查找角色' }, resourceFields: ['query'] },
       inputSchema: {
         type: 'object',
         required: ['query'],
@@ -251,6 +265,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
       description: 'Create a user-defined role with a name, description, full prompt, and default tools.',
       category: 'agent',
       icon: '🎭',
+      display: { name: 'Create Role', names: { 'zh-CN': '创建角色' }, resourceFields: ['name'] },
       inputSchema: {
         type: 'object',
         required: ['name'],
@@ -268,6 +283,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
       description: 'Update an existing user-defined role. This tool cannot delete roles.',
       category: 'agent',
       icon: '🎭',
+      display: { name: 'Update Role', names: { 'zh-CN': '更新角色' }, resourceFields: ['id'] },
       inputSchema: {
         type: 'object',
         required: ['id'],
@@ -286,6 +302,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
       description: 'Create a constrained Worker Agent child run with a role, task, and limited tool set. By default waits only for a bounded timeout and returns a diagnosis if still running.',
       category: 'agent',
       icon: '🧑‍💻',
+      display: { name: 'Spawn Worker Agent', names: { 'zh-CN': '启动 Worker Agent' }, resourceFields: ['task'] },
       inputSchema: {
         type: 'object',
         required: ['task', 'roleId', 'allowedToolIds'],
@@ -307,6 +324,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
       description: 'List Worker Agent invocations for the current parent run or another run in the same session.',
       category: 'agent',
       icon: '📋',
+      display: { name: 'List Worker Agents', names: { 'zh-CN': '列出 Worker Agent' }, resourceFields: ['parentRunId'] },
       inputSchema: {
         type: 'object',
         properties: {
@@ -321,6 +339,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
       description: 'Get a Worker Agent invocation status, diagnosis, and result if available.',
       category: 'agent',
       icon: '🔎',
+      display: { name: 'Get Worker Agent', names: { 'zh-CN': '查看 Worker Agent' }, resourceFields: ['invocationId'] },
       inputSchema: {
         type: 'object',
         required: ['invocationId'],
@@ -335,6 +354,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
       description: 'Wait for a Worker Agent to finish for a bounded timeout and return a diagnosis if it is still running.',
       category: 'agent',
       icon: '⏱️',
+      display: { name: 'Wait Worker Agent', names: { 'zh-CN': '等待 Worker Agent' }, resourceFields: ['invocationId'] },
       inputSchema: {
         type: 'object',
         required: ['invocationId'],
@@ -351,6 +371,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
       description: 'Cancel a running Worker Agent in the same session.',
       category: 'agent',
       icon: '🛑',
+      display: { name: 'Cancel Worker Agent', names: { 'zh-CN': '取消 Worker Agent' }, resourceFields: ['invocationId'] },
       inputSchema: {
         type: 'object',
         required: ['invocationId'],
@@ -366,6 +387,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
       description: 'Get the current date, time, timezone, and UTC offset for this desktop runtime.',
       category: 'system',
       icon: '🕒',
+      display: { name: 'Current Time', names: { 'zh-CN': '获取当前时间' } },
       inputSchema: { type: 'object', properties: {} }
     },
     {
@@ -374,6 +396,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
       description: 'Pause the Agent for a specified number of seconds before continuing. Use this to wait briefly before checking again.',
       category: 'system',
       icon: '💤',
+      display: { name: 'Sleep', names: { 'zh-CN': '等待' }, resourceFields: ['seconds'] },
       inputSchema: {
         type: 'object',
         required: ['seconds'],
@@ -388,6 +411,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
       description: 'Pause the Agent until a specific wake-up time, then return success. Provide an ISO 8601 timestamp with timezone, for example 2026-06-20T21:30:00+08:00.',
       category: 'system',
       icon: '⏰',
+      display: { name: 'Wait Until Time', names: { 'zh-CN': '等待到时间' }, resourceFields: ['wakeAt'] },
       inputSchema: {
         type: 'object',
         required: ['wakeAt'],
@@ -402,6 +426,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
       description: `Execute one complete shell command from the selected workspace. ${currentCommandRuntimeDescription()} The command is run after changing to the workspace directory.`,
       category: 'system',
       icon: '🖥️',
+      display: { name: 'Execute Command', names: { 'zh-CN': '执行命令' }, resourceFields: ['command'] },
       inputSchema: {
         type: 'object',
         required: ['command'],
@@ -417,6 +442,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
       description: 'Show a desktop notification.',
       category: 'system',
       icon: '🔔',
+      display: { name: 'Show Notification', names: { 'zh-CN': '显示通知' }, resourceFields: ['message'] },
       inputSchema: {
         type: 'object',
         required: ['message'],

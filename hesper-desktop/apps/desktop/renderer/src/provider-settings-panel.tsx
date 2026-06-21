@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
+import { createPortal } from 'react-dom'
 import type {
   ModelDto,
   ModelProviderDto,
@@ -156,6 +157,7 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
   const [dialogState, setDialogState] = useState<ConnectionDialogState>()
   const [addConnectionFlow, setAddConnectionFlow] = useState<AddConnectionFlow>()
   const [openMenuProviderId, setOpenMenuProviderId] = useState<string>()
+  const [connectionMenuPosition, setConnectionMenuPosition] = useState<{ top: number; left: number }>()
   const [hoveredProviderId, setHoveredProviderId] = useState<string>()
   const [renamingProviderId, setRenamingProviderId] = useState<string>()
   const [renameValue, setRenameValue] = useState('')
@@ -172,6 +174,7 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
   const renameInputRef = useRef<HTMLInputElement | null>(null)
 
   const visibleProviders = useMemo(() => providers.filter((provider) => provider.enabled !== false), [providers])
+  const openMenuProvider = visibleProviders.find((provider) => provider.id === openMenuProviderId)
 
   async function cancelCodexOAuthSession(sessionId: string): Promise<void> {
     try {
@@ -623,15 +626,13 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
           </div>
           <div style={connectionListStyle}>
             {visibleProviders.map((provider, index) => (
-              <div
-                key={provider.id}
-                onMouseEnter={() => setHoveredProviderId(provider.id)}
-                onMouseLeave={() => setHoveredProviderId((current) => current === provider.id ? undefined : current)}
-                style={{
-                  ...connectionItemStyle,
-                  ...(index > 0 ? connectionItemSeparatorStyle : {})
-                }}
-              >
+              <Fragment key={provider.id}>
+                {index > 0 ? <div aria-hidden="true" data-hesper-connection-separator="true" style={connectionItemSeparatorStyle} /> : null}
+                <div
+                  onMouseEnter={() => setHoveredProviderId(provider.id)}
+                  onMouseLeave={() => setHoveredProviderId((current) => current === provider.id ? undefined : current)}
+                  style={connectionItemStyle}
+                >
                 <div style={connectionInfoStyle}>
                   <span style={providerAvatarStyle}>{provider.name.slice(0, 1).toUpperCase()}</span>
                   <span style={{ minWidth: 0 }}>
@@ -688,31 +689,49 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
                   aria-label={`打开连接菜单 ${provider.name}`}
                   onClick={(event) => {
                     event.stopPropagation()
-                    setOpenMenuProviderId((current) => current === provider.id ? undefined : provider.id)
+                    if (openMenuProviderId === provider.id) {
+                      setOpenMenuProviderId(undefined)
+                      return
+                    }
+
+                    const rect = event.currentTarget.getBoundingClientRect()
+                    setConnectionMenuPosition({
+                      top: rect.bottom + 6,
+                      left: Math.max(8, rect.right - connectionMenuMinWidth)
+                    })
+                    setOpenMenuProviderId(provider.id)
                   }}
                   style={menuButtonStyle}
                 >
                   •••
                 </button>
-                {openMenuProviderId === provider.id ? (
-                  <div role="menu" aria-label={`${provider.name} 连接菜单`} style={connectionMenuStyle} onClick={(event) => event.stopPropagation()}>
-                    {isCodexOAuthProvider(provider) ? (
-                      <>
-                        <button type="button" role="menuitem" style={connectionMenuItemStyle} onClick={() => reauthorizeCodexConnection(provider)}>重新授权</button>
-                        <button type="button" role="menuitem" style={connectionMenuItemStyle} onClick={() => void testSavedConnection(provider)}>验证连接</button>
-                      </>
-                    ) : (
-                      <button type="button" role="menuitem" style={connectionMenuItemStyle} onClick={() => openEditConnection(provider)}>编辑</button>
-                    )}
-                    <button type="button" role="menuitem" style={{ ...connectionMenuItemStyle, color: dangerTextColor }} onClick={() => void deleteConnection(provider)}>删除</button>
-                  </div>
-                ) : null}
-              </div>
+                </div>
+              </Fragment>
             ))}
           </div>
           <button type="button" style={secondaryActionStyle} onClick={openAddConnection}>+ 添加连接</button>
         </section>
       </div>
+
+      {openMenuProvider && connectionMenuPosition ? createPortal(
+        <div
+          role="menu"
+          aria-label={`${openMenuProvider.name} 连接菜单`}
+          style={{ ...connectionMenuStyle, top: connectionMenuPosition.top, left: connectionMenuPosition.left }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          {isCodexOAuthProvider(openMenuProvider) ? (
+            <>
+              <button type="button" role="menuitem" style={connectionMenuItemStyle} onClick={() => reauthorizeCodexConnection(openMenuProvider)}>重新授权</button>
+              <button type="button" role="menuitem" style={connectionMenuItemStyle} onClick={() => void testSavedConnection(openMenuProvider)}>验证连接</button>
+            </>
+          ) : (
+            <button type="button" role="menuitem" style={connectionMenuItemStyle} onClick={() => openEditConnection(openMenuProvider)}>编辑</button>
+          )}
+          <button type="button" role="menuitem" style={{ ...connectionMenuItemStyle, color: dangerTextColor }} onClick={() => void deleteConnection(openMenuProvider)}>删除</button>
+        </div>,
+        document.body
+      ) : null}
 
       {addConnectionFlow === 'picker' ? (
         <ConnectionTypePicker
@@ -1162,9 +1181,10 @@ const connectionItemStyle: CSSProperties = {
 }
 
 const connectionItemSeparatorStyle: CSSProperties = {
-  borderTopWidth: 1,
-  borderTopStyle: 'solid',
-  borderTopColor: borderColor
+  height: 1,
+  margin: '0 14px',
+  background: 'var(--hesper-color-border-subtle, rgba(65, 72, 104, 0.45))',
+  pointerEvents: 'none'
 }
 
 const connectionInfoStyle: CSSProperties = {
@@ -1250,12 +1270,12 @@ const menuButtonStyle: CSSProperties = {
   letterSpacing: 1
 }
 
+const connectionMenuMinWidth = 112
+
 const connectionMenuStyle: CSSProperties = {
-  position: 'absolute',
-  zIndex: 10,
-  right: 8,
-  top: 46,
-  minWidth: 112,
+  position: 'fixed',
+  zIndex: 1000,
+  minWidth: connectionMenuMinWidth,
   borderRadius: 12,
   background: surfaceMutedColor,
   padding: 6,

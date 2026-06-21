@@ -8,6 +8,7 @@ import {
   runStepSchema,
   sessionSchema,
   workerAgentInvocationSchema,
+  toolDefinitionSchema,
   toolPermissionPolicySchema
 } from '../schemas'
 
@@ -247,6 +248,28 @@ describe('shared schemas', () => {
     })
 
     expect(parsed.canBeAssignedToWorkerAgent).toBe(true)
+  })
+
+  it('validates tool definition display metadata', () => {
+    const parsed = toolDefinitionSchema.parse({
+      id: 'filesystem.read-file',
+      name: 'Read File',
+      description: 'Read a text file from the selected workspace.',
+      category: 'filesystem',
+      icon: '📖',
+      inputSchema: { type: 'object', required: ['path'], properties: { path: { type: 'string' } } },
+      display: {
+        name: 'Read File',
+        names: { 'zh-CN': '读取文件' },
+        resourceFields: ['path']
+      }
+    })
+
+    expect(parsed.display).toEqual({
+      name: 'Read File',
+      names: { 'zh-CN': '读取文件' },
+      resourceFields: ['path']
+    })
   })
 
   it('validates tool permission policies', () => {

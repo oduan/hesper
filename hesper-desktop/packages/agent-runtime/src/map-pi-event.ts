@@ -23,7 +23,14 @@ type RunState = {
   pendingToolStepIdsByKey: Map<string, string[]>
   toolPurposeByStepId: Map<string, string>
   toolInputByStepId: Map<string, unknown>
+  toolDisplayByStepId: Map<string, ToolDisplayInfo>
   thinkingByBlockKey: Map<string, ThinkingState>
+}
+
+type ToolDisplayInfo = {
+  displayName: string
+  resource?: string
+  display?: Record<string, unknown>
 }
 
 type TextPhase = 'commentary' | 'final_answer'
@@ -51,6 +58,7 @@ function getRunState(runId: string): RunState {
     pendingToolStepIdsByKey: new Map(),
     toolPurposeByStepId: new Map(),
     toolInputByStepId: new Map(),
+    toolDisplayByStepId: new Map(),
     thinkingByBlockKey: new Map()
   }
   runStates.set(runId, created)
@@ -80,6 +88,9 @@ type ToolStepDetailPayload = {
   kind: 'tool_call'
   toolId?: string
   toolIcon?: string
+  displayName?: string
+  resource?: string
+  display?: Record<string, unknown>
   input?: unknown
   output?: unknown
   isError?: boolean
@@ -89,20 +100,48 @@ function recordValue(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined
 }
 
-function extractToolResultMetadata(output: unknown): { toolId?: string; toolIcon?: string } {
+function displayNameFromDisplay(display: unknown): string | undefined {
+  const record = recordValue(display)
+  const name = recordValue(record?.name)
+  const names = recordValue(record?.names)
+  return normalizedString(name?.zhCN)
+    ?? normalizedString(name?.['zh-CN'])
+    ?? normalizedString(name?.default)
+    ?? normalizedString(names?.['zh-CN'])
+    ?? normalizedString(record?.name)
+}
+
+function extractToolResultMetadata(output: unknown): { toolId?: string; toolIcon?: string; displayName?: string; display?: Record<string, unknown> } {
   const details = recordValue(recordValue(output)?.details)
+  const display = recordValue(details?.display)
+  const displayName = normalizedString(details?.displayName) ?? displayNameFromDisplay(display)
   return {
     ...(typeof details?.toolId === 'string' ? { toolId: details.toolId } : {}),
-    ...(typeof details?.toolIcon === 'string' ? { toolIcon: details.toolIcon } : {})
+    ...(typeof details?.toolIcon === 'string' ? { toolIcon: details.toolIcon } : {}),
+    ...(displayName !== undefined ? { displayName } : {}),
+    ...(display ? { display } : {})
   }
 }
 
-function createToolStepDetail(input: unknown, output?: unknown, isError?: boolean): string {
+function sanitizeToolInput(input: unknown): unknown {
+  const record = recordValue(input)
+  if (!record) return input
+  const { _displayName: _displayName, ...rest } = record
+  return rest
+}
+
+function createToolStepDetail(input: unknown, output?: unknown, isError?: boolean, displayInfo?: ToolDisplayInfo): string {
   const metadata = extractToolResultMetadata(output)
+  const display = displayInfo?.display ?? metadata.display
+  const displayName = displayInfo?.displayName ?? metadata.displayName ?? displayNameFromDisplay(display)
+  const resource = displayInfo?.resource ?? extractToolResource(input, display)
   const payload: ToolStepDetailPayload = {
     kind: 'tool_call',
     ...metadata,
-    ...(input !== undefined ? { input } : {}),
+    ...(displayName !== undefined ? { displayName } : {}),
+    ...(resource !== undefined ? { resource } : {}),
+    ...(display !== undefined ? { display } : {}),
+    ...(input !== undefined ? { input: sanitizeToolInput(input) } : {}),
     ...(output !== undefined ? { output } : {}),
     ...(isError !== undefined ? { isError } : {})
   }
@@ -185,6 +224,90 @@ function extractToolPurpose(args: unknown): string | undefined {
   return normalized || undefined
 }
 
+function normalizedString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const normalized = value.replace(/\s+/g, ' ').trim()
+  return normalized || undefined
+}
+
+function formatToolNameWord(word: string): string {
+  const lower = word.toLowerCase()
+  const specialWords: Record<string, string> = {
+    api: 'API',
+    id: 'ID',
+    url: 'URL',
+    git: 'Git',
+    ai: 'AI'
+  }
+  return specialWords[lower] ?? `${lower.slice(0, 1).toUpperCase()}${lower.slice(1)}`
+}
+
+function humanizeToolName(toolName: unknown): string {
+  const raw = normalizedString(typeof toolName === 'string' ? toolName : undefined) ?? 'Tool'
+  const withoutNamespace = raw.replace(/^(filesystem|web|system|git|roles|agent|time)[._-]+/i, '')
+  const words = withoutNamespace.split(/[._\s-]+/).filter(Boolean)
+  const humanized = words.map(formatToolNameWord).join(' ')
+  return humanized || 'Tool'
+}
+
+function stringifyResourceValue(value: unknown): string | undefined {
+  if (typeof value === 'string') return normalizedString(value)
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  if (Array.isArray(value)) return normalizedString(value.map((item) => typeof item === 'string' ? item : safeStringifyJson(item)).join(' '))
+  if (value && typeof value === 'object') return safeStringifyJson(value)
+  return undefined
+}
+
+function displayResourceFields(display: unknown): string[] {
+  const fields = recordValue(display)?.resourceFields
+  return Array.isArray(fields) ? fields.filter((field): field is string => typeof field === 'string' && Boolean(field.trim())) : []
+}
+
+function extractToolResource(args: unknown, display?: unknown): string | undefined {
+  const record = recordValue(args)
+  if (!record) return undefined
+  const parameters = [
+    ...displayResourceFields(display),
+    'path',
+    'url',
+    'query',
+    'command',
+    'args',
+    'pattern',
+    'condition',
+    'task',
+    'invocationId',
+    'parentRunId',
+    'wakeAt',
+    'seconds',
+    'message',
+    'name',
+    'id'
+  ]
+  for (const parameter of parameters) {
+    if (!Object.prototype.hasOwnProperty.call(record, parameter)) continue
+    const resource = stringifyResourceValue(record[parameter])
+    if (resource) return resource
+  }
+  return undefined
+}
+
+function createToolDisplayInfo(args: unknown, event: PiEventLike, fallback?: ToolDisplayInfo, metadata?: ReturnType<typeof extractToolResultMetadata>): ToolDisplayInfo {
+  const record = recordValue(args)
+  const display = metadata?.display ?? fallback?.display
+  const displayName = normalizedString(record?._displayName)
+    ?? metadata?.displayName
+    ?? fallback?.displayName
+    ?? displayNameFromDisplay(display)
+    ?? humanizeToolName(event.toolName)
+  const resource = extractToolResource(args, display) ?? fallback?.resource
+  return {
+    displayName,
+    ...(resource !== undefined ? { resource } : {}),
+    ...(display !== undefined ? { display } : {})
+  }
+}
+
 function queuePendingToolStepId(state: RunState, key: string, stepId: string): void {
   const pending = state.pendingToolStepIdsByKey.get(key) ?? []
   pending.push(stepId)
@@ -248,27 +371,32 @@ function createToolStepId(runId: string, event: PiEventLike, state: RunState, ke
 function createToolStepEvent(kind: StepEvent['type'], runId: string, event: PiEventLike): StepEvent {
   const state = getRunState(runId)
   const key = toolCorrelationKey(event)
-  const title = `调用 ${String(event.toolName ?? 'unknown')}`
 
   if (kind === 'step.created') {
     const stepId = createToolStepId(runId, event, state, key)
     const input = event.args
     const purpose = extractToolPurpose(input)
+    const displayInfo = createToolDisplayInfo(input, event)
     if (purpose) state.toolPurposeByStepId.set(stepId, purpose)
     if (input !== undefined) state.toolInputByStepId.set(stepId, input)
+    state.toolDisplayByStepId.set(stepId, displayInfo)
     queuePendingToolStepId(state, key, stepId)
     return {
       type: 'step.created',
-      step: createStep(runId, stepId, 'tool_call', 'running', title, purpose, createToolStepDetail(input))
+      step: createStep(runId, stepId, 'tool_call', 'running', displayInfo.displayName, purpose, createToolStepDetail(input, undefined, undefined, displayInfo))
     }
   }
 
   const stepId = takePendingToolStepId(state, key, runId, event)
   const input = event.args !== undefined ? event.args : state.toolInputByStepId.get(stepId)
   const purpose = extractToolPurpose(input) ?? state.toolPurposeByStepId.get(stepId)
+  const displayInfo = createToolDisplayInfo(input, event, state.toolDisplayByStepId.get(stepId))
   state.toolPurposeByStepId.delete(stepId)
   state.toolInputByStepId.delete(stepId)
+  state.toolDisplayByStepId.delete(stepId)
   const output = event.result
+  const outputMetadata = extractToolResultMetadata(output)
+  const finalDisplayInfo = createToolDisplayInfo(input, event, displayInfo, outputMetadata)
   const isError = event.isError === true
   return {
     type: 'step.updated',
@@ -277,14 +405,13 @@ function createToolStepEvent(kind: StepEvent['type'], runId: string, event: PiEv
       stepId,
       'tool_call',
       isError ? 'failed' : 'succeeded',
-      title,
+      finalDisplayInfo.displayName,
       purpose,
-      createToolStepDetail(input, output, isError),
+      createToolStepDetail(input, output, isError, finalDisplayInfo),
       nowIso()
     )
   }
 }
-
 function createThinkingStepEvent(kind: StepEvent['type'], runId: string, event: PiEventLike): StepEvent | undefined {
   const assistantMessageEvent = event.assistantMessageEvent as { contentIndex?: number; delta?: string; content?: string } | undefined
   const contentIndex = assistantMessageEvent?.contentIndex ?? 0

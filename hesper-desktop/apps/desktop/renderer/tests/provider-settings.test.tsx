@@ -304,19 +304,27 @@ describe('provider settings panel', () => {
     expect(mockItem?.style.border).toBe('0px')
     expect(mockItem?.style.boxShadow).toBe('none')
     expect(mockItem).toHaveStyle({ overflow: 'visible' })
-    expect(deepSeekItem).toHaveStyle({
-      borderTopWidth: '1px',
-      borderTopStyle: 'solid',
-      borderTopColor: 'var(--hesper-color-border, #414868)',
-      overflow: 'visible'
+    const separators = connectionList?.querySelectorAll('[data-hesper-connection-separator="true"]')
+    expect(separators).toHaveLength(baseProviders.length - 1)
+    expect(separators?.[0]).toHaveStyle({
+      height: '1px',
+      margin: '0px 14px',
+      background: 'var(--hesper-color-border-subtle, rgba(65, 72, 104, 0.45))'
     })
+    expect(deepSeekItem?.style.borderTopWidth).toBe('0px')
+    expect(deepSeekItem?.style.borderTopStyle).toBe('none')
+    expect(deepSeekItem).toHaveStyle({ overflow: 'visible' })
 
     expect(screen.queryByRole('button', { name: /选择模型来源/ })).not.toBeInTheDocument()
     expect(mockItem).toHaveStyle({ background: 'transparent' })
     expect(deepSeekItem).toHaveStyle({ background: 'transparent' })
 
     await user.click(deepSeekMenuButton)
-    expect(await screen.findByRole('menu', { name: 'DeepSeek 连接菜单' })).toBeInTheDocument()
+    const menu = await screen.findByRole('menu', { name: 'DeepSeek 连接菜单' })
+    expect(menu).toBeInTheDocument()
+    expect(menu.parentElement).toBe(document.body)
+    expect(menu).toHaveStyle({ position: 'fixed' })
+    expect(connectionList?.querySelector('[role="menu"]')).not.toBeInTheDocument()
     expect(deepSeekItem).toHaveStyle({ overflow: 'visible' })
   })
 

@@ -128,12 +128,12 @@ describe('pi event mapping', () => {
     ])
   })
 
-  it('maps tool execution start to a running tool step', () => {
+  it('maps tool execution start to a user-facing running tool step with a separate resource', () => {
     const events = mapPiEventToHesperEvents('run-tool-start', {
       type: 'tool_execution_start',
       toolCallId: 'tool-call-1',
-      toolName: 'read_file',
-      args: { path: 'README.md', purpose: '读取 README 了解项目结构' }
+      toolName: 'filesystem_read-file',
+      args: { path: 'README.md', purpose: '读取 README 了解项目结构', _displayName: '读取文件' }
     })
 
     expect(events).toEqual([
@@ -144,14 +144,17 @@ describe('pi event mapping', () => {
           runId: 'run-tool-start',
           type: 'tool_call',
           status: 'running',
-          title: '调用 read_file',
+          title: '读取文件',
           summary: '读取 README 了解项目结构'
         })
       })
     ])
+    expect((events[0] as Extract<(typeof events)[number], { type: 'step.created' }>).step.title).not.toContain('filesystem_read-file')
     const detail = JSON.parse((events[0] as Extract<(typeof events)[number], { type: 'step.created' }>).step.detail!)
     expect(detail).toEqual({
       kind: 'tool_call',
+      displayName: '读取文件',
+      resource: 'README.md',
       input: { path: 'README.md', purpose: '读取 README 了解项目结构' }
     })
   })
@@ -238,14 +241,14 @@ describe('pi event mapping', () => {
     const startEvents = mapPiEventToHesperEvents('run-tool-end', {
       type: 'tool_execution_start',
       toolCallId: 'tool-call-1',
-      toolName: 'read_file',
-      args: { path: 'README.md', purpose: '读取 README 了解项目结构' }
+      toolName: 'filesystem_read-file',
+      args: { path: 'README.md', purpose: '读取 README 了解项目结构', _displayName: '读取文件' }
     })
     const endEvents = mapPiEventToHesperEvents('run-tool-end', {
       type: 'tool_execution_end',
       toolCallId: 'tool-call-1',
-      toolName: 'read_file',
-      args: { path: 'README.md', purpose: '读取 README 了解项目结构' },
+      toolName: 'filesystem_read-file',
+      args: { path: 'README.md', purpose: '读取 README 了解项目结构', _displayName: '读取文件' },
       result: { content: 'done' },
       isError: false
     })
@@ -258,7 +261,7 @@ describe('pi event mapping', () => {
           runId: 'run-tool-end',
           type: 'tool_call',
           status: 'succeeded',
-          title: '调用 read_file',
+          title: '读取文件',
           summary: '读取 README 了解项目结构'
         })
       })
@@ -266,6 +269,8 @@ describe('pi event mapping', () => {
     const endStep = (endEvents[0] as Extract<(typeof endEvents)[number], { type: 'step.updated' }>).step
     expect(JSON.parse(endStep.detail!)).toEqual({
       kind: 'tool_call',
+      displayName: '读取文件',
+      resource: 'README.md',
       input: { path: 'README.md', purpose: '读取 README 了解项目结构' },
       output: { content: 'done' },
       isError: false
@@ -275,12 +280,12 @@ describe('pi event mapping', () => {
     )
   })
 
-  it('copies real tool id and icon from tool result details into structured step detail', () => {
+  it('copies real tool id and icon into structured step detail while preserving display parts from the start event', () => {
     mapPiEventToHesperEvents('run-tool-metadata', {
       type: 'tool_execution_start',
       toolCallId: 'tool-call-icon',
       toolName: 'filesystem_read-file',
-      args: { path: 'README.md', purpose: '读取 README' }
+      args: { path: 'README.md', purpose: '读取 README', _displayName: '读取文件' }
     })
     const endEvents = mapPiEventToHesperEvents('run-tool-metadata', {
       type: 'tool_execution_end',
@@ -288,7 +293,13 @@ describe('pi event mapping', () => {
       toolName: 'filesystem_read-file',
       result: {
         content: [{ type: 'text', text: 'done' }],
-        details: { toolId: 'filesystem.read-file', toolCallId: 'tool-call-icon', toolIcon: '📖' }
+        details: {
+          toolId: 'filesystem.read-file',
+          toolCallId: 'tool-call-icon',
+          toolIcon: '📖',
+          displayName: '读取文件',
+          display: { name: 'Read File', names: { 'zh-CN': '读取文件' }, resourceFields: ['path'] }
+        }
       },
       isError: false
     })
@@ -298,8 +309,12 @@ describe('pi event mapping', () => {
       kind: 'tool_call',
       toolId: 'filesystem.read-file',
       toolIcon: '📖',
+      displayName: '读取文件',
+      resource: 'README.md',
+      display: { name: 'Read File', names: { 'zh-CN': '读取文件' }, resourceFields: ['path'] },
       isError: false
     })
+    expect((endEvents[0] as Extract<(typeof endEvents)[number], { type: 'step.updated' }>).step.title).toBe('读取文件')
   })
 
   it('maps assistant thinking deltas to a live thought step', () => {

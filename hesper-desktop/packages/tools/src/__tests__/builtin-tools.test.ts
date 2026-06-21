@@ -51,6 +51,30 @@ describe('builtin tools', () => {
     )
   })
 
+  it('adds display metadata for step titles and resources', () => {
+    const tools = createBuiltinToolDefinitions()
+    expect(tools.every((tool) => tool.display?.name === tool.name)).toBe(true)
+    expect(tools.find((tool) => tool.id === 'filesystem.read-file')).toMatchObject({
+      display: {
+        name: 'Read File',
+        names: { 'zh-CN': '读取文件' },
+        resourceFields: ['path']
+      }
+    })
+    expect(tools.find((tool) => tool.id === 'web.fetch-url')).toMatchObject({
+      display: {
+        names: { 'zh-CN': '抓取网页' },
+        resourceFields: ['url']
+      }
+    })
+    expect(tools.find((tool) => tool.id === 'agent.spawn-worker-agent')).toMatchObject({
+      display: {
+        names: { 'zh-CN': '启动 Worker Agent' },
+        resourceFields: ['task']
+      }
+    })
+  })
+
   it('defines filesystem tools with required schema fields', () => {
     const tools = createBuiltinToolDefinitions()
     const readFile = tools.find((tool) => tool.id === 'filesystem.read-file')

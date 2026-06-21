@@ -9,6 +9,7 @@ const readTool: ToolDefinition = {
   description: 'Read a file',
   category: 'filesystem',
   icon: '📖',
+  display: { name: 'Read File', names: { 'zh-CN': '读取文件' }, resourceFields: ['path'] },
   inputSchema: { type: 'object', required: ['path'], properties: { path: { type: 'string' } } }
 }
 
@@ -17,6 +18,7 @@ const workerTool: ToolDefinition = {
   name: 'Spawn Worker Agent',
   description: 'Spawn',
   category: 'agent',
+  display: { name: 'Spawn Worker Agent', names: { 'zh-CN': '启动 Worker Agent' }, resourceFields: ['task'] },
   inputSchema: { type: 'object', properties: {} }
 }
 
@@ -45,14 +47,15 @@ describe('createPiAgentTools', () => {
 
     expect(tool).toMatchObject({
       name: 'filesystem_read-file',
-      label: 'Read File',
+      label: '读取文件',
       description: 'Read a file',
       parameters: {
         type: 'object',
-        required: ['path', 'purpose'],
+        required: ['path', 'purpose', '_displayName'],
         properties: {
           path: { type: 'string' },
-          purpose: expect.objectContaining({ type: 'string' })
+          purpose: expect.objectContaining({ type: 'string' }),
+          _displayName: expect.objectContaining({ type: 'string', default: '读取文件' })
         }
       }
     })
@@ -68,7 +71,7 @@ describe('createPiAgentTools', () => {
       context: { runId: 'run-1', sessionId: 'session-1', workspacePath: 'C:/workspace', allowedToolIds: ['filesystem.read-file'] }
     })
 
-    const result = await tool!.execute('tool-call-1', { path: 'README.md', purpose: '读取 README 了解项目结构' }, signal)
+    const result = await tool!.execute('tool-call-1', { path: 'README.md', purpose: '读取 README 了解项目结构', _displayName: '读取文件' }, signal)
 
     expect(run).toHaveBeenCalledWith(readTool, { path: 'README.md' }, {
       runId: 'run-1',
@@ -81,7 +84,14 @@ describe('createPiAgentTools', () => {
     })
     expect(result).toEqual({
       content: [{ type: 'text', text: 'file content' }],
-      details: { toolId: 'filesystem.read-file', toolCallId: 'tool-call-1', toolIcon: '📖', result: { bytes: 12 } }
+      details: {
+        toolId: 'filesystem.read-file',
+        toolCallId: 'tool-call-1',
+        toolIcon: '📖',
+        displayName: '读取文件',
+        display: readTool.display,
+        result: { bytes: 12 }
+      }
     })
   })
 
@@ -93,7 +103,7 @@ describe('createPiAgentTools', () => {
       context: { runId: 'run-parent', sessionId: 'session-1', allowedToolIds: ['agent.spawn-worker-agent'] }
     })
 
-    await tool!.execute('tool-1', { purpose: 'delegate work' }, new AbortController().signal)
+    await tool!.execute('tool-1', { purpose: 'delegate work', _displayName: '启动 Worker Agent' }, new AbortController().signal)
 
     expect(run).toHaveBeenCalledWith(expect.any(Object), {}, expect.objectContaining({
       toolCallId: 'tool-1',
@@ -163,12 +173,14 @@ describe('createPiAgentTools', () => {
       context: { runId: 'run-1', sessionId: 'session-1', allowedToolIds: [] }
     })
 
-    await expect(tool!.execute('tool-call-1', { path: 'README.md' })).rejects.toMatchObject({
+    await expect(tool!.execute('tool-call-1', { path: 'README.md', _displayName: '读取文件' })).rejects.toMatchObject({
       message: 'Tool blocked by permission policy',
       details: {
         toolId: 'filesystem.read-file',
         toolCallId: 'tool-call-1',
         toolIcon: '📖',
+        displayName: '读取文件',
+        display: readTool.display,
         result: { code: 'permission_denied' }
       }
     })

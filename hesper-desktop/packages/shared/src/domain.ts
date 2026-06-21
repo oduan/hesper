@@ -21,6 +21,12 @@ export type ToolPermissionScope = 'global' | 'session' | 'role' | 'worker-agent'
 export type ToolRiskLevel = 'low' | 'medium' | 'high' | 'critical'
 export type WorkerAgentInvocationStatus = RunStatus
 
+export type ToolDisplayMetadata = {
+  name?: string
+  names?: Record<string, string>
+  resourceFields?: string[]
+}
+
 export type ModelRef = {
   providerId: string
   modelId: string
@@ -147,6 +153,7 @@ export type ToolDefinition = {
   category: 'filesystem' | 'git' | 'web' | 'agent' | 'system'
   icon?: string
   requiresApiKey?: boolean
+  display?: ToolDisplayMetadata
 }
 
 export type ToolPermissionPolicy = {

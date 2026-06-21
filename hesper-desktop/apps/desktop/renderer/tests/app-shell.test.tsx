@@ -63,7 +63,7 @@ const { listSessions, createSession, updateTitle, deleteSession, generateTitle, 
   deleteRole: vi.fn(async (id: string) => ({ deleted: true as const, id })),
   listMessages: vi.fn(async (_sessionId?: string) => []),
   listMessagesByRun: vi.fn(async (_input?: { sessionId: string; runId: string }) => []),
-  listRuns: vi.fn(async (_sessionId?: string) => []),
+  listRuns: vi.fn(async (_sessionId?: string): Promise<any[]> => []),
   listSteps: vi.fn(async (_runId?: string) => []),
   listWorkerInvocationsByParentRun: vi.fn(async (_input?: { sessionId: string; parentRunId: string }) => []),
   enqueue: vi.fn(async () => ({ runId: 'run-1' })),
@@ -354,6 +354,122 @@ describe('renderer App', () => {
 
     expect(createSession).toHaveBeenCalledWith({ title: 'New chat' })
     expect(await screen.findAllByText('New chat')).not.toHaveLength(0)
+  })
+
+  it('deletes a newly-created empty session when switching to another session', async () => {
+    const user = userEvent.setup()
+    listSessions.mockResolvedValueOnce([
+      { id: 'session-existing', title: 'Existing chat', status: 'active', outputMode: 'markdown', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+    ] as any)
+    createSession.mockResolvedValueOnce({
+      id: 'session-new-empty',
+      title: 'New chat',
+      status: 'active',
+      outputMode: 'markdown',
+      createdAt: '2026-06-10T03:00:10.000Z',
+      updatedAt: '2026-06-10T03:00:10.000Z'
+    } as any)
+
+    render(<App />)
+
+    expect(await screen.findByRole('button', { name: 'Existing chat' })).toBeInTheDocument()
+    await user.click((await screen.findAllByRole('button', { name: '新建会话' }))[0]!)
+    expect(await screen.findAllByText('New chat')).not.toHaveLength(0)
+
+    await user.click(screen.getByRole('button', { name: 'Existing chat' }))
+
+    await waitFor(() => expect(deleteSession).toHaveBeenCalledWith('session-new-empty'))
+  })
+
+  it('keeps an existing default new chat when switching away if it was not created in this view', async () => {
+    const user = userEvent.setup()
+    listSessions.mockResolvedValueOnce([
+      { id: 'session-existing', title: 'Existing chat', status: 'active', outputMode: 'markdown', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' },
+      { id: 'session-existing-new-chat', title: 'New chat', status: 'active', outputMode: 'markdown', createdAt: '2026-06-10T03:00:10.000Z', updatedAt: '2026-06-10T03:00:10.000Z' }
+    ] as any)
+
+    render(<App />)
+
+    expect(await screen.findByRole('button', { name: 'Existing chat' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Existing chat' }))
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Existing chat' })).toHaveAttribute('aria-current', 'true'))
+    expect(deleteSession).not.toHaveBeenCalledWith('session-existing-new-chat')
+  })
+
+  it('keeps a newly-created session with a draft when switching away', async () => {
+    const user = userEvent.setup()
+    listSessions.mockResolvedValueOnce([
+      { id: 'session-existing', title: 'Existing chat', status: 'active', outputMode: 'markdown', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+    ] as any)
+    createSession.mockResolvedValueOnce({
+      id: 'session-new-draft',
+      title: 'New chat',
+      status: 'active',
+      outputMode: 'markdown',
+      createdAt: '2026-06-10T03:00:10.000Z',
+      updatedAt: '2026-06-10T03:00:10.000Z'
+    } as any)
+
+    render(<App />)
+
+    expect(await screen.findByRole('button', { name: 'Existing chat' })).toBeInTheDocument()
+    await user.click((await screen.findAllByRole('button', { name: '新建会话' }))[0]!)
+    await user.type(await screen.findByLabelText('消息输入框'), '保留这个草稿')
+
+    await user.click(screen.getByRole('button', { name: 'Existing chat' }))
+
+    await waitFor(() => expect(screen.getByLabelText('消息输入框')).toHaveValue(''))
+    expect(deleteSession).not.toHaveBeenCalledWith('session-new-draft')
+  })
+
+  it('keeps a newly-created session with a user message when switching away', async () => {
+    const user = userEvent.setup()
+    listSessions.mockResolvedValueOnce([
+      { id: 'session-existing', title: 'Existing chat', status: 'active', outputMode: 'markdown', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+    ] as any)
+    createSession.mockResolvedValueOnce({
+      id: 'session-new-message',
+      title: 'New chat',
+      status: 'active',
+      outputMode: 'markdown',
+      createdAt: '2026-06-10T03:00:10.000Z',
+      updatedAt: '2026-06-10T03:00:10.000Z'
+    } as any)
+
+    render(<App />)
+
+    expect(await screen.findByRole('button', { name: 'Existing chat' })).toBeInTheDocument()
+    await user.click((await screen.findAllByRole('button', { name: '新建会话' }))[0]!)
+    await user.type(await screen.findByLabelText('消息输入框'), '请读取 README')
+    await user.click(screen.getByRole('button', { name: '发送' }))
+    await waitFor(() => expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'session-new-message', prompt: '请读取 README' })))
+
+    await user.click(screen.getByRole('button', { name: 'Existing chat' }))
+
+    await waitFor(() => expect(screen.getByLabelText('消息输入框')).toHaveValue(''))
+    expect(deleteSession).not.toHaveBeenCalledWith('session-new-message')
+  })
+
+  it('keeps a default new chat with a latest run when switching away', async () => {
+    const user = userEvent.setup()
+    listSessions.mockResolvedValueOnce([
+      { id: 'session-existing', title: 'Existing chat', status: 'active', outputMode: 'markdown', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' },
+      { id: 'session-new-run', title: 'New chat', status: 'active', outputMode: 'markdown', createdAt: '2026-06-10T03:00:10.000Z', updatedAt: '2026-06-10T03:00:10.000Z' }
+    ] as any)
+    listRuns.mockImplementation(async (sessionId?: string) => sessionId === 'session-new-run'
+      ? [{ id: 'run-new', sessionId: 'session-new-run', status: 'succeeded', modelId: 'mock/hesper-fast', retryCount: 0, maxRetries: 5, createdAt: '2026-06-10T03:00:11.000Z' }]
+      : [])
+
+    render(<App />)
+
+    expect(await screen.findByRole('button', { name: 'Existing chat' })).toBeInTheDocument()
+    await waitFor(() => expect(listRuns).toHaveBeenCalledWith('session-new-run'))
+
+    await user.click(screen.getByRole('button', { name: 'Existing chat' }))
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Existing chat' })).toHaveAttribute('aria-current', 'true'))
+    expect(deleteSession).not.toHaveBeenCalledWith('session-new-run')
   })
 
   it('switches activity sections from the rail and shows extension placeholders', async () => {
@@ -723,12 +839,12 @@ describe('renderer App', () => {
       } as any)
     })
 
-    await waitFor(() => expect(backgroundRow.querySelector('[data-session-unread-icon="new-message"]')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('button', { name: '后台会话' }).querySelector('[data-session-unread-icon="new-message"]')).toBeInTheDocument())
     expect(markViewed).not.toHaveBeenCalledWith('session-bg')
 
-    await user.click(backgroundRow)
+    await user.click(screen.getByRole('button', { name: '后台会话' }))
     await waitFor(() => expect(markViewed).toHaveBeenCalledWith('session-bg'))
-    await waitFor(() => expect(backgroundRow.querySelector('[data-session-unread-icon="new-message"]')).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('button', { name: '后台会话' }).querySelector('[data-session-unread-icon="new-message"]')).not.toBeInTheDocument())
   })
 
   it('clears persisted unread state when the initially selected session is viewed', async () => {

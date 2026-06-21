@@ -283,6 +283,7 @@ export const toolDtoSchema = toolDefinitionBaseSchema.extend({
   enabled: value.enabled,
   ...(value.icon !== undefined ? { icon: value.icon } : {}),
   ...(value.requiresApiKey !== undefined ? { requiresApiKey: value.requiresApiKey } : {}),
+  ...(value.display !== undefined ? { display: value.display } : {}),
   ...(value.hasApiKey !== undefined ? { hasApiKey: value.hasApiKey } : {})
 }))
 

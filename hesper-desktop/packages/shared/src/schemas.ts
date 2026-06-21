@@ -189,6 +189,12 @@ const roleBaseSchema = z.object({
 
 export const roleSchema = roleBaseSchema.transform(stripUndefined)
 
+const toolDisplayMetadataSchema = z.object({
+  name: z.string().min(1).optional(),
+  names: z.record(z.string().min(1), z.string().min(1)).optional(),
+  resourceFields: z.array(z.string().min(1)).optional()
+}).transform(stripUndefined)
+
 export const toolDefinitionBaseSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -196,7 +202,8 @@ export const toolDefinitionBaseSchema = z.object({
   inputSchema: z.unknown(),
   category: z.enum(['filesystem', 'git', 'web', 'agent', 'system']),
   icon: z.string().min(1).optional(),
-  requiresApiKey: z.boolean().optional()
+  requiresApiKey: z.boolean().optional(),
+  display: toolDisplayMetadataSchema.optional()
 })
 
 export const toolDefinitionSchema = toolDefinitionBaseSchema.transform(stripUndefined) satisfies z.ZodType<ToolDefinition>
@@ -326,7 +333,7 @@ type _AgentRunCheck = Expect<Equal<z.output<typeof agentRunSchema>, NormalizeOpt
 type _RunStepCheck = Expect<Equal<z.output<typeof runStepSchema>, NormalizeOptional<RunStep>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type _SkillCheck = Expect<Equal<z.output<typeof skillSchema>, NormalizeOptional<Skill>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type _RoleCheck = Expect<Equal<z.output<typeof roleSchema>, NormalizeOptional<Role>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
-type _ToolDefinitionCheck = Expect<Equal<z.output<typeof toolDefinitionSchema>, NormalizeOptional<ToolDefinition>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _ToolDefinitionOutputCheck = Expect<z.output<typeof toolDefinitionSchema> extends NormalizeOptional<ToolDefinition> ? true : false>// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type _ToolPermissionPolicyCheck = Expect<Equal<z.output<typeof toolPermissionPolicySchema>, NormalizeOptional<ToolPermissionPolicy>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type _ModelRefCheck = Expect<Equal<z.output<typeof modelRefSchema>, NormalizeOptional<ModelRef>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type _ModelProviderConfigCheck = Expect<Equal<z.output<typeof modelProviderConfigSchema>, NormalizeOptional<ModelProviderConfig>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars

@@ -154,6 +154,7 @@ function AppContent() {
   const resolvedThemeMode = useResolvedThemeMode(appSettings.themeMode)
   const loadedHistorySessionIdsRef = useRef<Set<string>>(new Set())
   const loadingHistorySessionIdsRef = useRef<Set<string>>(new Set())
+  const createdNewSessionIdsRef = useRef<Set<string>>(new Set())
   const explicitModelSelectionSessionIdsRef = useRef<Set<string>>(new Set())
   const runModelIdsRef = useRef<Record<string, string>>({})
   const pendingTitlePromptsBySessionRef = useRef<Record<string, string>>({})
@@ -597,6 +598,7 @@ function AppContent() {
     const visible = new Set(visibleSessionIds)
     loadedHistorySessionIdsRef.current = new Set([...loadedHistorySessionIdsRef.current].filter((sessionId) => visible.has(sessionId)))
     loadingHistorySessionIdsRef.current = new Set([...loadingHistorySessionIdsRef.current].filter((sessionId) => visible.has(sessionId)))
+    createdNewSessionIdsRef.current = new Set([...createdNewSessionIdsRef.current].filter((sessionId) => visible.has(sessionId)))
     latestSettingsRequestIdRef.current = pruneRequestTokens(latestSettingsRequestIdRef.current, visibleSessionIds)
   }, [state.sessions])
 
@@ -924,6 +926,41 @@ function AppContent() {
     }
   }
 
+  const createTrackedSession = async () => {
+    const session = await createSession(dispatch, sessionModelCatalog.preferredModelId)
+    createdNewSessionIdsRef.current.add(session.id)
+  }
+
+  const shouldDeleteEmptyNewSession = (sessionId: string, nextSessionId: string): boolean => {
+    if (sessionId === nextSessionId || !createdNewSessionIdsRef.current.has(sessionId)) return false
+    const session = stateRef.current.sessions.find((candidate) => candidate.id === sessionId)
+    if (!session || session.title !== 'New chat') return false
+    const hasMessages = (stateRef.current.messagesBySession[sessionId] ?? []).length > 0
+    const hasDraft = (draftsBySession[sessionId] ?? '').trim().length > 0
+    const hasLatestRun = Boolean(stateRef.current.latestRunIdBySession[sessionId])
+    const hasRun = Object.values(stateRef.current.runsById).some((run) => run.sessionId === sessionId)
+    return !hasMessages && !hasDraft && !hasLatestRun && !hasRun
+  }
+
+  const deleteEmptyNewSessionBeforeSwitch = async (nextSessionId: string) => {
+    const previousSessionId = stateRef.current.activeSessionId
+    if (!previousSessionId || !shouldDeleteEmptyNewSession(previousSessionId, nextSessionId)) return
+
+    try {
+      await deleteSession(previousSessionId)
+      createdNewSessionIdsRef.current.delete(previousSessionId)
+    } catch (error) {
+      console.warn('Failed to delete empty new session', error)
+    }
+  }
+
+  const selectSession = async (sessionId: string) => {
+    await deleteEmptyNewSessionBeforeSwitch(sessionId)
+    dispatch({ type: 'section.selected', section: 'sessions' })
+    dispatch({ type: 'session.selected', sessionId })
+    void markSessionViewed(sessionId)
+  }
+
   return (
     <AppShell
       sessions={effectiveSessions}
@@ -941,7 +978,7 @@ function AppContent() {
       {...(state.activeSessionId ? { activeSessionId: state.activeSessionId } : {})}
       onCreateSession={async () => {
         dispatch({ type: 'section.selected', section: 'sessions' })
-        await createSession(dispatch, sessionModelCatalog.preferredModelId)
+        await createTrackedSession()
       }}
       onSelectSection={(section) => dispatch({ type: 'section.selected', section })}
       onSelectSettingsCategory={setActiveSettingsCategory}
@@ -955,9 +992,7 @@ function AppContent() {
         setActiveRoleId(roleId)
       }}
       onSelectSession={(sessionId) => {
-        dispatch({ type: 'section.selected', section: 'sessions' })
-        dispatch({ type: 'session.selected', sessionId })
-        void markSessionViewed(sessionId)
+        void selectSession(sessionId)
       }}
       onRenameSession={(sessionId, title) => {
         void renameSession(sessionId, title)
@@ -1084,7 +1119,9 @@ function AppContent() {
       ) : (
         <EmptyConversationState
           {...(loadError ? { loadError } : {})}
-          onCreateSession={async () => createSession(dispatch, sessionModelCatalog.preferredModelId)}
+          onCreateSession={async () => {
+            await createTrackedSession()
+          }}
         />
       )}
     </AppShell>
@@ -1257,12 +1294,13 @@ function EmptyConversationState({
   )
 }
 
-async function createSession(dispatch: ReturnType<typeof useAppStore>['dispatch'], defaultModelId = defaultFallbackModelId) {
+async function createSession(dispatch: ReturnType<typeof useAppStore>['dispatch'], defaultModelId = defaultFallbackModelId): Promise<Session> {
   const session = await hesperApi.sessions.create({
     title: 'New chat',
     ...(defaultModelId !== defaultFallbackModelId ? { defaultModelId } : {})
   })
   dispatch({ type: 'session.created', session })
+  return session
 }
 
 async function updateSessionWorkspace({
