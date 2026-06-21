@@ -34,6 +34,16 @@ const role = {
   defaultModelRef: { providerId: 'openai', modelId: 'gpt-4o' }
 }
 
+const reviewerRole = {
+  id: 'role-2',
+  name: '审查助手',
+  description: '审查代码',
+  systemPrompt: '你是审查助手。',
+  defaultToolIds: ['filesystem.read-file'],
+  defaultModelId: 'deepseek-chat',
+  defaultModelRef: { providerId: 'deepseek', modelId: 'deepseek-chat' }
+}
+
 describe('RolesPanel', () => {
   afterEach(() => cleanup())
 
@@ -44,6 +54,45 @@ describe('RolesPanel', () => {
     expect(screen.getByText('请让 Agent 创建角色后，再在这里维护名称、简介、提示词和默认工具。')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '创建第一个角色' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '新建角色' })).not.toBeInTheDocument()
+  })
+
+  it('keeps save disabled when switching selected roles after draft edits', async () => {
+    const user = userEvent.setup()
+    const { rerender } = render(
+      <RolesPanel
+        roles={[role, reviewerRole]}
+        selectedRole={role}
+        tools={tools}
+        modelOptions={modelOptions}
+        modelOptionGroups={modelOptionGroups}
+        onSave={vi.fn()}
+        onDelete={vi.fn()}
+      />
+    )
+
+    const nameInput = screen.getByLabelText('角色名称')
+    const saveButton = screen.getByRole('button', { name: '保存修改' })
+
+    await user.clear(nameInput)
+    await user.type(nameInput, '临时修改')
+    expect(saveButton).toBeEnabled()
+
+    rerender(
+      <RolesPanel
+        roles={[role, reviewerRole]}
+        selectedRole={reviewerRole}
+        tools={tools}
+        modelOptions={modelOptions}
+        modelOptionGroups={modelOptionGroups}
+        onSave={vi.fn()}
+        onDelete={vi.fn()}
+      />
+    )
+
+    expect(screen.getByLabelText('角色名称')).toHaveValue('审查助手')
+    expect(screen.getByLabelText('角色简介')).toHaveValue('审查代码')
+    expect(screen.getByLabelText('默认模型')).toHaveValue('deepseek-chat')
+    expect(screen.getByRole('button', { name: '保存修改' })).toBeDisabled()
   })
 
   it('shows the selected default model and enables save when it changes', async () => {

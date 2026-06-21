@@ -101,15 +101,23 @@ export function RolesPanel({
   onDelete
 }: RolesPanelProps) {
   const [draft, setDraft] = useState<ManagedRoleDto>(() => selectedRole ? cloneRole(selectedRole) : emptyDraft())
+  const selectedRoleId = selectedRole?.id ?? ''
+  const draftMatchesSelection = draft.id === selectedRoleId
+  const effectiveDraft = draftMatchesSelection ? draft : selectedRole ? cloneRole(selectedRole) : emptyDraft()
   const isExistingRole = Boolean(selectedRole)
   const canEdit = Boolean(selectedRole)
-  const trimmedName = draft.name.trim()
-  const hasDraftChanges = roleDraftChanged(draft, selectedRole)
+  const trimmedName = effectiveDraft.name.trim()
+  const hasDraftChanges = draftMatchesSelection && roleDraftChanged(effectiveDraft, selectedRole)
   const canSave = Boolean(trimmedName) && !pending && hasDraftChanges
   const hasModelOptionGroups = (modelOptionGroups?.length ?? 0) > 0
-  const unavailableDefaultModelId = draft.defaultModelId.trim() !== '' && !hasModelOption(modelOptions, modelOptionGroups, draft.defaultModelId)
-    ? draft.defaultModelId
+  const unavailableDefaultModelId = effectiveDraft.defaultModelId.trim() !== '' && !hasModelOption(modelOptions, modelOptionGroups, effectiveDraft.defaultModelId)
+    ? effectiveDraft.defaultModelId
     : undefined
+
+  const draftForCurrentSelection = (current: ManagedRoleDto): ManagedRoleDto => {
+    if (current.id === selectedRoleId) return current
+    return selectedRole ? cloneRole(selectedRole) : emptyDraft()
+  }
 
   useEffect(() => {
     if (selectedRole) {
@@ -120,50 +128,52 @@ export function RolesPanel({
   }, [selectedRole])
 
   const updateField = (field: 'name' | 'description' | 'systemPrompt', value: string) => {
-    setDraft((current) => ({ ...current, [field]: value }))
+    setDraft((current) => ({ ...draftForCurrentSelection(current), [field]: value }))
   }
 
   const toggleTool = (toolId: string) => {
     setDraft((current) => {
-      const toolIds = current.defaultToolIds.includes(toolId)
-        ? current.defaultToolIds.filter((id) => id !== toolId)
-        : [...current.defaultToolIds, toolId]
-      return { ...current, defaultToolIds: toolIds }
+      const currentDraft = draftForCurrentSelection(current)
+      const toolIds = currentDraft.defaultToolIds.includes(toolId)
+        ? currentDraft.defaultToolIds.filter((id) => id !== toolId)
+        : [...currentDraft.defaultToolIds, toolId]
+      return { ...currentDraft, defaultToolIds: toolIds }
     })
   }
 
   const updateDefaultModel = (value: string) => {
     setDraft((current) => {
+      const currentDraft = draftForCurrentSelection(current)
       if (value === '') {
-        const { defaultModelRef: _defaultModelRef, ...next } = current
+        const { defaultModelRef: _defaultModelRef, ...next } = currentDraft
         return { ...next, defaultModelId: '' }
       }
 
       const modelGroupId = findModelGroupId(modelOptionGroups, value)
       if (modelGroupId !== undefined) {
         return {
-          ...current,
+          ...currentDraft,
           defaultModelId: value,
           defaultModelRef: { providerId: modelGroupId, modelId: value }
         }
       }
 
-      const { defaultModelRef: _defaultModelRef, ...next } = current
+      const { defaultModelRef: _defaultModelRef, ...next } = currentDraft
       return { ...next, defaultModelId: value }
     })
   }
 
   const saveDraft = () => {
     if (!canSave) return
-    const defaultModelId = draft.defaultModelId.trim()
+    const defaultModelId = effectiveDraft.defaultModelId.trim()
     onSave?.({
-      id: draft.id,
+      id: effectiveDraft.id,
       name: trimmedName,
-      description: draft.description.trim(),
-      systemPrompt: draft.systemPrompt.trim(),
-      defaultToolIds: [...draft.defaultToolIds],
+      description: effectiveDraft.description.trim(),
+      systemPrompt: effectiveDraft.systemPrompt.trim(),
+      defaultToolIds: [...effectiveDraft.defaultToolIds],
       defaultModelId,
-      ...(defaultModelId && draft.defaultModelRef ? { defaultModelRef: { ...draft.defaultModelRef } } : {})
+      ...(defaultModelId && effectiveDraft.defaultModelRef ? { defaultModelRef: { ...effectiveDraft.defaultModelRef } } : {})
     })
   }
 
@@ -221,7 +231,7 @@ export function RolesPanel({
         <label style={fieldStyle}>
           <span style={labelStyle}>角色名称</span>
           <input
-            value={draft.name}
+            value={effectiveDraft.name}
             onChange={(event) => updateField('name', event.target.value)}
             disabled={pending}
             style={inputStyle}
@@ -231,7 +241,7 @@ export function RolesPanel({
         <label style={fieldStyle}>
           <span style={labelStyle}>角色简介</span>
           <input
-            value={draft.description}
+            value={effectiveDraft.description}
             onChange={(event) => updateField('description', event.target.value)}
             disabled={pending}
             style={inputStyle}
@@ -241,7 +251,7 @@ export function RolesPanel({
         <label style={fieldStyle}>
           <span style={labelStyle}>默认模型</span>
           <select
-            value={draft.defaultModelId}
+            value={effectiveDraft.defaultModelId}
             onChange={(event) => updateDefaultModel(event.target.value)}
             disabled={pending}
             style={inputStyle}
@@ -282,7 +292,7 @@ export function RolesPanel({
         <label style={fieldStyle}>
           <span style={labelStyle}>完整提示词</span>
           <textarea
-            value={draft.systemPrompt}
+            value={effectiveDraft.systemPrompt}
             onChange={(event) => updateField('systemPrompt', event.target.value)}
             disabled={pending}
             rows={8}
@@ -299,7 +309,7 @@ export function RolesPanel({
                   <input
                     type="checkbox"
                     aria-label={tool.name}
-                    checked={draft.defaultToolIds.includes(tool.id)}
+                    checked={effectiveDraft.defaultToolIds.includes(tool.id)}
                     disabled={pending}
                     onChange={() => toggleTool(tool.id)}
                   />
