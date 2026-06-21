@@ -28,6 +28,29 @@ describe('ipc-client fallback', () => {
     })
   })
 
+  it('lists role tools with default model schemas in fallback mode', async () => {
+    const api = createHesperApi({ allowFallback: true })
+
+    const tools = await api.tools.list()
+
+    for (const toolId of ['roles.create', 'roles.update']) {
+      expect(tools.find((tool) => tool.id === toolId)).toMatchObject({
+        inputSchema: {
+          properties: {
+            defaultModelId: expect.objectContaining({ type: 'string' }),
+            defaultModelRef: expect.objectContaining({
+              type: 'object',
+              properties: {
+                providerId: expect.objectContaining({ type: 'string' }),
+                modelId: expect.objectContaining({ type: 'string' })
+              }
+            })
+          }
+        }
+      })
+    }
+  })
+
   it('manages roles in fallback mode', async () => {
     const api = createHesperApi({ allowFallback: true })
 

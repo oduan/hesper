@@ -258,7 +258,16 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
           name: { type: 'string', description: 'Role name.' },
           description: { type: 'string', description: 'Short role description shown in the roles list.' },
           systemPrompt: { type: 'string', description: 'Full prompt for this role.' },
-          defaultToolIds: { type: 'array', items: { type: 'string' }, description: 'Default tool IDs for this role.' }
+          defaultToolIds: { type: 'array', items: { type: 'string' }, description: 'Default tool IDs for this role.' },
+          defaultModelId: { type: 'string', description: 'Default model id for this role. Empty string means inherit the caller/parent model.' },
+          defaultModelRef: {
+            type: 'object',
+            description: 'Provider-aware model reference. Only used with a non-empty defaultModelId.',
+            properties: {
+              providerId: { type: 'string' },
+              modelId: { type: 'string' }
+            }
+          }
         }
       }
     },
@@ -276,7 +285,16 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
           name: { type: 'string', description: 'New role name.' },
           description: { type: 'string', description: 'New short role description.' },
           systemPrompt: { type: 'string', description: 'New full prompt.' },
-          defaultToolIds: { type: 'array', items: { type: 'string' }, description: 'Replacement default tool IDs for this role.' }
+          defaultToolIds: { type: 'array', items: { type: 'string' }, description: 'Replacement default tool IDs for this role.' },
+          defaultModelId: { type: 'string', description: 'Default model id for this role. Empty string means inherit the caller/parent model.' },
+          defaultModelRef: {
+            type: 'object',
+            description: 'Provider-aware model reference. Only used with a non-empty defaultModelId.',
+            properties: {
+              providerId: { type: 'string' },
+              modelId: { type: 'string' }
+            }
+          }
         }
       }
     },

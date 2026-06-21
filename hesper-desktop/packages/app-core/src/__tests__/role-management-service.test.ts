@@ -85,6 +85,49 @@ describe('role management service', () => {
     })
   })
 
+  it('rejects default model references whose model id differs from defaultModelId', async () => {
+    const { service } = await createService()
+
+    await expect(service.createRole({
+      name: 'Mismatch Role',
+      defaultModelId: 'gpt-4o',
+      defaultModelRef: { providerId: 'openai', modelId: 'gpt-4o-mini' }
+    })).rejects.toThrow('Default model reference modelId must match defaultModelId')
+
+    const role = await service.createRole({
+      name: 'Model Role',
+      defaultModelId: 'gpt-4o',
+      defaultModelRef: { providerId: 'openai', modelId: 'gpt-4o' }
+    })
+
+    await expect(service.updateRole({
+      id: role.id,
+      defaultModelId: 'deepseek-chat',
+      defaultModelRef: { providerId: 'deepseek', modelId: 'deepseek-coder' }
+    })).rejects.toThrow('Default model reference modelId must match defaultModelId')
+  })
+
+  it('updates roles with matching default model metadata', async () => {
+    const { persistence, service } = await createService()
+    const role = await service.createRole({ name: 'Model Role' })
+
+    const updated = await service.updateRole({
+      id: role.id,
+      defaultModelId: 'deepseek-chat',
+      defaultModelRef: { providerId: 'deepseek', modelId: 'deepseek-chat' }
+    })
+
+    expect(updated).toMatchObject({
+      id: role.id,
+      defaultModelId: 'deepseek-chat',
+      defaultModelRef: { providerId: 'deepseek', modelId: 'deepseek-chat' }
+    })
+    await expect(persistence.roles.get(role.id)).resolves.toMatchObject({
+      defaultModelId: 'deepseek-chat',
+      defaultModelRef: { providerId: 'deepseek', modelId: 'deepseek-chat' }
+    })
+  })
+
   it('ignores default model ref on create without explicit default model id', async () => {
     const { persistence, service } = await createService()
 
@@ -137,7 +180,7 @@ describe('role management service', () => {
       systemPrompt: 'Original prompt',
       defaultToolIds: ['filesystem.read-file'],
       defaultModelId: 'legacy-model',
-      defaultModelRef: { providerId: 'provider-1', modelId: 'model-1' }
+      defaultModelRef: { providerId: 'provider-1', modelId: 'legacy-model' }
     })
 
     const updated = await service.updateRole({ id: role.id, name: 'Updated' })
@@ -149,7 +192,7 @@ describe('role management service', () => {
       systemPrompt: 'Original prompt',
       defaultToolIds: ['filesystem.read-file'],
       defaultModelId: 'legacy-model',
-      defaultModelRef: { providerId: 'provider-1', modelId: 'model-1' }
+      defaultModelRef: { providerId: 'provider-1', modelId: 'legacy-model' }
     })
   })
 

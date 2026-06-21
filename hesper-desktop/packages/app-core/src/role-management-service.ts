@@ -61,6 +61,12 @@ function cloneModelRef(modelRef: ModelRef): ModelRef {
   return { providerId: modelRef.providerId, modelId: modelRef.modelId }
 }
 
+function assertDefaultModelRefMatches(defaultModelId: string | undefined, defaultModelRef: ModelRef | undefined): void {
+  if (defaultModelId && defaultModelRef && defaultModelRef.modelId !== defaultModelId) {
+    throw new Error('Default model reference modelId must match defaultModelId')
+  }
+}
+
 function toManagedRole(role: Role): ManagedRoleDto {
   const defaultModelId = role.defaultModelId !== undefined
     ? role.defaultModelId
@@ -114,11 +120,13 @@ export function createRoleManagementService(options: RoleManagementServiceOption
       if (defaultModelId === '') {
         // Inherit the parent session / caller model.
       } else if (defaultModelId !== undefined) {
+        assertDefaultModelRefMatches(defaultModelId, input.defaultModelRef)
         role.defaultModelId = defaultModelId
         if (input.defaultModelRef) {
           role.defaultModelRef = cloneModelRef(input.defaultModelRef)
         }
       }
+      assertDefaultModelRefMatches(role.defaultModelId, role.defaultModelRef)
 
       await options.persistence.roles.save(role)
       return toManagedRole(role)
@@ -139,6 +147,7 @@ export function createRoleManagementService(options: RoleManagementServiceOption
         delete next.defaultModelId
         delete next.defaultModelRef
       } else if (defaultModelId !== undefined) {
+        assertDefaultModelRefMatches(defaultModelId, input.defaultModelRef)
         next.defaultModelId = defaultModelId
         if (input.defaultModelRef !== undefined) {
           next.defaultModelRef = cloneModelRef(input.defaultModelRef)
@@ -146,6 +155,7 @@ export function createRoleManagementService(options: RoleManagementServiceOption
           delete next.defaultModelRef
         }
       }
+      assertDefaultModelRefMatches(next.defaultModelId, next.defaultModelRef)
 
       await options.persistence.roles.save(next)
       return toManagedRole(next)

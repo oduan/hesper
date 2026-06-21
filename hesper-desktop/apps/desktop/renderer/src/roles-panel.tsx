@@ -68,6 +68,15 @@ function findModelGroupId(modelOptionGroups: ModelOptionGroup[] | undefined, mod
   return undefined
 }
 
+function hasModelOption(
+  modelOptions: string[] | undefined,
+  modelOptionGroups: ModelOptionGroup[] | undefined,
+  modelId: string
+): boolean {
+  if (modelOptions?.includes(modelId)) return true
+  return (modelOptionGroups ?? []).some((group) => group.options.some((option) => option.value === modelId))
+}
+
 function roleDraftChanged(draft: ManagedRoleDto, selectedRole: ManagedRoleDto | undefined): boolean {
   if (!selectedRole) return true
   const selectedDefaultModelId = selectedRole.defaultModelId ?? selectedRole.defaultModelRef?.modelId ?? ''
@@ -98,6 +107,9 @@ export function RolesPanel({
   const hasDraftChanges = roleDraftChanged(draft, selectedRole)
   const canSave = Boolean(trimmedName) && !pending && hasDraftChanges
   const hasModelOptionGroups = (modelOptionGroups?.length ?? 0) > 0
+  const unavailableDefaultModelId = draft.defaultModelId.trim() !== '' && !hasModelOption(modelOptions, modelOptionGroups, draft.defaultModelId)
+    ? draft.defaultModelId
+    : undefined
 
   useEffect(() => {
     if (selectedRole) {
@@ -199,7 +211,7 @@ export function RolesPanel({
       <header style={headerStyle}>
         <div>
           <h2 style={titleStyle}>编辑角色</h2>
-          <p style={mutedTextStyle}>角色仅用于管理预设内容；当前不会影响会话运行逻辑。</p>
+          <p style={mutedTextStyle}>角色可管理提示词、默认工具和默认模型；默认模型为空时继承调用方模型。</p>
         </div>
       </header>
 
@@ -235,19 +247,35 @@ export function RolesPanel({
             style={inputStyle}
           >
             <option value="">继承调用/父会话模型</option>
-            {hasModelOptionGroups ? (modelOptionGroups ?? []).map((group) => (
-              <optgroup key={group.id} label={group.label}>
-                {group.options.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
+            {hasModelOptionGroups ? (
+              <>
+                {(modelOptionGroups ?? []).map((group) => (
+                  <optgroup key={group.id} label={group.label}>
+                    {group.options.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+                {unavailableDefaultModelId ? (
+                  <optgroup label="当前模型">
+                    <option value={unavailableDefaultModelId}>当前模型（不可用）：{unavailableDefaultModelId}</option>
+                  </optgroup>
+                ) : null}
+              </>
+            ) : (
+              <>
+                {(modelOptions ?? []).map((option) => (
+                  <option key={option} value={option}>
+                    {option}
                   </option>
                 ))}
-              </optgroup>
-            )) : (modelOptions ?? []).map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
+                {unavailableDefaultModelId ? (
+                  <option value={unavailableDefaultModelId}>当前模型（不可用）：{unavailableDefaultModelId}</option>
+                ) : null}
+              </>
+            )}
           </select>
         </label>
 

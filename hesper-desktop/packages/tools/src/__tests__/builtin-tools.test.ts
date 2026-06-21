@@ -171,7 +171,19 @@ describe('builtin tools', () => {
           name: expect.objectContaining({ type: 'string' }),
           description: expect.objectContaining({ type: 'string' }),
           systemPrompt: expect.objectContaining({ type: 'string' }),
-          defaultToolIds: expect.objectContaining({ type: 'array' })
+          defaultToolIds: expect.objectContaining({ type: 'array' }),
+          defaultModelId: expect.objectContaining({
+            type: 'string',
+            description: 'Default model id for this role. Empty string means inherit the caller/parent model.'
+          }),
+          defaultModelRef: expect.objectContaining({
+            type: 'object',
+            description: 'Provider-aware model reference. Only used with a non-empty defaultModelId.',
+            properties: {
+              providerId: expect.objectContaining({ type: 'string' }),
+              modelId: expect.objectContaining({ type: 'string' })
+            }
+          })
         }
       }
     })
@@ -185,7 +197,19 @@ describe('builtin tools', () => {
           name: expect.objectContaining({ type: 'string' }),
           description: expect.objectContaining({ type: 'string' }),
           systemPrompt: expect.objectContaining({ type: 'string' }),
-          defaultToolIds: expect.objectContaining({ type: 'array' })
+          defaultToolIds: expect.objectContaining({ type: 'array' }),
+          defaultModelId: expect.objectContaining({
+            type: 'string',
+            description: 'Default model id for this role. Empty string means inherit the caller/parent model.'
+          }),
+          defaultModelRef: expect.objectContaining({
+            type: 'object',
+            description: 'Provider-aware model reference. Only used with a non-empty defaultModelId.',
+            properties: {
+              providerId: expect.objectContaining({ type: 'string' }),
+              modelId: expect.objectContaining({ type: 'string' })
+            }
+          })
         }
       }
     })

@@ -1,4 +1,4 @@
-import type { ToolDefinition } from '@hesper/shared'
+import type { ModelRef, ToolDefinition } from '@hesper/shared'
 import { execFile } from 'node:child_process'
 import { lstat, mkdir, open, readFile, readdir, realpath, rm, stat, unlink, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path'
@@ -18,6 +18,8 @@ type RoleToolInput = {
   description?: string
   systemPrompt?: string
   defaultToolIds?: string[]
+  defaultModelId?: string
+  defaultModelRef?: ModelRef
 }
 
 type RoleToolRecord = {
@@ -26,6 +28,8 @@ type RoleToolRecord = {
   description: string
   systemPrompt: string
   defaultToolIds: string[]
+  defaultModelId: string
+  defaultModelRef?: ModelRef
 }
 
 export type RoleToolHandlers = {
@@ -148,16 +152,38 @@ function optionalRoleStringArg(record: Record<string, unknown>, key: string): st
   return value
 }
 
+function optionalDefaultModelRefArg(record: Record<string, unknown>): ModelRef | undefined {
+  const value = record.defaultModelRef
+  if (value === undefined) return undefined
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Tool argument must be an object: defaultModelRef')
+  }
+
+  const modelRef = value as Record<string, unknown>
+  if (typeof modelRef.providerId !== 'string' || modelRef.providerId.trim() === '') {
+    throw new Error('Tool argument defaultModelRef.providerId must be a non-empty string')
+  }
+  if (typeof modelRef.modelId !== 'string' || modelRef.modelId.trim() === '') {
+    throw new Error('Tool argument defaultModelRef.modelId must be a non-empty string')
+  }
+
+  return { providerId: modelRef.providerId, modelId: modelRef.modelId }
+}
+
 function createRoleToolInput(args: unknown): Omit<RoleToolInput, 'id'> & { name: string } {
   const record = argsObject(args)
   const description = optionalRoleStringArg(record, 'description')
   const systemPrompt = optionalRoleStringArg(record, 'systemPrompt')
   const defaultToolIds = optionalStringArrayArg(args, 'defaultToolIds')
+  const defaultModelId = optionalRoleStringArg(record, 'defaultModelId')
+  const defaultModelRef = optionalDefaultModelRefArg(record)
   return {
     name: stringArg(args, 'name'),
     ...(description !== undefined ? { description } : {}),
     ...(systemPrompt !== undefined ? { systemPrompt } : {}),
-    ...(defaultToolIds !== undefined ? { defaultToolIds } : {})
+    ...(defaultToolIds !== undefined ? { defaultToolIds } : {}),
+    ...(defaultModelId !== undefined ? { defaultModelId } : {}),
+    ...(defaultModelRef !== undefined ? { defaultModelRef } : {})
   }
 }
 
@@ -167,12 +193,16 @@ function updateRoleToolInput(args: unknown): RoleToolInput & { id: string } {
   const description = optionalRoleStringArg(record, 'description')
   const systemPrompt = optionalRoleStringArg(record, 'systemPrompt')
   const defaultToolIds = optionalStringArrayArg(args, 'defaultToolIds')
+  const defaultModelId = optionalRoleStringArg(record, 'defaultModelId')
+  const defaultModelRef = optionalDefaultModelRefArg(record)
   return {
     id: stringArg(args, 'id'),
     ...(name !== undefined ? { name } : {}),
     ...(description !== undefined ? { description } : {}),
     ...(systemPrompt !== undefined ? { systemPrompt } : {}),
-    ...(defaultToolIds !== undefined ? { defaultToolIds } : {})
+    ...(defaultToolIds !== undefined ? { defaultToolIds } : {}),
+    ...(defaultModelId !== undefined ? { defaultModelId } : {}),
+    ...(defaultModelRef !== undefined ? { defaultModelRef } : {})
   }
 }
 

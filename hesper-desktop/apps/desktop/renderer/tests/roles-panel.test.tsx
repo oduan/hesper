@@ -71,6 +71,33 @@ describe('RolesPanel', () => {
     expect(saveButton).toBeEnabled()
   })
 
+  it('shows an unavailable selected default model without enabling save', () => {
+    const legacyRole = {
+      id: 'role-legacy',
+      name: '旧模型角色',
+      description: '保留旧模型',
+      systemPrompt: '你是旧模型角色。',
+      defaultToolIds: ['git.status'],
+      defaultModelId: 'legacy-model'
+    }
+
+    render(
+      <RolesPanel
+        roles={[legacyRole]}
+        selectedRole={legacyRole}
+        tools={tools}
+        modelOptions={modelOptions}
+        modelOptionGroups={modelOptionGroups}
+        onSave={vi.fn()}
+        onDelete={vi.fn()}
+      />
+    )
+
+    expect(screen.getByLabelText('默认模型')).toHaveValue('legacy-model')
+    expect(screen.getByRole('option', { name: '当前模型（不可用）：legacy-model' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '保存修改' })).toBeDisabled()
+  })
+
   it('edits and saves an existing role', async () => {
     const user = userEvent.setup()
     const onSave = vi.fn()
