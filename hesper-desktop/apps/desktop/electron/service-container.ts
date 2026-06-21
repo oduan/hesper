@@ -86,7 +86,7 @@ function accessTokenFromCodexOAuthCredential(rawCredential: string | undefined, 
 }
 
 function hasUsableCredential(provider: ModelProviderConfig, rawCredential: string | undefined): boolean {
-  if (provider.kind === 'mock' || provider.authType === 'none') return true
+  if (provider.kind === 'mock') return true
   if (isCodexOAuthProvider(provider)) {
     return accessTokenFromCodexOAuthCredential(rawCredential) !== undefined
   }
@@ -111,7 +111,7 @@ function hasSupportedPiAuthProvider(provider: ModelProviderConfig): boolean {
 function modelReadyForRuntime(provider: ModelProviderConfig, model: ModelConfig, credentialStatus: ModelCredentialStatus): boolean {
   if (!provider.enabled || model.enabled === false) return false
   if (credentialStatus !== 'ready') return false
-  if ((provider.kind === 'custom' || provider.kind === 'openai-compatible') && !hasRuntimeBaseUrl(provider)) return false
+  if (provider.kind === 'custom' || provider.kind === 'openai-compatible') return hasRuntimeBaseUrl(provider)
   if (provider.kind === 'pi') return hasSupportedPiAuthProvider(provider)
   if (provider.kind === 'mock' || provider.kind === 'openai' || provider.kind === 'deepseek' || provider.kind === 'anthropic') return true
   return false

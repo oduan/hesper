@@ -202,6 +202,74 @@ describe('desktop service container', () => {
     expect(raw).not.toContain(secret)
   })
 
+  it('marks openai-compatible providers with baseUrl and credentials ready for runtime without exposing credentials', async () => {
+    const secret = 'sk-openai-compatible-ready-secret'
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock', credentialCodec: createMockCredentialCodec() })
+    await container.modelProviderService.saveProvider({
+      id: 'openai-compatible-ready',
+      name: 'OpenAI Compatible Ready',
+      kind: 'openai-compatible',
+      authType: 'api_key',
+      baseUrl: 'https://api.compatible.example.com/v1',
+      enabled: true,
+      defaultModelId: 'openai-compatible-ready/chat'
+    })
+    await container.modelProviderService.saveModel({
+      id: 'openai-compatible-ready/chat',
+      providerId: 'openai-compatible-ready',
+      modelName: 'chat',
+      displayName: 'Compatible Chat',
+      capabilities: ['streaming', 'toolCalls'],
+      enabled: true
+    })
+    await container.credentialVaultService.saveProviderApiKey({ providerId: 'openai-compatible-ready', apiKey: secret })
+
+    const { catalog, raw } = await listAvailableModelCatalog(container)
+    const provider = catalog.providers.find((entry) => entry.id === 'openai-compatible-ready')
+
+    expect(provider).toMatchObject({ credentialStatus: 'ready', hasApiKey: true })
+    expect(provider?.models).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'openai-compatible-ready/chat',
+        readyForRuntime: true,
+        modelRef: { providerId: 'openai-compatible-ready', modelId: 'openai-compatible-ready/chat' }
+      })
+    ]))
+    expect(provider?.apiKeyRef).toBeUndefined()
+    expect(raw).not.toContain(secret)
+  })
+
+  it('requires credentials for non-mock authType none providers in the model catalog', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock', credentialCodec: createMockCredentialCodec() })
+    await container.modelProviderService.saveProvider({
+      id: 'none-auth-compatible',
+      name: 'None Auth Compatible',
+      kind: 'openai-compatible',
+      authType: 'none',
+      baseUrl: 'https://api.none-auth.example.com/v1',
+      enabled: true,
+      defaultModelId: 'none-auth-compatible/chat'
+    })
+    await container.modelProviderService.saveModel({
+      id: 'none-auth-compatible/chat',
+      providerId: 'none-auth-compatible',
+      modelName: 'chat',
+      displayName: 'None Auth Compatible Chat',
+      capabilities: ['streaming'],
+      enabled: true
+    })
+
+    const { catalog } = await listAvailableModelCatalog(container)
+    const provider = catalog.providers.find((entry) => entry.id === 'none-auth-compatible')
+
+    expect(provider).toMatchObject({ credentialStatus: 'needs_api_key', hasApiKey: false })
+    expect(provider?.models).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'none-auth-compatible/chat', readyForRuntime: false })
+    ]))
+  })
+
   it('marks disabled providers and disabled models unavailable in the model catalog', async () => {
     const persistence = await createInMemoryPersistence()
     const container = createServiceContainer({ persistence, agentMode: 'mock', credentialCodec: createMockCredentialCodec() })
