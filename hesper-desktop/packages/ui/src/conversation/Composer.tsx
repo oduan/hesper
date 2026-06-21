@@ -4,19 +4,37 @@ import { ThemedSelect, type ThemedSelectOptionGroup } from './ThemedSelect'
 
 export type ModelOptionGroup = ThemedSelectOptionGroup
 
+export type SkillOption = {
+  id: string
+  name: string
+  description?: string
+}
+
+export type ComposerSendOptions = {
+  prompt: string
+  displayPrompt?: string
+}
+
 export type ComposerProps = {
   workspacePath?: string
   modelId: string
   modelOptions?: string[]
   modelOptionGroups?: ModelOptionGroup[]
+  skillOptions?: SkillOption[]
   value?: string
   running?: boolean
   onDraftChange?: (value: string) => void
-  onSend: (content: string) => void
+  onSend: (content: string, options?: ComposerSendOptions) => void
   onStop?: () => void
   onSelectWorkspace?: () => void
   onModelChange?: (modelId: string) => void
   sendSignal?: number
+}
+
+type MentionToken = {
+  start: number
+  end: number
+  query: string
 }
 
 const defaultModelOptions = ['mock/hesper-fast', 'openai/gpt-4o', 'anthropic/claude-sonnet-4-20250514']
@@ -26,6 +44,7 @@ export function Composer({
   modelId,
   modelOptions = defaultModelOptions,
   modelOptionGroups,
+  skillOptions = [],
   value: controlledValue,
   running = false,
   onDraftChange,
@@ -36,15 +55,53 @@ export function Composer({
   sendSignal = 0
 }: ComposerProps) {
   const [internalValue, setInternalValue] = useState('')
+  const [selectionStart, setSelectionStart] = useState(0)
+  const [activeSkillIndex, setActiveSkillIndex] = useState(0)
+  const [dismissedMentionStart, setDismissedMentionStart] = useState<number>()
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const value = controlledValue ?? internalValue
   const lastHandledSendSignalRef = useRef(0)
   const canSend = useMemo(() => value.trim().length > 0, [value])
+  const mentionToken = useMemo(() => findMentionToken(value, selectionStart), [selectionStart, value])
+  const filteredSkills = useMemo(() => {
+    if (!mentionToken || skillOptions.length === 0) return []
+    const query = mentionToken.query.toLocaleLowerCase()
+    return skillOptions.filter((skill) => skill.name.toLocaleLowerCase().includes(query))
+  }, [mentionToken, skillOptions])
+  const showSkillMenu = Boolean(mentionToken && mentionToken.start !== dismissedMentionStart && filteredSkills.length > 0)
+
   const setComposerValue = useCallback((nextValue: string) => {
     if (controlledValue === undefined) {
       setInternalValue(nextValue)
     }
     onDraftChange?.(nextValue)
+    setDismissedMentionStart(undefined)
   }, [controlledValue, onDraftChange])
+
+  const updateSelectionStart = useCallback(() => {
+    setSelectionStart(textareaRef.current?.selectionStart ?? 0)
+  }, [])
+
+  const focusTextarea = useCallback((cursor?: number) => {
+    window.setTimeout(() => {
+      textareaRef.current?.focus()
+      if (cursor !== undefined) {
+        textareaRef.current?.setSelectionRange(cursor, cursor)
+        setSelectionStart(cursor)
+      }
+    }, 0)
+  }, [])
+
+  const confirmSkill = useCallback((skill: SkillOption) => {
+    if (!mentionToken) return
+    const replacement = `@${skill.name} `
+    const nextValue = `${value.slice(0, mentionToken.start)}${replacement}${value.slice(mentionToken.end)}`
+    const cursor = mentionToken.start + replacement.length
+    setComposerValue(nextValue)
+    setActiveSkillIndex(0)
+    setDismissedMentionStart(undefined)
+    focusTextarea(cursor)
+  }, [focusTextarea, mentionToken, setComposerValue, value])
 
   const handleSend = useCallback(() => {
     if (running) {
@@ -57,9 +114,15 @@ export function Composer({
       return
     }
 
-    onSend(content)
+    const injectedPrompt = createInjectedPrompt(content, skillOptions)
+    if (injectedPrompt && injectedPrompt !== content) {
+      onSend(content, { prompt: injectedPrompt, displayPrompt: content })
+    } else {
+      onSend(content)
+    }
     setComposerValue('')
-  }, [onSend, onStop, running, setComposerValue, value])
+    setActiveSkillIndex(0)
+  }, [onSend, onStop, running, setComposerValue, skillOptions, value])
 
   useEffect(() => {
     if (sendSignal <= 0 || sendSignal === lastHandledSendSignalRef.current) {
@@ -70,6 +133,12 @@ export function Composer({
     handleSend()
   }, [handleSend, sendSignal])
 
+  useEffect(() => {
+    if (activeSkillIndex >= filteredSkills.length) {
+      setActiveSkillIndex(0)
+    }
+  }, [activeSkillIndex, filteredSkills.length])
+
   return (
     <section
       aria-label="消息输入区"
@@ -79,17 +148,76 @@ export function Composer({
         border: 0,
         borderRadius: darkTheme.radius.xl,
         background: darkTheme.color.surfaceMuted,
-        padding: darkTheme.spacing.md
+        padding: darkTheme.spacing.md,
+        position: 'relative'
       }}
     >
+      {showSkillMenu ? (
+        <div role="listbox" aria-label="技能提及建议" style={skillMenuStyle}>
+          {filteredSkills.map((skill, index) => {
+            const selected = index === activeSkillIndex
+            const label = skill.description ? `选择技能 ${skill.name}：${skill.description}` : `选择技能 ${skill.name}`
+            return (
+              <button
+                key={skill.id}
+                type="button"
+                role="option"
+                aria-label={label}
+                aria-selected={selected}
+                className="hesper-skill-mention-option"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => confirmSkill(skill)}
+                style={{
+                  ...skillOptionStyle,
+                  ...(selected ? skillOptionSelectedStyle : {})
+                }}
+              >
+                <span style={skillNameStyle}>{skill.name}</span>
+                {skill.description ? <span style={skillDescriptionStyle}>{skill.description}</span> : null}
+              </button>
+            )
+          })}
+        </div>
+      ) : null}
       <textarea
+        ref={textareaRef}
         className="hesper-theme-scrollbar"
         aria-label="消息输入框"
         placeholder="输入消息，支持 @skills"
         rows={4}
         value={value}
-        onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setComposerValue(event.target.value)}
+        onChange={(event: ChangeEvent<HTMLTextAreaElement>) => {
+          setComposerValue(event.target.value)
+          setSelectionStart(event.target.selectionStart)
+        }}
+        onClick={updateSelectionStart}
+        onKeyUp={updateSelectionStart}
+        onSelect={updateSelectionStart}
         onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
+          if (showSkillMenu) {
+            if (event.key === 'ArrowDown') {
+              event.preventDefault()
+              setActiveSkillIndex((index) => (index + 1) % filteredSkills.length)
+              return
+            }
+            if (event.key === 'ArrowUp') {
+              event.preventDefault()
+              setActiveSkillIndex((index) => (index <= 0 ? filteredSkills.length - 1 : index - 1))
+              return
+            }
+            if (event.key === 'Enter' && !event.metaKey && !event.ctrlKey && !event.shiftKey) {
+              event.preventDefault()
+              const skill = filteredSkills[activeSkillIndex]
+              if (skill) confirmSkill(skill)
+              return
+            }
+            if (event.key === 'Escape') {
+              event.preventDefault()
+              setDismissedMentionStart(mentionToken?.start)
+              setActiveSkillIndex(0)
+              return
+            }
+          }
           if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
             event.preventDefault()
             handleSend()
@@ -148,6 +276,99 @@ export function Composer({
     </section>
   )
 }
+
+function findMentionToken(value: string, caret: number): MentionToken | undefined {
+  if (caret < 0) return undefined
+  const nextChar = value[caret]
+  if (nextChar && !/\s/.test(nextChar)) return undefined
+  const beforeCaret = value.slice(0, caret)
+  const match = /(^|\s)@([^\s@]*)$/.exec(beforeCaret)
+  if (!match || match.index === undefined) return undefined
+  const prefix = match[1] ?? ''
+  return {
+    start: match.index + prefix.length,
+    end: caret,
+    query: match[2] ?? ''
+  }
+}
+
+function createInjectedPrompt(content: string, skills: SkillOption[]): string | undefined {
+  const referencedSkills = findReferencedSkills(content, skills)
+  if (referencedSkills.length === 0) return undefined
+
+  const lines = referencedSkills.flatMap((skill) => [
+    `- 技能：${skill.name}`,
+    ...(skill.description ? [`  简介：${skill.description}`] : [])
+  ])
+  return `以下是用户通过 @ 提及的技能。请参考技能名称和简介理解用户意图，不要假设已注入完整 SKILL.md 正文。\n${lines.join('\n')}\n\n用户消息：\n${content}`
+}
+
+function findReferencedSkills(content: string, skills: SkillOption[]): SkillOption[] {
+  const found = new Set<string>()
+  const orderedSkills = [...skills].sort((left, right) => right.name.length - left.name.length)
+  for (const skill of orderedSkills) {
+    const pattern = new RegExp(`(^|\\s)@${escapeRegExp(skill.name)}(?=\\s|$)`, 'iu')
+    if (pattern.test(content)) {
+      found.add(skill.id)
+    }
+  }
+  return skills.filter((skill) => found.has(skill.id))
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+const skillMenuStyle = {
+  position: 'absolute',
+  left: darkTheme.spacing.md,
+  right: darkTheme.spacing.md,
+  bottom: 'calc(100% - 14px)',
+  zIndex: 20,
+  display: 'grid',
+  gap: 2,
+  maxHeight: 180,
+  overflow: 'auto',
+  border: `1px solid ${darkTheme.color.border}`,
+  borderRadius: darkTheme.radius.lg,
+  background: 'var(--hesper-color-surface, #1f2335)',
+  boxShadow: '0 18px 42px rgba(0, 0, 0, 0.38)',
+  padding: 6
+} satisfies CSSProperties
+
+const skillOptionStyle = {
+  width: '100%',
+  border: 0,
+  outline: 0,
+  borderRadius: darkTheme.radius.md,
+  background: 'transparent',
+  color: darkTheme.color.text,
+  cursor: 'pointer',
+  display: 'grid',
+  gridTemplateColumns: 'minmax(0, 1fr)',
+  gap: 2,
+  padding: `${darkTheme.spacing.xs} ${darkTheme.spacing.sm}`,
+  textAlign: 'left',
+  font: 'inherit'
+} satisfies CSSProperties
+
+const skillOptionSelectedStyle = {
+  background: 'var(--hesper-color-soft-control, rgba(122, 162, 247, 0.14))'
+} satisfies CSSProperties
+
+const skillNameStyle = {
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap'
+} satisfies CSSProperties
+
+const skillDescriptionStyle = {
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  color: darkTheme.color.textMuted,
+  fontSize: 12
+} satisfies CSSProperties
 
 const textareaStyle = {
   width: '100%',

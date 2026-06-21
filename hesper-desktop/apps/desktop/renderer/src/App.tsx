@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react'
 import { createId, nowIso, type Message, type RunStep, type Session, type WorkerAgentInvocation } from '@hesper/shared'
-import { AppShell, ConversationView, type AppSection, type ConversationShortcutCommand } from '@hesper/ui'
+import { AppShell, ConversationView, type AppSection, type ComposerSendOptions, type ConversationShortcutCommand, type SkillOption } from '@hesper/ui'
 import { AppStoreProvider, useAppStore } from './app-store'
 import { hesperApi } from './ipc-client'
 import { defaultFallbackModelId, fallbackSessionModelCatalog, loadAvailableModelCatalog, mergeModelOptions, type SessionModelCatalog } from './model-options'
@@ -418,6 +418,23 @@ function AppContent() {
       setActiveRoleId(roles[0]!.id)
     }
   }, [activeRoleId, roles])
+
+  useEffect(() => {
+    let cancelled = false
+    void hesperApi.skills.list().then((cachedSkills) => {
+      if (!cancelled) {
+        setSkills(cachedSkills)
+        setSkillsError(undefined)
+      }
+    }).catch((error) => {
+      if (!cancelled) {
+        setSkillsError(error instanceof Error ? error.message : '未知技能加载错误')
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     if (state.activeSection !== 'skills') return undefined
@@ -1351,6 +1368,7 @@ function AppContent() {
             modelId={activeModelId}
             modelOptions={activeModelOptions}
             modelOptionGroups={sessionModelCatalog.optionGroups}
+            skillOptions={skills.map(toSkillOption)}
             draftValue={draftsBySession[activeSession.id] ?? ''}
             running={Boolean(activeRunningRunId)}
             onDraftChange={(value) => {
@@ -1382,12 +1400,13 @@ function AppContent() {
                 clearLatestRequest: clearLatestSettingsRequest
               })
             }}
-            onSend={(content) => {
+            onSend={(content, sendOptions) => {
               pendingTitlePromptsBySessionRef.current[activeSession.id] = content
               void sendMessage({
                 session: activeSession,
                 modelId: activeModelId,
                 content,
+                ...(sendOptions ? { sendOptions } : {}),
                 dispatch,
                 setSendErrorsBySession
               })
@@ -1684,11 +1703,13 @@ async function sendMessage({
   modelId,
   content,
   dispatch,
+  sendOptions,
   setSendErrorsBySession
 }: {
   session: Pick<Session, 'id' | 'workspacePath' | 'updatedAt'>
   modelId: string
   content: string
+  sendOptions?: ComposerSendOptions
   dispatch: ReturnType<typeof useAppStore>['dispatch']
   setSendErrorsBySession: Dispatch<SetStateAction<Record<string, string>>>
 }) {
@@ -1700,7 +1721,8 @@ async function sendMessage({
   try {
     const result = await hesperApi.agent.enqueue({
       sessionId: session.id,
-      prompt: content,
+      prompt: sendOptions?.prompt ?? content,
+      ...(sendOptions?.displayPrompt ? { displayPrompt: sendOptions.displayPrompt } : {}),
       modelId,
       messageId: message.id,
       messageCreatedAt: message.createdAt,
@@ -1714,6 +1736,14 @@ async function sendMessage({
       ...current,
       [session.id]: error instanceof Error ? error.message : 'unknown enqueue error'
     }))
+  }
+}
+
+function toSkillOption(skill: SkillOption): SkillOption {
+  return {
+    id: skill.id,
+    name: skill.name,
+    ...(skill.description ? { description: skill.description } : {})
   }
 }
 
