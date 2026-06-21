@@ -77,11 +77,12 @@ const { listSessions, createSession, updateTitle, deleteSession, generateTitle, 
     endedAt: '2026-06-10T03:00:05.000Z'
   })),
   onEvent: vi.fn(() => () => undefined),
-  getSettings: vi.fn(async () => ({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', fontSize: 14 })),
-  updateSettings: vi.fn(async (input: Partial<{ defaultModelId: string; defaultOutputMode: 'markdown' | 'html'; themeMode: 'system' | 'light' | 'dark'; fontSize: number }>) => ({
+  getSettings: vi.fn(async () => ({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', themeId: 'catppuccin', fontSize: 14 })),
+  updateSettings: vi.fn(async (input: Partial<{ defaultModelId: string; defaultOutputMode: 'markdown' | 'html'; themeMode: 'system' | 'light' | 'dark'; themeId: 'catppuccin' | 'dracula' | 'tokyo-night'; fontSize: number }>) => ({
     defaultModelId: input.defaultModelId ?? 'mock/hesper-fast',
     defaultOutputMode: input.defaultOutputMode ?? 'markdown',
     themeMode: input.themeMode ?? 'dark',
+    themeId: input.themeId ?? 'catppuccin',
     fontSize: input.fontSize ?? 14
   })),
   listProviders: vi.fn(async () => []),
@@ -397,11 +398,12 @@ describe('renderer App', () => {
       createdAt: '2026-06-10T03:00:00.000Z',
       updatedAt: '2026-06-10T03:00:00.000Z'
     }))
-    getSettings.mockResolvedValue({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', fontSize: 14 })
+    getSettings.mockResolvedValue({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', themeId: 'catppuccin', fontSize: 14 })
     updateSettings.mockImplementation(async (input) => ({
       defaultModelId: input.defaultModelId ?? 'mock/hesper-fast',
       defaultOutputMode: input.defaultOutputMode ?? 'markdown',
       themeMode: input.themeMode ?? 'dark',
+      themeId: input.themeId ?? 'catppuccin',
       fontSize: input.fontSize ?? 14
     }))
   })
@@ -1139,10 +1141,11 @@ describe('renderer App', () => {
 
   it('opens appearance settings and persists theme mode and global font size', async () => {
     const user = userEvent.setup()
-    let storedSettings: { defaultModelId: string; defaultOutputMode: 'markdown' | 'html'; themeMode: 'system' | 'light' | 'dark'; fontSize: number } = {
+    let storedSettings: { defaultModelId: string; defaultOutputMode: 'markdown' | 'html'; themeMode: 'system' | 'light' | 'dark'; themeId: 'catppuccin' | 'dracula' | 'tokyo-night'; fontSize: number } = {
       defaultModelId: 'mock/hesper-fast',
       defaultOutputMode: 'markdown',
       themeMode: 'dark',
+      themeId: 'catppuccin',
       fontSize: 14
     }
     getSettings.mockImplementation(async () => storedSettings)
@@ -1158,13 +1161,18 @@ describe('renderer App', () => {
 
     expect(screen.getByRole('region', { name: '外观设置面板' })).toBeInTheDocument()
     const appRoot = screen.getByLabelText('主工作区').parentElement
-    await waitFor(() => expect(appRoot?.style.getPropertyValue('--hesper-color-background')).toBe('#1a1b26'))
-    expect(appRoot?.style.getPropertyValue('--hesper-color-accent')).toBe('#7aa2f7')
-    expect(appRoot?.style.getPropertyValue('--hesper-color-tool-toggle')).toBe('#7aa2f7')
-    expect(appRoot?.style.getPropertyValue('--hesper-color-tool-toggle-soft')).toBe('rgba(122, 162, 247, 0.14)')
-    expect(appRoot?.style.getPropertyValue('--hesper-color-scrollbar-thumb')).toBe('rgba(192, 202, 245, 0.10)')
-    expect(appRoot?.style.getPropertyValue('--hesper-color-scrollbar-thumb-hover')).toBe('rgba(192, 202, 245, 0.24)')
-    expect(appRoot?.style.getPropertyValue('--hesper-color-scrollbar-thumb-active')).toBe('rgba(192, 202, 245, 0.38)')
+    expect(screen.getByRole('group', { name: '主题' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Catppuccin/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Dracula/ })).toBeInTheDocument()
+    expect(screen.getAllByText(/仅提供暗色样式|仅暗色/).length).toBeGreaterThan(0)
+
+    await waitFor(() => expect(appRoot?.style.getPropertyValue('--hesper-color-background')).toBe('#11111b'))
+    expect(appRoot?.style.getPropertyValue('--hesper-color-accent')).toBe('#cba6f7')
+    expect(appRoot?.style.getPropertyValue('--hesper-color-tool-toggle')).toBe('#cba6f7')
+    expect(appRoot?.style.getPropertyValue('--hesper-color-tool-toggle-soft')).toBe('rgba(203, 166, 247, 0.14)')
+    expect(appRoot?.style.getPropertyValue('--hesper-color-scrollbar-thumb')).toBe('rgba(205, 214, 244, 0.10)')
+    expect(appRoot?.style.getPropertyValue('--hesper-color-scrollbar-thumb-hover')).toBe('rgba(205, 214, 244, 0.24)')
+    expect(appRoot?.style.getPropertyValue('--hesper-color-scrollbar-thumb-active')).toBe('rgba(205, 214, 244, 0.38)')
 
     await user.click(screen.getByRole('button', { name: /^亮色/ }))
     await waitFor(() => expect(updateSettings).toHaveBeenCalledWith({ themeMode: 'light' }))
@@ -1176,6 +1184,17 @@ describe('renderer App', () => {
     expect(appRoot?.style.getPropertyValue('--hesper-color-scrollbar-thumb')).toBe('rgba(76, 79, 105, 0.10)')
     expect(appRoot?.style.getPropertyValue('--hesper-color-scrollbar-thumb-hover')).toBe('rgba(76, 79, 105, 0.22)')
     expect(appRoot?.style.getPropertyValue('--hesper-color-scrollbar-thumb-active')).toBe('rgba(76, 79, 105, 0.36)')
+
+    await user.click(screen.getByRole('button', { name: /^Dracula/ }))
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledWith({ themeId: 'dracula' }))
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe('dark'))
+    expect(appRoot?.style.getPropertyValue('--hesper-color-background')).toBe('#282a36')
+    expect(appRoot?.style.getPropertyValue('--hesper-color-accent')).toBe('#bd93f9')
+
+    await user.click(screen.getByRole('button', { name: /^Catppuccin/ }))
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledWith({ themeId: 'catppuccin' }))
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe('light'))
+    expect(appRoot?.style.getPropertyValue('--hesper-color-background')).toBe('#dce0e8')
 
     await user.click(screen.getByRole('button', { name: '16px' }))
     await waitFor(() => expect(updateSettings).toHaveBeenCalledWith({ fontSize: 16 }))

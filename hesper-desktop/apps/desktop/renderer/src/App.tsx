@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react'
-import { createId, nowIso, type Message, type RunStep, type Session, type WorkerAgentInvocation } from '@hesper/shared'
-import { AppShell, ConversationView, type AppSection, type ConversationShortcutCommand } from '@hesper/ui'
+import { createId, defaultAppThemeId, nowIso, type Message, type RunStep, type Session, type WorkerAgentInvocation } from '@hesper/shared'
+import { AppShell, ConversationView, resolveThemeVariant, type AppSection, type ConversationShortcutCommand } from '@hesper/ui'
 import { AppStoreProvider, useAppStore } from './app-store'
 import { hesperApi } from './ipc-client'
 import { defaultFallbackModelId, fallbackSessionModelCatalog, loadAvailableModelCatalog, mergeModelOptions, type SessionModelCatalog } from './model-options'
@@ -35,6 +35,7 @@ const defaultAppSettings: AppSettings = {
   defaultModelId: 'mock/hesper-fast',
   defaultOutputMode: 'markdown',
   themeMode: 'system',
+  themeId: defaultAppThemeId,
   fontSize: 14
 }
 
@@ -156,7 +157,8 @@ function AppContent() {
   const [activeRoleId, setActiveRoleId] = useState<string>()
   const [rolesPending, setRolesPending] = useState(false)
   const [rolesLoading, setRolesLoading] = useState(true)
-  const resolvedThemeMode = useResolvedThemeMode(appSettings.themeMode)
+  const requestedThemeMode = useResolvedThemeMode(appSettings.themeMode)
+  const effectiveThemeMode = resolveThemeVariant(appSettings.themeId, requestedThemeMode).colorScheme
   const loadedHistorySessionIdsRef = useRef<Set<string>>(new Set())
   const loadingHistorySessionIdsRef = useRef<Set<string>>(new Set())
   const createdNewSessionIdsRef = useRef<Set<string>>(new Set())
@@ -322,8 +324,8 @@ function AppContent() {
   }, [])
 
   useEffect(() => {
-    document.documentElement.dataset.theme = resolvedThemeMode
-  }, [resolvedThemeMode])
+    document.documentElement.dataset.theme = effectiveThemeMode
+  }, [effectiveThemeMode])
 
   useEffect(() => {
     let cancelled = false
@@ -1158,7 +1160,7 @@ function AppContent() {
       activeSection={state.activeSection}
       title={isSessionsSection ? activeSession?.title ?? '新建会话' : getSectionTitle(state.activeSection)}
       platform={hesperApi.window.platform}
-      appearance={{ themeMode: resolvedThemeMode, fontSize: appSettings.fontSize }}
+      appearance={{ themeId: appSettings.themeId, themeMode: requestedThemeMode, fontSize: appSettings.fontSize }}
       activeSettingsCategory={activeSettingsCategory}
       runningSessionIds={runningSessionIds}
       tools={tools}
@@ -1355,6 +1357,7 @@ function applySettingsPatch(settings: AppSettings, patch: UpdateSettingsInput): 
     ...(patch.defaultModelId !== undefined ? { defaultModelId: patch.defaultModelId } : {}),
     ...(patch.defaultOutputMode !== undefined ? { defaultOutputMode: patch.defaultOutputMode } : {}),
     ...(patch.themeMode !== undefined ? { themeMode: patch.themeMode } : {}),
+    ...(patch.themeId !== undefined ? { themeId: patch.themeId } : {}),
     ...(patch.fontSize !== undefined ? { fontSize: patch.fontSize } : {})
   }
 }

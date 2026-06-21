@@ -49,11 +49,12 @@ const { listSessions, setWorkspace, setModel, setOutputMode, selectDirectory, on
   onEvent: vi.fn(() => () => undefined),
   enqueue: vi.fn(async () => ({ runId: 'run-1' })),
   stopRun: vi.fn(async () => undefined),
-  getSettings: vi.fn(async () => ({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', fontSize: 14 })),
-  updateSettings: vi.fn(async (input: Partial<{ defaultModelId: string; defaultOutputMode: 'markdown' | 'html'; themeMode: 'system' | 'light' | 'dark'; fontSize: number }>) => ({
+  getSettings: vi.fn(async () => ({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', themeId: 'catppuccin', fontSize: 14 })),
+  updateSettings: vi.fn(async (input: Partial<{ defaultModelId: string; defaultOutputMode: 'markdown' | 'html'; themeMode: 'system' | 'light' | 'dark'; themeId: 'catppuccin' | 'dracula' | 'tokyo-night'; fontSize: number }>) => ({
     defaultModelId: input.defaultModelId ?? 'mock/hesper-fast',
     defaultOutputMode: input.defaultOutputMode ?? 'markdown',
     themeMode: input.themeMode ?? 'dark',
+    themeId: input.themeId ?? 'catppuccin',
     fontSize: input.fontSize ?? 14
   })),
   listModels: vi.fn(async () => [
@@ -152,11 +153,12 @@ describe('session settings and restore flow', () => {
     listRoles.mockResolvedValue([])
     enqueue.mockResolvedValue({ runId: 'run-1' })
     stopRun.mockResolvedValue(undefined)
-    getSettings.mockResolvedValue({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', fontSize: 14 })
+    getSettings.mockResolvedValue({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', themeId: 'catppuccin', fontSize: 14 })
     updateSettings.mockImplementation(async (input) => ({
       defaultModelId: input.defaultModelId ?? 'mock/hesper-fast',
       defaultOutputMode: input.defaultOutputMode ?? 'markdown',
       themeMode: input.themeMode ?? 'dark',
+      themeId: input.themeId ?? 'catppuccin',
       fontSize: input.fontSize ?? 14
     }))
     listTools.mockResolvedValue([

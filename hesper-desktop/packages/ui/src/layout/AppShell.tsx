@@ -22,7 +22,7 @@ export type AppShellProps = {
   activeRoleId?: string
   roleSelectionDisabled?: boolean
   activeSettingsCategory?: SettingsCategory
-  appearance?: { themeMode: ThemeMode; fontSize: number }
+  appearance?: { themeId?: string; themeMode: ThemeMode; fontSize: number }
   onCreateSession?: () => void | Promise<void>
   onSelectSection?: (section: AppSection) => void
   onSelectSession?: (sessionId: string) => void
@@ -71,7 +71,11 @@ export function AppShell({
   onWindowClose,
   children
 }: AppShellProps) {
-  const themeVariables = createThemeVariables(appearance?.themeMode ?? 'dark', appearance?.fontSize ?? 14)
+  const themeVariables = createThemeVariables({
+    themeId: appearance?.themeId ?? 'tokyo-night',
+    mode: appearance?.themeMode ?? 'dark',
+    fontSize: appearance?.fontSize ?? 14
+  })
 
   return (
     <div

@@ -1,9 +1,9 @@
 import type { CSSProperties } from 'react'
-import { darkTheme } from '@hesper/ui'
+import { builtinThemes, darkTheme } from '@hesper/ui'
 import type { AppSettings, UpdateSettingsInput } from '../../electron/ipc-contract'
 
 export type AppearanceSettingsPanelProps = {
-  settings: Pick<AppSettings, 'themeMode' | 'fontSize'>
+  settings: Pick<AppSettings, 'themeMode' | 'themeId' | 'fontSize'>
   error?: string
   onUpdate: (patch: UpdateSettingsInput) => void | Promise<AppSettings>
 }
@@ -15,6 +15,7 @@ const themeModeOptions: Array<{ value: AppSettings['themeMode']; label: string; 
 ]
 
 const fontSizeOptions = [12, 13, 14, 15, 16, 17, 18]
+const themeOptions = Object.values(builtinThemes) as Array<(typeof builtinThemes)[AppSettings['themeId']]>
 
 export function AppearanceSettingsPanel({ settings, error, onUpdate }: AppearanceSettingsPanelProps) {
   const update = (patch: UpdateSettingsInput) => {
@@ -54,6 +55,38 @@ export function AppearanceSettingsPanel({ settings, error, onUpdate }: Appearanc
               >
                 <span style={{ fontWeight: 800 }}>{option.label}</span>
                 <span style={{ color: darkTheme.color.textMuted }}>{option.description}</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      <div style={cardStyle}>
+        <div style={fieldHeaderStyle}>
+          <div>
+            <h3 style={fieldTitleStyle}>主题</h3>
+            <p style={fieldDescriptionStyle}>选择内置主题。暗色专属主题会自动使用暗色样式。</p>
+          </div>
+          <span style={statusPillStyle}>{themeOptions.find((theme) => theme.id === settings.themeId)?.label ?? 'Catppuccin'}</span>
+        </div>
+        <div role="group" aria-label="主题" style={themeGridStyle}>
+          {themeOptions.map((theme) => {
+            const isActive = settings.themeId === theme.id
+            const isDarkOnly = theme.variants.every((variant) => variant.id === 'dark')
+            const variantLabels = theme.variants.map((variant) => variant.label).join(' / ')
+            return (
+              <button
+                key={theme.id}
+                type="button"
+                aria-pressed={isActive}
+                onClick={() => update({ themeId: theme.id as AppSettings['themeId'] })}
+                style={{
+                  ...segmentedButtonStyle,
+                  ...(isActive ? segmentedButtonActiveStyle : {})
+                }}
+              >
+                <span style={{ fontWeight: 800 }}>{theme.label}</span>
+                <span style={{ color: darkTheme.color.textMuted }}>{isDarkOnly ? '仅提供暗色样式' : variantLabels}</span>
               </button>
             )
           })}
@@ -156,6 +189,12 @@ const statusPillStyle: CSSProperties = {
 }
 
 const segmentedGridStyle: CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+  gap: darkTheme.spacing.sm
+}
+
+const themeGridStyle: CSSProperties = {
   display: 'grid',
   gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
   gap: darkTheme.spacing.sm
