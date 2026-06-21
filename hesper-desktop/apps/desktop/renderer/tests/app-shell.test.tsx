@@ -1208,9 +1208,12 @@ describe('renderer App', () => {
     expect(screen.getByRole('region', { name: 'SOUL 设置面板' })).toBeInTheDocument()
     expect(screen.getByText('设置主 Agent 的身份、口吻和行为偏好。')).toBeInTheDocument()
 
-    await user.type(screen.getByLabelText('身份设定'), '你是耐心的代码助手。')
+    const soulInput = screen.getByLabelText('身份设定')
+    await user.type(soulInput, '你是耐心的代码助手。')
 
-    await waitFor(() => expect(updateSettings).toHaveBeenLastCalledWith({ soul: '你是耐心的代码助手。' }))
+    expect(soulInput).toHaveValue('你是耐心的代码助手。')
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledWith({ soul: '你是耐心的代码助手。' }))
+    expect(updateSettings).toHaveBeenCalledTimes(1)
   })
 
   it('loads the active session conversation history after sessions load and renders persisted messages', async () => {

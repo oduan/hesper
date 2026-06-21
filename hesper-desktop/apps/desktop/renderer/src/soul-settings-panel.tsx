@@ -1,6 +1,8 @@
-import type { CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { darkTheme } from '@hesper/ui'
 import type { AppSettings, UpdateSettingsInput } from '../../electron/ipc-contract'
+
+const SOUL_SAVE_DEBOUNCE_MS = 300
 
 export type SoulSettingsPanelProps = {
   settings: Pick<AppSettings, 'soul'>
@@ -9,9 +11,59 @@ export type SoulSettingsPanelProps = {
 }
 
 export function SoulSettingsPanel({ settings, error, onUpdate }: SoulSettingsPanelProps) {
-  const update = (patch: UpdateSettingsInput) => {
-    void onUpdate(patch)
+  const [draft, setDraft] = useState(settings.soul)
+  const draftRef = useRef(settings.soul)
+  const settingsSoulRef = useRef(settings.soul)
+  const lastSubmittedSoulRef = useRef(settings.soul)
+  const saveTimeoutRef = useRef<number | null>(null)
+
+  const clearPendingSave = () => {
+    if (saveTimeoutRef.current !== null) {
+      window.clearTimeout(saveTimeoutRef.current)
+      saveTimeoutRef.current = null
+    }
   }
+
+  const flushDraft = () => {
+    clearPendingSave()
+
+    const nextSoul = draftRef.current
+    if (nextSoul === settingsSoulRef.current || nextSoul === lastSubmittedSoulRef.current) {
+      return
+    }
+
+    lastSubmittedSoulRef.current = nextSoul
+    void onUpdate({ soul: nextSoul })
+  }
+
+  useEffect(() => {
+    draftRef.current = draft
+  }, [draft])
+
+  useEffect(() => {
+    settingsSoulRef.current = settings.soul
+    lastSubmittedSoulRef.current = settings.soul
+    draftRef.current = settings.soul
+    setDraft(settings.soul)
+  }, [settings.soul])
+
+  useEffect(() => {
+    clearPendingSave()
+
+    if (draft === settings.soul) {
+      return () => clearPendingSave()
+    }
+
+    saveTimeoutRef.current = window.setTimeout(() => {
+      flushDraft()
+    }, SOUL_SAVE_DEBOUNCE_MS)
+
+    return () => clearPendingSave()
+  }, [draft, settings.soul, onUpdate])
+
+  useEffect(() => () => {
+    clearPendingSave()
+  }, [])
 
   return (
     <section aria-label="SOUL 设置面板" style={panelStyle}>
@@ -27,8 +79,9 @@ export function SoulSettingsPanel({ settings, error, onUpdate }: SoulSettingsPan
           <span style={labelStyle}>身份设定</span>
           <textarea
             aria-label="身份设定"
-            value={settings.soul}
-            onChange={(event) => update({ soul: event.target.value })}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={flushDraft}
             placeholder="写下主 Agent 的身份、口吻、原则或长期行为偏好。"
             rows={8}
             style={textareaStyle}
