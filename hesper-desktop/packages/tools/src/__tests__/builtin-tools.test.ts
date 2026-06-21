@@ -257,7 +257,7 @@ describe('builtin tools', () => {
           }),
           defaultModelRef: expect.objectContaining({
             type: 'object',
-            description: 'Provider-aware default model reference from models.list-available. Takes precedence over defaultModelId and does not require defaultModelId to be set.',
+            required: ['providerId', 'modelId'],
             properties: {
               providerId: expect.objectContaining({ type: 'string' }),
               modelId: expect.objectContaining({ type: 'string' })
@@ -283,7 +283,7 @@ describe('builtin tools', () => {
           }),
           defaultModelRef: expect.objectContaining({
             type: 'object',
-            description: 'Provider-aware default model reference from models.list-available. Takes precedence over defaultModelId and does not require defaultModelId to be set.',
+            required: ['providerId', 'modelId'],
             properties: {
               providerId: expect.objectContaining({ type: 'string' }),
               modelId: expect.objectContaining({ type: 'string' })
@@ -292,6 +292,16 @@ describe('builtin tools', () => {
         }
       }
     })
+
+    for (const toolId of ['roles.create', 'roles.update']) {
+      const defaultModelRef = (tools.find((tool) => tool.id === toolId)?.inputSchema as any).properties.defaultModelRef
+      expect(defaultModelRef.description).toMatch(/provider-aware/i)
+      expect(defaultModelRef.description).toContain('defaultModelId')
+      expect(defaultModelRef.description).toMatch(/must match/i)
+      expect(defaultModelRef.description).toContain("defaultModelId: ''")
+      expect(defaultModelRef.description).not.toContain('does not require defaultModelId')
+      expect(defaultModelRef.required).toEqual(['providerId', 'modelId'])
+    }
 
     expect(tools.find((tool) => tool.id === 'models.list-available')).toMatchObject({
       name: 'List Available Models',

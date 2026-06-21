@@ -11,7 +11,7 @@ function currentCommandRuntimeDescription(): string {
 }
 
 const roleDefaultModelIdDescription = 'Legacy default model id for this role. Empty string means inherit the caller/parent model; prefer defaultModelRef for provider-aware selection.'
-const roleDefaultModelRefDescription = 'Provider-aware default model reference from models.list-available. Takes precedence over defaultModelId and does not require defaultModelId to be set.'
+const roleDefaultModelRefDescription = "Provider-aware default model metadata/reference from models.list-available. Saved or updated only when a non-empty defaultModelId is also provided; defaultModelRef.modelId must match defaultModelId. Use defaultModelId: '' to inherit/clear the default model, which also clears this ref."
 
 export function createBuiltinToolDefinitions(): ToolDefinition[] {
   return [
@@ -266,6 +266,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
           defaultModelRef: {
             type: 'object',
             description: roleDefaultModelRefDescription,
+            required: ['providerId', 'modelId'],
             properties: {
               providerId: { type: 'string' },
               modelId: { type: 'string' }
@@ -293,6 +294,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
           defaultModelRef: {
             type: 'object',
             description: roleDefaultModelRefDescription,
+            required: ['providerId', 'modelId'],
             properties: {
               providerId: { type: 'string' },
               modelId: { type: 'string' }
