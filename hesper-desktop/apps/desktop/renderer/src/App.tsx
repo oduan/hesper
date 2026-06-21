@@ -4,7 +4,7 @@ import { AppShell, ConversationView, type AppSection, type ConversationShortcutC
 import { AppStoreProvider, useAppStore } from './app-store'
 import { hesperApi } from './ipc-client'
 import { defaultFallbackModelId, fallbackSessionModelCatalog, loadAvailableModelCatalog, mergeModelOptions, type SessionModelCatalog } from './model-options'
-import type { AppSettings, CreateSshKeyInput, CreateSshServerInput, ManagedRoleDto, SshKeyDto, SshServerDto, ToolCredentialStatus, ToolDto, UpdateSettingsInput } from '../../electron/ipc-contract'
+import type { AppSettings, CreateSshKeyInput, CreateSshServerInput, ManagedRoleDto, SshKeyDto, SshServerDto, ToolCredentialStatus, ToolDto, UpdateSettingsInput, UpdateSshServerInput } from '../../electron/ipc-contract'
 import { AppearanceSettingsPanel } from './appearance-settings-panel'
 import { ProviderSettingsPanel } from './provider-settings-panel'
 import { createShortcutHandler } from './shortcuts'
@@ -926,6 +926,18 @@ function AppContent() {
     }
   }
 
+  const updateSshServer = async (input: UpdateSshServerInput) => {
+    setSshError(undefined)
+    setSshPending(true)
+    try {
+      await hesperApi.sshServers.update(input)
+      await loadSshServers()
+    } catch (error) {
+      setSshError(error instanceof Error ? error.message : '未知 SSH 服务器更新错误')
+    } finally {
+      setSshPending(false)
+    }
+  }
 
   const deleteSshServer = async (serverId: string) => {
     const server = sshServers.find((candidate) => candidate.id === serverId)
@@ -1141,6 +1153,7 @@ function AppContent() {
               onCreateKey={createSshKey}
               onDeleteKey={deleteSshKey}
               onCreateServer={createSshServer}
+              onUpdateServer={updateSshServer}
               onDeleteServer={deleteSshServer}
             />
           ) : (

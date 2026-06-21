@@ -900,6 +900,12 @@ describe('renderer App', () => {
       savedServers.splice(0, savedServers.length, server)
       return server
     })
+    sshServersUpdate.mockImplementation(async (input) => {
+      const current = savedServers.find((server) => server.id === input.id) ?? savedServers[0]
+      const updated = { ...current, ...input, updatedAt: '2026-06-21T05:10:00.000Z' }
+      savedServers.splice(0, savedServers.length, updated)
+      return updated
+    })
 
     render(<App />)
     await user.click(screen.getByRole('button', { name: '工具' }))
@@ -951,6 +957,34 @@ describe('renderer App', () => {
     expect(screen.getByText('Prod host')).toBeInTheDocument()
     expect(screen.getByText(/10\.0\.0\.\*\*\*:22/)).toBeInTheDocument()
     expect(screen.queryByText('10.0.0.8:22')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '编辑 SSH 主机 Prod host' }))
+    const editDialog = await screen.findByRole('dialog', { name: '编辑 SSH 主机' })
+    expect(editDialog).toBeInTheDocument()
+    expect(appRoot).toContainElement(editDialog)
+    expect(screen.getByLabelText('SSH 主机名称')).toHaveValue('Prod host')
+    expect(screen.getByLabelText('主机 IP 地址')).toHaveValue('10.0.0.8')
+    expect(screen.getByLabelText('SSH 端口')).toHaveValue(22)
+    expect(screen.getByLabelText('SSH 用户名')).toHaveValue('deploy')
+    expect(screen.getByLabelText('SSH 密钥')).toHaveValue('ssh-key-1')
+    expect(screen.getByLabelText('主机备注')).toHaveValue('logs')
+
+    await user.clear(screen.getByLabelText('SSH 主机名称'))
+    await user.type(screen.getByLabelText('SSH 主机名称'), 'Prod host updated')
+    await user.clear(screen.getByLabelText('主机 IP 地址'))
+    await user.type(screen.getByLabelText('主机 IP 地址'), '10.0.0.9')
+    await user.clear(screen.getByLabelText('SSH 端口'))
+    await user.type(screen.getByLabelText('SSH 端口'), '2222')
+    await user.clear(screen.getByLabelText('SSH 用户名'))
+    await user.type(screen.getByLabelText('SSH 用户名'), 'ubuntu')
+    await user.clear(screen.getByLabelText('主机备注'))
+    await user.type(screen.getByLabelText('主机备注'), 'metrics')
+    await user.click(screen.getByRole('button', { name: '保存 SSH 主机' }))
+
+    await waitFor(() => expect(sshServersUpdate).toHaveBeenCalledWith({ id: 'ssh-server-1', name: 'Prod host updated', host: '10.0.0.9', port: 2222, username: 'ubuntu', keyId: 'ssh-key-1', note: 'metrics' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '编辑 SSH 主机' })).not.toBeInTheDocument())
+    expect(await screen.findByText('Prod host updated')).toBeInTheDocument()
+    expect(screen.getByText(/10\.0\.0\.\*\*\*:2222/)).toBeInTheDocument()
   })
 
   it('shows unread completion icon for background runs until the session is viewed', async () => {

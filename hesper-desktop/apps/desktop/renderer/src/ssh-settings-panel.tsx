@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
-import type { CreateSshKeyInput, CreateSshServerInput, SshKeyDto, SshServerDto } from '../../electron/ipc-contract'
+import type { CreateSshKeyInput, CreateSshServerInput, SshKeyDto, SshServerDto, UpdateSshServerInput } from '../../electron/ipc-contract'
 
 type SshSettingsPanelProps = {
   keys: SshKeyDto[]
@@ -9,10 +9,11 @@ type SshSettingsPanelProps = {
   onCreateKey?: (input: CreateSshKeyInput) => void | Promise<void>
   onDeleteKey?: (id: string) => void | Promise<void>
   onCreateServer?: (input: CreateSshServerInput) => void | Promise<void>
+  onUpdateServer?: (input: UpdateSshServerInput) => void | Promise<void>
   onDeleteServer?: (id: string) => void | Promise<void>
 }
 
-type ActiveDialog = 'key' | 'server'
+type ActiveDialog = { type: 'key' } | { type: 'server'; server?: SshServerDto }
 
 export function SshSettingsPanel({
   keys,
@@ -22,6 +23,7 @@ export function SshSettingsPanel({
   onCreateKey,
   onDeleteKey,
   onCreateServer,
+  onUpdateServer,
   onDeleteServer
 }: SshSettingsPanelProps) {
   const [activeDialog, setActiveDialog] = useState<ActiveDialog>()
@@ -42,7 +44,7 @@ export function SshSettingsPanel({
         <section aria-label="SSH 密钥管理" style={sectionBlockStyle}>
           <div style={sectionHeaderRowStyle}>
             <h3 style={sectionTitleStyle}>SSH 密钥管理</h3>
-            <button type="button" disabled={pending || !onCreateKey} onClick={() => setActiveDialog('key')} style={secondaryActionStyle(pending || !onCreateKey)}>添加 SSH 密钥</button>
+            <button type="button" disabled={pending || !onCreateKey} onClick={() => setActiveDialog({ type: 'key' })} style={secondaryActionStyle(pending || !onCreateKey)}>添加 SSH 密钥</button>
           </div>
           <div style={listStyle}>
             {keys.length > 0 ? keys.map((key, index) => (
@@ -64,7 +66,7 @@ export function SshSettingsPanel({
         <section aria-label="SSH 主机管理" style={sectionBlockStyle}>
           <div style={sectionHeaderRowStyle}>
             <h3 style={sectionTitleStyle}>SSH 主机管理</h3>
-            <button type="button" disabled={pending || !onCreateServer || keys.length === 0} onClick={() => setActiveDialog('server')} style={secondaryActionStyle(pending || !onCreateServer || keys.length === 0)}>添加 SSH 主机</button>
+            <button type="button" disabled={pending || !onCreateServer || keys.length === 0} onClick={() => setActiveDialog({ type: 'server' })} style={secondaryActionStyle(pending || !onCreateServer || keys.length === 0)}>添加 SSH 主机</button>
           </div>
           <div style={listStyle}>
             {servers.length > 0 ? servers.map((server, index) => (
@@ -77,14 +79,17 @@ export function SshSettingsPanel({
                     {server.note ? <span style={noteTextStyle}>{server.note}</span> : null}
                   </span>
                 </div>
-                <button type="button" aria-label={`删除 SSH 主机 ${server.name}`} disabled={pending || !onDeleteServer} onClick={() => { void onDeleteServer?.(server.id) }} style={menuButtonStyle(pending || !onDeleteServer)}>删除</button>
+                <div style={itemActionsStyle}>
+                  <button type="button" aria-label={`编辑 SSH 主机 ${server.name}`} disabled={pending || !onUpdateServer} onClick={() => setActiveDialog({ type: 'server', server })} style={neutralMenuButtonStyle(pending || !onUpdateServer)}>编辑</button>
+                  <button type="button" aria-label={`删除 SSH 主机 ${server.name}`} disabled={pending || !onDeleteServer} onClick={() => { void onDeleteServer?.(server.id) }} style={menuButtonStyle(pending || !onDeleteServer)}>删除</button>
+                </div>
               </RowShell>
             )) : <EmptyState text={keys.length === 0 ? '添加密钥后即可添加 SSH 主机' : '暂无 SSH 主机'} />}
           </div>
         </section>
       </div>
 
-      {activeDialog === 'key' ? (
+      {activeDialog?.type === 'key' ? (
         <SshKeyDialog
           pending={pending}
           onCancel={() => setActiveDialog(undefined)}
@@ -95,13 +100,18 @@ export function SshSettingsPanel({
         />
       ) : null}
 
-      {activeDialog === 'server' ? (
+      {activeDialog?.type === 'server' ? (
         <SshServerDialog
           keys={keys}
+          {...(activeDialog.server ? { server: activeDialog.server } : {})}
           pending={pending}
           onCancel={() => setActiveDialog(undefined)}
           onSave={async (input) => {
-            await onCreateServer?.(input)
+            if ('id' in input) {
+              await onUpdateServer?.(input)
+            } else {
+              await onCreateServer?.(input)
+            }
             setActiveDialog(undefined)
           }}
         />
@@ -171,18 +181,20 @@ function SshKeyDialog({ pending, onCancel, onSave }: {
   )
 }
 
-function SshServerDialog({ keys, pending, onCancel, onSave }: {
+function SshServerDialog({ keys, server, pending, onCancel, onSave }: {
   keys: SshKeyDto[]
+  server?: SshServerDto
   pending: boolean
   onCancel: () => void
-  onSave: (input: CreateSshServerInput) => Promise<void> | void
+  onSave: (input: CreateSshServerInput | UpdateSshServerInput) => Promise<void> | void
 }) {
-  const [name, setName] = useState('')
-  const [host, setHost] = useState('')
-  const [port, setPort] = useState('22')
-  const [username, setUsername] = useState('')
-  const [keyId, setKeyId] = useState(keys[0]?.id ?? '')
-  const [note, setNote] = useState('')
+  const isEditing = Boolean(server)
+  const [name, setName] = useState(server?.name ?? '')
+  const [host, setHost] = useState(server?.host ?? '')
+  const [port, setPort] = useState(String(server?.port ?? 22))
+  const [username, setUsername] = useState(server?.username ?? '')
+  const [keyId, setKeyId] = useState(server?.keyId ?? keys[0]?.id ?? '')
+  const [note, setNote] = useState(server?.note ?? '')
   const nameInputRef = useRef<HTMLInputElement | null>(null)
   const parsedPort = Number(port)
   const disabled = pending || !name.trim() || !host.trim() || !username.trim() || !keyId || !Number.isInteger(parsedPort) || parsedPort < 1 || parsedPort > 65535
@@ -190,20 +202,22 @@ function SshServerDialog({ keys, pending, onCancel, onSave }: {
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (disabled) return
-    await onSave({
+    const input = {
+      ...(server ? { id: server.id } : {}),
       name: name.trim(),
       host: host.trim(),
       port: parsedPort,
       username: username.trim(),
       keyId,
-      ...(note.trim() ? { note: note.trim() } : {})
-    })
+      note: note.trim() || undefined
+    }
+    await onSave(input)
   }
 
   return (
-    <FullWindowDialogShell ariaLabel="添加 SSH 主机" onClose={onCancel} initialFocusRef={nameInputRef}>
+    <FullWindowDialogShell ariaLabel={isEditing ? '编辑 SSH 主机' : '添加 SSH 主机'} onClose={onCancel} initialFocusRef={nameInputRef}>
       <form onSubmit={(event) => { void submit(event) }} style={overlayFormStyle}>
-        <DialogHeader title="添加 SSH 主机" description="填写主机连接信息，并选择这台主机使用的 SSH 密钥。列表中会默认打码显示 IP 和用户名。" />
+        <DialogHeader title={isEditing ? '编辑 SSH 主机' : '添加 SSH 主机'} description="填写主机连接信息，并选择这台主机使用的 SSH 密钥。列表中会默认打码显示 IP 和用户名。" />
         <label style={fieldStyle}>
           SSH 主机名称
           <input ref={nameInputRef} aria-label="SSH 主机名称" value={name} disabled={pending} onChange={(event) => setName(event.target.value)} placeholder="例如 Production host" style={inputStyle} />
@@ -452,6 +466,14 @@ const itemInfoStyle: CSSProperties = {
   gap: 12
 }
 
+const itemActionsStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'flex-end',
+  gap: 6,
+  flexWrap: 'wrap'
+}
+
 const avatarStyle: CSSProperties = {
   width: 26,
   height: 26,
@@ -523,6 +545,19 @@ function primaryActionStyle(disabled: boolean): CSSProperties {
     background: softControlColor,
     color: accentColor,
     fontWeight: 700,
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    opacity: disabled ? 0.55 : 1
+  }
+}
+
+function neutralMenuButtonStyle(disabled: boolean): CSSProperties {
+  return {
+    border: 0,
+    outline: 0,
+    borderRadius: 10,
+    background: 'transparent',
+    color: disabled ? mutedTextColor : accentColor,
+    padding: '8px 10px',
     cursor: disabled ? 'not-allowed' : 'pointer',
     opacity: disabled ? 0.55 : 1
   }
