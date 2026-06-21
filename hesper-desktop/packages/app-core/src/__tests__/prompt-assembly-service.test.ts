@@ -104,6 +104,19 @@ const tools: ToolDefinition[] = [
   }
 ]
 
+function expectLocalWorkspaceFileReferenceRules(prompt: string): void {
+  expect(prompt).toContain('Local workspace file reference rules:')
+  expect(prompt).toContain('[display name](workspace:relative/path/from/workspace.ext)')
+  expect(prompt).toContain('relative to the current session Workspace')
+  expect(prompt).toContain('path separators must be /')
+  expect(prompt).toContain('Do not output absolute paths, file:// URLs, or .. path segments')
+  expect(prompt).toContain('URL-encode spaces and special characters')
+  expect(prompt).toContain('[README.md](workspace:README.md)')
+  expect(prompt).toContain('[package.json](workspace:packages/app/package.json)')
+  expect(prompt).toContain('[preview image](workspace:docs/images/preview%20image.png)')
+  expect(prompt).toContain('If no Workspace is selected, do not use workspace: links')
+}
+
 describe('PromptAssemblyService', () => {
   it('assembles a main agent prompt with allowed tools, skills and Worker Agent role discovery guidance', () => {
     const service = createPromptAssemblyService()
@@ -118,6 +131,7 @@ describe('PromptAssemblyService', () => {
 
     expect(output.systemPrompt).toContain('hesper desktop Agent')
     expect(output.systemPrompt).toContain('Workspace: "C:/workspace/hesper"')
+    expectLocalWorkspaceFileReferenceRules(output.systemPrompt)
     expect(output.systemPrompt).toContain('Role: "Main Agent"')
     expect(output.systemPrompt).toContain('You coordinate coding work.')
     expect(output.systemPrompt).toContain('untrusted registry metadata')
@@ -289,6 +303,7 @@ describe('PromptAssemblyService', () => {
 
     expect(output.systemPrompt).toContain('Worker Agent task: "Review the staged diff."')
     expect(output.systemPrompt).toContain('Expected output: "Findings and PASS/NEEDS_CHANGES."')
+    expectLocalWorkspaceFileReferenceRules(output.systemPrompt)
     expect(output.systemPrompt).toContain('Role: "Reviewer"')
     expect(output.systemPrompt).toContain('Be skeptical and evidence-driven.')
     expect(output.toolManifest).toContain('filesystem.read-file')
