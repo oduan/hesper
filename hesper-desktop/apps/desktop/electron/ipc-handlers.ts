@@ -19,6 +19,8 @@ import {
   ipcChannels,
   ipcEvents,
   listModelsInputSchema,
+  localFilePreviewInputSchema,
+  localFilePreviewResultSchema,
   managedRoleDtoSchema,
   providerConnectionTestInputSchema,
   providerConnectionTestResultSchema,
@@ -56,6 +58,7 @@ import {
   updateSshServerInputSchema,
   updateSettingsInputSchema
 } from './ipc-contract'
+import { readLocalFilePreview } from './local-file-preview'
 import type { ServiceContainer } from './service-container'
 
 type WindowControlTarget = Pick<BrowserWindow, 'minimize' | 'maximize' | 'unmaximize' | 'isMaximized' | 'close'>
@@ -337,6 +340,14 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
     [ipcChannels.workerInvocationsListByParentRun]: async (_event, payload) => {
       const { sessionId, parentRunId } = workerInvocationsListByParentRunInputSchema.parse(payload)
       return workerInvocationsResultSchema.parse(await options.container.workerAgentService.list({ parentRunId }, { runId: parentRunId, sessionId, allowedToolIds: [] }))
+    },
+    [ipcChannels.filesPreview]: async (_event, payload) => {
+      const input = localFilePreviewInputSchema.parse(payload)
+      const session = await options.container.sessionService.getSession(input.sessionId)
+      if (!session.workspacePath) {
+        throw new Error('Local file preview requires a selected workspace for this session')
+      }
+      return localFilePreviewResultSchema.parse(await readLocalFilePreview({ workspacePath: session.workspacePath, path: input.path }))
     },
     [ipcChannels.dialogSelectDirectory]: async () => {
       const result = await options.dialog.showOpenDialog({ properties: ['openDirectory'] })

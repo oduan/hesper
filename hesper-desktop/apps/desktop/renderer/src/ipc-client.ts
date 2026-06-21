@@ -185,6 +185,11 @@ export function createFallbackHesperApi(): HesperDesktopApi {
     workerAgents: {
       listByParentRun: async (_input: { sessionId: string; parentRunId: string }) => [] as WorkerAgentInvocationDto[]
     },
+    files: {
+      preview: async (_input) => {
+        throw new Error('本地文件预览在 renderer fallback 模式不可用')
+      }
+    },
     agent: {
       enqueue: async (_input: AgentEnqueueInput) => ({ runId: `run-fallback-${nextRunNumber++}` }),
       stop: async (_runId: string) => undefined,

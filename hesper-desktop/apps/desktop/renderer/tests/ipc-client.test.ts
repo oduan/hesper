@@ -51,6 +51,12 @@ describe('ipc-client fallback', () => {
     }
   })
 
+  it('rejects local file preview in fallback mode', async () => {
+    const api = createHesperApi({ allowFallback: true })
+
+    await expect(api.files.preview({ sessionId: 'session-1', path: 'README.md' })).rejects.toThrowError('本地文件预览在 renderer fallback 模式不可用')
+  })
+
   it('manages roles in fallback mode', async () => {
     const api = createHesperApi({ allowFallback: true })
 

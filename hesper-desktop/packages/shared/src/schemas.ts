@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import type {
   AgentRun,
+  LocalFilePreview,
   Message,
   ModelConfig,
   ModelProviderConfig,
@@ -48,6 +49,21 @@ const runErrorBaseSchema = z.object({
 })
 
 export const runErrorSchema = runErrorBaseSchema.transform((value) => value)
+
+export const localFilePreviewKindSchema = z.enum(['image', 'video', 'markdown', 'json', 'html', 'pdf', 'text', 'unsupported'])
+
+const localFilePreviewBaseSchema = z.object({
+  path: z.string().min(1),
+  name: z.string().min(1),
+  kind: localFilePreviewKindSchema,
+  mimeType: z.string().min(1),
+  bytes: z.number().int().nonnegative(),
+  content: z.string().optional(),
+  dataUrl: z.string().optional(),
+  warning: z.string().min(1).optional()
+}).strict()
+
+export const localFilePreviewSchema = localFilePreviewBaseSchema.transform(stripUndefined) satisfies z.ZodType<NormalizeOptional<LocalFilePreview>>
 
 const modelRefBaseSchema = z.object({
   providerId: z.string().min(1),
@@ -429,4 +445,5 @@ type _ModelProviderConfigCheck = Expect<Equal<z.output<typeof modelProviderConfi
 type _ModelConfigCheck = Expect<Equal<z.output<typeof modelConfigSchema>, NormalizeOptional<ModelConfig>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type _WorkerAgentInvocationCheck = Expect<Equal<z.output<typeof workerAgentInvocationSchema>, NormalizeOptional<WorkerAgentInvocation>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type _RunErrorCheck = Expect<Equal<z.output<typeof runErrorSchema>, NormalizeOptional<RunError>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _LocalFilePreviewCheck = Expect<Equal<z.output<typeof localFilePreviewSchema>, NormalizeOptional<LocalFilePreview>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type _AgentRuntimeEventCheck = Expect<Equal<z.output<typeof agentRuntimeEventSchema>, NormalizeOptional<AgentRuntimeEvent>>>

@@ -1,3 +1,6 @@
+import fs from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 import type { CredentialVaultCodec } from '@hesper/app-core'
 import { createInMemoryPersistence } from '@hesper/persistence'
 import { describe, expect, it, vi } from 'vitest'
@@ -39,6 +42,31 @@ async function listAvailableModelCatalog(container: ReturnType<typeof createServ
     catalog: JSON.parse(result.content) as ListedAvailableModelCatalog,
     raw: JSON.stringify(result)
   }
+}
+
+async function withTempWorkspace<T>(run: (workspacePath: string) => Promise<T>): Promise<T> {
+  const workspacePath = await fs.mkdtemp(path.join(os.tmpdir(), 'hesper-preview-'))
+  try {
+    return await run(workspacePath)
+  } finally {
+    await fs.rm(workspacePath, { recursive: true, force: true })
+  }
+}
+
+function registerTestIpcHandlers(container: ReturnType<typeof createServiceContainer>) {
+  const handles = new Map<string, (event: any, ...args: any[]) => Promise<unknown> | unknown>()
+  const ipcMain = {
+    handle: vi.fn((channel: string, handler: (event: any, ...args: any[]) => Promise<unknown> | unknown) => {
+      handles.set(channel, handler)
+    }),
+    removeHandler: vi.fn()
+  }
+  const dialog = {
+    showOpenDialog: vi.fn(async () => ({ canceled: true, filePaths: [] }))
+  }
+
+  registerIpcHandlers({ ipcMain, dialog, container })
+  return { handles, ipcMain }
 }
 
 describe('desktop service container', () => {
@@ -440,6 +468,130 @@ describe('desktop service container', () => {
 })
 
 describe('registerIpcHandlers', () => {
+  it('previews workspace markdown, formatted JSON, and image files through IPC', async () => {
+    await withTempWorkspace(async (workspacePath) => {
+      const imageBytes = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=', 'base64')
+      await fs.mkdir(path.join(workspacePath, 'docs'))
+      await fs.writeFile(path.join(workspacePath, 'docs', 'note.md'), '# Preview\n\nHello workspace.\n')
+      await fs.writeFile(path.join(workspacePath, 'data.json'), '{"b":1,"a":{"c":2}}')
+      await fs.writeFile(path.join(workspacePath, 'pixel.png'), imageBytes)
+
+      const persistence = await createInMemoryPersistence()
+      const container = createServiceContainer({ persistence, agentMode: 'mock' })
+      const session = await container.sessionService.createSession({ title: 'Preview session', workspacePath })
+      const { handles, ipcMain } = registerTestIpcHandlers(container)
+
+      expect(ipcMain.handle).toHaveBeenCalledWith(ipcChannels.filesPreview, expect.any(Function))
+
+      await expect(handles.get(ipcChannels.filesPreview)?.({ sender: { id: 1 } }, {
+        sessionId: session.id,
+        path: 'docs/note.md'
+      })).resolves.toMatchObject({
+        path: 'docs/note.md',
+        name: 'note.md',
+        kind: 'markdown',
+        mimeType: 'text/markdown',
+        bytes: 28,
+        content: '# Preview\n\nHello workspace.\n'
+      })
+
+      await expect(handles.get(ipcChannels.filesPreview)?.({ sender: { id: 1 } }, {
+        sessionId: session.id,
+        path: 'data.json'
+      })).resolves.toMatchObject({
+        path: 'data.json',
+        name: 'data.json',
+        kind: 'json',
+        mimeType: 'application/json',
+        content: '{\n  "b": 1,\n  "a": {\n    "c": 2\n  }\n}'
+      })
+
+      await expect(handles.get(ipcChannels.filesPreview)?.({ sender: { id: 1 } }, {
+        sessionId: session.id,
+        path: 'pixel.png'
+      })).resolves.toMatchObject({
+        path: 'pixel.png',
+        name: 'pixel.png',
+        kind: 'image',
+        mimeType: 'image/png',
+        bytes: imageBytes.byteLength,
+        dataUrl: `data:image/png;base64,${imageBytes.toString('base64')}`
+      })
+    })
+  })
+
+  it('rejects local file preview when the session has no selected workspace', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock' })
+    const session = await container.sessionService.createSession({ title: 'No workspace' })
+    const { handles } = registerTestIpcHandlers(container)
+
+    await expect(handles.get(ipcChannels.filesPreview)?.({ sender: { id: 1 } }, {
+      sessionId: session.id,
+      path: 'README.md'
+    })).rejects.toThrow(/workspace/i)
+  })
+
+  it('rejects local file preview paths that are absolute, escape the workspace, or point at directories', async () => {
+    await withTempWorkspace(async (workspacePath) => {
+      await fs.mkdir(path.join(workspacePath, 'folder'))
+      await fs.writeFile(path.join(workspacePath, 'inside.txt'), 'inside')
+
+      const persistence = await createInMemoryPersistence()
+      const container = createServiceContainer({ persistence, agentMode: 'mock' })
+      const session = await container.sessionService.createSession({ title: 'Preview session', workspacePath })
+      const { handles } = registerTestIpcHandlers(container)
+
+      await expect(handles.get(ipcChannels.filesPreview)?.({ sender: { id: 1 } }, {
+        sessionId: session.id,
+        path: '../outside.txt'
+      })).rejects.toThrow(/workspace|escape|relative/i)
+
+      await expect(handles.get(ipcChannels.filesPreview)?.({ sender: { id: 1 } }, {
+        sessionId: session.id,
+        path: path.join(workspacePath, 'inside.txt')
+      })).rejects.toThrow(/relative|absolute/i)
+
+      await expect(handles.get(ipcChannels.filesPreview)?.({ sender: { id: 1 } }, {
+        sessionId: session.id,
+        path: 'folder'
+      })).rejects.toThrow(/file|directory/i)
+    })
+  })
+
+  it('rejects local file preview through symlinks or junctions that resolve outside the workspace', async () => {
+    const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'hesper-preview-link-'))
+    try {
+      const workspacePath = path.join(rootPath, 'workspace')
+      const outsidePath = path.join(rootPath, 'outside')
+      await fs.mkdir(workspacePath)
+      await fs.mkdir(outsidePath)
+      await fs.writeFile(path.join(outsidePath, 'secret.txt'), 'secret')
+
+      try {
+        await fs.symlink(outsidePath, path.join(workspacePath, 'escape'), process.platform === 'win32' ? 'junction' : 'dir')
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code
+        if (code === 'EPERM' || code === 'EACCES' || code === 'ENOTSUP') {
+          return
+        }
+        throw error
+      }
+
+      const persistence = await createInMemoryPersistence()
+      const container = createServiceContainer({ persistence, agentMode: 'mock' })
+      const session = await container.sessionService.createSession({ title: 'Preview session', workspacePath })
+      const { handles } = registerTestIpcHandlers(container)
+
+      await expect(handles.get(ipcChannels.filesPreview)?.({ sender: { id: 1 } }, {
+        sessionId: session.id,
+        path: 'escape/secret.txt'
+      })).rejects.toThrow(/workspace|outside|escape/i)
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true })
+    }
+  })
+
   it('returns the original session without saving when title generation returns no title', async () => {
     const persistence = await createInMemoryPersistence()
     const container = createServiceContainer({ persistence, agentMode: 'mock' })

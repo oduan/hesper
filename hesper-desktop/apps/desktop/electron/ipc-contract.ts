@@ -1,4 +1,4 @@
-import { agentRunSchema, agentRuntimeEventSchema, messageSchema, modelConfigSchema, modelProviderConfigSchema, modelRefSchema, runStepSchema, sessionSchema, sshKeySchema, sshServerSchema, toolDefinitionBaseSchema, workerAgentInvocationSchema } from '@hesper/shared'
+import { agentRunSchema, agentRuntimeEventSchema, localFilePreviewSchema, messageSchema, modelConfigSchema, modelProviderConfigSchema, modelRefSchema, runStepSchema, sessionSchema, sshKeySchema, sshServerSchema, toolDefinitionBaseSchema, workerAgentInvocationSchema } from '@hesper/shared'
 import { z } from 'zod'
 
 export const ipcChannels = {
@@ -17,6 +17,7 @@ export const ipcChannels = {
   conversationListRuns: 'conversation:listRuns',
   conversationListSteps: 'conversation:listSteps',
   workerInvocationsListByParentRun: 'workerInvocations:listByParentRun',
+  filesPreview: 'files:preview',
   dialogSelectDirectory: 'dialog:selectDirectory',
   agentEnqueue: 'agent:enqueue',
   agentStop: 'agent:stop',
@@ -94,6 +95,11 @@ export const workerInvocationsListByParentRunInputSchema = z.object({
   sessionId: nonEmptyStringSchema,
   parentRunId: nonEmptyStringSchema
 }).strict()
+export const localFilePreviewInputSchema = z.object({
+  sessionId: nonEmptyStringSchema,
+  path: nonEmptyStringSchema
+}).strict()
+export const localFilePreviewResultSchema = localFilePreviewSchema
 export const conversationMessagesResultSchema = z.array(messageSchema)
 export const conversationMessagesByRunResultSchema = z.array(messageSchema)
 export const conversationRunsResultSchema = z.array(agentRunSchema)
@@ -420,6 +426,8 @@ export type RunStepDto = z.infer<typeof runStepSchema>
 export type WorkerAgentInvocationDto = z.infer<typeof workerAgentInvocationSchema>
 export type ConversationMessagesByRunInput = z.infer<typeof conversationMessagesByRunInputSchema>
 export type WorkerInvocationsListByParentRunInput = z.infer<typeof workerInvocationsListByParentRunInputSchema>
+export type LocalFilePreviewInput = z.infer<typeof localFilePreviewInputSchema>
+export type LocalFilePreviewDto = z.infer<typeof localFilePreviewResultSchema>
 export type ModelProviderDto = z.infer<typeof modelProviderConfigSchema>
 export type ModelDto = z.infer<typeof modelConfigSchema>
 
@@ -444,6 +452,9 @@ export type HesperDesktopApi = {
   }
   workerAgents: {
     listByParentRun(input: WorkerInvocationsListByParentRunInput): Promise<WorkerAgentInvocationDto[]>
+  }
+  files: {
+    preview(input: LocalFilePreviewInput): Promise<LocalFilePreviewDto>
   }
   agent: {
     enqueue(input: AgentEnqueueInput): Promise<{ runId: string }>

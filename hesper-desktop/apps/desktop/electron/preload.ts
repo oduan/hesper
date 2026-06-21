@@ -43,6 +43,9 @@ const hesperApi: HesperDesktopApi = {
   workerAgents: {
     listByParentRun: (input) => ipcRenderer.invoke(ipcChannels.workerInvocationsListByParentRun, input)
   },
+  files: {
+    preview: (input) => ipcRenderer.invoke(ipcChannels.filesPreview, input)
+  },
   agent: {
     enqueue: (input) => ipcRenderer.invoke(ipcChannels.agentEnqueue, input),
     stop: (runId) => ipcRenderer.invoke(ipcChannels.agentStop, runId),

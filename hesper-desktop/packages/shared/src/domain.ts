@@ -5,6 +5,18 @@ export type MessageContentType = 'markdown' | 'html' | 'plain'
 export type RunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
 export type RunStepType = 'thought' | 'tool_call' | 'tool_result' | 'model_call' | 'retry' | 'warning'
 export type RunStepStatus = 'pending' | 'running' | 'succeeded' | 'failed'
+export type LocalFilePreviewKind = 'image' | 'video' | 'markdown' | 'json' | 'html' | 'pdf' | 'text' | 'unsupported'
+
+export type LocalFilePreview = {
+  path: string
+  name: string
+  kind: LocalFilePreviewKind
+  mimeType: string
+  bytes: number
+  content?: string
+  dataUrl?: string
+  warning?: string
+}
 
 export type RunError = {
   code: 'network_error' | 'timeout' | 'rate_limit_transient' | 'stream_interrupted' | 'tool_error' | 'unknown'
