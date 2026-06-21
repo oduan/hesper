@@ -118,9 +118,6 @@ export function createRoleManagementService(options: RoleManagementServiceOption
         if (input.defaultModelRef) {
           role.defaultModelRef = cloneModelRef(input.defaultModelRef)
         }
-      } else if (input.defaultModelRef) {
-        role.defaultModelId = input.defaultModelRef.modelId
-        role.defaultModelRef = cloneModelRef(input.defaultModelRef)
       }
 
       await options.persistence.roles.save(role)
@@ -148,9 +145,6 @@ export function createRoleManagementService(options: RoleManagementServiceOption
         } else if (currentDefaultModelId !== undefined && currentDefaultModelId !== defaultModelId && next.defaultModelRef !== undefined) {
           delete next.defaultModelRef
         }
-      } else if (input.defaultModelRef !== undefined) {
-        next.defaultModelId = input.defaultModelRef.modelId
-        next.defaultModelRef = cloneModelRef(input.defaultModelRef)
       }
 
       await options.persistence.roles.save(next)

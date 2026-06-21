@@ -364,9 +364,6 @@ export function createFallbackHesperApi(): HesperDesktopApi {
           } else if (currentDefaultModelId !== defaultModelId && updated.defaultModelRef !== undefined) {
             delete updated.defaultModelRef
           }
-        } else if (input.defaultModelRef !== undefined) {
-          updated.defaultModelId = input.defaultModelRef.modelId
-          updated.defaultModelRef = cloneModelRef(input.defaultModelRef)
         }
 
         roles = roles.map((role) => role.id === updated.id ? updated : role)

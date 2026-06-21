@@ -85,6 +85,28 @@ describe('role management service', () => {
     })
   })
 
+  it('ignores default model ref on create without explicit default model id', async () => {
+    const { persistence, service } = await createService()
+
+    const role = await service.createRole({
+      name: 'Ref Only Role',
+      defaultModelRef: { providerId: 'deepseek', modelId: 'deepseek-chat' }
+    })
+
+    expect(role).toMatchObject({
+      name: 'Ref Only Role',
+      description: '',
+      systemPrompt: '',
+      defaultToolIds: [],
+      defaultModelId: ''
+    })
+    expect(role.defaultModelRef).toBeUndefined()
+
+    const stored = await persistence.roles.get(role.id)
+    expect(stored?.defaultModelId).toBeUndefined()
+    expect(stored?.defaultModelRef).toBeUndefined()
+  })
+
   it('normalizes optional text fields to empty strings', async () => {
     const { service } = await createService()
 
@@ -128,6 +150,30 @@ describe('role management service', () => {
       defaultToolIds: ['filesystem.read-file'],
       defaultModelId: 'legacy-model',
       defaultModelRef: { providerId: 'provider-1', modelId: 'model-1' }
+    })
+  })
+
+  it('does not update default model fields when only default model ref is provided', async () => {
+    const { persistence, service } = await createService()
+    const role = await service.createRole({
+      name: 'Model Role',
+      defaultModelId: 'gpt-4o',
+      defaultModelRef: { providerId: 'openai', modelId: 'gpt-4o' }
+    })
+
+    const updated = await service.updateRole({
+      id: role.id,
+      defaultModelRef: { providerId: 'deepseek', modelId: 'deepseek-chat' }
+    })
+
+    expect(updated).toMatchObject({
+      id: role.id,
+      defaultModelId: 'gpt-4o',
+      defaultModelRef: { providerId: 'openai', modelId: 'gpt-4o' }
+    })
+    await expect(persistence.roles.get(role.id)).resolves.toMatchObject({
+      defaultModelId: 'gpt-4o',
+      defaultModelRef: { providerId: 'openai', modelId: 'gpt-4o' }
     })
   })
 
