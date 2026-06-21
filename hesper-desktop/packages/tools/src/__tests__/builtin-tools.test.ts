@@ -77,6 +77,36 @@ describe('builtin tools', () => {
     })
   })
 
+  it('defines temporary Worker Agent role schema and one-off guidance', () => {
+    const spawnWorkerAgent = createBuiltinToolDefinitions().find((tool) => tool.id === 'agent.spawn-worker-agent')
+    const schema = spawnWorkerAgent?.inputSchema as any
+
+    expect(schema.required).toEqual(['task', 'allowedToolIds'])
+    expect(schema.required).not.toContain('roleId')
+    expect(schema.properties.temporaryRole).toMatchObject({
+      type: 'object',
+      required: ['name', 'systemPrompt'],
+      properties: {
+        name: expect.objectContaining({ type: 'string' }),
+        description: expect.objectContaining({ type: 'string' }),
+        systemPrompt: expect.objectContaining({ type: 'string' }),
+        defaultToolIds: expect.objectContaining({ type: 'array' }),
+        defaultModelId: expect.objectContaining({ type: 'string' }),
+        defaultModelRef: expect.objectContaining({
+          type: 'object',
+          required: ['providerId', 'modelId'],
+          properties: {
+            providerId: expect.objectContaining({ type: 'string' }),
+            modelId: expect.objectContaining({ type: 'string' })
+          }
+        })
+      }
+    })
+    expect(spawnWorkerAgent?.description).toContain('temporaryRole')
+    expect(spawnWorkerAgent?.description).toMatch(/not (saved|persisted)|not written/i)
+    expect(spawnWorkerAgent?.description).toContain('roles.create')
+  })
+
   it('defines filesystem tools with required schema fields', () => {
     const tools = createBuiltinToolDefinitions()
     const readFile = tools.find((tool) => tool.id === 'filesystem.read-file')
@@ -251,10 +281,11 @@ describe('builtin tools', () => {
       category: 'agent',
       inputSchema: {
         type: 'object',
-        required: ['task', 'roleId', 'allowedToolIds'],
+        required: ['task', 'allowedToolIds'],
         properties: {
           task: expect.objectContaining({ type: 'string' }),
           roleId: expect.objectContaining({ type: 'string' }),
+          temporaryRole: expect.objectContaining({ type: 'object' }),
           allowedToolIds: expect.objectContaining({ type: 'array' }),
           expectedOutput: expect.objectContaining({ type: 'string' }),
           contextSummary: expect.objectContaining({ type: 'string' }),

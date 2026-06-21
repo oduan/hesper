@@ -77,7 +77,16 @@ const tools: ToolDefinition[] = [
     name: 'Spawn Worker Agent',
     description: 'Spawn a constrained Worker Agent',
     category: 'agent',
-    inputSchema: { type: 'object', required: ['task', 'roleId', 'allowedToolIds'], properties: { task: { type: 'string' }, roleId: { type: 'string' }, allowedToolIds: { type: 'array' } } }
+    inputSchema: {
+      type: 'object',
+      required: ['task', 'allowedToolIds'],
+      properties: {
+        task: { type: 'string' },
+        roleId: { type: 'string' },
+        temporaryRole: { type: 'object' },
+        allowedToolIds: { type: 'array' }
+      }
+    }
   }
 ]
 
@@ -116,6 +125,26 @@ describe('PromptAssemblyService', () => {
     expect(output.workerAgentRules).toContain('A wait timeout means the Worker Agent is still running, not failed')
     expect(output.workerAgentRules).toContain('Worker Agent management tools default to the current parent run and must not be used across sessions')
     expect(output.systemPrompt).not.toMatch(/api[_ -]?key/i)
+  })
+
+  it('guides one-off Worker Agents toward temporaryRole instead of creating persistent roles', () => {
+    const service = createPromptAssemblyService()
+
+    const output = service.assembleMainPrompt({
+      session,
+      role: mainRole,
+      skills,
+      tools,
+      assignableWorkerAgentRoles: [reviewerRole]
+    })
+
+    expect(output.workerAgentRules).toContain('temporaryRole')
+    expect(output.workerAgentRules).toContain('models.list-available')
+    expect(output.workerAgentRules).toContain('exactly one of roleId or temporaryRole')
+    expect(output.workerAgentRules).toContain('Do not call roles.create for one-off Worker Agent tasks')
+    expect(output.workerAgentRules).toContain('Only call roles.create when the user explicitly wants a reusable role')
+    expect(output.workerAgentRules).toContain('temporaryRole.defaultModelRef')
+    expect(output.workerAgentRules).toContain('temporaryRole.defaultModelId')
   })
 
   it('keeps custom Worker roles discoverable by role tools instead of listing them by default', () => {

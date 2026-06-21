@@ -309,16 +309,37 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
     {
       id: 'agent.spawn-worker-agent',
       name: 'Spawn Worker Agent',
-      description: 'Create a constrained Worker Agent child run with a role, task, limited tool set, and optional model override. Use models.list-available first to choose a provider-aware modelRef when possible; modelRef takes precedence over modelId. If neither is provided, the role default model (defaultModelRef then defaultModelId) or parent run model is used. By default waits only for a bounded timeout and returns a diagnosis if still running.',
+      description: 'Create a constrained Worker Agent child run with either an existing roleId or a one-off temporaryRole, task, limited tool set, and optional model override. Use temporaryRole when no suitable existing role fits a single run; temporaryRole is not saved, not persisted, and not written to the role library. Do not call roles.create for one-off Worker Agent tasks; only create roles the user explicitly wants to reuse. Use models.list-available first to choose a provider-aware modelRef when possible; modelRef takes precedence over modelId, temporaryRole/default role defaults, and the parent run model. If no explicit model is provided, temporaryRole.defaultModelRef/default role defaultModelRef is used before temporaryRole.defaultModelId/default role defaultModelId, then the parent run model. By default waits only for a bounded timeout and returns a diagnosis if still running.',
       category: 'agent',
       icon: '🧑‍💻',
       inputSchema: {
         type: 'object',
-        required: ['task', 'roleId', 'allowedToolIds'],
+        required: ['task', 'allowedToolIds'],
         properties: {
           task: { type: 'string', description: 'Specific task for the Worker Agent.' },
-          roleId: { type: 'string', description: 'Assignable Worker Agent role id.' },
-          allowedToolIds: { type: 'array', items: { type: 'string' }, description: 'Requested tool ids. Effective tools are intersected with parent, role, and global limits.' },
+          roleId: { type: 'string', description: 'Assignable Worker Agent role id. Provide exactly one of roleId or temporaryRole.' },
+          temporaryRole: {
+            type: 'object',
+            description: 'One-off Worker Agent role used only for this spawn. It is not saved to the role library; use this instead of roles.create for single-use tasks.',
+            required: ['name', 'systemPrompt'],
+            properties: {
+              name: { type: 'string', description: 'Temporary role display name for this run.' },
+              description: { type: 'string', description: 'Optional temporary role description for tracing.' },
+              systemPrompt: { type: 'string', description: 'Full system prompt/instructions for this temporary Worker Agent role.' },
+              defaultToolIds: { type: 'array', items: { type: 'string' }, description: 'Optional default tools for the temporary role. If omitted, requested allowedToolIds are used as the role tool side of the intersection.' },
+              defaultModelId: { type: 'string', description: 'Optional legacy default model id for this temporary role.' },
+              defaultModelRef: {
+                type: 'object',
+                description: 'Optional provider-aware default model reference for this temporary role. Takes precedence over defaultModelId unless spawn provides an explicit modelRef/modelId.',
+                required: ['providerId', 'modelId'],
+                properties: {
+                  providerId: { type: 'string', description: 'Model provider id returned by models.list-available.' },
+                  modelId: { type: 'string', description: 'Model id returned by models.list-available.' }
+                }
+              }
+            }
+          },
+          allowedToolIds: { type: 'array', items: { type: 'string' }, description: 'Requested tool ids. Effective tools are intersected with parent, requested, role/temporaryRole defaults, and global limits.' },
           modelRef: {
             type: 'object',
             description: 'Provider-aware model reference from models.list-available. Takes precedence over modelId, role defaults, and the parent run model.',
