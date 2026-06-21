@@ -4,7 +4,7 @@ import { AppShell, ConversationView, type AppSection, type ConversationShortcutC
 import { AppStoreProvider, useAppStore } from './app-store'
 import { hesperApi } from './ipc-client'
 import { defaultFallbackModelId, fallbackSessionModelCatalog, loadAvailableModelCatalog, mergeModelOptions, type SessionModelCatalog } from './model-options'
-import type { AppSettings, ManagedRoleDto, ToolCredentialStatus, ToolDto, UpdateSettingsInput } from '../../electron/ipc-contract'
+import type { AppSettings, CreateSshKeyInput, CreateSshServerInput, ManagedRoleDto, SshKeyDto, SshServerDto, ToolCredentialStatus, ToolDto, UpdateSettingsInput, UpdateSshServerInput } from '../../electron/ipc-contract'
 import { AppearanceSettingsPanel } from './appearance-settings-panel'
 import { ProviderSettingsPanel } from './provider-settings-panel'
 import { createShortcutHandler } from './shortcuts'
@@ -146,6 +146,9 @@ function AppContent() {
   const [toolCredentialStatuses, setToolCredentialStatuses] = useState<Record<string, ToolCredentialStatus>>({})
   const [pendingToolCredentialIds, setPendingToolCredentialIds] = useState<Set<string>>(new Set())
   const [toolsError, setToolsError] = useState<string>()
+  const [sshKeys, setSshKeys] = useState<SshKeyDto[]>([])
+  const [sshServers, setSshServers] = useState<SshServerDto[]>([])
+  const [sshPending, setSshPending] = useState(false)
   const [roles, setRoles] = useState<ManagedRoleDto[]>([])
   const [rolesError, setRolesError] = useState<string>()
   const [activeRoleId, setActiveRoleId] = useState<string>()
@@ -203,6 +206,50 @@ function AppContent() {
         setRolesError(error instanceof Error ? error.message : '未知角色加载错误')
       }
       return { requestId, error, applied }
+    }
+  }
+
+  const loadSshConfiguration = async (options: { isCancelled?: () => boolean } = {}) => {
+    try {
+      const [loadedKeys, loadedServers] = await Promise.all([
+        hesperApi.sshKeys.list(),
+        hesperApi.sshServers.list()
+      ])
+      if (!options.isCancelled?.()) {
+        setSshKeys(loadedKeys)
+        setSshServers(loadedServers)
+        setToolsError(undefined)
+      }
+      return { loadedKeys, loadedServers }
+    } catch (error) {
+      if (!options.isCancelled?.()) {
+        setToolsError(error instanceof Error ? error.message : '未知 SSH 配置加载错误')
+      }
+      return undefined
+    }
+  }
+
+  const loadSshKeys = async () => {
+    try {
+      const loadedKeys = await hesperApi.sshKeys.list()
+      setSshKeys(loadedKeys)
+      setToolsError(undefined)
+      return loadedKeys
+    } catch (error) {
+      setToolsError(error instanceof Error ? error.message : '未知 SSH 密钥加载错误')
+      return undefined
+    }
+  }
+
+  const loadSshServers = async () => {
+    try {
+      const loadedServers = await hesperApi.sshServers.list()
+      setSshServers(loadedServers)
+      setToolsError(undefined)
+      return loadedServers
+    } catch (error) {
+      setToolsError(error instanceof Error ? error.message : '未知 SSH 服务器加载错误')
+      return undefined
     }
   }
 
@@ -374,6 +421,22 @@ function AppContent() {
       cancelled = true
     }
   }, [activeTool])
+
+  useEffect(() => {
+    const tool = activeTool
+    if (state.activeSection !== 'tools' || !tool?.id.startsWith('ssh.')) return undefined
+    let cancelled = false
+    setSshPending(true)
+    void loadSshConfiguration({ isCancelled: () => cancelled }).finally(() => {
+      if (!cancelled) {
+        setSshPending(false)
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [state.activeSection, activeTool?.id])
 
   useEffect(() => {
     let cancelled = false
@@ -819,6 +882,75 @@ function AppContent() {
     }
   }
 
+  const createSshKey = async (input: CreateSshKeyInput) => {
+    setToolsError(undefined)
+    setSshPending(true)
+    try {
+      await hesperApi.sshKeys.create(input)
+      await loadSshKeys()
+    } catch (error) {
+      setToolsError(error instanceof Error ? error.message : '未知 SSH 密钥保存错误')
+    } finally {
+      setSshPending(false)
+    }
+  }
+
+  const deleteSshKey = async (keyId: string) => {
+    const key = sshKeys.find((candidate) => candidate.id === keyId)
+    if (!window.confirm(`删除 SSH 密钥 ${key?.name ?? keyId}？`)) return
+    setToolsError(undefined)
+    setSshPending(true)
+    try {
+      await hesperApi.sshKeys.delete(keyId)
+      await loadSshConfiguration()
+    } catch (error) {
+      setToolsError(error instanceof Error ? error.message : '未知 SSH 密钥删除错误')
+    } finally {
+      setSshPending(false)
+    }
+  }
+
+  const createSshServer = async (input: CreateSshServerInput) => {
+    setToolsError(undefined)
+    setSshPending(true)
+    try {
+      await hesperApi.sshServers.create(input)
+      await loadSshServers()
+    } catch (error) {
+      setToolsError(error instanceof Error ? error.message : '未知 SSH 服务器保存错误')
+    } finally {
+      setSshPending(false)
+    }
+  }
+
+  const updateSshServer = async (input: UpdateSshServerInput) => {
+    setToolsError(undefined)
+    setSshPending(true)
+    try {
+      await hesperApi.sshServers.update(input)
+      await loadSshServers()
+    } catch (error) {
+      setToolsError(error instanceof Error ? error.message : '未知 SSH 服务器更新错误')
+    } finally {
+      setSshPending(false)
+    }
+  }
+
+  const deleteSshServer = async (serverId: string) => {
+    const server = sshServers.find((candidate) => candidate.id === serverId)
+    if (!window.confirm(`删除 SSH 服务器 ${server?.name ?? serverId}？`)) return
+    setToolsError(undefined)
+    setSshPending(true)
+    try {
+      await hesperApi.sshServers.delete(serverId)
+      await loadSshServers()
+    } catch (error) {
+      setToolsError(error instanceof Error ? error.message : '未知 SSH 服务器删除错误')
+    } finally {
+      setSshPending(false)
+    }
+  }
+
   const renameSession = async (sessionId: string, title: string) => {
     const session = stateRef.current.sessions.find((candidate) => candidate.id === sessionId)
     const nextTitle = title.trim()
@@ -997,6 +1129,9 @@ function AppContent() {
             credentialPending={activeTool ? pendingToolCredentialIds.has(activeTool.id) : false}
             {...(activeToolCredentialStatus ? { credentialStatus: activeToolCredentialStatus } : {})}
             {...(toolsError ? { error: toolsError } : {})}
+            sshKeys={sshKeys}
+            sshServers={sshServers}
+            sshPending={sshPending}
             onToggle={(enabled) => {
               if (activeTool) void updateToolEnabled(activeTool.id, enabled)
             }}
@@ -1006,6 +1141,11 @@ function AppContent() {
             onDeleteApiKey={() => {
               if (activeTool) void deleteToolApiKey(activeTool.id)
             }}
+            onCreateSshKey={(input) => { void createSshKey(input) }}
+            onDeleteSshKey={(keyId) => { void deleteSshKey(keyId) }}
+            onCreateSshServer={(input) => { void createSshServer(input) }}
+            onUpdateSshServer={(input) => { void updateSshServer(input) }}
+            onDeleteSshServer={(serverId) => { void deleteSshServer(serverId) }}
           />
         ) : <SectionPlaceholder section={state.activeSection} />
       ) : activeSession ? (

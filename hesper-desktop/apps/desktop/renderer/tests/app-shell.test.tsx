@@ -15,7 +15,7 @@ function createDeferred<T>() {
   return { promise, resolve, reject }
 }
 
-const { listSessions, createSession, updateTitle, deleteSession, generateTitle, markViewed, listRoles, createRole, updateRole, deleteRole, listMessages, listMessagesByRun, listRuns, listSteps, listWorkerInvocationsByParentRun, enqueue, stopRun, onEvent, getSettings, updateSettings, listProviders, listModels, listTools, setToolEnabled, toolCredentialStatus, saveToolApiKey, deleteToolApiKey, minimizeWindow, toggleMaximizeWindow, closeWindow } = vi.hoisted(() => ({
+const { listSessions, createSession, updateTitle, deleteSession, generateTitle, markViewed, listRoles, createRole, updateRole, deleteRole, listMessages, listMessagesByRun, listRuns, listSteps, listWorkerInvocationsByParentRun, enqueue, stopRun, onEvent, getSettings, updateSettings, listProviders, listModels, listTools, setToolEnabled, toolCredentialStatus, saveToolApiKey, deleteToolApiKey, sshKeysList, sshKeysCreate, sshKeysDelete, sshServersList, sshServersCreate, sshServersUpdate, sshServersDelete, minimizeWindow, toggleMaximizeWindow, closeWindow } = vi.hoisted(() => ({
   listSessions: vi.fn(async () => []),
   createSession: vi.fn(async () => ({
     id: 'session-1',
@@ -149,6 +149,40 @@ const { listSessions, createSession, updateTitle, deleteSession, generateTitle, 
     hasApiKey: false,
     encryptionAvailable: true
   })),
+  sshKeysList: vi.fn(async () => []),
+  sshKeysCreate: vi.fn(async (input) => ({
+    id: 'ssh-key-created',
+    name: input.name,
+    note: input.note,
+    hasPassphrase: Boolean(input.passphrase?.trim()),
+    createdAt: '2026-06-21T05:00:00.000Z',
+    updatedAt: '2026-06-21T05:00:00.000Z'
+  })),
+  sshKeysDelete: vi.fn(async (id: string) => ({ deleted: true as const, id })),
+  sshServersList: vi.fn(async () => []),
+  sshServersCreate: vi.fn(async (input) => ({
+    id: 'ssh-server-created',
+    name: input.name,
+    host: input.host,
+    port: input.port,
+    username: input.username,
+    keyId: input.keyId,
+    note: input.note,
+    createdAt: '2026-06-21T05:00:00.000Z',
+    updatedAt: '2026-06-21T05:00:00.000Z'
+  })),
+  sshServersUpdate: vi.fn(async (input) => ({
+    id: input.id,
+    name: input.name ?? 'SSH server',
+    host: input.host ?? '127.0.0.1',
+    port: input.port ?? 22,
+    username: input.username ?? 'user',
+    keyId: input.keyId ?? 'ssh-key-created',
+    note: input.note,
+    createdAt: '2026-06-21T05:00:00.000Z',
+    updatedAt: '2026-06-21T05:00:00.000Z'
+  })),
+  sshServersDelete: vi.fn(async (id: string) => ({ deleted: true as const, id })),
   minimizeWindow: vi.fn(async () => ({ minimized: true })),
   toggleMaximizeWindow: vi.fn(async () => ({ isMaximized: true })),
   closeWindow: vi.fn(async () => ({ closed: true }))
@@ -172,6 +206,8 @@ vi.mock('../src/ipc-client', () => ({
     providers: { list: listProviders },
     models: { list: listModels },
     tools: { list: listTools, setEnabled: setToolEnabled, credentialStatus: toolCredentialStatus, saveApiKey: saveToolApiKey, deleteApiKey: deleteToolApiKey },
+    sshKeys: { list: sshKeysList, create: sshKeysCreate, delete: sshKeysDelete },
+    sshServers: { list: sshServersList, create: sshServersCreate, update: sshServersUpdate, delete: sshServersDelete },
     roles: { list: listRoles, create: createRole, update: updateRole, delete: deleteRole },
     window: {
       platform: 'win32',
@@ -224,6 +260,13 @@ describe('renderer App', () => {
     toolCredentialStatus.mockReset()
     saveToolApiKey.mockReset()
     deleteToolApiKey.mockReset()
+    sshKeysList.mockReset()
+    sshKeysCreate.mockReset()
+    sshKeysDelete.mockReset()
+    sshServersList.mockReset()
+    sshServersCreate.mockReset()
+    sshServersUpdate.mockReset()
+    sshServersDelete.mockReset()
     minimizeWindow.mockClear()
     toggleMaximizeWindow.mockClear()
     closeWindow.mockClear()
@@ -299,6 +342,40 @@ describe('renderer App', () => {
       hasApiKey: false,
       encryptionAvailable: true
     }))
+    sshKeysList.mockResolvedValue([])
+    sshKeysCreate.mockImplementation(async (input) => ({
+      id: 'ssh-key-created',
+      name: input.name,
+      note: input.note,
+      hasPassphrase: Boolean(input.passphrase?.trim()),
+      createdAt: '2026-06-21T05:00:00.000Z',
+      updatedAt: '2026-06-21T05:00:00.000Z'
+    }))
+    sshKeysDelete.mockImplementation(async (id: string) => ({ deleted: true as const, id }))
+    sshServersList.mockResolvedValue([])
+    sshServersCreate.mockImplementation(async (input) => ({
+      id: 'ssh-server-created',
+      name: input.name,
+      host: input.host,
+      port: input.port,
+      username: input.username,
+      keyId: input.keyId,
+      note: input.note,
+      createdAt: '2026-06-21T05:00:00.000Z',
+      updatedAt: '2026-06-21T05:00:00.000Z'
+    }))
+    sshServersUpdate.mockImplementation(async (input) => ({
+      id: input.id,
+      name: input.name ?? 'SSH server',
+      host: input.host ?? '127.0.0.1',
+      port: input.port ?? 22,
+      username: input.username ?? 'user',
+      keyId: input.keyId ?? 'ssh-key-created',
+      note: input.note,
+      createdAt: '2026-06-21T05:00:00.000Z',
+      updatedAt: '2026-06-21T05:00:00.000Z'
+    }))
+    sshServersDelete.mockImplementation(async (id: string) => ({ deleted: true as const, id }))
     enqueue.mockResolvedValue({ runId: 'run-1' })
     stopRun.mockImplementation(async (runId: string) => ({
       id: runId,
@@ -676,6 +753,55 @@ describe('renderer App', () => {
     await waitFor(() => expect(saveToolApiKey).toHaveBeenCalledWith({ toolId: 'web.search', apiKey: 'tinyfish-secret' }))
     await waitFor(() => expect(detailsRegion).toHaveTextContent('已保存'))
     expect(screen.getByRole('switch', { name: '工具全局开关' })).not.toBeDisabled()
+  })
+
+  it('manages SSH keys and servers from the SSH tool detail panel without echoing secrets', async () => {
+    const user = userEvent.setup()
+    listTools.mockResolvedValueOnce([
+      {
+        id: 'ssh.run-commands',
+        name: 'Run SSH Commands',
+        description: 'Run multiple commands sequentially on a configured SSH server.',
+        category: 'system',
+        icon: '🔐',
+        inputSchema: { type: 'object', required: ['serverId', 'commands'], properties: { serverId: { type: 'string' }, commands: { type: 'array', items: { type: 'string' } } } },
+        enabled: true
+      }
+    ] as any)
+    sshKeysList.mockResolvedValueOnce([]).mockResolvedValueOnce([{ id: 'ssh-key-1', name: 'Prod key', note: 'deploy', hasPassphrase: true, createdAt: '2026-06-21T05:00:00.000Z', updatedAt: '2026-06-21T05:00:00.000Z' }] as any)
+    sshServersList.mockResolvedValueOnce([]).mockResolvedValueOnce([{ id: 'ssh-server-1', name: 'Prod server', host: '10.0.0.8', port: 22, username: 'deploy', keyId: 'ssh-key-1', note: 'logs', createdAt: '2026-06-21T05:00:00.000Z', updatedAt: '2026-06-21T05:00:00.000Z' }] as any)
+    sshKeysCreate.mockResolvedValueOnce({ id: 'ssh-key-1', name: 'Prod key', note: 'deploy', hasPassphrase: true, createdAt: '2026-06-21T05:00:00.000Z', updatedAt: '2026-06-21T05:00:00.000Z' })
+    sshServersCreate.mockResolvedValueOnce({ id: 'ssh-server-1', name: 'Prod server', host: '10.0.0.8', port: 22, username: 'deploy', keyId: 'ssh-key-1', note: 'logs', createdAt: '2026-06-21T05:00:00.000Z', updatedAt: '2026-06-21T05:00:00.000Z' })
+
+    render(<App />)
+    await user.click(screen.getByRole('button', { name: '工具' }))
+    const toolsList = await screen.findByLabelText('工具列表')
+    await user.click(toolsList.querySelector('[data-tool-id="ssh.run-commands"]') as HTMLElement)
+
+    expect(await screen.findByRole('region', { name: 'SSH 配置' })).toBeInTheDocument()
+    await user.type(screen.getByLabelText('SSH 密钥名称'), 'Prod key')
+    await user.type(screen.getByLabelText('SSH 私钥内容'), 'private-key-secret')
+    await user.type(screen.getByLabelText('SSH Passphrase'), 'passphrase-secret')
+    await user.type(screen.getByLabelText('SSH 密钥备注'), 'deploy')
+    await user.click(screen.getByRole('button', { name: '保存 SSH 密钥' }))
+
+    await waitFor(() => expect(sshKeysCreate).toHaveBeenCalledWith({ name: 'Prod key', privateKey: 'private-key-secret', passphrase: 'passphrase-secret', note: 'deploy' }))
+    expect(screen.getByLabelText('SSH 私钥内容')).toHaveValue('')
+    expect(screen.getByLabelText('SSH Passphrase')).toHaveValue('')
+    expect(screen.queryByText('private-key-secret')).not.toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('SSH 服务器名称'), 'Prod server')
+    await user.type(screen.getByLabelText('SSH Host 或 IP'), '10.0.0.8')
+    await user.clear(screen.getByLabelText('SSH 端口'))
+    await user.type(screen.getByLabelText('SSH 端口'), '22')
+    await user.type(screen.getByLabelText('SSH 用户名'), 'deploy')
+    await user.selectOptions(screen.getByLabelText('SSH 密钥'), 'ssh-key-1')
+    await user.type(screen.getByLabelText('SSH 服务器备注'), 'logs')
+    await user.click(screen.getByRole('button', { name: '保存 SSH 服务器' }))
+
+    await waitFor(() => expect(sshServersCreate).toHaveBeenCalledWith({ name: 'Prod server', host: '10.0.0.8', port: 22, username: 'deploy', keyId: 'ssh-key-1', note: 'logs' }))
+    expect(await screen.findByText('Prod server')).toBeInTheDocument()
+    expect(screen.getByText('10.0.0.8:22')).toBeInTheDocument()
   })
 
   it('shows unread completion icon for background runs until the session is viewed', async () => {
