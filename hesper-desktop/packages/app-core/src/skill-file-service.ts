@@ -203,7 +203,7 @@ export function createSkillFileService(options: SkillFileServiceOptions): SkillF
     refreshSkills,
     startAutoScan(intervalMs = DEFAULT_AUTO_SCAN_INTERVAL_MS) {
       if (autoScanHandle !== undefined) return
-      autoScanHandle = timer.setInterval(() => refreshSkills().then(() => undefined), intervalMs)
+      autoScanHandle = timer.setInterval(() => refreshSkills().then(() => undefined).catch(() => undefined), intervalMs)
     },
     stopAutoScan() {
       if (autoScanHandle === undefined) return

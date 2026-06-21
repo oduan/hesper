@@ -150,6 +150,21 @@ describe('SkillFileService', () => {
     expect(service.getSkill('user:not-a-skill')).toBeUndefined()
   })
 
+  it('keeps existing cache and resolves auto refresh ticks when scanning fails', async () => {
+    fs.seedFile('/user/stable/SKILL.md', '---\nname: Stable\n---\nCached prompt')
+    const { timer, tick } = makeTimer()
+    const service = createSkillFileService({ paths: { builtinSkillsDir: '/builtin', userSkillsDir: '/user' }, fs, timer })
+    await service.refreshSkills()
+
+    expect(service.getSkill('user:stable')).toMatchObject({ name: 'Stable', prompt: 'Cached prompt' })
+    fs.readdir.mockRejectedValueOnce(new Error('scan failed'))
+
+    service.startAutoScan(500)
+    await expect(tick()).resolves.toBeUndefined()
+
+    expect(service.getSkill('user:stable')).toMatchObject({ name: 'Stable', prompt: 'Cached prompt' })
+  })
+
   it('starts and stops auto refresh with injected timer', async () => {
     fs.seedFile('/user/first/SKILL.md', '---\nname: First\n---\nOne')
     const { timer, tick } = makeTimer()
