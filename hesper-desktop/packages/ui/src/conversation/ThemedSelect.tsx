@@ -168,8 +168,8 @@ const themedSelectHoverCss = `
 .hesper-themed-select-option:focus-visible,
 .hesper-themed-select-group-button:hover,
 .hesper-themed-select-group-button:focus-visible {
-  background: var(--hesper-color-hover) !important;
-  color: var(--hesper-color-text) !important;
+  background: ${themeTokens.color.hover} !important;
+  color: ${themeTokens.color.text} !important;
 }
 `
 

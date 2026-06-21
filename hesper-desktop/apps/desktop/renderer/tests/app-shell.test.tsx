@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import '@testing-library/jest-dom/vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -222,6 +224,21 @@ vi.mock('../src/ipc-client', () => ({
 }))
 
 describe('renderer App', () => {
+  it('provides root theme color defaults before AppShell injects variables', () => {
+    const styles = readFileSync(join(process.cwd(), 'renderer/src/styles.css'), 'utf8')
+    const rootBlock = styles.match(/:root\s*{(?<body>[\s\S]*?)}/)?.groups?.body ?? ''
+
+    expect(rootBlock).toContain('--hesper-color-text-muted:')
+    expect(rootBlock).toContain('--hesper-color-hover:')
+    expect(rootBlock).toContain('--hesper-color-soft-control:')
+    expect(rootBlock).toContain('--hesper-color-scrollbar-thumb:')
+    expect(rootBlock).toContain('--hesper-color-scrollbar-thumb-hover:')
+    expect(rootBlock).toContain('--hesper-color-scrollbar-thumb-active:')
+    expect(styles).toContain('color: var(--hesper-color-text-muted);')
+    expect(styles).toContain('background: var(--hesper-color-hover);')
+    expect(styles).toContain('scrollbar-color: var(--hesper-color-scrollbar-thumb) transparent;')
+  })
+
   it('deletes cleared send-error entries instead of keeping undefined keys', () => {
     expect(clearSessionSendError({ 'session-1': 'failed', 'session-2': 'still-here' }, 'session-1')).toEqual({ 'session-2': 'still-here' })
   })

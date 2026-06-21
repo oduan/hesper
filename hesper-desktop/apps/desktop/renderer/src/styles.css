@@ -1,8 +1,35 @@
 :root {
   color-scheme: light;
-  /* Bootstrap fallback before React mounts theme variables. Component-level colors should use themeTokens/CSS variables without local fallbacks. */
-  --hesper-body-background: var(--hesper-color-background, #1a1b26);
-  --hesper-body-text: var(--hesper-color-text, #c0caf5);
+  /* Central bootstrap defaults before React/AppShell injects the selected theme variables. */
+  --hesper-color-background: #1a1b26;
+  --hesper-color-surface: #16161e;
+  --hesper-color-surface-muted: #24283b;
+  --hesper-color-text: #c0caf5;
+  --hesper-color-text-muted: #737aa2;
+  --hesper-color-border: #414868;
+  --hesper-color-accent: #7aa2f7;
+  --hesper-color-accent-contrast: #16161e;
+  --hesper-color-success: #9ece6a;
+  --hesper-color-danger: #f7768e;
+  --hesper-color-warning: #e0af68;
+  --hesper-color-hover: rgba(122, 162, 247, 0.12);
+  --hesper-color-soft-control: rgba(122, 162, 247, 0.14);
+  --hesper-color-tool-toggle: #7aa2f7;
+  --hesper-color-tool-toggle-soft: rgba(122, 162, 247, 0.14);
+  --hesper-color-danger-soft: rgba(247, 118, 142, 0.14);
+  --hesper-color-danger-strong: #f7768e;
+  --hesper-color-success-soft: rgba(158, 206, 106, 0.16);
+  --hesper-color-warning-soft: rgba(224, 175, 104, 0.16);
+  --hesper-color-border-subtle: rgba(65, 72, 104, 0.38);
+  --hesper-color-neutral-soft: rgba(192, 202, 245, 0.10);
+  --hesper-color-code-background: #16161e;
+  --hesper-color-shadow: rgba(192, 202, 245, 0.18);
+  --hesper-color-preview-background: #16161e;
+  --hesper-color-scrollbar-thumb: rgba(192, 202, 245, 0.10);
+  --hesper-color-scrollbar-thumb-hover: rgba(192, 202, 245, 0.24);
+  --hesper-color-scrollbar-thumb-active: rgba(192, 202, 245, 0.38);
+  --hesper-body-background: var(--hesper-color-background);
+  --hesper-body-text: var(--hesper-color-text);
 }
 
 *,
@@ -206,6 +233,6 @@ button {
 
 [data-theme='dark'] {
   color-scheme: dark;
-  --hesper-body-background: var(--hesper-color-background, #1a1b26);
-  --hesper-body-text: var(--hesper-color-text, #c0caf5);
+  --hesper-body-background: var(--hesper-color-background);
+  --hesper-body-text: var(--hesper-color-text);
 }

@@ -88,6 +88,8 @@ describe('ui components', () => {
     expect(menu).toHaveStyle({ background: themeTokens.color.surfaceMuted, borderRadius: '12px', padding: '4px 0' })
     expect(menu).toHaveStyle({ boxShadow: `0 18px 50px ${themeTokens.color.shadow}` })
     expect(menu.querySelector('style')).toHaveTextContent('.hesper-session-menu-item:hover::after')
+    expect(menu.querySelector('style')).toHaveTextContent(`background: ${themeTokens.color.hover};`)
+    expect(menu.querySelector('style')).not.toHaveTextContent('background: var(--hesper-color-hover);')
     expect(menu.querySelector('style')).not.toHaveTextContent('keyframes')
     for (const label of ['重命名', '重新生成标题', '删除']) {
       const item = within(menu).getByRole('menuitem', { name: label })
@@ -714,6 +716,9 @@ describe('ui components', () => {
     const modelListbox = screen.getByRole('listbox', { name: '选择模型选项' })
     expect(modelListbox).toHaveStyle({ display: 'grid' })
     expect(modelListbox.querySelector('style')).toHaveTextContent('.hesper-themed-select-option:hover')
+    expect(modelListbox.querySelector('style')).toHaveTextContent(`background: ${themeTokens.color.hover} !important;`)
+    expect(modelListbox.querySelector('style')).toHaveTextContent(`color: ${themeTokens.color.text} !important;`)
+    expect(modelListbox.querySelector('style')).not.toHaveTextContent('background: var(--hesper-color-hover) !important;')
     expect(within(modelListbox).getByRole('option', { name: 'mock/hesper-fast' })).toHaveClass('hesper-themed-select-option')
 
     await user.type(textarea, 'hello')

@@ -819,7 +819,7 @@ const sessionMenuHoverCss = `
   position: absolute;
   inset: 0;
   z-index: 0;
-  background: var(--hesper-color-hover);
+  background: ${themeTokens.color.hover};
   opacity: 0;
   transition: opacity 160ms ease;
 }
