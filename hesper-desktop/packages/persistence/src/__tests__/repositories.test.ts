@@ -596,4 +596,68 @@ describe('persistence repositories', () => {
       fs.rmSync(tempFile, { force: true })
     }
   })
+
+  it('round-trips SSH keys, servers, executions, and command results', async () => {
+    const persistence = await createInMemoryPersistence()
+    const now = '2026-06-21T05:00:00.000Z'
+
+    await persistence.sshKeys.save({
+      id: 'ssh-key-1',
+      name: 'Production key',
+      note: 'deploy key',
+      hasPassphrase: true,
+      createdAt: now,
+      updatedAt: now
+    })
+    await persistence.sshServers.save({
+      id: 'ssh-server-1',
+      name: 'Production',
+      host: '10.0.0.8',
+      port: 2222,
+      username: 'deploy',
+      keyId: 'ssh-key-1',
+      note: 'logs',
+      createdAt: now,
+      updatedAt: now
+    })
+    await persistence.sshExecutions.save({
+      id: 'ssh-exec-1',
+      sessionId: 'session-1',
+      runId: 'run-1',
+      serverId: 'ssh-server-1',
+      serverName: 'Production',
+      commands: ['pwd', 'whoami'],
+      stopOnError: true,
+      timeoutMs: 0,
+      status: 'running',
+      startedAt: now,
+      updatedAt: now
+    })
+    await persistence.sshCommandResults.save({
+      executionId: 'ssh-exec-1',
+      index: 0,
+      command: 'pwd',
+      status: 'succeeded',
+      stdout: '/home/deploy\n',
+      stderr: '',
+      exitCode: 0,
+      startedAt: now,
+      completedAt: now,
+      durationMs: 5
+    })
+
+    expect(await persistence.sshKeys.get('ssh-key-1')).toMatchObject({ name: 'Production key', hasPassphrase: true })
+    expect(await persistence.sshServers.get('ssh-server-1')).toMatchObject({ host: '10.0.0.8', port: 2222, username: 'deploy', keyId: 'ssh-key-1' })
+    expect(await persistence.sshServers.listByKeyId('ssh-key-1')).toHaveLength(1)
+    expect(await persistence.sshExecutions.listBySession('session-1')).toMatchObject([{ id: 'ssh-exec-1', timeoutMs: 0 }])
+    expect(await persistence.sshCommandResults.listByExecution('ssh-exec-1')).toMatchObject([{ index: 0, stdout: '/home/deploy\n' }])
+  })
+
+  it('creates SSH tables when migrating a legacy database', async () => {
+    const persistence = await createInMemoryPersistence()
+    await expect(persistence.sshKeys.list()).resolves.toEqual([])
+    await expect(persistence.sshServers.list()).resolves.toEqual([])
+    await expect(persistence.sshExecutions.listBySession('missing')).resolves.toEqual([])
+  })
+
 })

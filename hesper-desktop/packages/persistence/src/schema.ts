@@ -162,6 +162,63 @@ CREATE TABLE IF NOT EXISTS worker_agent_invocations (
   sort_seq INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS ssh_keys (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  note TEXT,
+  has_passphrase INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  sort_seq INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS ssh_servers (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  host TEXT NOT NULL,
+  port INTEGER NOT NULL,
+  username TEXT NOT NULL,
+  key_id TEXT NOT NULL,
+  note TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  sort_seq INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS ssh_executions (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  run_id TEXT NOT NULL,
+  server_id TEXT NOT NULL,
+  server_name TEXT NOT NULL,
+  commands_json TEXT NOT NULL,
+  stop_on_error INTEGER NOT NULL,
+  timeout_ms INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  completed_at TEXT,
+  error_json TEXT,
+  sort_seq INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS ssh_command_results (
+  id TEXT PRIMARY KEY,
+  execution_id TEXT NOT NULL,
+  command_index INTEGER NOT NULL,
+  command TEXT NOT NULL,
+  status TEXT NOT NULL,
+  stdout TEXT NOT NULL,
+  stderr TEXT NOT NULL,
+  exit_code INTEGER,
+  signal TEXT,
+  started_at TEXT,
+  completed_at TEXT,
+  duration_ms INTEGER,
+  skipped_reason TEXT,
+  sort_seq INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS credential_records (
   id TEXT PRIMARY KEY,
   kind TEXT NOT NULL,
