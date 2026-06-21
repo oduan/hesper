@@ -32,6 +32,7 @@ export type AppShellProps = {
   onRenameSession?: (sessionId: string, title: string) => void
   onRegenerateSessionTitle?: (sessionId: string, sessionIds?: string[]) => void
   onDeleteSession?: (sessionId: string, sessionIds?: string[]) => void
+  onDeleteRole?: (roleId: string, roleIds?: string[]) => void
   onWindowMinimize?: WindowControlAction
   onWindowToggleMaximize?: WindowControlAction
   onWindowClose?: WindowControlAction
@@ -62,6 +63,7 @@ export function AppShell({
   onRenameSession,
   onRegenerateSessionTitle,
   onDeleteSession,
+  onDeleteRole,
   onWindowMinimize,
   onWindowToggleMaximize,
   onWindowClose,
@@ -126,6 +128,7 @@ export function AppShell({
           {...(onRenameSession ? { onRenameSession } : {})}
           {...(onRegenerateSessionTitle ? { onRegenerateSessionTitle } : {})}
           {...(onDeleteSession ? { onDeleteSession } : {})}
+          {...(onDeleteRole ? { onDeleteRole } : {})}
         />
         <section
           aria-label="详情区域"

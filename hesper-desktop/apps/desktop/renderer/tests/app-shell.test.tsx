@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, clearSessionSendError, pruneSessionSendErrors } from '../src/App'
@@ -552,6 +552,36 @@ describe('renderer App', () => {
     expect(screen.queryByRole('button', { name: '创建第一个角色' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '新建角色' })).not.toBeInTheDocument()
     expect(screen.getByRole('alert')).toHaveTextContent('refresh failed')
+  })
+
+  it('confirms and deletes selected role ranges from the role list in list order', async () => {
+    const user = userEvent.setup()
+    const roles = [
+      { id: 'role-1', name: '运维助手', description: '执行命令', systemPrompt: '你是运维助手。', defaultToolIds: [] },
+      { id: 'role-2', name: '搜索专家', description: '搜索资料', systemPrompt: '你是搜索专家。', defaultToolIds: [] },
+      { id: 'role-3', name: '写作助手', description: '撰写文案', systemPrompt: '你是写作助手。', defaultToolIds: [] },
+      { id: 'role-4', name: '测试助手', description: '编写测试', systemPrompt: '你是测试助手。', defaultToolIds: [] }
+    ]
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
+    listRoles.mockResolvedValueOnce(roles as any).mockResolvedValueOnce(roles as any).mockResolvedValueOnce([roles[3]] as any)
+
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: '角色' }))
+    const firstRow = await screen.findByRole('button', { name: /运维助手/ })
+    const secondRow = screen.getByRole('button', { name: /搜索专家/ })
+    const thirdRow = screen.getByRole('button', { name: /写作助手/ })
+
+    await user.click(firstRow)
+    fireEvent.click(thirdRow, { shiftKey: true })
+    fireEvent.contextMenu(secondRow)
+    await user.click(within(screen.getByRole('menu', { name: '角色操作' })).getByRole('menuitem', { name: '删除' }))
+
+    await waitFor(() => expect(deleteRole).toHaveBeenCalledTimes(3))
+    expect(confirmSpy).toHaveBeenCalledWith('确定要删除选中的 3 个角色吗？')
+    expect(deleteRole.mock.calls.map(([roleId]) => roleId)).toEqual(['role-1', 'role-2', 'role-3'])
+    expect(await screen.findByRole('button', { name: /测试助手/ })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByLabelText('角色名称')).toHaveValue('测试助手')
   })
 
   it('ignores role list selection while a role mutation is pending', async () => {
