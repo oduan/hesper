@@ -3,8 +3,10 @@ packages:
   - "packages/*"
 allowBuilds:
   '@google/genai': false
+  cpu-features: false
   esbuild: true
   protobufjs: false
+  ssh2: false
 minimumReleaseAgeExclude:
   - electron@42.4.0
   - prettier@3.8.4

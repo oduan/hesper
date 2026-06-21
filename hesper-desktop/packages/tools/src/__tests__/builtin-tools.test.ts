@@ -2,16 +2,21 @@ import { describe, expect, it } from 'vitest'
 import { createBuiltinToolDefinitions } from '../builtin-tools'
 
 describe('builtin tools', () => {
-  it('contains the builtin tool set including Worker Agent management tools', () => {
+  it('contains the builtin tool set including Worker Agent management and SSH tools', () => {
     const tools = createBuiltinToolDefinitions()
-    expect(tools).toHaveLength(26)
-    expect(tools.map((tool) => tool.id)).toEqual(
+    expect(tools).toHaveLength(30)
+    const toolIds = tools.map((tool) => tool.id)
+    expect(toolIds).toEqual(
       expect.arrayContaining([
         'agent.spawn-worker-agent',
         'agent.list-worker-agents',
         'agent.get-worker-agent',
         'agent.wait-worker-agent',
-        'agent.cancel-worker-agent'
+        'agent.cancel-worker-agent',
+        'ssh.list-servers',
+        'ssh.run-commands',
+        'ssh.list-executions',
+        'ssh.get-execution-output'
       ])
     )
     expect(tools.every((tool) => typeof tool.icon === 'string' && tool.icon.length > 0)).toBe(true)
@@ -42,6 +47,10 @@ describe('builtin tools', () => {
         'agent.get-worker-agent',
         'agent.wait-worker-agent',
         'agent.cancel-worker-agent',
+        'ssh.list-servers',
+        'ssh.run-commands',
+        'ssh.list-executions',
+        'ssh.get-execution-output',
         'time.current',
         'time.sleep',
         'time.wait-until',
@@ -249,6 +258,20 @@ describe('builtin tools', () => {
           reason: expect.objectContaining({ type: 'string' })
         }
       }
+    })
+
+    const runCommands = tools.find((tool) => tool.id === 'ssh.run-commands')!
+    expect(runCommands).toMatchObject({ name: 'Run SSH Commands', category: 'system', icon: '🔐' })
+    expect(runCommands.inputSchema).toMatchObject({
+      type: 'object',
+      required: ['serverId', 'commands'],
+      properties: expect.objectContaining({
+        serverId: expect.objectContaining({ type: 'string' }),
+        commands: expect.objectContaining({ type: 'array' }),
+        stopOnError: expect.objectContaining({ type: 'boolean' }),
+        timeoutMs: expect.objectContaining({ type: 'number' }),
+        wait: expect.objectContaining({ type: 'boolean' })
+      })
     })
 
     expect(tools.find((tool) => tool.id === 'time.current')).toMatchObject({

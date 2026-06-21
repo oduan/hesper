@@ -12,7 +12,10 @@
   },
   "dependencies": {
     "@hesper/persistence": "workspace:*",
-    "@hesper/shared": "workspace:*"
+    "@hesper/shared": "workspace:*",
+    "ssh2": "1.17.0"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "@types/ssh2": "1.15.5"
+  }
 }
