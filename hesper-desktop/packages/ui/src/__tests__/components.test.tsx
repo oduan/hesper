@@ -219,6 +219,36 @@ describe('ui components', () => {
     expect(onSelectRole).toHaveBeenCalledWith('role-search')
   })
 
+  it('renders skill list rows with descriptions and selection', async () => {
+    const user = userEvent.setup()
+    const onSelectSkill = vi.fn()
+
+    render(
+      <AppShell
+        sessions={[]}
+        activeSection="skills"
+        title="技能"
+        skills={[
+          { id: 'builtin:install-skills', name: '安装技能', description: '安装可复用技能' },
+          { id: 'workspace:writer', name: '写作助手' }
+        ]}
+        activeSkillId="builtin:install-skills"
+        onSelectSkill={onSelectSkill}
+      >
+        <div>Skill detail</div>
+      </AppShell>
+    )
+
+    expect(screen.getByRole('button', { name: '技能' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByLabelText('技能列表')).toHaveClass('hesper-theme-scrollbar')
+    expect(screen.getByRole('button', { name: '安装技能 安装可复用技能' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByText('安装可复用技能')).toBeInTheDocument()
+    expect(screen.getByText('暂无简介')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '写作助手 暂无简介' }))
+    expect(onSelectSkill).toHaveBeenCalledWith('workspace:writer')
+  })
+
   it('renders fallback description for roles without description', async () => {
     const user = userEvent.setup()
     const onSelectRole = vi.fn()

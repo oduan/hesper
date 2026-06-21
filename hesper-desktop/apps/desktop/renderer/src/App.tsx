@@ -4,13 +4,14 @@ import { AppShell, ConversationView, type AppSection, type ConversationShortcutC
 import { AppStoreProvider, useAppStore } from './app-store'
 import { hesperApi } from './ipc-client'
 import { defaultFallbackModelId, fallbackSessionModelCatalog, loadAvailableModelCatalog, mergeModelOptions, type SessionModelCatalog } from './model-options'
-import type { AppSettings, CreateSshKeyInput, CreateSshServerInput, ManagedRoleDto, SshKeyDto, SshServerDto, ToolCredentialStatus, ToolDto, UpdateSettingsInput, UpdateSshServerInput } from '../../electron/ipc-contract'
+import type { AppSettings, CreateSshKeyInput, CreateSshServerInput, ManagedRoleDto, SkillDto, SshKeyDto, SshServerDto, ToolCredentialStatus, ToolDto, UpdateSettingsInput, UpdateSshServerInput } from '../../electron/ipc-contract'
 import { AppearanceSettingsPanel } from './appearance-settings-panel'
 import { ProviderSettingsPanel } from './provider-settings-panel'
 import { createShortcutHandler } from './shortcuts'
 import { SshSettingsPanel } from './ssh-settings-panel'
 import { ToolDetailsPanel } from './tool-details-panel'
 import { RolesPanel } from './roles-panel'
+import { SkillsPanel } from './skills-panel'
 
 export function App() {
   return (
@@ -156,6 +157,10 @@ function AppContent() {
   const [activeRoleId, setActiveRoleId] = useState<string>()
   const [rolesPending, setRolesPending] = useState(false)
   const [rolesLoading, setRolesLoading] = useState(true)
+  const [skills, setSkills] = useState<SkillDto[]>([])
+  const [skillsError, setSkillsError] = useState<string>()
+  const [activeSkillId, setActiveSkillId] = useState<string>()
+  const [skillsLoading, setSkillsLoading] = useState(false)
   const resolvedThemeMode = useResolvedThemeMode(appSettings.themeMode)
   const loadedHistorySessionIdsRef = useRef<Set<string>>(new Set())
   const loadingHistorySessionIdsRef = useRef<Set<string>>(new Set())
@@ -177,6 +182,7 @@ function AppContent() {
     : undefined
   const activeTool = tools.find((tool) => tool.id === activeToolId) ?? tools[0]
   const activeRole = roles.find((role) => role.id === activeRoleId) ?? roles[0]
+  const activeSkill = skills.find((skill) => skill.id === activeSkillId) ?? skills[0]
   const activeToolCredentialStatus = activeTool ? toolCredentialStatuses[activeTool.id] : undefined
   const pendingToolIdList = useMemo(() => [...pendingToolIds], [pendingToolIds])
 
@@ -209,6 +215,22 @@ function AppContent() {
         setRolesError(error instanceof Error ? error.message : '未知角色加载错误')
       }
       return { requestId, error, applied }
+    }
+  }
+
+  const loadSkills = async (options: { isCancelled?: () => boolean } = {}) => {
+    try {
+      const refreshedSkills = await hesperApi.skills.refresh()
+      if (!options.isCancelled?.()) {
+        setSkills(refreshedSkills)
+        setSkillsError(undefined)
+      }
+      return refreshedSkills
+    } catch (error) {
+      if (!options.isCancelled?.()) {
+        setSkillsError(error instanceof Error ? error.message : '未知技能加载错误')
+      }
+      return undefined
     }
   }
 
@@ -396,6 +418,37 @@ function AppContent() {
       setActiveRoleId(roles[0]!.id)
     }
   }, [activeRoleId, roles])
+
+  useEffect(() => {
+    if (state.activeSection !== 'skills') return undefined
+
+    let cancelled = false
+    const refresh = async (showLoading: boolean) => {
+      if (showLoading) setSkillsLoading(true)
+      await loadSkills({ isCancelled: () => cancelled })
+      if (!cancelled && showLoading) setSkillsLoading(false)
+    }
+
+    void refresh(skills.length === 0)
+    const interval = window.setInterval(() => {
+      void refresh(false)
+    }, 5_000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+    }
+  }, [state.activeSection])
+
+  useEffect(() => {
+    if (skills.length === 0) {
+      setActiveSkillId(undefined)
+      return
+    }
+    if (!activeSkillId || !skills.some((skill) => skill.id === activeSkillId)) {
+      setActiveSkillId(skills[0]!.id)
+    }
+  }, [activeSkillId, skills])
 
   useEffect(() => {
     const tool = activeTool
@@ -1164,9 +1217,15 @@ function AppContent() {
       tools={tools}
       pendingToolIds={pendingToolIdList}
       roles={roles.map((role) => ({ id: role.id, name: role.name, description: role.description }))}
+      skills={skills.map((skill) => ({
+        id: skill.id,
+        name: skill.name,
+        ...(skill.description !== undefined ? { description: skill.description } : {})
+      }))}
       roleSelectionDisabled={rolesLoading || rolesPending}
       {...(activeTool ? { activeToolId: activeTool.id } : {})}
       {...(activeRoleId ? { activeRoleId } : {})}
+      {...(activeSkillId ? { activeSkillId } : {})}
       {...(state.activeSessionId ? { activeSessionId: state.activeSessionId } : {})}
       onCreateSession={async () => {
         dispatch({ type: 'section.selected', section: 'sessions' })
@@ -1182,6 +1241,10 @@ function AppContent() {
         if (rolesLoading || rolesPending) return
         setRolesError(undefined)
         setActiveRoleId(roleId)
+      }}
+      onSelectSkill={(skillId) => {
+        setSkillsError(undefined)
+        setActiveSkillId(skillId)
       }}
       onSelectSession={(sessionId) => {
         void selectSession(sessionId)
@@ -1221,6 +1284,13 @@ function AppContent() {
           ) : (
             <ProviderSettingsPanel onModelRegistryChanged={refreshSessionModelOptions} />
           )
+        ) : state.activeSection === 'skills' ? (
+          <SkillsPanel
+            skills={skills}
+            {...(activeSkill ? { selectedSkill: activeSkill } : {})}
+            loading={skillsLoading}
+            {...(skillsError ? { error: skillsError } : {})}
+          />
         ) : state.activeSection === 'roles' ? (
           <RolesPanel
             roles={roles}
@@ -1339,7 +1409,7 @@ function AppContent() {
 
 const sectionTitles: Record<AppSection, string> = {
   sessions: '所有会话',
-  skills: 'Skills 即将支持',
+  skills: '技能',
   roles: '角色',
   tools: '工具',
   settings: '设置'

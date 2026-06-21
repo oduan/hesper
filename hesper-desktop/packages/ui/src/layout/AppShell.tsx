@@ -2,11 +2,11 @@ import type { ReactNode } from 'react'
 import type { Session, ToolDefinition } from '@hesper/shared'
 import { createThemeVariables, darkTheme, type ThemeMode } from '../theme'
 import { ActivityRail, type AppSection } from './ActivityRail'
-import { EntityListPane, type RoleListItem, type SettingsCategory } from './EntityListPane'
+import { EntityListPane, type RoleListItem, type SettingsCategory, type SkillListItem } from './EntityListPane'
 import { TitleBar, type DesktopPlatform, type WindowControlAction } from './TitleBar'
 
 export type ToolListItem = ToolDefinition & { enabled: boolean }
-export type { RoleListItem } from './EntityListPane'
+export type { RoleListItem, SkillListItem } from './EntityListPane'
 
 export type AppShellProps = {
   sessions: Session[]
@@ -20,6 +20,8 @@ export type AppShellProps = {
   pendingToolIds?: string[]
   roles?: RoleListItem[]
   activeRoleId?: string
+  skills?: SkillListItem[]
+  activeSkillId?: string
   roleSelectionDisabled?: boolean
   activeSettingsCategory?: SettingsCategory
   appearance?: { themeMode: ThemeMode; fontSize: number }
@@ -29,6 +31,7 @@ export type AppShellProps = {
   onSelectTool?: (toolId: string) => void
   onToggleToolEnabled?: (toolId: string, enabled: boolean) => void
   onSelectRole?: (roleId: string) => void
+  onSelectSkill?: (skillId: string) => void
   onSelectSettingsCategory?: (category: SettingsCategory) => void
   onRenameSession?: (sessionId: string, title: string) => void
   onRegenerateSessionTitle?: (sessionId: string, sessionIds?: string[]) => void
@@ -52,6 +55,8 @@ export function AppShell({
   pendingToolIds,
   roles,
   activeRoleId,
+  skills,
+  activeSkillId,
   roleSelectionDisabled,
   activeSettingsCategory,
   appearance,
@@ -61,6 +66,7 @@ export function AppShell({
   onSelectTool,
   onToggleToolEnabled,
   onSelectRole,
+  onSelectSkill,
   onSelectSettingsCategory,
   onRenameSession,
   onRegenerateSessionTitle,
@@ -121,12 +127,15 @@ export function AppShell({
           {...(pendingToolIds ? { pendingToolIds } : {})}
           {...(roles ? { roles } : {})}
           {...(activeRoleId ? { activeRoleId } : {})}
+          {...(skills ? { skills } : {})}
+          {...(activeSkillId ? { activeSkillId } : {})}
           {...(roleSelectionDisabled ? { roleSelectionDisabled } : {})}
           {...(activeSettingsCategory ? { activeSettingsCategory } : {})}
           {...(onSelectSession ? { onSelectSession } : {})}
           {...(onSelectTool ? { onSelectTool } : {})}
           {...(onToggleToolEnabled ? { onToggleToolEnabled } : {})}
           {...(onSelectRole ? { onSelectRole } : {})}
+          {...(onSelectSkill ? { onSelectSkill } : {})}
           {...(onSelectSettingsCategory ? { onSelectSettingsCategory } : {})}
           {...(onRenameSession ? { onRenameSession } : {})}
           {...(onRegenerateSessionTitle ? { onRegenerateSessionTitle } : {})}
