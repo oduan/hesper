@@ -151,6 +151,33 @@ describe('createCodexOAuthGateway', () => {
     }
   })
 
+  it('cleans up the flow when device-code fallback cannot start', async () => {
+    const occupiedPort = callbackPort + 21
+    const blocker = createServer((_request, response) => {
+      response.writeHead(200, { 'content-type': 'text/plain' })
+      response.end('occupied')
+    })
+    await listenOnLocalhost(blocker, occupiedPort)
+
+    const tokenFetch = vi.fn(async () => new Response('device auth unavailable', { status: 500 }))
+    const gateway = createCodexOAuthGateway({ fetch: tokenFetch as unknown as typeof fetch, callbackPort: occupiedPort })
+
+    try {
+      await expect(gateway.startAuthorization({ provider: 'openai-codex', connectionName: 'ChatGPT Codex' }))
+        .rejects.toThrow('device auth unavailable')
+
+      await closeServer(blocker)
+      const restarted = await gateway.startAuthorization({ provider: 'openai-codex', connectionName: 'ChatGPT Codex' })
+      await expect(gateway.getAuthorizationStatus({ sessionId: restarted.sessionId })).resolves.toEqual({
+        status: 'pending',
+        message: '等待浏览器授权'
+      })
+      await gateway.cancelAuthorization({ sessionId: restarted.sessionId })
+    } finally {
+      await closeServer(blocker)
+    }
+  })
+
   it('ignores wrong-state callbacks and keeps the matching authorization flow usable', async () => {
     const port = callbackPort + 1
     const tokenFetch = vi.fn(async () => new Response(JSON.stringify({ access_token: 'codex-oauth-access-token' }), { status: 200 }))
