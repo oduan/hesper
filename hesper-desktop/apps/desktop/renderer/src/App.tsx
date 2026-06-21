@@ -8,6 +8,7 @@ import type { AppSettings, CreateSshKeyInput, CreateSshServerInput, ManagedRoleD
 import { AppearanceSettingsPanel } from './appearance-settings-panel'
 import { ProviderSettingsPanel } from './provider-settings-panel'
 import { createShortcutHandler } from './shortcuts'
+import { SoulSettingsPanel } from './soul-settings-panel'
 import { SshSettingsPanel } from './ssh-settings-panel'
 import { ToolDetailsPanel } from './tool-details-panel'
 import { RolesPanel } from './roles-panel'
@@ -29,7 +30,7 @@ type SessionSettingsField = keyof SessionSettingsOverride
 
 type RequestTokensBySession = Record<string, Partial<Record<SessionSettingsField, number>>>
 
-type SettingsCategory = 'ai' | 'appearance' | 'ssh'
+type SettingsCategory = 'ai' | 'appearance' | 'ssh' | 'soul'
 
 const defaultAppSettings: AppSettings = {
   defaultModelId: 'mock/hesper-fast',
@@ -1219,6 +1220,8 @@ function AppContent() {
               onUpdateServer={updateSshServer}
               onDeleteServer={deleteSshServer}
             />
+          ) : activeSettingsCategory === 'soul' ? (
+            <SoulSettingsPanel settings={appSettings} {...(settingsError ? { error: settingsError } : {})} onUpdate={updateAppSettings} />
           ) : (
             <ProviderSettingsPanel onModelRegistryChanged={refreshSessionModelOptions} />
           )

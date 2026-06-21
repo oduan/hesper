@@ -1185,6 +1185,34 @@ describe('renderer App', () => {
     expect(screen.getByLabelText('主工作区').parentElement?.style.getPropertyValue('--hesper-font-size')).toBe('16px')
   })
 
+  it('opens soul settings and persists the soul text', async () => {
+    const user = userEvent.setup()
+    let storedSettings: { defaultModelId: string; defaultOutputMode: 'markdown' | 'html'; themeMode: 'system' | 'light' | 'dark'; fontSize: number; soul: string } = {
+      defaultModelId: 'mock/hesper-fast',
+      defaultOutputMode: 'markdown',
+      themeMode: 'dark',
+      fontSize: 14,
+      soul: ''
+    }
+    getSettings.mockImplementation(async () => storedSettings)
+    updateSettings.mockImplementation(async (input) => {
+      storedSettings = { ...storedSettings, ...input }
+      return storedSettings
+    })
+
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: '设置' }))
+    await user.click(screen.getByRole('button', { name: 'SOUL 设置' }))
+
+    expect(screen.getByRole('region', { name: 'SOUL 设置面板' })).toBeInTheDocument()
+    expect(screen.getByText('设置主 Agent 的身份、口吻和行为偏好。')).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('身份设定'), '你是耐心的代码助手。')
+
+    await waitFor(() => expect(updateSettings).toHaveBeenLastCalledWith({ soul: '你是耐心的代码助手。' }))
+  })
+
   it('loads the active session conversation history after sessions load and renders persisted messages', async () => {
     listSessions.mockResolvedValueOnce([
       {
