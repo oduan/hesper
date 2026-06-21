@@ -245,7 +245,7 @@ function SshServerDialog({ keys, server, pending, onCancel, onSave }: {
         </label>
         <label style={fieldStyle}>
           主机备注
-          <input aria-label="主机备注" value={note} disabled={pending} onChange={(event) => setNote(event.target.value)} placeholder="例如 logs / staging" style={inputStyle} />
+          <textarea aria-label="主机备注" value={note} disabled={pending} onChange={(event) => setNote(event.target.value)} placeholder="例如 logs / staging" style={{ ...textareaStyle, minHeight: 84 }} />
         </label>
         <footer style={dialogFooterStyle}>
           <button type="button" onClick={onCancel} style={secondaryActionStyle(false)}>取消</button>

@@ -949,6 +949,7 @@ describe('renderer App', () => {
     await user.type(screen.getByLabelText('SSH 端口'), '22')
     await user.type(screen.getByLabelText('SSH 用户名'), 'deploy')
     await user.selectOptions(screen.getByLabelText('SSH 密钥'), 'ssh-key-1')
+    expect(screen.getByLabelText('主机备注').tagName).toBe('TEXTAREA')
     await user.type(screen.getByLabelText('主机备注'), 'logs')
     await user.click(screen.getByRole('button', { name: '保存 SSH 主机' }))
 
@@ -967,6 +968,7 @@ describe('renderer App', () => {
     expect(screen.getByLabelText('SSH 端口')).toHaveValue(22)
     expect(screen.getByLabelText('SSH 用户名')).toHaveValue('deploy')
     expect(screen.getByLabelText('SSH 密钥')).toHaveValue('ssh-key-1')
+    expect(screen.getByLabelText('主机备注').tagName).toBe('TEXTAREA')
     expect(screen.getByLabelText('主机备注')).toHaveValue('logs')
 
     await user.clear(screen.getByLabelText('SSH 主机名称'))
