@@ -7,6 +7,7 @@ import {
   roleSchema,
   runStepSchema,
   sessionSchema,
+  skillSchema,
   sshCommandResultSchema,
   sshExecutionSchema,
   sshKeySchema,
@@ -236,6 +237,19 @@ describe('shared schemas', () => {
     })
 
     expect(parsed.capabilities).toEqual(['streaming', 'toolCalls'])
+  })
+
+  it('validates user skill source metadata', () => {
+    const parsed = skillSchema.parse({
+      id: 'user:research',
+      name: 'Research',
+      description: 'Find references',
+      source: 'user',
+      sourcePath: '~/.hesper/skills/research/SKILL.md',
+      prompt: 'Use citations.'
+    })
+
+    expect(parsed.source).toBe('user')
   })
 
   it('validates role prompt and Worker Agent assignment metadata', () => {

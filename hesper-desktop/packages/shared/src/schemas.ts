@@ -167,7 +167,7 @@ const skillBaseSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   description: z.string().optional(),
-  source: z.enum(['builtin', 'workspace', 'project']),
+  source: z.enum(['builtin', 'workspace', 'project', 'user']),
   path: z.string().optional(),
   sourcePath: z.string().optional(),
   prompt: z.string().optional(),
