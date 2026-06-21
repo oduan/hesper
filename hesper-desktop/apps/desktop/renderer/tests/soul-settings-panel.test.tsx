@@ -117,4 +117,36 @@ describe('SoulSettingsPanel', () => {
     })
     expect(onUpdate).not.toHaveBeenCalled()
   })
+
+  it('preserves dirty drafts when settings.soul rolls back during an in-flight save', () => {
+    const onUpdate = vi.fn()
+
+    const { rerender } = render(<SoulSettingsPanel settings={{ soul: '旧身份' }} onUpdate={onUpdate} />)
+
+    const textarea = screen.getByLabelText('身份设定')
+    expect(textarea).toHaveValue('旧身份')
+
+    fireEvent.change(textarea, { target: { value: '第一次编辑' } })
+
+    act(() => {
+      vi.advanceTimersByTime(300)
+    })
+    expect(onUpdate).toHaveBeenCalledTimes(1)
+    expect(onUpdate).toHaveBeenLastCalledWith({ soul: '第一次编辑' })
+
+    rerender(<SoulSettingsPanel settings={{ soul: '第一次编辑' }} onUpdate={onUpdate} />)
+    expect(textarea).toHaveValue('第一次编辑')
+
+    fireEvent.change(textarea, { target: { value: '第二次编辑' } })
+
+    rerender(<SoulSettingsPanel settings={{ soul: '旧身份' }} onUpdate={onUpdate} />)
+
+    expect(textarea).toHaveValue('第二次编辑')
+
+    act(() => {
+      vi.advanceTimersByTime(300)
+    })
+    expect(onUpdate).toHaveBeenCalledTimes(2)
+    expect(onUpdate).toHaveBeenLastCalledWith({ soul: '第二次编辑' })
+  })
 })

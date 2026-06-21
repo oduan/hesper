@@ -13,7 +13,8 @@ export type SoulSettingsPanelProps = {
 export function SoulSettingsPanel({ settings, error, onUpdate }: SoulSettingsPanelProps) {
   const [draft, setDraft] = useState(settings.soul)
   const draftRef = useRef(settings.soul)
-  const settingsSoulRef = useRef(settings.soul)
+  const savedSoulRef = useRef(settings.soul)
+  const lastSeenSettingsSoulRef = useRef(settings.soul)
   const lastSubmittedSoulRef = useRef(settings.soul)
   const saveTimeoutRef = useRef<number | null>(null)
   const onUpdateRef = useRef(onUpdate)
@@ -29,7 +30,7 @@ export function SoulSettingsPanel({ settings, error, onUpdate }: SoulSettingsPan
     clearPendingSave()
 
     const nextSoul = draftRef.current
-    if (nextSoul === settingsSoulRef.current || nextSoul === lastSubmittedSoulRef.current) {
+    if (nextSoul === savedSoulRef.current || nextSoul === lastSubmittedSoulRef.current) {
       return
     }
 
@@ -46,23 +47,28 @@ export function SoulSettingsPanel({ settings, error, onUpdate }: SoulSettingsPan
   }, [draft])
 
   useEffect(() => {
-    settingsSoulRef.current = settings.soul
+    if (settings.soul === lastSeenSettingsSoulRef.current) {
+      return
+    }
+
+    const previousSaved = savedSoulRef.current
+    savedSoulRef.current = settings.soul
+    lastSeenSettingsSoulRef.current = settings.soul
     lastSubmittedSoulRef.current = settings.soul
-    draftRef.current = settings.soul
-    setDraft(settings.soul)
+    setDraft((current) => (current === previousSaved ? settings.soul : current))
   }, [settings.soul])
 
   useEffect(() => {
     clearPendingSave()
 
-    if (draft === settings.soul) {
+    if (draft === savedSoulRef.current) {
       return clearPendingSave
     }
 
     saveTimeoutRef.current = window.setTimeout(flushDraft, SOUL_SAVE_DEBOUNCE_MS)
 
     return clearPendingSave
-  }, [clearPendingSave, draft, flushDraft, settings.soul])
+  }, [clearPendingSave, draft, flushDraft])
 
   useEffect(() => clearPendingSave, [clearPendingSave])
 
