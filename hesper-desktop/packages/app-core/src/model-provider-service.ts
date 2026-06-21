@@ -6,7 +6,7 @@ export type PiAuthProvider = 'openai-codex'
 export type ProviderOAuthStatus = 'pending' | 'authorized' | 'failed'
 
 export type ProviderOAuthGateway = {
-  startAuthorization(input: { provider: PiAuthProvider; connectionName: string }): Promise<{ sessionId: string; authorizationUrl: string }>
+  startAuthorization(input: { provider: PiAuthProvider; connectionName: string }): Promise<{ sessionId: string; authorizationUrl: string; message?: string }>
   getAuthorizationStatus(input: { sessionId: string }): Promise<{ status: ProviderOAuthStatus; message: string }>
   cancelAuthorization(input: { sessionId: string }): Promise<void>
   consumeAuthorization(input: { sessionId: string }): Promise<{
@@ -546,7 +546,7 @@ export function createModelProviderService(options: {
         sessionId: started.sessionId,
         authorizationUrl: started.authorizationUrl,
         status: 'pending',
-        message: '等待浏览器授权'
+        message: started.message ?? '等待浏览器授权'
       }
     },
     async getOAuthAuthorizationStatus(input) {

@@ -100,7 +100,7 @@ describe('createCodexOAuthGateway', () => {
     expect(JSON.stringify(consumed)).not.toContain('do-not-return-id-token')
   })
 
-  it('rejects when the fixed Codex callback port is occupied instead of generating an unregistered redirect URI', async () => {
+  it('falls back to device-code authorization when the fixed Codex callback port is occupied', async () => {
     const occupiedPort = callbackPort + 20
     const blocker = createServer((_request, response) => {
       response.writeHead(200, { 'content-type': 'text/plain' })
@@ -108,13 +108,44 @@ describe('createCodexOAuthGateway', () => {
     })
     await listenOnLocalhost(blocker, occupiedPort)
 
-    const tokenFetch = vi.fn(async () => new Response(JSON.stringify({ access_token: 'codex-oauth-access-token' }), { status: 200 }))
+    const tokenFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === 'https://auth.openai.com/api/accounts/deviceauth/usercode') {
+        expect(init?.method).toBe('POST')
+        expect(init?.headers).toEqual({ 'Content-Type': 'application/json' })
+        expect(JSON.parse(String(init?.body))).toEqual({ client_id: 'app_EMoamEEZ73f0CkXaXp7hrann' })
+        return new Response(JSON.stringify({ device_auth_id: 'device-auth-1', user_code: 'ABCD-EFGH', interval: 0 }), { status: 200 })
+      }
+      if (url === 'https://auth.openai.com/api/accounts/deviceauth/token') {
+        expect(init?.method).toBe('POST')
+        expect(init?.headers).toEqual({ 'Content-Type': 'application/json' })
+        expect(JSON.parse(String(init?.body))).toEqual({ device_auth_id: 'device-auth-1', user_code: 'ABCD-EFGH' })
+        return new Response(JSON.stringify({ authorization_code: 'device-authorization-code', code_verifier: 'device-code-verifier' }), { status: 200 })
+      }
+      if (url === 'https://auth.openai.com/oauth/token') {
+        const body = init?.body as URLSearchParams
+        expect(body.get('grant_type')).toBe('authorization_code')
+        expect(body.get('code')).toBe('device-authorization-code')
+        expect(body.get('code_verifier')).toBe('device-code-verifier')
+        expect(body.get('redirect_uri')).toBe('https://auth.openai.com/deviceauth/callback')
+        return new Response(JSON.stringify({ access_token: 'codex-oauth-access-token', refresh_token: 'codex-oauth-refresh-token', expires_in: 3600 }), { status: 200 })
+      }
+      throw new Error(`Unexpected fetch: ${url}`)
+    })
     const gateway = createCodexOAuthGateway({ fetch: tokenFetch as unknown as typeof fetch, callbackPort: occupiedPort })
 
     try {
-      await expect(gateway.startAuthorization({ provider: 'openai-codex', connectionName: 'ChatGPT Codex' }))
-        .rejects.toThrow(`Codex 授权回调端口 ${occupiedPort} 已被占用`)
-      expect(tokenFetch).not.toHaveBeenCalled()
+      const started = await gateway.startAuthorization({ provider: 'openai-codex', connectionName: 'ChatGPT Codex' })
+      expect(started.authorizationUrl).toBe('https://auth.openai.com/codex/device')
+      expect(started.message).toContain('ABCD-EFGH')
+      await expect(gateway.getAuthorizationStatus({ sessionId: started.sessionId })).resolves.toEqual({
+        status: 'authorized',
+        message: '授权成功'
+      })
+      await expect(gateway.consumeAuthorization({ sessionId: started.sessionId })).resolves.toMatchObject({
+        accessToken: 'codex-oauth-access-token',
+        refreshToken: 'codex-oauth-refresh-token'
+      })
     } finally {
       await closeServer(blocker)
     }

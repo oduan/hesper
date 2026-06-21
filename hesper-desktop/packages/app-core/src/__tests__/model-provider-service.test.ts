@@ -324,6 +324,34 @@ describe('createModelProviderService', () => {
     expect(Buffer.from(exportDatabaseBytes(persistence)).toString('latin1')).not.toContain('codex-oauth-refresh-token')
   })
 
+  it('passes Codex OAuth gateway start messages through to the UI', async () => {
+    const persistence = await createInMemoryPersistence()
+    const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
+    const oauthGateway = {
+      startAuthorization: vi.fn(async () => ({
+        sessionId: 'oauth-session-device',
+        authorizationUrl: 'https://auth.openai.com/codex/device',
+        message: '请在打开的 OpenAI 页面输入代码：ABCD-EFGH'
+      })),
+      getAuthorizationStatus: vi.fn(async () => ({ status: 'pending' as const, message: '请在打开的 OpenAI 页面输入代码：ABCD-EFGH' })),
+      consumeAuthorization: vi.fn(async () => ({
+        accessToken: 'codex-oauth-access-token',
+        models: [],
+        defaultModelId: 'pi/gpt-5.5'
+      })),
+      cancelAuthorization: vi.fn(async () => {})
+    }
+    const service = createModelProviderService({ persistence, credentialVaultService, now: () => now, oauthGateway })
+
+    await expect(service.startOAuthAuthorization({ provider: 'openai-codex', connectionName: 'ChatGPT Codex' })).resolves.toMatchObject({
+      provider: 'openai-codex',
+      sessionId: 'oauth-session-device',
+      authorizationUrl: 'https://auth.openai.com/codex/device',
+      status: 'pending',
+      message: '请在打开的 OpenAI 页面输入代码：ABCD-EFGH'
+    })
+  })
+
   it('cancels Codex OAuth authorization sessions through the gateway', async () => {
     const persistence = await createInMemoryPersistence()
     const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })

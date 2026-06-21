@@ -10,6 +10,10 @@ const timeoutMessage = '授权超时，请重新开始 Codex 授权'
 const callbackPath = '/auth/callback'
 const authorizationEndpoint = 'https://auth.openai.com/oauth/authorize'
 const tokenEndpoint = 'https://auth.openai.com/oauth/token'
+const deviceUserCodeEndpoint = 'https://auth.openai.com/api/accounts/deviceauth/usercode'
+const deviceTokenEndpoint = 'https://auth.openai.com/api/accounts/deviceauth/token'
+const deviceVerificationEndpoint = 'https://auth.openai.com/codex/device'
+const deviceRedirectUri = 'https://auth.openai.com/deviceauth/callback'
 const defaultModels: Awaited<ReturnType<ProviderOAuthGateway['consumeAuthorization']>>['models'] = [
   { id: 'pi/gpt-5.5', modelName: 'gpt-5.5', displayName: 'GPT-5.5', capabilities: ['streaming', 'toolCalls', 'reasoning'], contextWindow: 272000 },
   { id: 'pi/gpt-5.4-mini', modelName: 'gpt-5.4-mini', displayName: 'GPT-5.4 Mini', capabilities: ['streaming', 'toolCalls', 'reasoning'], contextWindow: 272000 }
@@ -24,10 +28,15 @@ type CodexOAuthFlow = {
   redirectUri: string
   status: ProviderOAuthStatus
   message: string
+  mode: 'browser' | 'device'
   code?: string
   server?: Server | undefined
   timeout?: ReturnType<typeof setTimeout> | undefined
   cleanupTimeout?: ReturnType<typeof setTimeout> | undefined
+  deviceAuthId?: string | undefined
+  userCode?: string | undefined
+  devicePollIntervalMs?: number | undefined
+  nextDevicePollAt?: number | undefined
 }
 
 export type CodexOAuthGatewayOptions = {
@@ -125,6 +134,10 @@ function callbackPortInUseError(port: number): Error {
   return new Error(`Codex 授权回调端口 ${port} 已被占用。请关闭其他 Codex 授权会话或释放该端口后重试。`)
 }
 
+function deviceAuthorizationMessage(userCode: string): string {
+  return `本机 Codex 回调端口被占用，已切换到设备码授权。请在打开的 OpenAI 页面输入代码：${userCode}`
+}
+
 function redirectUriForPort(port: number): string {
   return `http://localhost:${port}${callbackPath}`
 }
@@ -139,19 +152,126 @@ async function readJson(response: Response): Promise<unknown> {
   }
 }
 
+async function readText(response: Response): Promise<string> {
+  return response.text().catch(() => '')
+}
+
+function payloadRecord(payload: unknown): Record<string, unknown> | undefined {
+  return typeof payload === 'object' && payload !== null ? payload as Record<string, unknown> : undefined
+}
+
+function stringField(payload: Record<string, unknown> | undefined, key: string): string | undefined {
+  const value = payload?.[key]
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+function numberField(payload: Record<string, unknown> | undefined, key: string): number | undefined {
+  const value = payload?.[key]
+  const normalized = typeof value === 'number' ? value : typeof value === 'string' && value.trim() ? Number(value) : undefined
+  return normalized !== undefined && Number.isFinite(normalized) ? normalized : undefined
+}
+
 function tokenDetailsFromPayload(payload: unknown): { accessToken?: string; refreshToken?: string; expiresAt?: number } {
-  if (typeof payload !== 'object' || payload === null) return {}
-  const accessToken = (payload as { access_token?: unknown }).access_token
-  const refreshToken = (payload as { refresh_token?: unknown }).refresh_token
-  const expiresIn = (payload as { expires_in?: unknown }).expires_in
-  const normalizedAccessToken = typeof accessToken === 'string' && accessToken.trim() ? accessToken.trim() : undefined
-  const normalizedRefreshToken = typeof refreshToken === 'string' && refreshToken.trim() ? refreshToken.trim() : undefined
-  const normalizedExpiresIn = typeof expiresIn === 'number' ? expiresIn : typeof expiresIn === 'string' && expiresIn.trim() ? Number(expiresIn) : undefined
+  const record = payloadRecord(payload)
+  const accessToken = stringField(record, 'access_token')
+  const refreshToken = stringField(record, 'refresh_token')
+  const expiresIn = numberField(record, 'expires_in')
   return {
-    ...(normalizedAccessToken ? { accessToken: normalizedAccessToken } : {}),
-    ...(normalizedRefreshToken ? { refreshToken: normalizedRefreshToken } : {}),
-    ...(normalizedExpiresIn !== undefined && Number.isFinite(normalizedExpiresIn) && normalizedExpiresIn > 0 ? { expiresAt: Date.now() + Math.floor(normalizedExpiresIn * 1000) } : {})
+    ...(accessToken ? { accessToken } : {}),
+    ...(refreshToken ? { refreshToken } : {}),
+    ...(expiresIn !== undefined && expiresIn > 0 ? { expiresAt: Date.now() + Math.floor(expiresIn * 1000) } : {})
   }
+}
+
+type DeviceAuthorization = {
+  deviceAuthId: string
+  userCode: string
+  pollIntervalMs: number
+}
+
+async function startDeviceAuthorization(fetchImpl: typeof fetch | undefined): Promise<DeviceAuthorization> {
+  if (!fetchImpl) throw callbackPortInUseError(defaultCallbackPort)
+  const response = await fetchImpl(deviceUserCodeEndpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ client_id: codexOAuthClientId })
+  })
+  const payload = await readJson(response)
+  if (!response.ok) {
+    throw new Error(`Codex 设备码授权启动失败（HTTP ${response.status}）：${await readText(response) || response.statusText}`)
+  }
+  const record = payloadRecord(payload)
+  const deviceAuthId = stringField(record, 'device_auth_id')
+  const userCode = stringField(record, 'user_code')
+  const intervalSeconds = numberField(record, 'interval') ?? 5
+  if (!deviceAuthId || !userCode || intervalSeconds < 0) {
+    throw new Error(`Codex 设备码授权返回无效响应：${JSON.stringify(payload)}`)
+  }
+  return { deviceAuthId, userCode, pollIntervalMs: Math.floor(intervalSeconds * 1000) }
+}
+
+async function pollDeviceAuthorization(fetchImpl: typeof fetch | undefined, flow: CodexOAuthFlow): Promise<void> {
+  if (!fetchImpl) throw new Error('Codex 设备码授权需要 fetch')
+  if (!flow.deviceAuthId || !flow.userCode) {
+    markDeviceFlowFailed(flow, 'Codex 设备码授权会话缺少设备码')
+    return
+  }
+  const nowMs = Date.now()
+  if (flow.nextDevicePollAt !== undefined && flow.nextDevicePollAt > nowMs) return
+
+  const response = await fetchImpl(deviceTokenEndpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ device_auth_id: flow.deviceAuthId, user_code: flow.userCode })
+  })
+  const responseText = await response.text().catch(() => '')
+  let payload: unknown
+  try {
+    payload = responseText.trim() ? JSON.parse(responseText) as unknown : undefined
+  } catch {
+    payload = undefined
+  }
+  const record = payloadRecord(payload)
+
+  if (response.ok) {
+    const authorizationCode = stringField(record, 'authorization_code')
+    const codeVerifier = stringField(record, 'code_verifier')
+    if (!authorizationCode || !codeVerifier) {
+      markDeviceFlowFailed(flow, `Codex 设备码授权返回无效响应：${responseText || response.statusText}`)
+      return
+    }
+    flow.status = 'authorized'
+    flow.message = '授权成功'
+    flow.code = authorizationCode
+    flow.codeVerifier = codeVerifier
+    flow.redirectUri = deviceRedirectUri
+    clearFlowTimeout(flow)
+    clearFlowCleanupTimeout(flow)
+    return
+  }
+
+  const error = record?.error
+  const errorCode = typeof error === 'object' && error !== null
+    ? stringField(error as Record<string, unknown>, 'code')
+    : typeof error === 'string'
+      ? error
+      : stringField(record, 'error')
+  if (response.status === 403 || response.status === 404 || errorCode === 'deviceauth_authorization_pending') {
+    flow.nextDevicePollAt = nowMs + (flow.devicePollIntervalMs ?? 5_000)
+    return
+  }
+  if (errorCode === 'slow_down') {
+    flow.devicePollIntervalMs = (flow.devicePollIntervalMs ?? 5_000) + 5_000
+    flow.nextDevicePollAt = nowMs + flow.devicePollIntervalMs
+    return
+  }
+  markDeviceFlowFailed(flow, `Codex 设备码授权失败（HTTP ${response.status}）：${responseText || response.statusText}`)
+}
+
+function markDeviceFlowFailed(flow: CodexOAuthFlow, message: string): void {
+  flow.status = 'failed'
+  flow.message = message
+  clearFailedFlowSensitiveState(flow)
 }
 
 export function createCodexOAuthGateway(options: CodexOAuthGatewayOptions = {}): ProviderOAuthGateway {
@@ -253,7 +373,8 @@ export function createCodexOAuthGateway(options: CodexOAuthGatewayOptions = {}):
         codeVerifier,
         redirectUri: redirectUriForPort(callbackPort),
         status: 'pending',
-        message: '等待浏览器授权'
+        message: '等待浏览器授权',
+        mode: 'browser'
       }
       const server = createServer((request, response) => handleCallback(flow, request, response))
       flow.server = server
@@ -262,11 +383,22 @@ export function createCodexOAuthGateway(options: CodexOAuthGatewayOptions = {}):
       try {
         await listen(server, callbackPort)
       } catch (error) {
-        flows.delete(sessionId)
         clearFlowTimeout(flow)
         await closeFlowServer(flow)
-        if (isAddressInUse(error)) throw callbackPortInUseError(callbackPort)
-        throw error
+        if (isAddressInUse(error)) {
+          const deviceAuthorization = await startDeviceAuthorization(fetchImpl)
+          flow.mode = 'device'
+          flow.redirectUri = deviceRedirectUri
+          flow.codeVerifier = ''
+          flow.deviceAuthId = deviceAuthorization.deviceAuthId
+          flow.userCode = deviceAuthorization.userCode
+          flow.devicePollIntervalMs = deviceAuthorization.pollIntervalMs
+          flow.nextDevicePollAt = 0
+          flow.message = deviceAuthorizationMessage(deviceAuthorization.userCode)
+        } else {
+          flows.delete(sessionId)
+          throw error
+        }
       }
 
       flow.timeout = setTimeout(() => {
@@ -276,6 +408,10 @@ export function createCodexOAuthGateway(options: CodexOAuthGatewayOptions = {}):
         }
       }, Math.max(0, flowTtlMs))
       flow.timeout.unref?.()
+
+      if (flow.mode === 'device') {
+        return { sessionId, authorizationUrl: deviceVerificationEndpoint, message: flow.message }
+      }
 
       const authorizationUrl = new URL(authorizationEndpoint)
       authorizationUrl.searchParams.set('client_id', codexOAuthClientId)
@@ -293,6 +429,13 @@ export function createCodexOAuthGateway(options: CodexOAuthGatewayOptions = {}):
     async getAuthorizationStatus(input) {
       const flow = flows.get(input.sessionId)
       if (!flow) return { status: 'failed', message: '授权会话不存在' }
+      if (flow.mode === 'device' && flow.status === 'pending') {
+        await pollDeviceAuthorization(fetchImpl, flow)
+        if (flow.status !== 'pending') {
+          clearFlowTimeout(flow)
+          scheduleFlowDeletion(flow)
+        }
+      }
       return { status: flow.status, message: flow.message }
     },
     async cancelAuthorization(input) {
