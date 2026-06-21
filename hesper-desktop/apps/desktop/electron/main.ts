@@ -1,9 +1,7 @@
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from 'electron'
-import { createSkillFileService } from '@hesper/app-core'
 import { createFilePersistence, exportDatabaseBytes } from '@hesper/persistence'
 import { createBeforeQuitHandler } from './before-quit'
 import { createElectronSafeStorageCredentialCodec } from './credential-codec'
@@ -12,6 +10,7 @@ import { createPersistenceSaveQueue } from './persistence-save-queue'
 import { installNavigationGuards, resolveRendererLoadTarget } from './renderer-security'
 import { resolveAgentMode } from './agent-mode'
 import { createServiceContainer, type ServiceContainer } from './service-container'
+import { createElectronSkillService, startSkillService } from './skill-service-lifecycle'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -36,16 +35,6 @@ let container: ServiceContainer | null = null
 let disposeIpcHandlers: (() => void) | undefined
 let persistencePath = ''
 let persistenceFlushTimer: NodeJS.Timeout | undefined
-
-function createElectronSkillService() {
-  const homeDir = os.homedir()
-  return createSkillFileService({
-    paths: {
-      userSkillsDir: path.join(homeDir, '.hesper', 'skills'),
-      builtinSkillsDir: path.join(homeDir, '.hesper', 'default', 'skills')
-    }
-  })
-}
 
 function stopSkillAutoScan(): void {
   (container?.skillService as { stopAutoScan?: () => void } | undefined)?.stopAutoScan?.()
@@ -123,8 +112,7 @@ async function bootstrap(): Promise<void> {
   persistencePath = path.join(app.getPath('userData'), 'hesper.sqlite')
   const persistence = await createFilePersistence(persistencePath)
   const skillService = createElectronSkillService()
-  await skillService.refreshSkills()
-  skillService.startAutoScan()
+  await startSkillService(skillService)
   container = createServiceContainer({ persistence, agentMode: resolveAgentMode(), credentialCodec: createElectronSafeStorageCredentialCodec(safeStorage), skillService })
   disposeIpcHandlers = registerIpcHandlers({ ipcMain, dialog, container, savePersistence, schedulePersistenceSave, openExternal: (url) => shell.openExternal(url) })
   await savePersistence()
