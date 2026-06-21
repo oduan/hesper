@@ -508,12 +508,6 @@ export function RunSteps({ steps, autoExpanded = false, runStartedAt, runEndedAt
                   <StatusDot step={step} />
                   <span data-hesper-step-row-text="true" style={stepTextStyle}>
                     <span style={primarySegmentStyle}>{parts.primary}</span>
-                    {parts.resource ? (
-                      <span>
-                        <span aria-hidden="true" style={mutedSeparatorStyle}> · </span>
-                        <span data-hesper-tool-resource="true" style={resourceSegmentStyle}>{parts.resource}</span>
-                      </span>
-                    ) : null}
                     {parts.secondary.map((part) => (
                       <span key={part}>
                         <span aria-hidden="true" style={mutedSeparatorStyle}> · </span>
@@ -670,12 +664,6 @@ const mutedSeparatorStyle: CSSProperties = {
 
 const mutedSegmentStyle: CSSProperties = {
   color: darkTheme.color.textMuted
-}
-
-const resourceSegmentStyle: CSSProperties = {
-  ...mutedSegmentStyle,
-  textDecorationLine: 'underline',
-  textUnderlineOffset: '3px'
 }
 
 const stepFullscreenOverlayStyle: CSSProperties = {

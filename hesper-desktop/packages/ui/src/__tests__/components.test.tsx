@@ -1241,7 +1241,7 @@ describe('ui components', () => {
     expect(within(item).getByText('{"url":"https://example.com"}')).toHaveStyle({ color: 'var(--hesper-color-text-muted, #737aa2)' })
   })
 
-  it('renders structured tool call rows as action, underlined resource, then purpose', () => {
+  it('renders structured tool call rows as action then purpose without inline resource', () => {
     render(
       <RunSteps
         autoExpanded
@@ -1266,12 +1266,10 @@ describe('ui components', () => {
 
     const item = screen.getByRole('listitem')
     expect(item).toHaveTextContent('读取文件')
-    expect(item).toHaveTextContent('README.md')
     expect(item).toHaveTextContent('读取 README 了解项目结构')
+    expect(item).not.toHaveTextContent('README.md')
     expect(item).not.toHaveTextContent('filesystem_read-file')
-    const resource = within(item).getByText('README.md')
-    expect(resource).toHaveAttribute('data-hesper-tool-resource', 'true')
-    expect(resource).toHaveStyle({ textDecorationLine: 'underline' })
+    expect(item.querySelector('[data-hesper-tool-resource="true"]')).not.toBeInTheDocument()
     expect(within(item).getByText('读取 README 了解项目结构')).toHaveStyle({ color: 'var(--hesper-color-text-muted, #737aa2)' })
   })
 
@@ -1302,8 +1300,8 @@ describe('ui components', () => {
     await user.click(screen.getByRole('button', { expanded: false }))
     const item = screen.getByRole('listitem')
     expect(item).not.toHaveTextContent('"kind"')
-    const resource = within(item).getByText('https://example.com')
-    expect(resource).toHaveAttribute('data-hesper-tool-resource', 'true')
+    expect(item).not.toHaveTextContent('https://example.com')
+    expect(item.querySelector('[data-hesper-tool-resource="true"]')).not.toBeInTheDocument()
     await user.click(within(item).getByRole('button', { name: /查看步骤详情/ }))
 
     const dialog = screen.getByRole('dialog', { name: '步骤全屏查看' })
