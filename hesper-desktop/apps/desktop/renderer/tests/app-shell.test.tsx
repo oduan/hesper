@@ -15,7 +15,7 @@ function createDeferred<T>() {
   return { promise, resolve, reject }
 }
 
-const { listSessions, createSession, updateTitle, deleteSession, generateTitle, markViewed, listRoles, createRole, updateRole, deleteRole, listMessages, listMessagesByRun, listRuns, listSteps, listWorkerInvocationsByParentRun, enqueue, stopRun, onEvent, getSettings, updateSettings, listProviders, listModels, listTools, setToolEnabled, toolCredentialStatus, saveToolApiKey, deleteToolApiKey, sshKeysList, sshKeysCreate, sshKeysDelete, sshServersList, sshServersCreate, sshServersUpdate, sshServersDelete, minimizeWindow, toggleMaximizeWindow, closeWindow } = vi.hoisted(() => ({
+const { listSessions, createSession, updateTitle, deleteSession, generateTitle, markViewed, listRoles, createRole, updateRole, deleteRole, listMessages, listMessagesByRun, listRuns, listSteps, listWorkerInvocationsByParentRun, filesPreview, enqueue, stopRun, onEvent, getSettings, updateSettings, listProviders, listModels, listTools, setToolEnabled, toolCredentialStatus, saveToolApiKey, deleteToolApiKey, sshKeysList, sshKeysCreate, sshKeysDelete, sshServersList, sshServersCreate, sshServersUpdate, sshServersDelete, minimizeWindow, toggleMaximizeWindow, closeWindow } = vi.hoisted(() => ({
   listSessions: vi.fn(async () => []),
   createSession: vi.fn(async () => ({
     id: 'session-1',
@@ -66,6 +66,14 @@ const { listSessions, createSession, updateTitle, deleteSession, generateTitle, 
   listRuns: vi.fn(async (_sessionId?: string): Promise<any[]> => []),
   listSteps: vi.fn(async (_runId?: string) => []),
   listWorkerInvocationsByParentRun: vi.fn(async (_input?: { sessionId: string; parentRunId: string }) => []),
+  filesPreview: vi.fn(async (input: { sessionId: string; path: string }) => ({
+    path: input.path,
+    name: input.path.split('/').pop() ?? input.path,
+    kind: 'markdown' as const,
+    mimeType: 'text/markdown',
+    bytes: 18,
+    content: '# Fallback preview'
+  })),
   enqueue: vi.fn(async () => ({ runId: 'run-1' })),
   stopRun: vi.fn(async (runId: string) => ({
     id: runId,
@@ -201,6 +209,7 @@ vi.mock('../src/ipc-client', () => ({
     },
     conversation: { listMessages, listMessagesByRun, listRuns, listSteps },
     workerAgents: { listByParentRun: listWorkerInvocationsByParentRun },
+    files: { preview: filesPreview },
     agent: { enqueue, stop: stopRun, onEvent },
     dialog: { selectDirectory: vi.fn() },
     settings: { get: getSettings, update: updateSettings },
@@ -249,6 +258,7 @@ describe('renderer App', () => {
     listRuns.mockReset()
     listSteps.mockReset()
     listWorkerInvocationsByParentRun.mockReset()
+    filesPreview.mockReset()
     enqueue.mockReset()
     stopRun.mockReset()
     onEvent.mockReset()
@@ -278,6 +288,14 @@ describe('renderer App', () => {
     listRuns.mockResolvedValue([])
     listSteps.mockResolvedValue([])
     listWorkerInvocationsByParentRun.mockResolvedValue([])
+    filesPreview.mockImplementation(async (input: { sessionId: string; path: string }) => ({
+      path: input.path,
+      name: input.path.split('/').pop() ?? input.path,
+      kind: 'markdown' as const,
+      mimeType: 'text/markdown',
+      bytes: 18,
+      content: '# Fallback preview'
+    }))
     listProviders.mockResolvedValue([])
     listModels.mockResolvedValue([])
     listTools.mockResolvedValue([
@@ -1229,6 +1247,49 @@ describe('renderer App', () => {
       expect(listRuns).toHaveBeenCalledWith('session-1')
       expect(listSteps).toHaveBeenCalledWith('run-restored')
     })
+  })
+
+  it('wires workspace file preview links from App to the active session IPC loader', async () => {
+    const user = userEvent.setup()
+
+    listSessions.mockResolvedValueOnce([
+      {
+        id: 'session-preview',
+        title: 'Preview chat',
+        status: 'active',
+        outputMode: 'markdown',
+        createdAt: '2026-06-10T03:00:00.000Z',
+        updatedAt: '2026-06-10T03:00:00.000Z'
+      }
+    ] as any)
+    listMessages.mockResolvedValueOnce([
+      {
+        id: 'message-preview-assistant',
+        sessionId: 'session-preview',
+        role: 'assistant',
+        content: '[README](workspace:README.md)',
+        contentType: 'markdown',
+        runId: 'run-preview',
+        createdAt: '2026-06-10T03:00:02.000Z'
+      }
+    ] as any)
+    filesPreview.mockResolvedValueOnce({
+      path: 'README.md',
+      name: 'README.md',
+      kind: 'markdown',
+      mimeType: 'text/markdown',
+      bytes: 20,
+      content: '# 本地 README\n\n预览内容'
+    })
+
+    render(<App />)
+
+    await user.click(await screen.findByRole('link', { name: 'README' }))
+
+    expect(filesPreview).toHaveBeenCalledWith({ sessionId: 'session-preview', path: 'README.md' })
+    expect(screen.getByRole('dialog', { name: '本地文件全屏预览' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '本地 README' })).toBeInTheDocument()
+    expect(screen.getByText('预览内容')).toBeInTheDocument()
   })
 
   it('retries loading worker history when the first attempt fails before a session is marked loaded', async () => {

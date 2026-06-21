@@ -1283,6 +1283,7 @@ function AppContent() {
             modelOptionGroups={sessionModelCatalog.optionGroups}
             draftValue={draftsBySession[activeSession.id] ?? ''}
             running={Boolean(activeRunningRunId)}
+            loadLocalFilePreview={(path) => hesperApi.files.preview({ sessionId: activeSession.id, path })}
             onDraftChange={(value) => {
               setDraftsBySession((current) => ({ ...current, [activeSession.id]: value }))
             }}
