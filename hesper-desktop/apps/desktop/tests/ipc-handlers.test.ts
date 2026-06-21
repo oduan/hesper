@@ -13,6 +13,34 @@ function createMockCredentialCodec(): CredentialVaultCodec {
   }
 }
 
+type ListedAvailableModelCatalog = {
+  providers: Array<{
+    id: string
+    credentialStatus: string
+    hasApiKey?: boolean
+    apiKeyRef?: string
+    models: Array<{
+      id: string
+      readyForRuntime: boolean
+      modelRef: { providerId: string; modelId: string }
+    }>
+  }>
+}
+
+async function listAvailableModelCatalog(container: ReturnType<typeof createServiceContainer>): Promise<{ catalog: ListedAvailableModelCatalog; raw: string }> {
+  const result = await container.toolRunner.run(container.toolCatalogService.get('models.list-available')!, {}, {
+    runId: 'run-1',
+    sessionId: 'session-1',
+    allowedToolIds: ['models.list-available']
+  })
+
+  expect(result.isError).not.toBe(true)
+  return {
+    catalog: JSON.parse(result.content) as ListedAvailableModelCatalog,
+    raw: JSON.stringify(result)
+  }
+}
+
 describe('desktop service container', () => {
   it('creates a session through app-core services', async () => {
     const persistence = await createInMemoryPersistence()
@@ -157,14 +185,8 @@ describe('desktop service container', () => {
     await container.modelProviderService.ensureBuiltinProviders()
     await container.credentialVaultService.saveProviderApiKey({ providerId: 'openai', apiKey: secret })
 
-    const result = await container.toolRunner.run(container.toolCatalogService.get('models.list-available')!, {}, {
-      runId: 'run-1',
-      sessionId: 'session-1',
-      allowedToolIds: ['models.list-available']
-    })
+    const { catalog, raw } = await listAvailableModelCatalog(container)
 
-    expect(result.isError).not.toBe(true)
-    const catalog = JSON.parse(result.content) as { providers: Array<{ id: string; credentialStatus: string; hasApiKey?: boolean; apiKeyRef?: string; models: Array<{ id: string; readyForRuntime: boolean; modelRef: { providerId: string; modelId: string } }> }> }
     expect(catalog.providers.map((provider) => provider.id)).toEqual(expect.arrayContaining(['mock', 'deepseek', 'openai']))
     expect(catalog.providers.find((provider) => provider.id === 'mock')).toMatchObject({ credentialStatus: 'ready' })
     expect(catalog.providers.find((provider) => provider.id === 'deepseek')).toMatchObject({ credentialStatus: 'needs_api_key' })
@@ -177,7 +199,134 @@ describe('desktop service container', () => {
       })
     ]))
     expect(catalog.providers.every((provider) => provider.apiKeyRef === undefined)).toBe(true)
-    expect(JSON.stringify(result)).not.toContain(secret)
+    expect(raw).not.toContain(secret)
+  })
+
+  it('marks disabled providers and disabled models unavailable in the model catalog', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock', credentialCodec: createMockCredentialCodec() })
+    await container.modelProviderService.ensureBuiltinProviders()
+    await container.credentialVaultService.saveProviderApiKey({ providerId: 'deepseek', apiKey: 'sk-disabled-provider-secret' })
+    await container.modelProviderService.disableProvider('deepseek')
+    await container.credentialVaultService.saveProviderApiKey({ providerId: 'openai', apiKey: 'sk-disabled-model-secret' })
+    await container.modelProviderService.saveModel({
+      id: 'gpt-4o',
+      providerId: 'openai',
+      modelName: 'gpt-4o',
+      displayName: 'GPT-4o',
+      capabilities: ['streaming', 'toolCalls', 'jsonOutput'],
+      enabled: false
+    })
+
+    const { catalog, raw } = await listAvailableModelCatalog(container)
+
+    expect(catalog.providers.find((provider) => provider.id === 'deepseek')).toMatchObject({ credentialStatus: 'disabled' })
+    expect(catalog.providers.find((provider) => provider.id === 'deepseek')?.models).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'deepseek-chat', readyForRuntime: false })
+    ]))
+    expect(catalog.providers.find((provider) => provider.id === 'openai')).toMatchObject({ credentialStatus: 'ready' })
+    expect(catalog.providers.find((provider) => provider.id === 'openai')?.models).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'gpt-4o', readyForRuntime: false })
+    ]))
+    expect(raw).not.toContain('sk-disabled-provider-secret')
+    expect(raw).not.toContain('sk-disabled-model-secret')
+  })
+
+  it('treats expired Codex OAuth credentials as not ready without leaking the token', async () => {
+    const expiredAccessToken = 'codex-expired-access-token-never-return'
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock', credentialCodec: createMockCredentialCodec() })
+    await container.modelProviderService.saveProvider({
+      id: 'chatgpt-codex',
+      name: 'ChatGPT Codex',
+      kind: 'pi',
+      authType: 'oauth',
+      piAuthProvider: 'openai-codex',
+      enabled: true,
+      defaultModelId: 'pi/gpt-5.5'
+    })
+    await container.modelProviderService.saveModel({
+      id: 'pi/gpt-5.5',
+      providerId: 'chatgpt-codex',
+      modelName: 'gpt-5.5',
+      displayName: 'GPT-5.5',
+      capabilities: ['streaming', 'toolCalls', 'reasoning'],
+      enabled: true
+    })
+    await container.credentialVaultService.saveProviderApiKey({
+      providerId: 'chatgpt-codex',
+      apiKey: JSON.stringify({ type: 'codex_oauth', accessToken: expiredAccessToken, expiresAt: Date.now() - 1_000 })
+    })
+
+    const { catalog, raw } = await listAvailableModelCatalog(container)
+    const provider = catalog.providers.find((entry) => entry.id === 'chatgpt-codex')
+
+    expect(provider).toMatchObject({ credentialStatus: 'needs_oauth', hasApiKey: true })
+    expect(provider?.models).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'pi/gpt-5.5', readyForRuntime: false })
+    ]))
+    expect(raw).not.toContain(expiredAccessToken)
+  })
+
+  it('does not mark openai-compatible providers without a baseUrl ready for runtime', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock', credentialCodec: createMockCredentialCodec() })
+    await container.modelProviderService.saveProvider({
+      id: 'custom-no-base-url',
+      name: 'Custom without baseUrl',
+      kind: 'openai-compatible',
+      enabled: true,
+      defaultModelId: 'custom-no-base-url/chat'
+    })
+    await container.modelProviderService.saveModel({
+      id: 'custom-no-base-url/chat',
+      providerId: 'custom-no-base-url',
+      modelName: 'chat',
+      displayName: 'Custom Chat',
+      capabilities: ['streaming', 'toolCalls'],
+      enabled: true
+    })
+    await container.credentialVaultService.saveProviderApiKey({ providerId: 'custom-no-base-url', apiKey: 'sk-custom-no-base-url' })
+
+    const { catalog, raw } = await listAvailableModelCatalog(container)
+    const provider = catalog.providers.find((entry) => entry.id === 'custom-no-base-url')
+
+    expect(provider).toMatchObject({ credentialStatus: 'ready', hasApiKey: true })
+    expect(provider?.models).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'custom-no-base-url/chat', readyForRuntime: false })
+    ]))
+    expect(raw).not.toContain('sk-custom-no-base-url')
+  })
+
+  it('does not mark pi providers without a supported piAuthProvider ready for runtime', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock', credentialCodec: createMockCredentialCodec() })
+    await container.modelProviderService.saveProvider({
+      id: 'pi-missing-auth-provider',
+      name: 'Pi Missing Auth Provider',
+      kind: 'pi',
+      authType: 'api_key',
+      enabled: true,
+      defaultModelId: 'pi-missing-auth-provider/model'
+    })
+    await container.modelProviderService.saveModel({
+      id: 'pi-missing-auth-provider/model',
+      providerId: 'pi-missing-auth-provider',
+      modelName: 'model',
+      displayName: 'Pi Missing Auth Model',
+      capabilities: ['streaming'],
+      enabled: true
+    })
+    await container.credentialVaultService.saveProviderApiKey({ providerId: 'pi-missing-auth-provider', apiKey: 'sk-pi-missing-auth-provider' })
+
+    const { catalog, raw } = await listAvailableModelCatalog(container)
+    const provider = catalog.providers.find((entry) => entry.id === 'pi-missing-auth-provider')
+
+    expect(provider).toMatchObject({ credentialStatus: 'ready', hasApiKey: true })
+    expect(provider?.models).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'pi-missing-auth-provider/model', readyForRuntime: false })
+    ]))
+    expect(raw).not.toContain('sk-pi-missing-auth-provider')
   })
 
   it('wires pi-core runs through the provider registry resolver and fails fast without credentials', async () => {
