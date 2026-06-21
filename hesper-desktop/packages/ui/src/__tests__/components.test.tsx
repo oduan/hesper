@@ -809,7 +809,9 @@ describe('ui components', () => {
     await user.type(textarea, '请用 @中')
 
     const listbox = screen.getByRole('listbox', { name: '技能提及建议' })
-    expect(within(listbox).getByRole('option', { name: '选择技能 中文写作：中文润色' })).toBeInTheDocument()
+    const cnOption = within(listbox).getByRole('option', { name: '选择技能 中文写作：中文润色' })
+    expect(cnOption).toHaveTextContent(/^中文写作$/)
+    expect(within(listbox).queryByText('中文润色')).not.toBeInTheDocument()
     expect(within(listbox).queryByRole('option', { name: /Research/ })).not.toBeInTheDocument()
 
     await user.keyboard('{Enter}')

@@ -173,7 +173,6 @@ export function Composer({
                 }}
               >
                 <span style={skillNameStyle}>{skill.name}</span>
-                {skill.description ? <span style={skillDescriptionStyle}>{skill.description}</span> : null}
               </button>
             )
           })}
@@ -360,14 +359,6 @@ const skillNameStyle = {
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap'
-} satisfies CSSProperties
-
-const skillDescriptionStyle = {
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
-  color: darkTheme.color.textMuted,
-  fontSize: 12
 } satisfies CSSProperties
 
 const textareaStyle = {
