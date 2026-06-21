@@ -640,6 +640,7 @@ describe('registerIpcHandlers', () => {
     const enqueueSpy = vi.spyOn(container.agentRuntime, 'enqueue').mockResolvedValueOnce({ id: 'run-assembled' } as Awaited<ReturnType<typeof container.agentRuntime.enqueue>>)
     const createUserMessageSpy = vi.spyOn(container.conversationService, 'createUserMessage')
 
+    await container.settingsService.updateSettings({ soul: 'Softly curious and steady.' })
     registerIpcHandlers({ ipcMain, dialog, container, savePersistence, schedulePersistenceSave })
     const session = await container.sessionService.createSession({ title: 'Prompt assembly IPC', workspacePath: 'C:/workspace' })
     await container.roleManagementService.createRole({ name: 'Custom Worker', defaultToolIds: ['filesystem.read-file'] })
@@ -653,6 +654,7 @@ describe('registerIpcHandlers', () => {
         workspacePath: 'C:/workspace',
         enabledToolIds: expectedDefaultEnabledTools
       }),
+      soul: 'Softly curious and steady.',
       role: expect.objectContaining({ id: 'main-agent' }),
       skills: expect.any(Array),
       tools: expect.any(Array)
