@@ -70,7 +70,7 @@ export type SshDeleteResult = {
 }
 
 export type SshExecutionListItem = {
-  executionId: string
+  id: string
   serverId: string
   serverName: string
   status: SshExecutionStatus
@@ -646,7 +646,7 @@ export function createSshConfigurationService(options: SshConfigurationServiceOp
       for (const execution of filtered) {
         const results = await options.persistence.sshCommandResults.listByExecution(execution.id)
         items.push({
-          executionId: execution.id,
+          id: execution.id,
           serverId: execution.serverId,
           serverName: execution.serverName,
           status: execution.status,

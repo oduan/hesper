@@ -220,6 +220,10 @@ describe('createSshConfigurationService', () => {
       wait: true
     })
 
+    await expect(service.listExecutions({ sessionId: 'session-owner' })).resolves.toEqual({
+      executions: [expect.objectContaining({ id: output.executionId })],
+      count: 1
+    })
     await expect(service.listExecutions({ sessionId: 'session-other' })).resolves.toEqual({ executions: [], count: 0 })
     await expect(service.getExecutionOutput({ sessionId: 'session-other', executionId: output.executionId })).rejects.toThrow('SSH execution not found')
   })
