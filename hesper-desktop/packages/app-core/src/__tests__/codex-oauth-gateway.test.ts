@@ -67,7 +67,9 @@ describe('createCodexOAuthGateway', () => {
     })
 
     const callbackResponse = await fetch(`http://localhost:${callbackPort}/auth/callback?state=${state}&code=codex-code`)
-    await expect(callbackResponse.text()).resolves.toContain('Codex authorization complete')
+    const callbackHtml = await callbackResponse.text()
+    expect(callbackHtml).toContain('授权成功')
+    expect(callbackHtml).toContain('你可以关闭此页面并返回 Hesper')
     await expect(gateway.getAuthorizationStatus({ sessionId: started.sessionId })).resolves.toEqual({
       status: 'authorized',
       message: '授权成功'

@@ -361,7 +361,7 @@ describe('provider settings panel', () => {
     await user.click(await screen.findByRole('button', { name: '设置' }))
     await user.click(await screen.findByRole('button', { name: '+ 添加连接' }))
 
-    const picker = await screen.findByRole('dialog', { name: 'Add connection' })
+    const picker = await screen.findByRole('dialog', { name: '添加连接' })
     expect(picker).toHaveStyle({
       position: 'fixed',
       top: '36px',
@@ -369,12 +369,13 @@ describe('provider settings panel', () => {
       right: '0px',
       bottom: '0px'
     })
-    expect(within(picker).getByRole('heading', { name: 'Add connection' })).toBeInTheDocument()
-    expect(within(picker).getByRole('button', { name: /Codex 授权/ })).toBeInTheDocument()
-    expect(within(picker).getByRole('button', { name: /Custom/ })).toBeInTheDocument()
+    expect(within(picker).getByRole('heading', { name: '欢迎使用 Hesper' })).toBeInTheDocument()
+    expect(within(picker).getByText('选择连接方式')).toBeInTheDocument()
+    expect(within(picker).getByRole('button', { name: /ChatGPT\/Codex 连接/ })).toBeInTheDocument()
+    expect(within(picker).getByRole('button', { name: /自定义连接/ })).toBeInTheDocument()
     expect(screen.queryByRole('dialog', { name: 'API 配置' })).not.toBeInTheDocument()
 
-    await user.click(within(picker).getByRole('button', { name: /Custom/ }))
+    await user.click(within(picker).getByRole('button', { name: /自定义连接/ }))
 
     const apiDialog = await screen.findByRole('dialog', { name: 'API 配置' })
     expect(apiDialog).toHaveStyle({
@@ -416,24 +417,19 @@ describe('provider settings panel', () => {
     await user.click(screen.getByRole('button', { name: '打开连接菜单 ChatGPT Codex' }))
     await user.click(await screen.findByRole('menuitem', { name: '重新授权' }))
     const codexDialog = await screen.findByRole('dialog', { name: 'Codex 授权' })
-    expect(within(codexDialog).getByRole('textbox', { name: 'Codex 连接名称' })).toHaveValue('ChatGPT Codex')
+    expect(within(codexDialog).getByRole('heading', { name: '连接 ChatGPT' })).toBeInTheDocument()
+    expect(within(codexDialog).getByRole('button', { name: /连接中/ })).toBeDisabled()
+    await waitFor(() => expect(startOAuthAuthorization).toHaveBeenCalledWith({ provider: 'openai-codex', connectionName: 'ChatGPT Codex' }))
     expect(screen.queryByRole('dialog', { name: 'API 配置' })).not.toBeInTheDocument()
   })
 
-  it('cancels an active Codex OAuth session from Back, close, and Escape', async () => {
+  it('cancels an active Codex OAuth session from Back and Escape', async () => {
     const user = userEvent.setup()
     startOAuthAuthorization
       .mockResolvedValueOnce({
         provider: 'openai-codex',
         sessionId: 'oauth-session-back',
         authorizationUrl: 'https://auth.craft.do/oauth/openai-codex?state=oauth-session-back',
-        status: 'pending',
-        message: '等待浏览器授权'
-      })
-      .mockResolvedValueOnce({
-        provider: 'openai-codex',
-        sessionId: 'oauth-session-close',
-        authorizationUrl: 'https://auth.craft.do/oauth/openai-codex?state=oauth-session-close',
         status: 'pending',
         message: '等待浏览器授权'
       })
@@ -448,25 +444,15 @@ describe('provider settings panel', () => {
 
     await user.click(await screen.findByRole('button', { name: '设置' }))
     await user.click(await screen.findByRole('button', { name: '+ 添加连接' }))
-    await user.click(await screen.findByRole('button', { name: /Codex 授权/ }))
+    await user.click(await screen.findByRole('button', { name: /ChatGPT\/Codex 连接/ }))
     let codexDialog = await screen.findByRole('dialog', { name: 'Codex 授权' })
-    await user.click(within(codexDialog).getByRole('button', { name: 'Open Browser' }))
     await waitFor(() => expect(startOAuthAuthorization).toHaveBeenCalledTimes(1))
     await user.click(within(codexDialog).getByRole('button', { name: 'Back' }))
     await waitFor(() => expect(cancelOAuthAuthorization).toHaveBeenCalledWith({ sessionId: 'oauth-session-back' }))
 
-    await user.click(await screen.findByRole('button', { name: /Codex 授权/ }))
+    await user.click(await screen.findByRole('button', { name: /ChatGPT\/Codex 连接/ }))
     codexDialog = await screen.findByRole('dialog', { name: 'Codex 授权' })
-    await user.click(within(codexDialog).getByRole('button', { name: 'Open Browser' }))
     await waitFor(() => expect(startOAuthAuthorization).toHaveBeenCalledTimes(2))
-    await user.click(within(codexDialog).getByRole('button', { name: '关闭 Codex 授权' }))
-    await waitFor(() => expect(cancelOAuthAuthorization).toHaveBeenCalledWith({ sessionId: 'oauth-session-close' }))
-
-    await user.click(screen.getByRole('button', { name: '+ 添加连接' }))
-    await user.click(await screen.findByRole('button', { name: /Codex 授权/ }))
-    codexDialog = await screen.findByRole('dialog', { name: 'Codex 授权' })
-    await user.click(within(codexDialog).getByRole('button', { name: 'Open Browser' }))
-    await waitFor(() => expect(startOAuthAuthorization).toHaveBeenCalledTimes(3))
     await user.keyboard('{Escape}')
     await waitFor(() => expect(cancelOAuthAuthorization).toHaveBeenCalledWith({ sessionId: 'oauth-session-escape' }))
   })
@@ -478,22 +464,22 @@ describe('provider settings panel', () => {
     await user.click(await screen.findByRole('button', { name: '设置' }))
     await user.click(await screen.findByRole('button', { name: '+ 添加连接' }))
 
-    await user.click(await screen.findByRole('button', { name: /Codex 授权/ }))
+    await user.click(await screen.findByRole('button', { name: /ChatGPT\/Codex 连接/ }))
     const codexDialog = await screen.findByRole('dialog', { name: 'Codex 授权' })
     expect(codexDialog).toBeInTheDocument()
     expect(screen.queryByRole('dialog', { name: 'API 配置' })).not.toBeInTheDocument()
 
     await user.click(within(codexDialog).getByRole('button', { name: 'Back' }))
-    expect(await screen.findByRole('dialog', { name: 'Add connection' })).toBeInTheDocument()
+    expect(await screen.findByRole('dialog', { name: '添加连接' })).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /Codex 授权/ }))
+    await user.click(screen.getByRole('button', { name: /ChatGPT\/Codex 连接/ }))
     const escapeDialog = await screen.findByRole('dialog', { name: 'Codex 授权' })
     await waitFor(() => expect(escapeDialog).toHaveFocus())
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('dialog', { name: 'Codex 授权' })).not.toBeInTheDocument()
   })
 
-  it('authorizes and saves a Codex OAuth connection from the full-window flow', async () => {
+  it('authorizes and auto-saves a Codex OAuth connection from the full-window flow', async () => {
     const user = userEvent.setup()
     startOAuthAuthorization.mockResolvedValueOnce({
       provider: 'openai-codex',
@@ -510,7 +496,7 @@ describe('provider settings panel', () => {
     })
     saveOAuthConnection.mockResolvedValueOnce({
       id: 'chatgpt-codex',
-      name: 'My Codex',
+      name: 'ChatGPT Codex',
       kind: 'pi',
       authType: 'oauth',
       piAuthProvider: 'openai-codex',
@@ -525,41 +511,31 @@ describe('provider settings panel', () => {
 
     await user.click(await screen.findByRole('button', { name: '设置' }))
     await user.click(await screen.findByRole('button', { name: '+ 添加连接' }))
-    await user.click(await screen.findByRole('button', { name: /Codex 授权/ }))
-
-    const codexDialog = await screen.findByRole('dialog', { name: 'Codex 授权' })
-    const connectionNameInput = within(codexDialog).getByRole('textbox', { name: 'Codex 连接名称' })
-    expect(connectionNameInput).toHaveValue('ChatGPT Codex')
-
-    await user.clear(connectionNameInput)
-    await user.type(connectionNameInput, 'My Codex')
     const providerReloadCallsBeforeSave = listProviders.mock.calls.length
     const modelReloadCallsBeforeSave = listModels.mock.calls.length
+    await user.click(await screen.findByRole('button', { name: /ChatGPT\/Codex 连接/ }))
 
-    await user.click(within(codexDialog).getByRole('button', { name: 'Open Browser' }))
+    const codexDialog = await screen.findByRole('dialog', { name: 'Codex 授权' })
+    expect(within(codexDialog).getByRole('heading', { name: '连接 ChatGPT' })).toBeInTheDocument()
+    expect(within(codexDialog).getByRole('button', { name: /连接中/ })).toBeDisabled()
+
     await waitFor(() => {
-      expect(startOAuthAuthorization).toHaveBeenCalledWith({ provider: 'openai-codex', connectionName: 'My Codex' })
+      expect(startOAuthAuthorization).toHaveBeenCalledWith({ provider: 'openai-codex', connectionName: 'ChatGPT Codex' })
     })
-    const pendingStatus = await within(codexDialog).findByRole('status')
-    expect(pendingStatus).toHaveTextContent('pending')
-    expect(pendingStatus).toHaveTextContent('等待浏览器授权')
+    expect(await within(codexDialog).findByRole('status')).toHaveTextContent('等待浏览器授权')
 
-    await user.click(within(codexDialog).getByRole('button', { name: 'Check Status' }))
     await waitFor(() => {
       expect(getOAuthAuthorizationStatus).toHaveBeenCalledWith({ sessionId: 'oauth-session-1' })
     })
-    expect(await within(codexDialog).findByRole('status')).toHaveTextContent('授权成功')
-
-    await user.click(within(codexDialog).getByRole('button', { name: 'Save' }))
     await waitFor(() => {
-      expect(saveOAuthConnection).toHaveBeenCalledWith({ sessionId: 'oauth-session-1', connectionName: 'My Codex' })
+      expect(saveOAuthConnection).toHaveBeenCalledWith({ sessionId: 'oauth-session-1', connectionName: 'ChatGPT Codex' })
     })
-    expect(await screen.findByRole('status')).toHaveTextContent('已添加连接：My Codex')
+    expect(await screen.findByRole('status')).toHaveTextContent('已添加连接：ChatGPT Codex')
     expect(listProviders.mock.calls.length).toBeGreaterThan(providerReloadCallsBeforeSave)
     expect(listModels.mock.calls.length).toBeGreaterThan(modelReloadCallsBeforeSave)
   })
 
-  it('keeps Codex status checks and saving guarded until authorization succeeds', async () => {
+  it('keeps the Codex authorization page waiting until authorization succeeds', async () => {
     const user = userEvent.setup()
     startOAuthAuthorization.mockResolvedValueOnce({
       provider: 'openai-codex',
@@ -578,21 +554,66 @@ describe('provider settings panel', () => {
 
     await user.click(await screen.findByRole('button', { name: '设置' }))
     await user.click(await screen.findByRole('button', { name: '+ 添加连接' }))
-    await user.click(await screen.findByRole('button', { name: /Codex 授权/ }))
+    await user.click(await screen.findByRole('button', { name: /ChatGPT\/Codex 连接/ }))
 
     const codexDialog = await screen.findByRole('dialog', { name: 'Codex 授权' })
-    const checkStatusButton = within(codexDialog).getByRole('button', { name: 'Check Status' })
-    const saveButton = within(codexDialog).getByRole('button', { name: 'Save' })
-    expect(checkStatusButton).toBeDisabled()
-    expect(saveButton).toBeDisabled()
-
-    await user.click(within(codexDialog).getByRole('button', { name: 'Open Browser' }))
-    await waitFor(() => expect(checkStatusButton).toBeEnabled())
-    expect(saveButton).toBeDisabled()
-
-    await user.click(checkStatusButton)
+    expect(within(codexDialog).getByRole('button', { name: /连接中/ })).toBeDisabled()
+    await waitFor(() => expect(getOAuthAuthorizationStatus).toHaveBeenCalledWith({ sessionId: 'oauth-session-pending' }))
     expect(await within(codexDialog).findByRole('status')).toHaveTextContent('仍在等待授权')
-    expect(saveButton).toBeDisabled()
+    expect(saveOAuthConnection).not.toHaveBeenCalled()
+  })
+
+  it('continues polling Codex OAuth status when pending messages do not change', async () => {
+    const user = userEvent.setup()
+    startOAuthAuthorization.mockResolvedValueOnce({
+      provider: 'openai-codex',
+      sessionId: 'oauth-session-repeat-pending',
+      authorizationUrl: 'https://auth.craft.do/oauth/openai-codex?state=oauth-session-repeat-pending',
+      status: 'pending',
+      message: '等待浏览器授权'
+    })
+    getOAuthAuthorizationStatus
+      .mockResolvedValueOnce({
+        provider: 'openai-codex',
+        sessionId: 'oauth-session-repeat-pending',
+        status: 'pending',
+        message: '仍在等待授权'
+      })
+      .mockResolvedValueOnce({
+        provider: 'openai-codex',
+        sessionId: 'oauth-session-repeat-pending',
+        status: 'pending',
+        message: '仍在等待授权'
+      })
+      .mockResolvedValueOnce({
+        provider: 'openai-codex',
+        sessionId: 'oauth-session-repeat-pending',
+        status: 'authorized',
+        message: '授权成功'
+      })
+    saveOAuthConnection.mockResolvedValueOnce({
+      id: 'chatgpt-codex',
+      name: 'ChatGPT Codex',
+      kind: 'pi',
+      authType: 'oauth',
+      piAuthProvider: 'openai-codex',
+      defaultModelId: 'pi/gpt-5.5',
+      hasApiKey: true,
+      enabled: true,
+      apiKeyRef: 'provider:chatgpt-codex:api-key',
+      createdAt: now,
+      updatedAt: now
+    })
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: '设置' }))
+    await user.click(await screen.findByRole('button', { name: '+ 添加连接' }))
+    await user.click(await screen.findByRole('button', { name: /ChatGPT\/Codex 连接/ }))
+
+    await waitFor(() => expect(getOAuthAuthorizationStatus).toHaveBeenCalledTimes(2), { timeout: 2200 })
+    await waitFor(() => expect(getOAuthAuthorizationStatus).toHaveBeenCalledTimes(3), { timeout: 2200 })
+    await waitFor(() => expect(saveOAuthConnection).toHaveBeenCalledWith({ sessionId: 'oauth-session-repeat-pending', connectionName: 'ChatGPT Codex' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('已添加连接：ChatGPT Codex')
   })
 
   it('shows a Codex OAuth start error without closing the authorization page', async () => {
@@ -602,17 +623,12 @@ describe('provider settings panel', () => {
 
     await user.click(await screen.findByRole('button', { name: '设置' }))
     await user.click(await screen.findByRole('button', { name: '+ 添加连接' }))
-    await user.click(await screen.findByRole('button', { name: /Codex 授权/ }))
+    await user.click(await screen.findByRole('button', { name: /ChatGPT\/Codex 连接/ }))
 
     const codexDialog = await screen.findByRole('dialog', { name: 'Codex 授权' })
-    const openBrowserButton = within(codexDialog).getByRole('button', { name: 'Open Browser' })
-    const checkStatusButton = within(codexDialog).getByRole('button', { name: 'Check Status' })
-    await user.click(openBrowserButton)
-
     expect(await within(codexDialog).findByRole('alert')).toHaveTextContent('browser unavailable')
     expect(screen.getByRole('dialog', { name: 'Codex 授权' })).toBeInTheDocument()
-    expect(openBrowserButton).toBeEnabled()
-    expect(checkStatusButton).toBeDisabled()
+    expect(within(codexDialog).getByRole('button', { name: '重新连接' })).toBeEnabled()
   })
 
   it('prevents duplicate Codex OAuth starts while the browser launch is pending', async () => {
@@ -623,15 +639,11 @@ describe('provider settings panel', () => {
 
     await user.click(await screen.findByRole('button', { name: '设置' }))
     await user.click(await screen.findByRole('button', { name: '+ 添加连接' }))
-    await user.click(await screen.findByRole('button', { name: /Codex 授权/ }))
+    await user.click(await screen.findByRole('button', { name: /ChatGPT\/Codex 连接/ }))
 
     const codexDialog = await screen.findByRole('dialog', { name: 'Codex 授权' })
-    const openBrowserButton = within(codexDialog).getByRole('button', { name: 'Open Browser' })
-    await user.click(openBrowserButton)
-
-    await waitFor(() => expect(openBrowserButton).toBeDisabled())
-    await user.click(openBrowserButton)
-    expect(startOAuthAuthorization).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(startOAuthAuthorization).toHaveBeenCalledTimes(1))
+    expect(within(codexDialog).getByRole('button', { name: /正在打开/ })).toBeDisabled()
 
     await act(async () => {
       startDeferred.resolve({
@@ -645,10 +657,10 @@ describe('provider settings panel', () => {
     })
 
     expect(await within(codexDialog).findByRole('status')).toHaveTextContent('等待浏览器授权')
-    expect(openBrowserButton).toBeEnabled()
+    expect(startOAuthAuthorization).toHaveBeenCalledTimes(1)
   })
 
-  it('prevents duplicate Codex OAuth saves while saving is pending', async () => {
+  it('prevents duplicate Codex OAuth saves while auto-saving is pending', async () => {
     const user = userEvent.setup()
     const saveDeferred = createDeferred<any>()
     startOAuthAuthorization.mockResolvedValueOnce({
@@ -658,7 +670,7 @@ describe('provider settings panel', () => {
       status: 'pending',
       message: '等待浏览器授权'
     })
-    getOAuthAuthorizationStatus.mockResolvedValueOnce({
+    getOAuthAuthorizationStatus.mockResolvedValue({
       provider: 'openai-codex',
       sessionId: 'oauth-session-saving',
       status: 'authorized',
@@ -669,17 +681,12 @@ describe('provider settings panel', () => {
 
     await user.click(await screen.findByRole('button', { name: '设置' }))
     await user.click(await screen.findByRole('button', { name: '+ 添加连接' }))
-    await user.click(await screen.findByRole('button', { name: /Codex 授权/ }))
+    await user.click(await screen.findByRole('button', { name: /ChatGPT\/Codex 连接/ }))
 
     const codexDialog = await screen.findByRole('dialog', { name: 'Codex 授权' })
-    await user.click(within(codexDialog).getByRole('button', { name: 'Open Browser' }))
-    await user.click(await within(codexDialog).findByRole('button', { name: 'Check Status' }))
-    const saveButton = within(codexDialog).getByRole('button', { name: 'Save' })
-    await waitFor(() => expect(saveButton).toBeEnabled())
-
-    await user.click(saveButton)
-    await waitFor(() => expect(saveButton).toBeDisabled())
-    await user.click(saveButton)
+    await waitFor(() => expect(saveOAuthConnection).toHaveBeenCalledTimes(1))
+    expect(within(codexDialog).getByRole('button', { name: /正在保存/ })).toBeDisabled()
+    await new Promise((resolve) => setTimeout(resolve, 1300))
     expect(saveOAuthConnection).toHaveBeenCalledTimes(1)
 
     await act(async () => {
@@ -702,7 +709,7 @@ describe('provider settings panel', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('已添加连接：ChatGPT Codex')
   })
 
-  it('keeps the Codex dialog open with retry enabled when saving fails', async () => {
+  it('keeps the Codex dialog open with reconnect enabled when auto-saving fails', async () => {
     const user = userEvent.setup()
     startOAuthAuthorization.mockResolvedValueOnce({
       provider: 'openai-codex',
@@ -717,41 +724,17 @@ describe('provider settings panel', () => {
       status: 'authorized',
       message: '授权成功'
     })
-    saveOAuthConnection
-      .mockRejectedValueOnce(new Error('vault unavailable'))
-      .mockResolvedValueOnce({
-        id: 'chatgpt-codex',
-        name: 'ChatGPT Codex',
-        kind: 'pi',
-        authType: 'oauth',
-        piAuthProvider: 'openai-codex',
-        defaultModelId: 'pi/gpt-5.5',
-        hasApiKey: true,
-        enabled: true,
-        apiKeyRef: 'provider:chatgpt-codex:api-key',
-        createdAt: now,
-        updatedAt: now
-      })
+    saveOAuthConnection.mockRejectedValueOnce(new Error('vault unavailable'))
     render(<App />)
 
     await user.click(await screen.findByRole('button', { name: '设置' }))
     await user.click(await screen.findByRole('button', { name: '+ 添加连接' }))
-    await user.click(await screen.findByRole('button', { name: /Codex 授权/ }))
+    await user.click(await screen.findByRole('button', { name: /ChatGPT\/Codex 连接/ }))
 
     const codexDialog = await screen.findByRole('dialog', { name: 'Codex 授权' })
-    await user.click(within(codexDialog).getByRole('button', { name: 'Open Browser' }))
-    await user.click(await within(codexDialog).findByRole('button', { name: 'Check Status' }))
-    const saveButton = within(codexDialog).getByRole('button', { name: 'Save' })
-    await waitFor(() => expect(saveButton).toBeEnabled())
-
-    await user.click(saveButton)
     expect(await within(codexDialog).findByRole('alert')).toHaveTextContent('vault unavailable')
     expect(screen.getByRole('dialog', { name: 'Codex 授权' })).toBeInTheDocument()
-    expect(saveButton).toBeEnabled()
-
-    await user.click(saveButton)
-    await waitFor(() => expect(saveOAuthConnection).toHaveBeenCalledTimes(2))
-    expect(await screen.findByRole('status')).toHaveTextContent('已添加连接：ChatGPT Codex')
+    expect(within(codexDialog).getByRole('button', { name: '重新连接' })).toBeEnabled()
   })
 
   it('shows a visible warning when a saved Codex OAuth connection cannot refresh providers', async () => {
@@ -786,42 +769,32 @@ describe('provider settings panel', () => {
 
     await user.click(await screen.findByRole('button', { name: '设置' }))
     await user.click(await screen.findByRole('button', { name: '+ 添加连接' }))
-    await user.click(await screen.findByRole('button', { name: /Codex 授权/ }))
+    await user.click(await screen.findByRole('button', { name: /ChatGPT\/Codex 连接/ }))
 
-    const codexDialog = await screen.findByRole('dialog', { name: 'Codex 授权' })
-    await user.click(within(codexDialog).getByRole('button', { name: 'Open Browser' }))
-    await user.click(await within(codexDialog).findByRole('button', { name: 'Check Status' }))
-    await waitFor(() => expect(within(codexDialog).getByRole('button', { name: 'Save' })).toBeEnabled())
+    await screen.findByRole('dialog', { name: 'Codex 授权' })
     listProviders.mockRejectedValueOnce(new Error('reload failed'))
-
-    await user.click(within(codexDialog).getByRole('button', { name: 'Save' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('连接已保存，但刷新模型列表失败：reload failed')
     expect(screen.queryByRole('dialog', { name: 'Codex 授权' })).not.toBeInTheDocument()
     expect(screen.queryByText('已添加连接：ChatGPT Codex')).not.toBeInTheDocument()
   })
 
-  it('closes and reopens the picker from Back, close, and Escape', async () => {
+  it('closes and reopens the picker from Back and Escape', async () => {
     const user = userEvent.setup()
     render(<App />)
 
     await user.click(await screen.findByRole('button', { name: '设置' }))
     await user.click(await screen.findByRole('button', { name: '+ 添加连接' }))
-    let picker = await screen.findByRole('dialog', { name: 'Add connection' })
+    let picker = await screen.findByRole('dialog', { name: '添加连接' })
 
     await user.click(within(picker).getByRole('button', { name: 'Back' }))
-    expect(screen.queryByRole('dialog', { name: 'Add connection' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: '添加连接' })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '+ 添加连接' }))
-    picker = await screen.findByRole('dialog', { name: 'Add connection' })
-    await user.click(within(picker).getByRole('button', { name: '关闭 Add connection' }))
-    expect(screen.queryByRole('dialog', { name: 'Add connection' })).not.toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: '+ 添加连接' }))
-    picker = await screen.findByRole('dialog', { name: 'Add connection' })
+    picker = await screen.findByRole('dialog', { name: '添加连接' })
     await waitFor(() => expect(picker).toHaveFocus())
     await user.keyboard('{Escape}')
-    expect(screen.queryByRole('dialog', { name: 'Add connection' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: '添加连接' })).not.toBeInTheDocument()
   })
 
   it('clears custom dialog state when canceled before reopening the picker', async () => {
@@ -831,7 +804,7 @@ describe('provider settings panel', () => {
 
     await user.click(await screen.findByRole('button', { name: '设置' }))
     await user.click(await screen.findByRole('button', { name: '+ 添加连接' }))
-    await user.click(await screen.findByRole('button', { name: /Custom/ }))
+    await user.click(await screen.findByRole('button', { name: /自定义连接/ }))
 
     await user.type(await screen.findByLabelText('添加连接 API key'), 'sk-custom-value')
     await user.type(screen.getByLabelText('添加连接 Endpoint'), 'https://api.example.com')
@@ -842,19 +815,19 @@ describe('provider settings panel', () => {
     await user.click(screen.getByRole('button', { name: 'Back' }))
     await user.click(screen.getByRole('button', { name: '+ 添加连接' }))
 
-    const picker = await screen.findByRole('dialog', { name: 'Add connection' })
+    const picker = await screen.findByRole('dialog', { name: '添加连接' })
     expect(screen.queryByRole('dialog', { name: 'API 配置' })).not.toBeInTheDocument()
     expect(screen.queryByDisplayValue('sk-custom-value')).not.toBeInTheDocument()
     expect(screen.queryByText('连接成功')).not.toBeInTheDocument()
 
-    await user.click(within(picker).getByRole('button', { name: /Custom/ }))
+    await user.click(within(picker).getByRole('button', { name: /自定义连接/ }))
     const apiDialog = await screen.findByRole('dialog', { name: 'API 配置' })
     expect(screen.getByLabelText('添加连接 API key')).toHaveValue('')
     expect(screen.queryByText('连接成功')).not.toBeInTheDocument()
 
     await user.click(within(apiDialog).getByRole('button', { name: '关闭 API 配置' }))
     await user.click(screen.getByRole('button', { name: '+ 添加连接' }))
-    expect(await screen.findByRole('dialog', { name: 'Add connection' })).toBeInTheDocument()
+    expect(await screen.findByRole('dialog', { name: '添加连接' })).toBeInTheDocument()
     expect(screen.queryByRole('dialog', { name: 'API 配置' })).not.toBeInTheDocument()
   })
 
@@ -865,17 +838,22 @@ describe('provider settings panel', () => {
     await user.click(await screen.findByRole('button', { name: '设置' }))
     await user.click(await screen.findByRole('button', { name: '+ 添加连接' }))
 
-    const picker = await screen.findByRole('dialog', { name: 'Add connection' })
+    const picker = await screen.findByRole('dialog', { name: '添加连接' })
     await waitFor(() => expect(picker).toHaveFocus())
 
-    const closeButton = within(picker).getByRole('button', { name: '关闭 Add connection' })
+    const codexButton = within(picker).getByRole('button', { name: /ChatGPT\/Codex 连接/ })
+    const customButton = within(picker).getByRole('button', { name: /自定义连接/ })
     const backButton = within(picker).getByRole('button', { name: 'Back' })
     backButton.focus()
     await user.keyboard('{Tab}')
-    expect(closeButton).toHaveFocus()
+    expect(codexButton).toHaveFocus()
 
     await user.keyboard('{Shift>}{Tab}{/Shift}')
     expect(backButton).toHaveFocus()
+
+    codexButton.focus()
+    await user.keyboard('{Tab}')
+    expect(customButton).toHaveFocus()
   })
 
   it('adds a custom AI connection from the API configuration dialog', async () => {
@@ -885,7 +863,7 @@ describe('provider settings panel', () => {
 
     await user.click(await screen.findByRole('button', { name: '设置' }))
     await user.click(await screen.findByRole('button', { name: '+ 添加连接' }))
-    await user.click(await screen.findByRole('button', { name: /Custom/ }))
+    await user.click(await screen.findByRole('button', { name: /自定义连接/ }))
 
     expect(await screen.findByRole('dialog', { name: 'API 配置' })).toBeInTheDocument()
     await user.type(screen.getByLabelText('添加连接 API key'), 'sk-custom-value')
@@ -948,7 +926,7 @@ describe('provider settings panel', () => {
 
     await user.click(await screen.findByRole('button', { name: '设置' }))
     await user.click(await screen.findByRole('button', { name: '+ 添加连接' }))
-    await user.click(await screen.findByRole('button', { name: /Custom/ }))
+    await user.click(await screen.findByRole('button', { name: /自定义连接/ }))
     await user.type(screen.getByLabelText('添加连接 API key'), 'sk-custom-value')
     await user.type(screen.getByLabelText('添加连接 Endpoint'), 'https://api.example.com')
     await user.type(screen.getByLabelText('添加连接默认模型'), 'gpt-4o')

@@ -26,7 +26,7 @@ type ConnectionDialogState = {
   form: ConnectionFormState
 }
 
-type CodexOAuthAction = 'starting' | 'checking' | 'saving'
+type CodexOAuthAction = 'starting' | 'saving'
 
 type CodexOAuthState = {
   connectionName: string
@@ -38,6 +38,7 @@ type CodexOAuthState = {
 }
 
 const initialCodexOAuthState: CodexOAuthState = { connectionName: 'ChatGPT Codex', status: 'idle' }
+const codexOAuthStatusPollIntervalMs = 600
 
 function isCodexOAuthProvider(provider: ModelProviderDto): boolean {
   return provider.kind === 'pi' && provider.authType === 'oauth' && provider.piAuthProvider === 'openai-codex'
@@ -85,11 +86,6 @@ function withoutCodexAction(state: CodexOAuthState): CodexOAuthState {
 
 function withoutCodexError(state: CodexOAuthState): CodexOAuthState {
   const { errorMessage: _errorMessage, ...nextState } = state
-  return nextState
-}
-
-function withoutCodexActionAndError(state: CodexOAuthState): CodexOAuthState {
-  const { action: _action, errorMessage: _errorMessage, ...nextState } = state
   return nextState
 }
 
@@ -170,6 +166,8 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
   const loadRequestIdRef = useRef(0)
   const codexOAuthRequestIdRef = useRef(0)
   const codexOAuthSessionIdRef = useRef<string | undefined>(undefined)
+  const codexOAuthAutoSaveSessionRef = useRef<string | undefined>(undefined)
+  const codexOAuthStatusCheckInFlightRef = useRef(false)
   const renameInputRef = useRef<HTMLInputElement | null>(null)
 
   const visibleProviders = useMemo(() => providers.filter((provider) => provider.enabled !== false), [providers])
@@ -186,6 +184,8 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
     codexOAuthRequestIdRef.current += 1
     const sessionId = codexOAuthSessionIdRef.current
     codexOAuthSessionIdRef.current = undefined
+    codexOAuthAutoSaveSessionRef.current = undefined
+    codexOAuthStatusCheckInFlightRef.current = false
     setCodexOAuthState({ connectionName: options.connectionName ?? initialCodexOAuthState.connectionName, status: 'idle' })
     if (options.cancel && sessionId) {
       void cancelCodexOAuthSession(sessionId)
@@ -220,6 +220,8 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
       codexOAuthRequestIdRef.current += 1
       const sessionId = codexOAuthSessionIdRef.current
       codexOAuthSessionIdRef.current = undefined
+      codexOAuthAutoSaveSessionRef.current = undefined
+      codexOAuthStatusCheckInFlightRef.current = false
       if (sessionId) {
         void cancelCodexOAuthSession(sessionId)
       }
@@ -289,14 +291,15 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
     setDialogState((current) => current ? { ...current, form: typeof updater === 'function' ? updater(current.form) : updater } : current)
   }
 
-  const startCodexOAuth = async () => {
+  const startCodexOAuth = async (connectionNameOverride?: string) => {
     if (codexOAuthState.action) return
 
-    const connectionName = codexOAuthState.connectionName.trim() || initialCodexOAuthState.connectionName
+    const connectionName = (connectionNameOverride ?? codexOAuthState.connectionName).trim() || initialCodexOAuthState.connectionName
     const requestId = codexOAuthRequestIdRef.current + 1
     codexOAuthRequestIdRef.current = requestId
     const previousSessionId = codexOAuthSessionIdRef.current
     codexOAuthSessionIdRef.current = undefined
+    codexOAuthStatusCheckInFlightRef.current = false
     if (previousSessionId) {
       void cancelCodexOAuthSession(previousSessionId)
     }
@@ -308,6 +311,7 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
       const result = await hesperApi.providers.startOAuthAuthorization({ provider: 'openai-codex', connectionName })
       if (!mountedRef.current || requestId !== codexOAuthRequestIdRef.current) return
       codexOAuthSessionIdRef.current = result.sessionId
+      codexOAuthAutoSaveSessionRef.current = undefined
       setCodexOAuthState({
         connectionName,
         sessionId: result.sessionId,
@@ -328,20 +332,20 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
     }
   }
 
-  const checkCodexOAuthStatus = async () => {
-    const sessionId = codexOAuthState.sessionId
-    if (!sessionId || codexOAuthState.action) return
+  const checkCodexOAuthStatus = async (sessionIdOverride?: string) => {
+    const sessionId = sessionIdOverride ?? codexOAuthSessionIdRef.current ?? codexOAuthState.sessionId
+    if (!sessionId || codexOAuthStatusCheckInFlightRef.current) return
 
-    const requestId = codexOAuthRequestIdRef.current + 1
-    codexOAuthRequestIdRef.current = requestId
+    const requestId = codexOAuthRequestIdRef.current
+    codexOAuthStatusCheckInFlightRef.current = true
     setError(undefined)
     setMessage(undefined)
-    setCodexOAuthState((current) => ({ ...withoutCodexError(current), action: 'checking' }))
+    setCodexOAuthState((current) => withoutCodexError(current))
     try {
       const result = await hesperApi.providers.getOAuthAuthorizationStatus({ sessionId })
       if (!mountedRef.current || requestId !== codexOAuthRequestIdRef.current) return
       setCodexOAuthState((current) => ({
-        ...withoutCodexActionAndError(current),
+        ...withoutCodexError(current),
         sessionId: result.sessionId,
         status: result.status,
         message: result.message
@@ -355,16 +359,16 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
       }))
     } finally {
       if (mountedRef.current && requestId === codexOAuthRequestIdRef.current) {
-        setCodexOAuthState((current) => withoutCodexAction(current))
+        codexOAuthStatusCheckInFlightRef.current = false
       }
     }
   }
 
-  const saveCodexOAuthConnection = async () => {
-    const sessionId = codexOAuthState.sessionId
+  const saveCodexOAuthConnection = async (sessionIdOverride?: string, connectionNameOverride?: string) => {
+    const sessionId = sessionIdOverride ?? codexOAuthState.sessionId
     if (!sessionId || codexOAuthState.status !== 'authorized' || codexOAuthState.action) return
 
-    const connectionName = codexOAuthState.connectionName.trim() || initialCodexOAuthState.connectionName
+    const connectionName = (connectionNameOverride ?? codexOAuthState.connectionName).trim() || initialCodexOAuthState.connectionName
     const requestId = codexOAuthRequestIdRef.current + 1
     codexOAuthRequestIdRef.current = requestId
     setError(undefined)
@@ -393,16 +397,53 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
       setMessage(`已添加连接：${provider.name}`)
     } catch (saveError) {
       if (!mountedRef.current || requestId !== codexOAuthRequestIdRef.current) return
-      setCodexOAuthState((current) => ({
-        ...withoutCodexAction(current),
-        errorMessage: formatUnknownError(saveError, 'Codex 连接保存失败')
-      }))
+      codexOAuthSessionIdRef.current = undefined
+      setCodexOAuthState((current) => {
+        const { sessionId: _sessionId, ...nextState } = withoutCodexAction(current)
+        return {
+          ...nextState,
+          status: 'failed',
+          errorMessage: formatUnknownError(saveError, 'Codex 连接保存失败')
+        }
+      })
     } finally {
       if (mountedRef.current && requestId === codexOAuthRequestIdRef.current) {
         setCodexOAuthState((current) => withoutCodexAction(current))
       }
     }
   }
+
+  useEffect(() => {
+    if (addConnectionFlow !== 'codex') return undefined
+    if (codexOAuthState.status !== 'idle' || codexOAuthState.action) return undefined
+    const connectionName = codexOAuthState.connectionName.trim() || initialCodexOAuthState.connectionName
+    const timer = window.setTimeout(() => {
+      void startCodexOAuth(connectionName)
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [addConnectionFlow, codexOAuthState.status, codexOAuthState.action, codexOAuthState.connectionName])
+
+  useEffect(() => {
+    if (addConnectionFlow !== 'codex') return undefined
+    if (!codexOAuthState.sessionId || codexOAuthState.status !== 'pending') return undefined
+    const sessionId = codexOAuthState.sessionId
+    const timer = window.setInterval(() => {
+      void checkCodexOAuthStatus(sessionId)
+    }, codexOAuthStatusPollIntervalMs)
+    return () => window.clearInterval(timer)
+  }, [addConnectionFlow, codexOAuthState.sessionId, codexOAuthState.status])
+
+  useEffect(() => {
+    if (addConnectionFlow !== 'codex') return undefined
+    if (!codexOAuthState.sessionId || codexOAuthState.status !== 'authorized' || codexOAuthState.action) return undefined
+    if (codexOAuthAutoSaveSessionRef.current === codexOAuthState.sessionId) return undefined
+    codexOAuthAutoSaveSessionRef.current = codexOAuthState.sessionId
+    const connectionName = codexOAuthState.connectionName.trim() || initialCodexOAuthState.connectionName
+    const timer = window.setTimeout(() => {
+      void saveCodexOAuthConnection(codexOAuthState.sessionId, connectionName)
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [addConnectionFlow, codexOAuthState.sessionId, codexOAuthState.status, codexOAuthState.action, codexOAuthState.connectionName])
 
   const saveConnection = async () => {
     if (!dialogState) return
@@ -683,12 +724,9 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
       {addConnectionFlow === 'codex' ? (
         <CodexAuthorizationPage
           state={codexOAuthState}
-          onConnectionNameChange={(connectionName) => setCodexOAuthState((current) => ({ ...current, connectionName }))}
           onBack={backFromCodexConnection}
           onCancel={closeCodexConnection}
-          onStart={() => void startCodexOAuth()}
-          onCheckStatus={() => void checkCodexOAuthStatus()}
-          onSave={() => void saveCodexOAuthConnection()}
+          onRetry={() => void startCodexOAuth()}
         />
       ) : null}
 
@@ -728,12 +766,16 @@ function FullWindowDialogShell({
   ariaLabel,
   children,
   onClose,
-  initialFocusRef
+  initialFocusRef,
+  style,
+  showClose = true
 }: {
   ariaLabel: string
   children: ReactNode
   onClose: () => void
   initialFocusRef?: RefObject<HTMLElement | null>
+  style?: CSSProperties
+  showClose?: boolean
 }) {
   const dialogRef = useRef<HTMLDivElement | null>(null)
 
@@ -789,9 +831,9 @@ function FullWindowDialogShell({
       aria-label={ariaLabel}
       tabIndex={-1}
       onKeyDown={handleKeyDown}
-      style={fullWindowOverlayStyle}
+      style={{ ...fullWindowOverlayStyle, ...style }}
     >
-      <button type="button" aria-label={`关闭 ${ariaLabel}`} onClick={onClose} style={overlayCloseStyle}>×</button>
+      {showClose ? <button type="button" aria-label={`关闭 ${ariaLabel}`} onClick={onClose} style={overlayCloseStyle}>×</button> : null}
       {children}
     </div>
   )
@@ -807,109 +849,130 @@ function ConnectionTypePicker({
   onCancel: () => void
 }) {
   return (
-    <FullWindowDialogShell ariaLabel="Add connection" onClose={onCancel}>
+    <FullWindowDialogShell ariaLabel="添加连接" onClose={onCancel} style={onboardingOverlayStyle} showClose={false}>
       <div style={connectionTypePickerPanelStyle}>
-        <header style={{ textAlign: 'center', marginBottom: 6 }}>
-          <h2 style={{ margin: 0, fontSize: bodyFontSize }}>Add connection</h2>
-          <p style={{ margin: '12px 0 0', color: mutedTextColor, lineHeight: 1.5 }}>选择一种连接方式。</p>
+        <header style={onboardingHeaderStyle}>
+          <CraftMark />
+          <h2 style={onboardingTitleStyle}>欢迎使用 Hesper</h2>
+          <p style={onboardingSubtitleStyle}>选择连接方式</p>
         </header>
-        <div style={connectionTypeGridStyle}>
-          <button type="button" onClick={onSelectCodex} style={connectionTypeCardStyle}>
-            <strong style={connectionTypeTitleStyle}>Codex 授权</strong>
-            <span style={connectionTypeDescriptionStyle}>使用 Codex OAuth 授权连接。</span>
-          </button>
-          <button type="button" onClick={onSelectCustom} style={connectionTypeCardStyle}>
-            <strong style={connectionTypeTitleStyle}>Custom</strong>
-            <span style={connectionTypeDescriptionStyle}>手动填写 API key、Endpoint 和模型。</span>
-          </button>
+        <div style={connectionTypeListStyle}>
+          <ConnectionTypeRow
+            title="ChatGPT/Codex 连接"
+            description="使用 ChatGPT 订阅驱动 Hesper。"
+            icon={<OpenAIIcon />}
+            onClick={onSelectCodex}
+          />
+          <ConnectionTypeRow
+            title="自定义连接"
+            description="手动填写 API Key、Endpoint 和模型。"
+            icon={<CustomProviderIcon />}
+            onClick={onSelectCustom}
+          />
         </div>
-        <footer style={{ display: 'flex', justifyContent: 'center', marginTop: 22 }}>
-          <button type="button" onClick={onCancel} style={secondaryActionStyle}>Back</button>
+        <footer style={connectionPickerFooterStyle}>
+          <button type="button" onClick={onCancel} style={onboardingSecondaryButtonStyle}>Back</button>
         </footer>
       </div>
     </FullWindowDialogShell>
   )
 }
 
+function ConnectionTypeRow({
+  title,
+  description,
+  icon,
+  onClick
+}: {
+  title: string
+  description: string
+  icon: ReactNode
+  onClick: () => void
+}) {
+  return (
+    <button type="button" onClick={onClick} style={connectionTypeRowStyle}>
+      <span style={connectionTypeIconStyle}>{icon}</span>
+      <span style={connectionTypeTextBlockStyle}>
+        <strong style={connectionTypeTitleStyle}>{title}</strong>
+        <span style={connectionTypeDescriptionStyle}>{description}</span>
+      </span>
+    </button>
+  )
+}
+
+function CraftMark() {
+  return (
+    <div aria-hidden="true" style={craftMarkStyle}>
+      <span style={craftMarkCutoutStyle} />
+    </div>
+  )
+}
+
+function OpenAIIcon() {
+  return <span aria-hidden="true" style={openAIIconStyle}>◎</span>
+}
+
+function CustomProviderIcon() {
+  return <span aria-hidden="true" style={customProviderIconStyle}>⌁</span>
+}
+
+function SpinnerIcon() {
+  return <span aria-hidden="true" style={spinnerIconStyle}>⋮⋮</span>
+}
+
 function CodexAuthorizationPage({
   state,
-  onConnectionNameChange,
   onBack,
   onCancel,
-  onStart,
-  onCheckStatus,
-  onSave
+  onRetry
 }: {
   state: CodexOAuthState
-  onConnectionNameChange: (connectionName: string) => void
   onBack: () => void
   onCancel: () => void
-  onStart: () => void
-  onCheckStatus: () => void
-  onSave: () => void
+  onRetry: () => void
 }) {
-  const hasSession = Boolean(state.sessionId)
-  const hasActiveAction = Boolean(state.action)
-  const inputDisabled = state.action === 'starting' || state.action === 'saving'
-  const startDisabled = hasActiveAction
-  const checkDisabled = !hasSession || hasActiveAction
-  const canSave = state.status === 'authorized'
-  const saveDisabled = !canSave || hasActiveAction
   const feedbackIsError = Boolean(state.errorMessage) || state.status === 'failed'
-  const feedbackText = state.errorMessage ?? (state.message ? `${state.status}: ${state.message}` : undefined)
+  const feedbackText = state.errorMessage ?? state.message
+  const isSaving = state.action === 'saving'
+  const isStarting = state.action === 'starting'
+  const statusLabel = state.status === 'authorized' || isSaving
+    ? '正在保存...'
+    : isStarting
+      ? '正在打开...'
+      : state.status === 'failed'
+        ? '重新连接'
+        : '连接中...'
 
   return (
-    <FullWindowDialogShell ariaLabel="Codex 授权" onClose={onCancel}>
-      <div style={overlayFormStyle}>
-        <header style={{ textAlign: 'center', marginBottom: 6 }}>
-          <h2 style={{ margin: 0, fontSize: bodyFontSize }}>Codex 授权</h2>
-          <p style={{ margin: '12px 0 0', color: mutedTextColor, lineHeight: 1.5 }}>
-            使用默认浏览器完成 ChatGPT Codex 授权。
-          </p>
+    <FullWindowDialogShell ariaLabel="Codex 授权" onClose={onCancel} style={onboardingOverlayStyle} showClose={false}>
+      <div style={codexAuthPanelStyle}>
+        <header style={codexAuthHeaderStyle}>
+          <h2 style={codexAuthTitleStyle}>连接 ChatGPT</h2>
+          <p style={codexAuthSubtitleStyle}>使用 ChatGPT 订阅驱动 Hesper。</p>
         </header>
-        <label style={fieldStyle}>
-          Connection Name
-          <input
-            aria-label="Codex 连接名称"
-            value={state.connectionName}
-            onChange={(event) => onConnectionNameChange(event.target.value)}
-            disabled={inputDisabled}
-            style={inputStyle}
-          />
-        </label>
-        {feedbackText ? (
-          <p
-            role={feedbackIsError ? 'alert' : 'status'}
-            style={{ ...connectionFeedbackTextStyle, ...(feedbackIsError ? errorTextStyle : statusTextStyle) }}
-          >
-            {feedbackText}
+        <div style={codexAuthBodyStyle}>
+          <p style={codexAuthInstructionStyle}>
+            已在默认浏览器打开 OpenAI 登录页面，请完成认证。授权成功后将自动保存并返回设置界面。
           </p>
-        ) : null}
-        <footer style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10, marginTop: 22 }}>
-          <button type="button" onClick={onBack} style={secondaryActionStyle}>Back</button>
+          {feedbackText ? (
+            <p
+              role={feedbackIsError ? 'alert' : 'status'}
+              style={{ ...codexAuthFeedbackStyle, ...(feedbackIsError ? codexAuthErrorTextStyle : {}) }}
+            >
+              {feedbackText}
+            </p>
+          ) : null}
+        </div>
+        <footer style={codexAuthFooterStyle}>
+          <button type="button" onClick={onBack} style={onboardingSecondaryButtonStyle}>Back</button>
           <button
             type="button"
-            onClick={onStart}
-            disabled={startDisabled}
-            style={{ ...secondaryActionStyle, ...(startDisabled ? disabledActionStyle : {}) }}
+            onClick={state.status === 'failed' ? onRetry : undefined}
+            disabled={state.status !== 'failed'}
+            style={{ ...onboardingPrimaryButtonStyle, ...(state.status !== 'failed' ? disabledOnboardingButtonStyle : {}) }}
           >
-            Open Browser
-          </button>
-          <button
-            type="button"
-            onClick={onCheckStatus}
-            disabled={checkDisabled}
-            style={{ ...secondaryActionStyle, ...(checkDisabled ? disabledActionStyle : {}) }}
-          >
-            Check Status
-          </button>
-          <button
-            type="button"
-            onClick={onSave}
-            disabled={saveDisabled}
-            style={{ ...primaryActionStyle, ...(saveDisabled ? disabledActionStyle : {}) }}
-          >
-            Save
+            {state.status === 'failed' ? null : <SpinnerIcon />}
+            <span>{statusLabel}</span>
           </button>
         </footer>
       </div>
@@ -1302,41 +1365,241 @@ const overlayFormStyle: CSSProperties = {
   padding: 24
 }
 
+const onboardingBackgroundColor = '#eef1f7'
+const onboardingTextColor = '#515873'
+const onboardingMutedColor = '#9da4b8'
+const onboardingBorderColor = '#dde2eb'
+const onboardingCardColor = 'rgba(244, 246, 251, 0.72)'
+const onboardingIconColor = '#111827'
+const onboardingPurpleColor = '#8036f5'
+
+const onboardingOverlayStyle: CSSProperties = {
+  background: onboardingBackgroundColor,
+  color: onboardingTextColor,
+  padding: '56px 32px',
+  alignItems: 'start',
+  justifyItems: 'center',
+  overflowY: 'auto'
+}
+
 const connectionTypePickerPanelStyle: CSSProperties = {
-  ...overlayFormStyle,
-  width: 'min(600px, 100%)'
-}
-
-const connectionTypeGridStyle: CSSProperties = {
+  width: 'min(760px, 100%)',
   display: 'grid',
-  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-  gap: 12
+  gap: 22,
+  paddingTop: 28
 }
 
-const connectionTypeCardStyle: CSSProperties = {
-  minHeight: 132,
-  border: `1px solid ${borderColor}`,
-  outline: 0,
-  borderRadius: 16,
-  background: surfaceColor,
-  color: bodyTextColor,
-  padding: 18,
+const onboardingHeaderStyle: CSSProperties = {
+  display: 'grid',
+  justifyItems: 'center',
+  gap: 12,
+  marginBottom: 20,
+  textAlign: 'center'
+}
+
+const craftMarkStyle: CSSProperties = {
+  position: 'relative',
+  width: 58,
+  height: 50,
+  background: onboardingPurpleColor,
+  clipPath: 'polygon(18% 0, 100% 0, 100% 38%, 58% 38%, 58% 62%, 100% 62%, 100% 100%, 18% 100%, 18% 76%, 0 76%, 0 24%, 18% 24%)'
+}
+
+const craftMarkCutoutStyle: CSSProperties = {
+  position: 'absolute',
+  right: 14,
+  top: 19,
+  width: 18,
+  height: 12,
+  background: onboardingBackgroundColor
+}
+
+const onboardingTitleStyle: CSSProperties = {
+  margin: '24px 0 0',
+  color: onboardingTextColor,
+  fontSize: 30,
+  lineHeight: 1.2,
+  fontWeight: 760
+}
+
+const onboardingSubtitleStyle: CSSProperties = {
+  margin: 0,
+  color: onboardingMutedColor,
+  fontSize: 22,
+  lineHeight: 1.35,
+  fontWeight: 650
+}
+
+const connectionTypeListStyle: CSSProperties = {
+  display: 'grid',
+  gap: 18
+}
+
+const connectionTypeRowStyle: CSSProperties = {
+  width: '100%',
+  minHeight: 112,
+  border: `1px solid ${onboardingBorderColor}`,
+  borderRadius: 22,
+  background: onboardingCardColor,
+  color: onboardingTextColor,
+  padding: '22px 28px',
   cursor: 'pointer',
   display: 'grid',
-  alignContent: 'start',
-  gap: 10,
-  textAlign: 'left'
+  gridTemplateColumns: '74px minmax(0, 1fr)',
+  alignItems: 'center',
+  gap: 24,
+  textAlign: 'left',
+  boxShadow: '0 2px 5px rgba(36, 42, 64, 0.06), 0 12px 24px rgba(36, 42, 64, 0.05)'
+}
+
+const connectionTypeIconStyle: CSSProperties = {
+  width: 66,
+  height: 66,
+  borderRadius: 14,
+  background: '#e8ebf3',
+  display: 'grid',
+  placeItems: 'center',
+  color: onboardingIconColor,
+  flex: '0 0 auto'
+}
+
+const connectionTypeTextBlockStyle: CSSProperties = {
+  minWidth: 0,
+  display: 'grid',
+  gap: 6
 }
 
 const connectionTypeTitleStyle: CSSProperties = {
-  color: bodyTextColor,
-  fontSize: bodyFontSize,
-  lineHeight: 1.2
+  color: onboardingTextColor,
+  fontSize: 23,
+  lineHeight: 1.2,
+  fontWeight: 760
 }
 
 const connectionTypeDescriptionStyle: CSSProperties = {
-  color: mutedTextColor,
-  lineHeight: 1.5
+  color: onboardingMutedColor,
+  fontSize: 19,
+  lineHeight: 1.35,
+  fontWeight: 560
+}
+
+const connectionPickerFooterStyle: CSSProperties = {
+  display: 'flex',
+  justifyContent: 'center',
+  marginTop: 4
+}
+
+const openAIIconStyle: CSSProperties = {
+  fontSize: 36,
+  lineHeight: 1,
+  fontWeight: 900
+}
+
+const customProviderIconStyle: CSSProperties = {
+  fontSize: 34,
+  lineHeight: 1,
+  color: onboardingMutedColor,
+  fontWeight: 800
+}
+
+const onboardingSecondaryButtonStyle: CSSProperties = {
+  minHeight: 58,
+  borderRadius: 15,
+  border: `1px solid ${onboardingBorderColor}`,
+  background: 'rgba(244, 246, 251, 0.72)',
+  color: onboardingMutedColor,
+  padding: '0 24px',
+  cursor: 'pointer',
+  fontSize: 22,
+  fontWeight: 650,
+  boxShadow: '0 2px 5px rgba(36, 42, 64, 0.04)'
+}
+
+const onboardingPrimaryButtonStyle: CSSProperties = {
+  ...onboardingSecondaryButtonStyle,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 18,
+  color: onboardingMutedColor
+}
+
+const disabledOnboardingButtonStyle: CSSProperties = {
+  opacity: 0.72,
+  cursor: 'default'
+}
+
+const spinnerIconStyle: CSSProperties = {
+  letterSpacing: 3,
+  color: onboardingMutedColor,
+  transform: 'rotate(90deg)',
+  fontSize: 22,
+  lineHeight: 1
+}
+
+const codexAuthPanelStyle: CSSProperties = {
+  width: 'min(760px, 100%)',
+  minHeight: 'min(560px, calc(100vh - 124px))',
+  display: 'grid',
+  gridTemplateRows: 'auto minmax(0, 1fr) auto',
+  paddingTop: 96,
+  boxSizing: 'border-box'
+}
+
+const codexAuthHeaderStyle: CSSProperties = {
+  textAlign: 'center',
+  display: 'grid',
+  gap: 20,
+  marginBottom: 78
+}
+
+const codexAuthTitleStyle: CSSProperties = {
+  margin: 0,
+  color: '#343b56',
+  fontSize: 30,
+  lineHeight: 1.2,
+  fontWeight: 780
+}
+
+const codexAuthSubtitleStyle: CSSProperties = {
+  margin: 0,
+  color: onboardingMutedColor,
+  fontSize: 22,
+  lineHeight: 1.35,
+  fontWeight: 560
+}
+
+const codexAuthBodyStyle: CSSProperties = {
+  display: 'grid',
+  alignContent: 'start',
+  gap: 24
+}
+
+const codexAuthInstructionStyle: CSSProperties = {
+  margin: 0,
+  color: onboardingMutedColor,
+  fontSize: 22,
+  lineHeight: 1.45,
+  fontWeight: 560,
+  maxWidth: 680
+}
+
+const codexAuthFeedbackStyle: CSSProperties = {
+  ...codexAuthInstructionStyle,
+  fontSize: 18,
+  color: onboardingTextColor,
+  overflowWrap: 'anywhere'
+}
+
+const codexAuthErrorTextStyle: CSSProperties = {
+  color: '#c2415b'
+}
+
+const codexAuthFooterStyle: CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+  gap: 18,
+  marginTop: 36
 }
 
 const segmentedControlStyle: CSSProperties = {
