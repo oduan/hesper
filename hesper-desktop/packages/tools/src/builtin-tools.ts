@@ -10,6 +10,9 @@ function currentCommandRuntimeDescription(): string {
   return `Current platform is ${process.platform}; commands run once through bash from the selected workspace.`
 }
 
+const roleDefaultModelIdDescription = 'Legacy default model id for this role. Empty string means inherit the caller/parent model; prefer defaultModelRef for provider-aware selection.'
+const roleDefaultModelRefDescription = 'Provider-aware default model reference from models.list-available. Takes precedence over defaultModelId and does not require defaultModelId to be set.'
+
 export function createBuiltinToolDefinitions(): ToolDefinition[] {
   return [
     {
@@ -248,7 +251,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
     {
       id: 'roles.create',
       name: 'Create Role',
-      description: 'Create a user-defined role with a name, description, full prompt, and default tools.',
+      description: 'Create a reusable role with a name, description, full prompt, default tools, and optional default model. Do not use for one-off Worker Agent tasks; pass temporaryRole to agent.spawn-worker-agent instead. Only create roles the user explicitly wants to reuse.',
       category: 'agent',
       icon: '🎭',
       inputSchema: {
@@ -259,10 +262,10 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
           description: { type: 'string', description: 'Short role description shown in the roles list.' },
           systemPrompt: { type: 'string', description: 'Full prompt for this role.' },
           defaultToolIds: { type: 'array', items: { type: 'string' }, description: 'Default tool IDs for this role.' },
-          defaultModelId: { type: 'string', description: 'Default model id for this role. Empty string means inherit the caller/parent model.' },
+          defaultModelId: { type: 'string', description: roleDefaultModelIdDescription },
           defaultModelRef: {
             type: 'object',
-            description: 'Provider-aware model reference. Only used with a non-empty defaultModelId.',
+            description: roleDefaultModelRefDescription,
             properties: {
               providerId: { type: 'string' },
               modelId: { type: 'string' }
@@ -274,7 +277,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
     {
       id: 'roles.update',
       name: 'Update Role',
-      description: 'Update an existing user-defined role. This tool cannot delete roles.',
+      description: 'Update an existing reusable user-defined role. This tool cannot delete roles.',
       category: 'agent',
       icon: '🎭',
       inputSchema: {
@@ -286,10 +289,10 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
           description: { type: 'string', description: 'New short role description.' },
           systemPrompt: { type: 'string', description: 'New full prompt.' },
           defaultToolIds: { type: 'array', items: { type: 'string' }, description: 'Replacement default tool IDs for this role.' },
-          defaultModelId: { type: 'string', description: 'Default model id for this role. Empty string means inherit the caller/parent model.' },
+          defaultModelId: { type: 'string', description: roleDefaultModelIdDescription },
           defaultModelRef: {
             type: 'object',
-            description: 'Provider-aware model reference. Only used with a non-empty defaultModelId.',
+            description: roleDefaultModelRefDescription,
             properties: {
               providerId: { type: 'string' },
               modelId: { type: 'string' }
@@ -301,7 +304,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
     {
       id: 'models.list-available',
       name: 'List Available Models',
-      description: 'List currently available model providers and models so the main Agent can choose a model for itself or Worker Agents. Returns metadata only and never returns API keys.',
+      description: 'List currently available model providers and models, including provider-aware modelRef values, so the main Agent can choose a model for itself or Worker Agents. Returns metadata only and never returns API keys.',
       category: 'agent',
       icon: '🤖',
       inputSchema: { type: 'object', properties: {} }
@@ -331,7 +334,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
               description: { type: 'string', description: 'Optional temporary role description for tracing.' },
               systemPrompt: { type: 'string', description: 'Full system prompt/instructions for this temporary Worker Agent role.' },
               defaultToolIds: { type: 'array', items: { type: 'string' }, description: 'Optional default tools for the temporary role. If omitted, requested allowedToolIds are used as the role tool side of the intersection.' },
-              defaultModelId: { type: 'string', description: 'Optional legacy default model id for this temporary role.' },
+              defaultModelId: { type: 'string', description: 'Optional legacy default model id for this temporary role. Empty string means inherit the parent model; prefer defaultModelRef for provider-aware selection.' },
               defaultModelRef: {
                 type: 'object',
                 description: 'Optional provider-aware default model reference for this temporary role. Takes precedence over defaultModelId unless spawn provides an explicit modelRef/modelId.',

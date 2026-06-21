@@ -173,18 +173,38 @@ function renderSkillManifest(skills: Skill[], availableToolIds?: Set<string>): s
   ].join('\n')).join('\n')
 }
 
+function renderRoleDefaultModel(role: Role): string | undefined {
+  const providerId = role.defaultModelRef?.providerId?.trim()
+  const modelId = role.defaultModelRef?.modelId?.trim()
+  if (providerId && modelId) {
+    return `default model: defaultModelRef=${sanitizeText(`${providerId}/${modelId}`)}`
+  }
+
+  const defaultModelId = role.defaultModelId?.trim()
+  if (defaultModelId) {
+    return `default model: defaultModelId=${sanitizeText(defaultModelId)}`
+  }
+
+  return undefined
+}
+
 function renderRoleManifest(roles: Role[], options: { availableToolIds?: Set<string>, enabledSkillIds?: Set<string> } = {}): string {
   if (roles.length === 0) {
     return 'No Worker Agent roles are assignable for this run.'
   }
 
-  return roles.map((role) => [
-    `- ${sanitizeText(role.id)}: ${sanitizeText(role.name)}`,
-    ...(role.description ? [`  description: ${sanitizeText(role.description)}`] : []),
-    ...(role.defaultToolIds?.length ? [`  default tools: ${renderIdList(role.defaultToolIds, options.availableToolIds)}`] : []),
-    ...(role.allowedSkillIds.length ? [`  allowed skills: ${renderIdList(role.allowedSkillIds, options.enabledSkillIds)}`] : []),
-    ...(role.workerAgentGuidance ? [`  worker agent guidance: ${sanitizeText(role.workerAgentGuidance)}`] : [])
-  ].join('\n')).join('\n')
+  return roles.map((role) => {
+    const defaultModelLine = renderRoleDefaultModel(role)
+
+    return [
+      `- ${sanitizeText(role.id)}: ${sanitizeText(role.name)}`,
+      ...(role.description ? [`  description: ${sanitizeText(role.description)}`] : []),
+      ...(defaultModelLine ? [`  ${defaultModelLine}`] : []),
+      ...(role.defaultToolIds?.length ? [`  default tools: ${renderIdList(role.defaultToolIds, options.availableToolIds)}`] : []),
+      ...(role.allowedSkillIds.length ? [`  allowed skills: ${renderIdList(role.allowedSkillIds, options.enabledSkillIds)}`] : []),
+      ...(role.workerAgentGuidance ? [`  worker agent guidance: ${sanitizeText(role.workerAgentGuidance)}`] : [])
+    ].join('\n')
+  }).join('\n')
 }
 
 function renderMainWorkerAgentRules(input: MainPromptAssemblyInput, roles: Role[], tools: ToolDefinition[]): string {

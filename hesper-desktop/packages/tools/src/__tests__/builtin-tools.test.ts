@@ -106,11 +106,28 @@ describe('builtin tools', () => {
         })
       }
     })
+    expect(schema.properties.temporaryRole.properties.defaultModelRef.description).toContain('Takes precedence over defaultModelId')
     expect(spawnWorkerAgent?.description).toContain('temporaryRole')
     expect(spawnWorkerAgent?.description).toContain('roleSnapshot')
     expect(spawnWorkerAgent?.description).toContain('role library')
     expect(spawnWorkerAgent?.description).not.toMatch(/not persisted/i)
     expect(spawnWorkerAgent?.description).toContain('roles.create')
+  })
+
+  it('describes provider-aware model discovery, Worker spawning, and reusable role creation consistently', () => {
+    const tools = createBuiltinToolDefinitions()
+    const modelList = tools.find((tool) => tool.id === 'models.list-available')
+    const spawnWorkerAgent = tools.find((tool) => tool.id === 'agent.spawn-worker-agent')
+    const createRole = tools.find((tool) => tool.id === 'roles.create')
+
+    expect(modelList?.description).toContain('provider-aware modelRef')
+    expect(modelList?.description).toContain('never returns API keys')
+    expect(spawnWorkerAgent?.description).toContain('modelRef takes precedence')
+    expect(spawnWorkerAgent?.description).toContain('temporaryRole is not saved')
+    expect(spawnWorkerAgent?.description).toContain('roleSnapshot')
+    expect(createRole?.description).toContain('reusable role')
+    expect(createRole?.description).toContain('Do not use for one-off Worker Agent tasks')
+    expect(createRole?.description).toContain('temporaryRole')
   })
 
   it('defines filesystem tools with required schema fields', () => {
@@ -236,11 +253,11 @@ describe('builtin tools', () => {
           defaultToolIds: expect.objectContaining({ type: 'array' }),
           defaultModelId: expect.objectContaining({
             type: 'string',
-            description: 'Default model id for this role. Empty string means inherit the caller/parent model.'
+            description: 'Legacy default model id for this role. Empty string means inherit the caller/parent model; prefer defaultModelRef for provider-aware selection.'
           }),
           defaultModelRef: expect.objectContaining({
             type: 'object',
-            description: 'Provider-aware model reference. Only used with a non-empty defaultModelId.',
+            description: 'Provider-aware default model reference from models.list-available. Takes precedence over defaultModelId and does not require defaultModelId to be set.',
             properties: {
               providerId: expect.objectContaining({ type: 'string' }),
               modelId: expect.objectContaining({ type: 'string' })
@@ -262,11 +279,11 @@ describe('builtin tools', () => {
           defaultToolIds: expect.objectContaining({ type: 'array' }),
           defaultModelId: expect.objectContaining({
             type: 'string',
-            description: 'Default model id for this role. Empty string means inherit the caller/parent model.'
+            description: 'Legacy default model id for this role. Empty string means inherit the caller/parent model; prefer defaultModelRef for provider-aware selection.'
           }),
           defaultModelRef: expect.objectContaining({
             type: 'object',
-            description: 'Provider-aware model reference. Only used with a non-empty defaultModelId.',
+            description: 'Provider-aware default model reference from models.list-available. Takes precedence over defaultModelId and does not require defaultModelId to be set.',
             properties: {
               providerId: expect.objectContaining({ type: 'string' }),
               modelId: expect.objectContaining({ type: 'string' })
