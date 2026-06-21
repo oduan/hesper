@@ -309,7 +309,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
     {
       id: 'agent.spawn-worker-agent',
       name: 'Spawn Worker Agent',
-      description: 'Create a constrained Worker Agent child run with a role, task, and limited tool set. By default waits only for a bounded timeout and returns a diagnosis if still running.',
+      description: 'Create a constrained Worker Agent child run with a role, task, limited tool set, and optional model override. Use models.list-available first to choose a provider-aware modelRef when possible; modelRef takes precedence over modelId. If neither is provided, the role default model (defaultModelRef then defaultModelId) or parent run model is used. By default waits only for a bounded timeout and returns a diagnosis if still running.',
       category: 'agent',
       icon: '🧑‍💻',
       inputSchema: {
@@ -319,6 +319,16 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
           task: { type: 'string', description: 'Specific task for the Worker Agent.' },
           roleId: { type: 'string', description: 'Assignable Worker Agent role id.' },
           allowedToolIds: { type: 'array', items: { type: 'string' }, description: 'Requested tool ids. Effective tools are intersected with parent, role, and global limits.' },
+          modelRef: {
+            type: 'object',
+            description: 'Provider-aware model reference from models.list-available. Takes precedence over modelId, role defaults, and the parent run model.',
+            required: ['providerId', 'modelId'],
+            properties: {
+              providerId: { type: 'string', description: 'Model provider id returned by models.list-available.' },
+              modelId: { type: 'string', description: 'Model id returned by models.list-available.' }
+            }
+          },
+          modelId: { type: 'string', description: 'Legacy model id override. Used only when modelRef is not provided; otherwise role defaults or the parent run model are used.' },
           expectedOutput: { type: 'string', description: 'Expected result format.' },
           contextSummary: { type: 'string', description: 'Relevant context from the parent run.' },
           wait: { type: 'boolean', description: 'When true, wait for a bounded timeout. Defaults to true.' },

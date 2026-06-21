@@ -61,6 +61,37 @@ describe('PiCoreAgentAdapter', () => {
   beforeEach(() => {
     vi.mocked(Agent).mockClear()
   })
+  it('passes provider-aware modelRef to the model resolver when present', async () => {
+    const resolver = resolverFor()
+    const adapter = new PiCoreAgentAdapter({ modelResolver: resolver })
+
+    await adapter.run({
+      runId: 'run-model-ref',
+      sessionId: 'session-1',
+      prompt: 'hello',
+      modelId: 'legacy-fallback-model',
+      modelRef: { providerId: 'provider-deepseek', modelId: 'deepseek-chat' },
+      signal: new AbortController().signal
+    }, vi.fn())
+
+    expect(resolver.resolve).toHaveBeenCalledWith({ providerId: 'provider-deepseek', modelId: 'deepseek-chat' })
+  })
+
+  it('passes only modelId to the model resolver when modelRef is absent', async () => {
+    const resolver = resolverFor()
+    const adapter = new PiCoreAgentAdapter({ modelResolver: resolver })
+
+    await adapter.run({
+      runId: 'run-model-id',
+      sessionId: 'session-1',
+      prompt: 'hello',
+      modelId: 'gpt-4o',
+      signal: new AbortController().signal
+    }, vi.fn())
+
+    expect(resolver.resolve).toHaveBeenCalledWith({ modelId: 'gpt-4o' })
+  })
+
   it('passes previous Hesper messages into the pi core transcript', async () => {
     const adapter = new PiCoreAgentAdapter({ modelResolver: resolverFor() })
 

@@ -53,6 +53,30 @@ describe('builtin tools', () => {
     )
   })
 
+  it('defines Worker Agent model override schema and guidance', () => {
+    const spawnWorkerAgent = createBuiltinToolDefinitions().find((tool) => tool.id === 'agent.spawn-worker-agent')
+
+    expect(spawnWorkerAgent?.description).toContain('models.list-available')
+    expect(spawnWorkerAgent?.description).toContain('modelRef')
+    expect(spawnWorkerAgent?.description).toContain('modelId')
+    expect(spawnWorkerAgent?.description).toContain('modelRef takes precedence')
+    expect(spawnWorkerAgent).toMatchObject({
+      inputSchema: {
+        type: 'object',
+        properties: {
+          modelRef: {
+            type: 'object',
+            properties: {
+              providerId: expect.objectContaining({ type: 'string' }),
+              modelId: expect.objectContaining({ type: 'string' })
+            }
+          },
+          modelId: expect.objectContaining({ type: 'string' })
+        }
+      }
+    })
+  })
+
   it('defines filesystem tools with required schema fields', () => {
     const tools = createBuiltinToolDefinitions()
     const readFile = tools.find((tool) => tool.id === 'filesystem.read-file')
