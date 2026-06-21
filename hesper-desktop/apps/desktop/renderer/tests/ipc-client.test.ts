@@ -35,10 +35,17 @@ describe('ipc-client fallback', () => {
       name: 'Fallback Role',
       description: 'Created locally',
       systemPrompt: 'Fallback prompt',
-      defaultToolIds: ['filesystem.read-file']
+      defaultToolIds: ['filesystem.read-file'],
+      defaultModelId: 'deepseek-chat',
+      defaultModelRef: { providerId: 'deepseek', modelId: 'deepseek-chat' }
     })
 
-    expect(created).toMatchObject({ name: 'Fallback Role', defaultToolIds: ['filesystem.read-file'] })
+    expect(created).toMatchObject({
+      name: 'Fallback Role',
+      defaultToolIds: ['filesystem.read-file'],
+      defaultModelId: 'deepseek-chat',
+      defaultModelRef: { providerId: 'deepseek', modelId: 'deepseek-chat' }
+    })
     expect(await api.roles.list()).toEqual([created])
 
     const updated = await api.roles.update({ id: created.id, name: 'Updated Fallback Role' })
@@ -47,12 +54,30 @@ describe('ipc-client fallback', () => {
       name: 'Updated Fallback Role',
       description: 'Created locally',
       systemPrompt: 'Fallback prompt',
-      defaultToolIds: ['filesystem.read-file']
+      defaultToolIds: ['filesystem.read-file'],
+      defaultModelId: 'deepseek-chat',
+      defaultModelRef: { providerId: 'deepseek', modelId: 'deepseek-chat' }
     })
     expect(await api.roles.list()).toEqual([updated])
 
     await expect(api.roles.delete(created.id)).resolves.toEqual({ deleted: true, id: created.id })
     expect(await api.roles.list()).toEqual([])
+  })
+
+  it('clears default model fields in fallback mode', async () => {
+    const api = createHesperApi({ allowFallback: true })
+
+    const created = await api.roles.create({
+      name: 'Fallback Role',
+      defaultModelId: 'gpt-4o',
+      defaultModelRef: { providerId: 'openai', modelId: 'gpt-4o' }
+    })
+
+    const updated = await api.roles.update({ id: created.id, defaultModelId: '' })
+
+    expect(updated.defaultModelId).toBe('')
+    expect(updated.defaultModelRef).toBeUndefined()
+    expect(await api.roles.list()).toEqual([updated])
   })
 
   it('trims role names in fallback mode', async () => {

@@ -1,4 +1,4 @@
-import { agentRunSchema, agentRuntimeEventSchema, messageSchema, modelConfigSchema, modelProviderConfigSchema, runStepSchema, sessionSchema, toolDefinitionBaseSchema, workerAgentInvocationSchema } from '@hesper/shared'
+import { agentRunSchema, agentRuntimeEventSchema, messageSchema, modelConfigSchema, modelProviderConfigSchema, modelRefSchema, runStepSchema, sessionSchema, toolDefinitionBaseSchema, workerAgentInvocationSchema } from '@hesper/shared'
 import { z } from 'zod'
 
 export const ipcChannels = {
@@ -140,14 +140,18 @@ export const managedRoleDtoSchema = z.object({
   name: nonEmptyStringSchema,
   description: z.string(),
   systemPrompt: z.string(),
-  defaultToolIds: z.array(nonEmptyStringSchema)
+  defaultToolIds: z.array(nonEmptyStringSchema),
+  defaultModelId: z.string(),
+  defaultModelRef: modelRefSchema.optional()
 }).strict()
 
 export const createRoleInputSchema = z.object({
   name: nonEmptyStringSchema,
   description: z.string().optional(),
   systemPrompt: z.string().optional(),
-  defaultToolIds: z.array(nonEmptyStringSchema).optional()
+  defaultToolIds: z.array(nonEmptyStringSchema).optional(),
+  defaultModelId: z.string().optional(),
+  defaultModelRef: modelRefSchema.optional()
 }).strict()
 
 export const updateRoleInputSchema = z.object({
@@ -155,7 +159,9 @@ export const updateRoleInputSchema = z.object({
   name: nonEmptyStringSchema.optional(),
   description: z.string().optional(),
   systemPrompt: z.string().optional(),
-  defaultToolIds: z.array(nonEmptyStringSchema).optional()
+  defaultToolIds: z.array(nonEmptyStringSchema).optional(),
+  defaultModelId: z.string().optional(),
+  defaultModelRef: modelRefSchema.optional()
 }).strict()
 
 export const directorySelectionSchema = z.object({

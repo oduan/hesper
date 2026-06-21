@@ -94,7 +94,13 @@ export function createFallbackHesperApi(): HesperDesktopApi {
     sessions = [updated, ...sessions.filter((session) => session.id !== id)]
     return updated
   }
-  const cloneRole = (role: ManagedRoleDto): ManagedRoleDto => ({ ...role, defaultToolIds: [...role.defaultToolIds] })
+  const cloneModelRef = (modelRef: ManagedRoleDto['defaultModelRef']): ManagedRoleDto['defaultModelRef'] => modelRef ? { ...modelRef } : undefined
+  const cloneRole = (role: ManagedRoleDto): ManagedRoleDto => ({
+    ...role,
+    defaultToolIds: [...role.defaultToolIds],
+    defaultModelId: role.defaultModelId ?? role.defaultModelRef?.modelId ?? '',
+    ...(role.defaultModelRef ? { defaultModelRef: cloneModelRef(role.defaultModelRef) } : {})
+  })
   const normalizeRoleName = (name: string): string => {
     const trimmed = name.trim()
     if (!trimmed) {
@@ -319,12 +325,15 @@ export function createFallbackHesperApi(): HesperDesktopApi {
     roles: {
       list: async () => roles.map(cloneRole),
       create: async (input) => {
+        const defaultModelId = input.defaultModelId?.trim() ?? ''
         const role: ManagedRoleDto = {
           id: createId('role'),
           name: normalizeRoleName(input.name),
           description: normalizeRoleText(input.description),
           systemPrompt: normalizeRoleText(input.systemPrompt),
-          defaultToolIds: validateRoleToolIds(input.defaultToolIds)
+          defaultToolIds: validateRoleToolIds(input.defaultToolIds),
+          defaultModelId,
+          ...(defaultModelId && input.defaultModelRef ? { defaultModelRef: cloneModelRef(input.defaultModelRef) } : {})
         }
         roles = [...roles, role]
         return cloneRole(role)
@@ -334,6 +343,9 @@ export function createFallbackHesperApi(): HesperDesktopApi {
         if (!existing) {
           throw new Error(`Role not found: ${input.id}`)
         }
+
+        const defaultModelId = input.defaultModelId?.trim()
+        const currentDefaultModelId = existing.defaultModelId ?? existing.defaultModelRef?.modelId ?? ''
         const updated: ManagedRoleDto = {
           ...existing,
           ...(input.name !== undefined ? { name: normalizeRoleName(input.name) } : {}),
@@ -341,6 +353,22 @@ export function createFallbackHesperApi(): HesperDesktopApi {
           ...(input.systemPrompt !== undefined ? { systemPrompt: normalizeRoleText(input.systemPrompt) } : {}),
           ...(input.defaultToolIds !== undefined ? { defaultToolIds: validateRoleToolIds(input.defaultToolIds) } : {})
         }
+
+        if (defaultModelId === '') {
+          updated.defaultModelId = ''
+          delete updated.defaultModelRef
+        } else if (defaultModelId !== undefined) {
+          updated.defaultModelId = defaultModelId
+          if (input.defaultModelRef !== undefined) {
+            updated.defaultModelRef = cloneModelRef(input.defaultModelRef)
+          } else if (currentDefaultModelId !== defaultModelId && updated.defaultModelRef !== undefined) {
+            delete updated.defaultModelRef
+          }
+        } else if (input.defaultModelRef !== undefined) {
+          updated.defaultModelId = input.defaultModelRef.modelId
+          updated.defaultModelRef = cloneModelRef(input.defaultModelRef)
+        }
+
         roles = roles.map((role) => role.id === updated.id ? updated : role)
         return cloneRole(updated)
       },

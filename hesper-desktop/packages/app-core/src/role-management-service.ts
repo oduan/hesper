@@ -1,5 +1,5 @@
 import type { Persistence } from '@hesper/persistence'
-import { createId, type Role } from '@hesper/shared'
+import { createId, type ModelRef, type Role } from '@hesper/shared'
 import type { ToolCatalogService } from './registry-services'
 
 export type ManagedRoleDto = {
@@ -8,6 +8,8 @@ export type ManagedRoleDto = {
   description: string
   systemPrompt: string
   defaultToolIds: string[]
+  defaultModelId: string
+  defaultModelRef?: ModelRef
 }
 
 export type CreateManagedRoleInput = {
@@ -15,6 +17,8 @@ export type CreateManagedRoleInput = {
   description?: string
   systemPrompt?: string
   defaultToolIds?: string[]
+  defaultModelId?: string
+  defaultModelRef?: ModelRef
 }
 
 export type UpdateManagedRoleInput = {
@@ -23,6 +27,8 @@ export type UpdateManagedRoleInput = {
   description?: string
   systemPrompt?: string
   defaultToolIds?: string[]
+  defaultModelId?: string
+  defaultModelRef?: ModelRef
 }
 
 export type ManagedRoleService = {
@@ -47,28 +53,30 @@ function normalizeOptionalText(value: string | undefined): string {
   return value?.trim() ?? ''
 }
 
+function normalizeOptionalModelId(value: string | undefined): string | undefined {
+  return value?.trim()
+}
+
+function cloneModelRef(modelRef: ModelRef): ModelRef {
+  return { providerId: modelRef.providerId, modelId: modelRef.modelId }
+}
+
 function toManagedRole(role: Role): ManagedRoleDto {
+  const defaultModelId = role.defaultModelId !== undefined
+    ? role.defaultModelId
+    : role.defaultModelRef?.modelId ?? ''
+  const defaultModelRef = role.defaultModelId === ''
+    ? undefined
+    : role.defaultModelRef ? cloneModelRef(role.defaultModelRef) : undefined
+
   return {
     id: role.id,
     name: role.name,
     description: role.description ?? '',
     systemPrompt: role.systemPrompt ?? '',
-    defaultToolIds: role.defaultToolIds ?? []
-  }
-}
-
-function toStoredRole(input: ManagedRoleDto): Role {
-  return {
-    id: input.id,
-    name: input.name,
-    description: input.description,
-    systemPrompt: input.systemPrompt,
-    allowedSkillIds: [],
-    defaultSkillIds: [],
-    defaultToolIds: input.defaultToolIds,
-    canBeMainAgent: true,
-    canBeWorkerAgent: true,
-    canBeAssignedToWorkerAgent: true
+    defaultToolIds: [...(role.defaultToolIds ?? [])],
+    defaultModelId,
+    ...(defaultModelRef ? { defaultModelRef } : {})
   }
 }
 
@@ -89,15 +97,34 @@ export function createRoleManagementService(options: RoleManagementServiceOption
     },
 
     async createRole(input) {
-      const role: ManagedRoleDto = {
+      const role: Role = {
         id: createId('role'),
         name: normalizeRequiredName(input.name),
         description: normalizeOptionalText(input.description),
         systemPrompt: normalizeOptionalText(input.systemPrompt),
-        defaultToolIds: validateToolIds(input.defaultToolIds)
+        allowedSkillIds: [],
+        defaultSkillIds: [],
+        defaultToolIds: validateToolIds(input.defaultToolIds),
+        canBeMainAgent: true,
+        canBeWorkerAgent: true,
+        canBeAssignedToWorkerAgent: true
       }
-      await options.persistence.roles.save(toStoredRole(role))
-      return role
+
+      const defaultModelId = normalizeOptionalModelId(input.defaultModelId)
+      if (defaultModelId === '') {
+        // Inherit the parent session / caller model.
+      } else if (defaultModelId !== undefined) {
+        role.defaultModelId = defaultModelId
+        if (input.defaultModelRef) {
+          role.defaultModelRef = cloneModelRef(input.defaultModelRef)
+        }
+      } else if (input.defaultModelRef) {
+        role.defaultModelId = input.defaultModelRef.modelId
+        role.defaultModelRef = cloneModelRef(input.defaultModelRef)
+      }
+
+      await options.persistence.roles.save(role)
+      return toManagedRole(role)
     },
 
     async updateRole(input) {
@@ -108,6 +135,24 @@ export function createRoleManagementService(options: RoleManagementServiceOption
       if (input.description !== undefined) next.description = normalizeOptionalText(input.description)
       if (input.systemPrompt !== undefined) next.systemPrompt = normalizeOptionalText(input.systemPrompt)
       if (input.defaultToolIds !== undefined) next.defaultToolIds = validateToolIds(input.defaultToolIds)
+
+      const currentDefaultModelId = existing.defaultModelId ?? existing.defaultModelRef?.modelId
+      const defaultModelId = normalizeOptionalModelId(input.defaultModelId)
+      if (defaultModelId === '') {
+        delete next.defaultModelId
+        delete next.defaultModelRef
+      } else if (defaultModelId !== undefined) {
+        next.defaultModelId = defaultModelId
+        if (input.defaultModelRef !== undefined) {
+          next.defaultModelRef = cloneModelRef(input.defaultModelRef)
+        } else if (currentDefaultModelId !== undefined && currentDefaultModelId !== defaultModelId && next.defaultModelRef !== undefined) {
+          delete next.defaultModelRef
+        }
+      } else if (input.defaultModelRef !== undefined) {
+        next.defaultModelId = input.defaultModelRef.modelId
+        next.defaultModelRef = cloneModelRef(input.defaultModelRef)
+      }
+
       await options.persistence.roles.save(next)
       return toManagedRole(next)
     },

@@ -491,16 +491,26 @@ describe('registerIpcHandlers', () => {
       name: '运维助手',
       description: '执行命令',
       systemPrompt: '你是运维助手。',
-      defaultToolIds: ['git.status']
+      defaultToolIds: ['git.status'],
+      defaultModelId: 'gpt-4o',
+      defaultModelRef: { providerId: 'openai', modelId: 'gpt-4o' }
     }) as { id: string }
 
-    expect(created).toMatchObject({ name: '运维助手', defaultToolIds: ['git.status'] })
-    await expect(handles.get(ipcChannels.rolesList)?.({ sender: { id: 1 } })).resolves.toEqual([expect.objectContaining({ id: created.id })])
+    expect(created).toMatchObject({
+      name: '运维助手',
+      defaultToolIds: ['git.status'],
+      defaultModelId: 'gpt-4o',
+      defaultModelRef: { providerId: 'openai', modelId: 'gpt-4o' }
+    })
+    await expect(handles.get(ipcChannels.rolesList)?.({ sender: { id: 1 } })).resolves.toEqual([expect.objectContaining({ id: created.id, defaultModelId: 'gpt-4o' })])
 
     await expect(handles.get(ipcChannels.rolesUpdate)?.({ sender: { id: 1 } }, {
       id: created.id,
-      name: '更新后的角色'
-    })).resolves.toMatchObject({ id: created.id, name: '更新后的角色' })
+      name: '更新后的角色',
+      defaultModelId: ''
+    })).resolves.toMatchObject({ id: created.id, name: '更新后的角色', defaultModelId: '' })
+
+    await expect(handles.get(ipcChannels.rolesList)?.({ sender: { id: 1 } })).resolves.toEqual([expect.objectContaining({ id: created.id, defaultModelId: '' })])
 
     await expect(handles.get(ipcChannels.rolesDelete)?.({ sender: { id: 1 } }, created.id)).resolves.toEqual({ deleted: true, id: created.id })
     await expect(handles.get(ipcChannels.rolesList)?.({ sender: { id: 1 } })).resolves.toEqual([])

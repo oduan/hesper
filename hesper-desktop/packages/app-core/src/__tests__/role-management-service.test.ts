@@ -34,8 +34,10 @@ describe('role management service', () => {
       name: '运维助手',
       description: '执行 Git 和 Linux 命令',
       systemPrompt: '你是运维助手。',
-      defaultToolIds: ['filesystem.read-file']
+      defaultToolIds: ['filesystem.read-file'],
+      defaultModelId: ''
     })
+    expect(role.defaultModelRef).toBeUndefined()
     expect(role.id).toMatch(/^role-/)
     expect(await service.listRoles()).toEqual([role])
     await expect(persistence.roles.get(role.id)).resolves.toMatchObject({
@@ -43,6 +45,40 @@ describe('role management service', () => {
       allowedSkillIds: [],
       defaultSkillIds: [],
       defaultToolIds: ['filesystem.read-file'],
+      canBeMainAgent: true,
+      canBeWorkerAgent: true,
+      canBeAssignedToWorkerAgent: true
+    })
+    const stored = await persistence.roles.get(role.id)
+    expect(stored?.defaultModelId).toBeUndefined()
+    expect(stored?.defaultModelRef).toBeUndefined()
+  })
+
+  it('creates roles with default model metadata', async () => {
+    const { persistence, service } = await createService()
+
+    const role = await service.createRole({
+      name: '搜索专家',
+      defaultModelId: 'gpt-4o',
+      defaultModelRef: { providerId: 'openai', modelId: 'gpt-4o' }
+    })
+
+    expect(role).toMatchObject({
+      name: '搜索专家',
+      description: '',
+      systemPrompt: '',
+      defaultToolIds: [],
+      defaultModelId: 'gpt-4o',
+      defaultModelRef: { providerId: 'openai', modelId: 'gpt-4o' }
+    })
+    expect(await service.listRoles()).toEqual([role])
+    await expect(persistence.roles.get(role.id)).resolves.toMatchObject({
+      id: role.id,
+      defaultModelId: 'gpt-4o',
+      defaultModelRef: { providerId: 'openai', modelId: 'gpt-4o' },
+      allowedSkillIds: [],
+      defaultSkillIds: [],
+      defaultToolIds: [],
       canBeMainAgent: true,
       canBeWorkerAgent: true,
       canBeAssignedToWorkerAgent: true
@@ -58,8 +94,10 @@ describe('role management service', () => {
       name: '搜索专家',
       description: '',
       systemPrompt: '',
-      defaultToolIds: []
+      defaultToolIds: [],
+      defaultModelId: ''
     })
+    expect(role.defaultModelRef).toBeUndefined()
   })
 
   it('rejects blank names and unknown default tools', async () => {
@@ -75,7 +113,9 @@ describe('role management service', () => {
       name: 'Original',
       description: 'Original description',
       systemPrompt: 'Original prompt',
-      defaultToolIds: ['filesystem.read-file']
+      defaultToolIds: ['filesystem.read-file'],
+      defaultModelId: 'legacy-model',
+      defaultModelRef: { providerId: 'provider-1', modelId: 'model-1' }
     })
 
     const updated = await service.updateRole({ id: role.id, name: 'Updated' })
@@ -85,11 +125,13 @@ describe('role management service', () => {
       name: 'Updated',
       description: 'Original description',
       systemPrompt: 'Original prompt',
-      defaultToolIds: ['filesystem.read-file']
+      defaultToolIds: ['filesystem.read-file'],
+      defaultModelId: 'legacy-model',
+      defaultModelRef: { providerId: 'provider-1', modelId: 'model-1' }
     })
   })
 
-  it('preserves non-managed role fields when updating managed fields', async () => {
+  it('clears default model fields while preserving non-managed fields', async () => {
     const { persistence, service } = await createService()
     await persistence.roles.save({
       id: 'custom-role',
@@ -107,21 +149,21 @@ describe('role management service', () => {
       workerAgentGuidance: 'Keep guidance'
     })
 
-    const updated = await service.updateRole({ id: 'custom-role', name: 'Updated' })
+    const updated = await service.updateRole({ id: 'custom-role', name: 'Updated', defaultModelId: '' })
 
-    expect(updated).toEqual({
+    expect(updated).toMatchObject({
       id: 'custom-role',
       name: 'Updated',
       description: 'Original description',
       systemPrompt: 'Original prompt',
-      defaultToolIds: ['filesystem.read-file']
+      defaultToolIds: ['filesystem.read-file'],
+      defaultModelId: ''
     })
+    expect(updated.defaultModelRef).toBeUndefined()
     await expect(persistence.roles.get('custom-role')).resolves.toMatchObject({
       id: 'custom-role',
       name: 'Updated',
       description: 'Original description',
-      defaultModelId: 'legacy-model',
-      defaultModelRef: { providerId: 'provider-1', modelId: 'model-1' },
       systemPrompt: 'Original prompt',
       allowedSkillIds: ['builtin:notes'],
       defaultSkillIds: ['workspace:notes'],
@@ -131,6 +173,9 @@ describe('role management service', () => {
       canBeAssignedToWorkerAgent: true,
       workerAgentGuidance: 'Keep guidance'
     })
+    const stored = await persistence.roles.get('custom-role')
+    expect(stored?.defaultModelId).toBeUndefined()
+    expect(stored?.defaultModelRef).toBeUndefined()
   })
 
   it('rejects invalid updates and deletes roles', async () => {

@@ -486,13 +486,14 @@ describe('renderer App', () => {
     await user.click(screen.getByLabelText('Fetch URL'))
     await user.click(screen.getByRole('button', { name: '保存修改' }))
 
-    await waitFor(() => expect(updateRole).toHaveBeenCalledWith({
+    await waitFor(() => expect(updateRole).toHaveBeenCalledWith(expect.objectContaining({
       id: 'role-1',
       name: '高级运维助手',
       description: '执行命令',
       systemPrompt: '你是运维助手。',
-      defaultToolIds: ['filesystem.read-file', 'web.fetch-url']
-    }))
+      defaultToolIds: ['filesystem.read-file', 'web.fetch-url'],
+      defaultModelId: ''
+    })))
     expect(await screen.findByRole('button', { name: /高级运维助手/ })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByLabelText('角色名称')).toHaveValue('高级运维助手')
   })

@@ -729,7 +729,9 @@ function AppContent() {
         name: role.name,
         description: role.description,
         systemPrompt: role.systemPrompt,
-        defaultToolIds: role.defaultToolIds
+        defaultToolIds: role.defaultToolIds,
+        defaultModelId: role.defaultModelId,
+        ...(role.defaultModelRef ? { defaultModelRef: { ...role.defaultModelRef } } : {})
       })
       const result = await loadRoles()
       if (result.applied && !('error' in result)) {
@@ -984,6 +986,8 @@ function AppContent() {
             roles={roles}
             {...(activeRole ? { selectedRole: activeRole } : {})}
             tools={tools}
+            modelOptions={sessionModelCatalog.options}
+            modelOptionGroups={sessionModelCatalog.optionGroups}
             pending={rolesPending || rolesLoading}
             loading={rolesLoading}
             {...(rolesError ? { error: rolesError } : {})}

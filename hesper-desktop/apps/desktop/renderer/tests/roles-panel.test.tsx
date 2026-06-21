@@ -10,12 +10,28 @@ const tools = [
   { id: 'git.status', name: 'Git Status', description: 'Git status', category: 'git' as const, inputSchema: {}, enabled: true }
 ]
 
+const modelOptions = ['gpt-4o', 'deepseek-chat']
+const modelOptionGroups = [
+  {
+    id: 'openai',
+    label: 'OpenAI',
+    options: [{ value: 'gpt-4o', label: 'GPT-4o' }]
+  },
+  {
+    id: 'deepseek',
+    label: 'DeepSeek',
+    options: [{ value: 'deepseek-chat', label: 'DeepSeek Chat' }]
+  }
+]
+
 const role = {
   id: 'role-1',
   name: '运维助手',
   description: '执行命令',
   systemPrompt: '你是运维助手。',
-  defaultToolIds: ['git.status']
+  defaultToolIds: ['git.status'],
+  defaultModelId: 'gpt-4o',
+  defaultModelRef: { providerId: 'openai', modelId: 'gpt-4o' }
 }
 
 describe('RolesPanel', () => {
@@ -30,16 +46,27 @@ describe('RolesPanel', () => {
     expect(screen.queryByRole('button', { name: '新建角色' })).not.toBeInTheDocument()
   })
 
-  it('disables save for unchanged existing roles', async () => {
+  it('shows the selected default model and enables save when it changes', async () => {
     const user = userEvent.setup()
-    const onSave = vi.fn()
-    render(<RolesPanel roles={[role]} selectedRole={role} tools={tools} onSave={onSave} onDelete={vi.fn()} />)
+    render(
+      <RolesPanel
+        roles={[role]}
+        selectedRole={role}
+        tools={tools}
+        modelOptions={modelOptions}
+        modelOptionGroups={modelOptionGroups}
+        onSave={vi.fn()}
+        onDelete={vi.fn()}
+      />
+    )
 
+    const defaultModelSelect = screen.getByLabelText('默认模型')
     const saveButton = screen.getByRole('button', { name: '保存修改' })
-    expect(saveButton).toBeDisabled()
-    expect(saveButton).toHaveStyle({ background: 'var(--hesper-color-surface-muted, #24283b)', color: 'var(--hesper-color-text-muted, #737aa2)', cursor: 'not-allowed' })
 
-    await user.type(screen.getByLabelText('角色简介'), ' updated')
+    expect(defaultModelSelect).toHaveValue('gpt-4o')
+    expect(saveButton).toBeDisabled()
+
+    await user.selectOptions(defaultModelSelect, 'deepseek-chat')
 
     expect(saveButton).toBeEnabled()
   })
@@ -47,10 +74,21 @@ describe('RolesPanel', () => {
   it('edits and saves an existing role', async () => {
     const user = userEvent.setup()
     const onSave = vi.fn()
-    render(<RolesPanel roles={[role]} selectedRole={role} tools={tools} onSave={onSave} onDelete={vi.fn()} />)
+    render(
+      <RolesPanel
+        roles={[role]}
+        selectedRole={role}
+        tools={tools}
+        modelOptions={modelOptions}
+        modelOptionGroups={modelOptionGroups}
+        onSave={onSave}
+        onDelete={vi.fn()}
+      />
+    )
 
     await user.clear(screen.getByLabelText('角色名称'))
     await user.type(screen.getByLabelText('角色名称'), '更新角色')
+    await user.selectOptions(screen.getByLabelText('默认模型'), 'deepseek-chat')
     await user.click(screen.getByLabelText('Read File'))
     await user.click(screen.getByRole('button', { name: '保存修改' }))
 
@@ -59,15 +97,52 @@ describe('RolesPanel', () => {
       name: '更新角色',
       description: '执行命令',
       systemPrompt: '你是运维助手。',
-      defaultToolIds: expect.arrayContaining(['filesystem.read-file', 'git.status'])
+      defaultToolIds: expect.arrayContaining(['filesystem.read-file', 'git.status']),
+      defaultModelId: 'deepseek-chat',
+      defaultModelRef: { providerId: 'deepseek', modelId: 'deepseek-chat' }
     })
+  })
+
+  it('clears the default model when switched to inherit', async () => {
+    const user = userEvent.setup()
+    const onSave = vi.fn()
+    render(
+      <RolesPanel
+        roles={[role]}
+        selectedRole={role}
+        tools={tools}
+        modelOptions={modelOptions}
+        modelOptionGroups={modelOptionGroups}
+        onSave={onSave}
+        onDelete={vi.fn()}
+      />
+    )
+
+    await user.selectOptions(screen.getByLabelText('默认模型'), screen.getByRole('option', { name: '继承调用/父会话模型' }))
+    await user.click(screen.getByRole('button', { name: '保存修改' }))
+
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'role-1',
+      defaultModelId: ''
+    }))
+    expect(onSave.mock.calls[0]?.[0].defaultModelRef).toBeUndefined()
   })
 
   it('confirms before deleting a role', async () => {
     const user = userEvent.setup()
     const onDelete = vi.fn()
     vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
-    render(<RolesPanel roles={[role]} selectedRole={role} tools={tools} onSave={vi.fn()} onDelete={onDelete} />)
+    render(
+      <RolesPanel
+        roles={[role]}
+        selectedRole={role}
+        tools={tools}
+        modelOptions={modelOptions}
+        modelOptionGroups={modelOptionGroups}
+        onSave={vi.fn()}
+        onDelete={onDelete}
+      />
+    )
 
     const deleteButton = screen.getByRole('button', { name: '删除角色' })
     expect(deleteButton).toHaveStyle({
