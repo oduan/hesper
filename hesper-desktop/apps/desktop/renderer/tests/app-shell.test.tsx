@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import '@testing-library/jest-dom/vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
@@ -225,7 +225,9 @@ vi.mock('../src/ipc-client', () => ({
 
 describe('renderer App', () => {
   it('provides root theme color defaults before AppShell injects variables', () => {
-    const styles = readFileSync(join(process.cwd(), 'renderer/src/styles.css'), 'utf8')
+    const desktopRelativeStylesPath = join(process.cwd(), 'renderer/src/styles.css')
+    const workspaceRelativeStylesPath = join(process.cwd(), 'apps/desktop/renderer/src/styles.css')
+    const styles = readFileSync(existsSync(desktopRelativeStylesPath) ? desktopRelativeStylesPath : workspaceRelativeStylesPath, 'utf8')
     const rootBlock = styles.match(/:root\s*{(?<body>[\s\S]*?)}/)?.groups?.body ?? ''
 
     expect(rootBlock).toContain('--hesper-color-text-muted:')
