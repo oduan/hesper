@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useLayoutEffect, useMemo, type ReactNode } from 'react'
 import type { Session, ToolDefinition } from '@hesper/shared'
 import { createThemeVariables, themeTokens, type ThemeMode } from '../theme'
 import { ActivityRail, type AppSection } from './ActivityRail'
@@ -71,11 +71,52 @@ export function AppShell({
   onWindowClose,
   children
 }: AppShellProps) {
-  const themeVariables = createThemeVariables({
-    themeId: appearance?.themeId ?? 'tokyo-night',
-    mode: appearance?.themeMode ?? 'dark',
-    fontSize: appearance?.fontSize ?? 14
-  })
+  const themeId = appearance?.themeId ?? 'tokyo-night'
+  const themeMode = appearance?.themeMode ?? 'dark'
+  const fontSize = appearance?.fontSize ?? 14
+  const themeVariables = useMemo(
+    () => createThemeVariables({
+      themeId,
+      mode: themeMode,
+      fontSize
+    }),
+    [fontSize, themeId, themeMode]
+  )
+
+  useLayoutEffect(() => {
+    if (typeof document === 'undefined') {
+      return
+    }
+
+    const root = document.documentElement
+    const previousVariables = new Map<string, string>()
+    const previousColorScheme = root.style.colorScheme
+
+    for (const [name, value] of Object.entries(themeVariables)) {
+      if (name === 'colorScheme') {
+        root.style.colorScheme = String(value)
+        continue
+      }
+
+      if (!name.startsWith('--')) {
+        continue
+      }
+
+      previousVariables.set(name, root.style.getPropertyValue(name))
+      root.style.setProperty(name, String(value))
+    }
+
+    return () => {
+      root.style.colorScheme = previousColorScheme
+      for (const [name, value] of previousVariables) {
+        if (value) {
+          root.style.setProperty(name, value)
+        } else {
+          root.style.removeProperty(name)
+        }
+      }
+    }
+  }, [themeVariables])
 
   return (
     <div

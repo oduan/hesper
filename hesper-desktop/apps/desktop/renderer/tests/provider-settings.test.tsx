@@ -3,7 +3,7 @@ import '@testing-library/jest-dom/vitest'
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { themeTokens } from '@hesper/ui'
+import { resolveThemeVariant, themeTokens } from '@hesper/ui'
 import { App } from '../src/App'
 
 const now = '2026-06-10T03:00:00.000Z'
@@ -328,6 +328,29 @@ describe('provider settings panel', () => {
     expect(menu).toHaveStyle({ position: 'fixed' })
     expect(connectionList?.querySelector('[role="menu"]')).not.toBeInTheDocument()
     expect(deepSeekItem).toHaveStyle({ overflow: 'visible' })
+  })
+
+  it('keeps body portal connection menus on the selected app theme variables', async () => {
+    const user = userEvent.setup()
+    const draculaPalette = resolveThemeVariant('dracula', 'dark').palette
+    const tokyoNightPalette = resolveThemeVariant('tokyo-night', 'dark').palette
+    getSettings.mockResolvedValueOnce({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', themeId: 'dracula', fontSize: 16 })
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: '设置' }))
+    await user.click(await screen.findByRole('button', { name: '打开连接菜单 DeepSeek' }))
+
+    const menu = await screen.findByRole('menu', { name: 'DeepSeek 连接菜单' })
+    expect(menu.parentElement).toBe(document.body)
+    expect(menu).toHaveStyle({ background: themeTokens.color.surfaceMuted })
+    expect(screen.getByRole('menuitem', { name: '编辑' })).toHaveStyle({ color: themeTokens.color.text })
+    expect(screen.getByRole('menuitem', { name: '删除' })).toHaveStyle({ color: themeTokens.color.danger })
+
+    expect(document.documentElement.style.getPropertyValue('--hesper-color-surface-muted')).toBe(draculaPalette.surfaceMuted)
+    expect(document.documentElement.style.getPropertyValue('--hesper-color-text')).toBe(draculaPalette.text)
+    expect(document.documentElement.style.getPropertyValue('--hesper-color-danger')).toBe(draculaPalette.danger)
+    expect(document.documentElement.style.getPropertyValue('--hesper-color-surface-muted')).not.toBe(tokyoNightPalette.surfaceMuted)
+    expect(document.documentElement.style.getPropertyValue('--hesper-font-size')).toBe('16px')
   })
 
   it('renames a connection inline from the hover edit icon on blur', async () => {
