@@ -448,6 +448,36 @@ describe('persistence repositories', () => {
     ])
   })
 
+  it('round-trips Worker Agent invocation role snapshots through persistence', async () => {
+    const db = await createInMemoryPersistence()
+    await db.workerAgentInvocations.save({
+      id: 'worker-agent-role-snapshot',
+      parentRunId: 'run-parent',
+      task: 'Review the staged diff.',
+      roleId: 'reviewer',
+      allowedToolIds: ['filesystem.read-file', 'git.status'],
+      roleSnapshot: {
+        id: 'reviewer',
+        name: 'Reviewer',
+        description: 'Reviews code for correctness.',
+        systemPrompt: 'Review carefully.',
+        defaultToolIds: ['filesystem.read-file'],
+        defaultModelId: 'deepseek-chat',
+        defaultModelRef: { providerId: 'provider-deepseek', modelId: 'deepseek-chat' }
+      },
+      status: 'running',
+      createdAt: now
+    })
+
+    await expect(db.workerAgentInvocations.get('worker-agent-role-snapshot')).resolves.toMatchObject({
+      roleSnapshot: {
+        id: 'reviewer',
+        name: 'Reviewer',
+        defaultModelRef: { providerId: 'provider-deepseek', modelId: 'deepseek-chat' }
+      }
+    })
+  })
+
   it('keeps messages with missing runs visible in session history', async () => {
     const db = await createInMemoryPersistence()
 
