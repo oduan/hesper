@@ -768,7 +768,7 @@ describe('ui components', () => {
     expect(sendButton).toBeDisabled()
     expect(screen.getByLabelText('消息输入区')).toHaveStyle({ borderRadius: '20px' })
     expect(textarea).toHaveStyle({ borderRadius: '0' })
-    expect(textarea).toHaveStyle({ boxSizing: 'border-box', fontSize: 'var(--hesper-font-size, 14px)', lineHeight: '1.5', padding: '0px 1px' })
+    expect(textarea).toHaveStyle({ boxSizing: 'border-box', fontSize: 'var(--hesper-font-size, 14px)', lineHeight: '1.5', padding: '0px 2px' })
     expect(textarea).not.toHaveStyle({ font: 'inherit' })
     expect(textarea).toHaveClass('hesper-theme-scrollbar')
     expect(screen.queryByText('模型')).not.toBeInTheDocument()
@@ -865,8 +865,8 @@ describe('ui components', () => {
     expect(textarea).toHaveValue('请用 @中文写作 ')
     const pill = container.querySelector('[data-skill-mention-pill="true"]') as HTMLElement
     expect(pill).toHaveTextContent('@中文写作')
-    expect(pill).toHaveStyle({ background: themeTokens.color.softControl, borderRadius: '6px' })
-    expect(pill).toHaveStyle({ boxShadow: `3px 0 0 3px ${themeTokens.color.softControl}` })
+    expect(pill).toHaveStyle({ background: themeTokens.color.softControl, borderRadius: '3px', fontSize: '0.92em', padding: '0px' })
+    expect(pill).toHaveStyle({ boxShadow: `0 0 0 2px ${themeTokens.color.softControl}`, lineHeight: '1.2' })
     expect(pill.style.border).toBe('0px')
     expect(textarea).toHaveFocus()
 

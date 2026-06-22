@@ -549,7 +549,7 @@ const highlightMirrorStyle = {
   pointerEvents: 'none',
   overflow: 'hidden',
   color: themeTokens.color.text,
-  padding: '0 1px',
+  padding: '0 2px',
   fontFamily: 'inherit',
   fontSize: themeTokens.typography.body,
   fontWeight: 'inherit',
@@ -562,14 +562,15 @@ const highlightMirrorStyle = {
 const skillMentionPillStyle = {
   display: 'inline',
   border: 0,
-  borderRadius: '6px',
+  borderRadius: '3px',
   background: themeTokens.color.softControl,
-  boxShadow: `3px 0 0 3px ${themeTokens.color.softControl}`,
+  boxShadow: `0 0 0 2px ${themeTokens.color.softControl}`,
   boxDecorationBreak: 'clone',
   WebkitBoxDecorationBreak: 'clone',
   color: themeTokens.color.text,
+  fontSize: '0.92em',
   padding: 0,
-  lineHeight: 1.5,
+  lineHeight: 1.2,
   whiteSpace: 'pre-wrap'
 } satisfies CSSProperties
 
@@ -591,7 +592,7 @@ const textareaStyle = {
   outline: 0,
   background: 'transparent',
   color: themeTokens.color.text,
-  padding: '0 1px',
+  padding: '0 2px',
   fontFamily: 'inherit',
   fontSize: themeTokens.typography.body,
   fontWeight: 'inherit',
