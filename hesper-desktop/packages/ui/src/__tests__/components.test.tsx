@@ -865,7 +865,8 @@ describe('ui components', () => {
     expect(textarea).toHaveValue('请用 @中文写作 ')
     const pill = container.querySelector('[data-skill-mention-pill="true"]') as HTMLElement
     expect(pill).toHaveTextContent('@中文写作')
-    expect(pill).toHaveStyle({ background: themeTokens.color.softControl, borderRadius: themeTokens.radius.md })
+    expect(pill).toHaveStyle({ background: themeTokens.color.softControl, borderRadius: '6px' })
+    expect(pill).toHaveStyle({ boxShadow: `0 0 0 4px ${themeTokens.color.softControl}` })
     expect(pill.style.border).toBe('0px')
     expect(textarea).toHaveFocus()
 

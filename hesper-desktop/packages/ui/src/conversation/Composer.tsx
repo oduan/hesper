@@ -562,9 +562,9 @@ const highlightMirrorStyle = {
 const skillMentionPillStyle = {
   display: 'inline',
   border: 0,
-  borderRadius: themeTokens.radius.md,
+  borderRadius: '6px',
   background: themeTokens.color.softControl,
-  boxShadow: `0 0 0 2px ${themeTokens.color.softControl}`,
+  boxShadow: `0 0 0 4px ${themeTokens.color.softControl}`,
   boxDecorationBreak: 'clone',
   WebkitBoxDecorationBreak: 'clone',
   color: themeTokens.color.text,
