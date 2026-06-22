@@ -178,12 +178,14 @@ describe('desktop runtime tooling', () => {
     expect(mainProcessSource).toContain("app.setName('Hesper')")
   })
 
-  it('keeps the default user data directory stable when the display name changes', () => {
-    const mainProcessSource = fs.readFileSync(mainProcessPath, 'utf8')
+  it('uses the Hesper app name for the default user data directory while preserving explicit overrides', () => {
+    const mainProcessSource = fs.readFileSync(mainProcessPath, 'utf8').replace(/\r\n/g, '\n')
 
-    expect(mainProcessSource).toContain("const defaultUserDataPath = path.join(app.getPath('appData'), '@hesper', 'desktop')")
-    expect(mainProcessSource).toContain("app.setPath('userData', configuredUserDataPath ?? defaultUserDataPath)")
-    expect(mainProcessSource.indexOf("app.setPath('userData'")).toBeLessThan(mainProcessSource.indexOf("app.getPath('userData')"))
+    expect(mainProcessSource).toContain("app.setName('Hesper')")
+    expect(mainProcessSource).toContain('const configuredUserDataPath = process.env.HESPER_USER_DATA_DIR')
+    expect(mainProcessSource).toContain("if (configuredUserDataPath) {\n  app.setPath('userData', configuredUserDataPath)\n}")
+    expect(mainProcessSource).not.toContain('defaultUserDataPath')
+    expect(mainProcessSource).not.toContain("'@hesper', 'desktop'")
   })
 
   it('fails dev startup instead of opening another app on the renderer dev port', () => {
