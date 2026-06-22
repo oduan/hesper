@@ -613,8 +613,8 @@ describe('createBuiltinToolExecutor', () => {
 
   it('lists and gets skills through injected skill handlers', async () => {
     const skills = [
-      { id: 'builtin:notes', name: 'Notes', description: 'Take notes', source: 'builtin' as const, path: '/skills/notes', sourcePath: '/skills/notes/SKILL.md', prompt: 'Use notes.', allowedToolIds: ['filesystem.read-file'], enabled: true },
-      { id: 'user:review', name: 'Review', source: 'user' as const, sourcePath: '/user/review/SKILL.md', prompt: 'Review code.' }
+      { id: 'Notes', name: 'Notes', description: 'Take notes', source: 'builtin' as const, path: '/skills/notes', sourcePath: '/skills/notes/SKILL.md', prompt: 'Use notes.', allowedToolIds: ['filesystem.read-file'], enabled: true },
+      { id: 'Review', name: 'Review', source: 'user' as const, sourcePath: '/user/review/SKILL.md', prompt: 'Review code.' }
     ]
     const listSkills = vi.fn(async () => skills)
     const getSkill = vi.fn(async (id: string) => skills.find((skill) => skill.id === id))
@@ -629,12 +629,12 @@ describe('createBuiltinToolExecutor', () => {
     expect(JSON.parse(listed.content)).toEqual(skills)
     expect(listed.details).toEqual({ toolId: 'skills.list', skills, count: 2 })
 
-    const found = await executor.execute(tool('skills.get'), { id: 'builtin:notes' }, {
+    const found = await executor.execute(tool('skills.get'), { id: 'Notes' }, {
       runId: 'run-1',
       sessionId: 'session-1',
       allowedToolIds: ['skills.get']
     })
-    expect(getSkill).toHaveBeenCalledWith('builtin:notes')
+    expect(getSkill).toHaveBeenCalledWith('Notes')
     expect(JSON.parse(found.content)).toEqual(skills[0])
     expect(found.details).toEqual({ toolId: 'skills.get', skill: skills[0] })
   })

@@ -119,11 +119,11 @@ describe('SkillFileService', () => {
     await service.refreshSkills()
 
     expect(service.listSkills()).toMatchObject<Partial<Skill>[]>([
-      { id: 'builtin:code-review', name: 'Code Review', description: 'Review TypeScript changes', source: 'builtin', prompt: 'Use the project checklist.' },
-      { id: 'builtin:install-skills', name: 'Install Skills', source: 'builtin' },
-      { id: 'user:research', name: 'Research', description: 'Find current references', source: 'user', prompt: 'Use citations.' }
+      { id: 'Code Review', name: 'Code Review', description: 'Review TypeScript changes', source: 'builtin', prompt: 'Use the project checklist.' },
+      { id: 'Install Skills', name: 'Install Skills', source: 'builtin' },
+      { id: 'Research', name: 'Research', description: 'Find current references', source: 'user', prompt: 'Use citations.' }
     ])
-    expect(service.getSkill('user:research')?.sourcePath).toBe('/user/research/SKILL.md')
+    expect(service.getSkill('Research')?.sourcePath).toBe('/user/research/SKILL.md')
   })
 
   it('ensures builtin install-skills exists without overwriting an existing file', async () => {
@@ -133,7 +133,7 @@ describe('SkillFileService', () => {
     await service.refreshSkills()
 
     expect(fs.getFile('/builtin/install-skills/SKILL.md')).toContain('Keep custom text.')
-    expect(service.getSkill('builtin:install-skills')).toMatchObject({ name: 'Custom Installer', prompt: 'Keep custom text.' })
+    expect(service.getSkill('Custom Installer')).toMatchObject({ id: 'Custom Installer', name: 'Custom Installer', prompt: 'Keep custom text.' })
   })
 
   it('falls back to slug metadata and skips malformed or missing skill files', async () => {
@@ -144,10 +144,20 @@ describe('SkillFileService', () => {
     const service = createSkillFileService({ paths: { builtinSkillsDir: '/builtin', userSkillsDir: '/user' }, fs })
     await service.refreshSkills()
 
-    expect(service.getSkill('builtin:no-frontmatter')).toMatchObject({ name: 'No Frontmatter', prompt: 'Body only.' })
-    expect(service.getSkill('user:empty')).toMatchObject({ name: 'Empty' })
-    expect(service.getSkill('user:empty')?.prompt).toBeUndefined()
-    expect(service.getSkill('user:not-a-skill')).toBeUndefined()
+    expect(service.getSkill('No Frontmatter')).toMatchObject({ id: 'No Frontmatter', name: 'No Frontmatter', prompt: 'Body only.' })
+    expect(service.getSkill('Empty')).toMatchObject({ id: 'Empty', name: 'Empty' })
+    expect(service.getSkill('Empty')?.prompt).toBeUndefined()
+    expect(service.getSkill('Not A Skill')).toBeUndefined()
+  })
+
+  it('rejects duplicate skill names across builtin and user roots', async () => {
+    fs.seedFile('/builtin/research/SKILL.md', '---\nname: Research\n---\nBuilt-in guidance')
+    fs.seedFile('/user/research-copy/SKILL.md', '---\nname: research\n---\nUser guidance')
+
+    const service = createSkillFileService({ paths: { builtinSkillsDir: '/builtin', userSkillsDir: '/user' }, fs })
+
+    await expect(service.refreshSkills()).rejects.toThrow(/Duplicate skill name/i)
+    expect(service.listSkills()).toEqual([])
   })
 
   it('keeps existing cache and resolves auto refresh ticks when scanning fails', async () => {
@@ -156,13 +166,13 @@ describe('SkillFileService', () => {
     const service = createSkillFileService({ paths: { builtinSkillsDir: '/builtin', userSkillsDir: '/user' }, fs, timer })
     await service.refreshSkills()
 
-    expect(service.getSkill('user:stable')).toMatchObject({ name: 'Stable', prompt: 'Cached prompt' })
+    expect(service.getSkill('Stable')).toMatchObject({ id: 'Stable', name: 'Stable', prompt: 'Cached prompt' })
     fs.readdir.mockRejectedValueOnce(new Error('scan failed'))
 
     service.startAutoScan(500)
     await expect(tick()).resolves.toBeUndefined()
 
-    expect(service.getSkill('user:stable')).toMatchObject({ name: 'Stable', prompt: 'Cached prompt' })
+    expect(service.getSkill('Stable')).toMatchObject({ id: 'Stable', name: 'Stable', prompt: 'Cached prompt' })
   })
 
   it('starts and stops auto refresh with injected timer', async () => {
@@ -174,7 +184,7 @@ describe('SkillFileService', () => {
     expect(timer.setInterval).toHaveBeenCalledWith(expect.any(Function), 500)
 
     await tick()
-    expect(service.getSkill('user:first')).toMatchObject({ name: 'First' })
+    expect(service.getSkill('First')).toMatchObject({ id: 'First', name: 'First' })
 
     service.stopAutoScan()
     expect(timer.clearInterval).toHaveBeenCalledWith(123)

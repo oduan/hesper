@@ -365,7 +365,7 @@ describe('builtin tools', () => {
       name: 'List Skills',
       category: 'agent',
       icon: '🧩',
-      description: expect.stringContaining('available skills'),
+      description: expect.stringContaining('Skill id is the unique skill name'),
       inputSchema: { type: 'object', properties: {} }
     })
     expect(tools.find((tool) => tool.id === 'skills.get')).toMatchObject({
@@ -380,7 +380,7 @@ describe('builtin tools', () => {
         type: 'object',
         required: ['id'],
         properties: {
-          id: expect.objectContaining({ type: 'string' })
+          id: expect.objectContaining({ type: 'string', description: expect.stringContaining('Skill name/id') })
         }
       }
     })

@@ -241,7 +241,7 @@ describe('shared schemas', () => {
 
   it('validates user skill source metadata', () => {
     const parsed = skillSchema.parse({
-      id: 'user:research',
+      id: 'Research',
       name: 'Research',
       description: 'Find references',
       source: 'user',

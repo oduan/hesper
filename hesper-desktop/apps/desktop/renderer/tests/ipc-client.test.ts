@@ -22,10 +22,10 @@ describe('ipc-client fallback', () => {
     const skills = await api.skills.list()
 
     expect(skills).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'builtin:install-skills', name: 'Install Skills', source: 'builtin' })
+      expect.objectContaining({ id: 'Install Skills', name: 'Install Skills', source: 'builtin' })
     ]))
-    await expect(api.skills.get('builtin:install-skills')).resolves.toMatchObject({ id: 'builtin:install-skills' })
-    await expect(api.skills.get('missing')).resolves.toBeUndefined()
+    await expect(api.skills.get('Install Skills')).resolves.toMatchObject({ id: 'Install Skills' })
+    await expect(api.skills.get('Missing')).resolves.toBeUndefined()
     await expect(api.skills.refresh()).resolves.toEqual(skills)
   })
 

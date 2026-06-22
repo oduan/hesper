@@ -67,22 +67,22 @@ describe('registry services', () => {
       'web.search'
     ])
     expect(roles.find((role) => role.id === 'main-agent')?.allowedSkillIds).toEqual([
-      'builtin:notes',
-      'builtin:files',
-      'builtin:web',
-      'builtin:install-skills'
+      'Notes',
+      'Files',
+      'Web',
+      'Install Skills'
     ])
     expect(roles.find((role) => role.id === 'main-agent')?.defaultSkillIds).toEqual([
-      'builtin:notes',
-      'builtin:files',
-      'builtin:web',
-      'builtin:install-skills'
+      'Notes',
+      'Files',
+      'Web',
+      'Install Skills'
     ])
     expect(skills.map((skill) => skill.id)).toEqual([
-      'builtin:install-skills',
-      'builtin:notes',
-      'workspace:notes',
-      'project:notes'
+      'Install Skills',
+      'Notes',
+      'Workspace Notes',
+      'Project Notes'
     ])
   })
 

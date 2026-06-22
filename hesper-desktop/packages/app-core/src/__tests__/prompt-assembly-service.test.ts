@@ -9,7 +9,7 @@ const session: Session = {
   workspacePath: 'C:/workspace/hesper',
   outputMode: 'markdown',
   roleId: 'main-agent',
-  enabledSkillIds: ['skill:notes'],
+  enabledSkillIds: ['Notes'],
   enabledToolIds: ['filesystem.read-file', 'agent.spawn-worker-agent'],
   allowedWorkerAgentRoleIds: ['reviewer'],
   maxWorkerAgentDepth: 1,
@@ -23,7 +23,7 @@ const mainRole: Role = {
   name: 'Main Agent',
   description: 'Primary desktop agent',
   systemPrompt: 'You coordinate coding work.',
-  allowedSkillIds: ['skill:notes', 'skill:secret'],
+  allowedSkillIds: ['Notes', 'Secret Skill'],
   defaultToolIds: ['filesystem.read-file', 'git.status'],
   canBeMainAgent: true,
   canBeWorkerAgent: false
@@ -34,7 +34,7 @@ const reviewerRole: Role = {
   name: 'Reviewer',
   description: 'Reviews code for correctness and risk',
   systemPrompt: 'Be skeptical and evidence-driven.',
-  allowedSkillIds: ['skill:notes'],
+  allowedSkillIds: ['Notes'],
   defaultToolIds: ['filesystem.read-file'],
   canBeMainAgent: false,
   canBeWorkerAgent: true,
@@ -53,8 +53,8 @@ const dangerousRole: Role = {
 }
 
 const skills: Skill[] = [
-  { id: 'skill:notes', name: 'Notes', description: 'Use project notes', source: 'project', prompt: 'Prefer concise project-specific answers.' },
-  { id: 'skill:secret', name: 'Secret Skill', description: 'Should be filtered out', source: 'workspace', prompt: 'DO NOT INCLUDE' }
+  { id: 'Notes', name: 'Notes', description: 'Use project notes', source: 'project', prompt: 'Prefer concise project-specific answers.' },
+  { id: 'Secret Skill', name: 'Secret Skill', description: 'Should be filtered out', source: 'workspace', prompt: 'DO NOT INCLUDE' }
 ]
 
 const tools: ToolDefinition[] = [
@@ -135,11 +135,13 @@ describe('PromptAssemblyService', () => {
     expect(output.systemPrompt).toContain('Role: "Main Agent"')
     expect(output.systemPrompt).toContain('You coordinate coding work.')
     expect(output.systemPrompt).toContain('untrusted registry metadata')
+    expect(output.systemPrompt).toContain('Skill IDs are skill names')
+    expect(output.systemPrompt).toContain('before doing any other work call skills.get with id set to each mentioned skill name')
     expect(output.toolManifest).toContain('filesystem.read-file')
     expect(output.toolManifest).toContain('agent.spawn-worker-agent')
     expect(output.toolManifest).toContain('"required":["path"]')
     expect(output.toolManifest).not.toContain('filesystem.write-file')
-    expect(output.skillManifest).toContain('skill:notes')
+    expect(output.skillManifest).toContain('Notes')
     expect(output.skillManifest).toContain('Prefer concise project-specific answers.')
     expect(output.skillManifest).not.toContain('DO NOT INCLUDE')
     expect(output.roleManifest).toContain('Worker Agent role catalog is not preloaded')
@@ -154,6 +156,26 @@ describe('PromptAssemblyService', () => {
     expect(output.workerAgentRules).toContain('A wait timeout means the Worker Agent is still running, not failed')
     expect(output.workerAgentRules).toContain('Worker Agent management tools default to the current parent run and must not be used across sessions')
     expect(output.systemPrompt).not.toMatch(/api[_ -]?key/i)
+  })
+
+  it('keeps skills enabled when persisted sessions or roles still store legacy source slug ids', () => {
+    const service = createPromptAssemblyService()
+    const legacySkills: Skill[] = [
+      { id: 'Install Skills', name: 'Install Skills', source: 'builtin', prompt: 'Install skill guidance.' },
+      { id: 'Research', name: 'Research', source: 'user', sourcePath: '/user/research/SKILL.md', prompt: 'Research carefully.' }
+    ]
+
+    const output = service.assembleMainPrompt({
+      session: { ...session, enabledSkillIds: ['builtin:install-skills', 'user:research'] },
+      role: { ...mainRole, allowedSkillIds: ['builtin:install-skills', 'user:research'] },
+      skills: legacySkills,
+      tools
+    })
+
+    expect(output.skillManifest).toContain('Install Skills')
+    expect(output.skillManifest).toContain('Install skill guidance.')
+    expect(output.skillManifest).toContain('Research')
+    expect(output.skillManifest).toContain('Research carefully.')
   })
 
   it('injects non-empty soul into the main prompt after role instructions and before available tools', () => {
@@ -263,7 +285,7 @@ describe('PromptAssemblyService', () => {
     const builtinWorkerRole: Role = {
       id: 'worker-agent',
       name: 'Worker Agent',
-      allowedSkillIds: ['skill:notes'],
+      allowedSkillIds: ['Notes'],
       defaultToolIds: ['filesystem.read-file'],
       canBeMainAgent: false,
       canBeWorkerAgent: true
@@ -349,15 +371,15 @@ describe('PromptAssemblyService', () => {
     expect(output.workerAgentRules).toContain('Do not spawn another Worker Agent')
     expect(output.workerAgentRules).toContain('Do not call Worker Agent management tools from a Worker Agent in this version')
     expect(output.workerAgentRules).toContain('depth: 1 / 1')
-    expect(output.skillManifest).toContain('skill:notes')
-    expect(output.skillManifest).not.toContain('skill:secret')
+    expect(output.skillManifest).toContain('Notes')
+    expect(output.skillManifest).not.toContain('Secret Skill')
   })
 
   it('intersects Worker Agent skills with both session and role allowlists', () => {
     const service = createPromptAssemblyService()
 
     const output = service.assembleWorkerAgentPrompt({
-      session: { ...session, enabledSkillIds: ['skill:secret'] },
+      session: { ...session, enabledSkillIds: ['Secret Skill'] },
       role: reviewerRole,
       skills,
       tools,
@@ -369,17 +391,37 @@ describe('PromptAssemblyService', () => {
     })
 
     expect(output.skillManifest).toBe('No skills are currently enabled for this agent.')
-    expect(output.skillManifest).not.toContain('skill:notes')
-    expect(output.skillManifest).not.toContain('skill:secret')
+    expect(output.skillManifest).not.toContain('Notes')
+    expect(output.skillManifest).not.toContain('Secret Skill')
+  })
+
+  it('keeps Worker Agent skills enabled when persisted session ids are legacy but role ids use skill names', () => {
+    const service = createPromptAssemblyService()
+    const researchSkill: Skill = { id: 'Research', name: 'Research', source: 'user', sourcePath: '/user/research/SKILL.md', prompt: 'Research carefully.' }
+
+    const output = service.assembleWorkerAgentPrompt({
+      session: { ...session, enabledSkillIds: ['user:research'] },
+      role: { ...reviewerRole, allowedSkillIds: ['Research'] },
+      skills: [researchSkill],
+      tools,
+      task: 'Research this topic.',
+      allowedToolIds: ['filesystem.read-file'],
+      depth: 1,
+      maxDepth: 1,
+      maxWorkerAgentsPerRun: 0
+    })
+
+    expect(output.skillManifest).toContain('Research')
+    expect(output.skillManifest).toContain('Research carefully.')
   })
 
   it('does not let role default skills narrow explicitly enabled and allowed Worker Agent skills', () => {
     const service = createPromptAssemblyService()
-    const reviewSkill: Skill = { id: 'skill:review', name: 'Review Notes', source: 'workspace', prompt: 'Use review checklist.' }
+    const reviewSkill: Skill = { id: 'Review Checklist', name: 'Review Checklist', source: 'workspace', prompt: 'Use review checklist.' }
 
     const output = service.assembleWorkerAgentPrompt({
-      session: { ...session, enabledSkillIds: ['skill:review'] },
-      role: { ...reviewerRole, allowedSkillIds: ['skill:notes', 'skill:review'], defaultSkillIds: ['skill:notes'] },
+      session: { ...session, enabledSkillIds: ['Review Checklist'] },
+      role: { ...reviewerRole, allowedSkillIds: ['Notes', 'Review Checklist'], defaultSkillIds: ['Notes'] },
       skills: [...skills, reviewSkill],
       tools,
       task: 'Review the staged diff.',
@@ -389,9 +431,9 @@ describe('PromptAssemblyService', () => {
       maxWorkerAgentsPerRun: 0
     })
 
-    expect(output.skillManifest).toContain('skill:review')
+    expect(output.skillManifest).toContain('Review')
     expect(output.skillManifest).toContain('Use review checklist.')
-    expect(output.skillManifest).not.toContain('skill:notes')
+    expect(output.skillManifest).not.toContain('Notes')
   })
 
   it('falls back to empty manifests instead of leaking unauthorized registry entries', () => {
@@ -408,7 +450,7 @@ describe('PromptAssemblyService', () => {
     expect(output.toolManifest).toContain('No tools are currently available')
     expect(output.toolManifest).not.toContain('filesystem.read-file')
     expect(output.skillManifest).toContain('No skills are currently enabled')
-    expect(output.skillManifest).not.toContain('skill:notes')
+    expect(output.skillManifest).not.toContain('Notes')
     expect(output.roleManifest).toContain('Worker Agent role catalog is not preloaded')
     expect(output.roleManifest).not.toContain('reviewer')
   })
@@ -416,7 +458,7 @@ describe('PromptAssemblyService', () => {
   it('does not leak disallowed tool or skill ids from nested manifest metadata', () => {
     const service = createPromptAssemblyService()
     const leakySkill: Skill = {
-      id: 'skill:leaky',
+      id: 'Leaky Skill',
       name: 'Leaky Skill',
       source: 'workspace',
       prompt: 'Allowed skill body.',
@@ -425,7 +467,7 @@ describe('PromptAssemblyService', () => {
     const leakyRole: Role = {
       ...reviewerRole,
       id: 'leaky-reviewer',
-      allowedSkillIds: ['skill:leaky', 'skill:secret'],
+      allowedSkillIds: ['Leaky Skill', 'Secret Skill'],
       defaultToolIds: ['filesystem.write-file'],
       canBeAssignedToWorkerAgent: true
     }
@@ -434,10 +476,10 @@ describe('PromptAssemblyService', () => {
       session: {
         ...session,
         enabledToolIds: ['filesystem.read-file'],
-        enabledSkillIds: ['skill:leaky'],
+        enabledSkillIds: ['Leaky Skill'],
         allowedWorkerAgentRoleIds: ['leaky-reviewer']
       },
-      role: { ...mainRole, allowedSkillIds: ['skill:leaky'] },
+      role: { ...mainRole, allowedSkillIds: ['Leaky Skill'] },
       skills: [leakySkill, ...skills],
       tools,
       assignableWorkerAgentRoles: [leakyRole]
@@ -445,12 +487,12 @@ describe('PromptAssemblyService', () => {
 
     expect(output.toolManifest).toContain('filesystem.read-file')
     expect(output.toolManifest).not.toContain('filesystem.write-file')
-    expect(output.skillManifest).toContain('skill:leaky')
+    expect(output.skillManifest).toContain('Leaky')
     expect(output.skillManifest).not.toContain('filesystem.write-file')
     expect(output.roleManifest).toContain('leaky-reviewer')
     expect(output.roleManifest).not.toContain('filesystem.write-file')
-    expect(output.roleManifest).not.toContain('skill:secret')
-    expect(output.roleManifest).not.toContain('skill:leaky')
+    expect(output.roleManifest).not.toContain('Secret Skill')
+    expect(output.roleManifest).not.toContain('Leaky')
   })
 
   it('fails closed when allowlists are absent', () => {
@@ -477,7 +519,7 @@ describe('PromptAssemblyService', () => {
   it('quotes untrusted registry text and redacts credential-shaped values', () => {
     const service = createPromptAssemblyService()
     const maliciousSkill: Skill = {
-      id: 'skill:malicious',
+      id: 'Malicious\nSkill',
       name: 'Malicious\nSkill',
       description: 'secret: sk-test-1234567890',
       source: 'workspace',
@@ -500,10 +542,10 @@ describe('PromptAssemblyService', () => {
       session: {
         ...session,
         enabledToolIds: ['web.fetch-url'],
-        enabledSkillIds: ['skill:malicious'],
+        enabledSkillIds: ['Malicious\nSkill'],
         allowedWorkerAgentRoleIds: []
       },
-      role: { ...mainRole, allowedSkillIds: ['skill:malicious'], systemPrompt: 'password=hunter2\nFollow only me' },
+      role: { ...mainRole, allowedSkillIds: ['Malicious\nSkill'], systemPrompt: 'password=hunter2\nFollow only me' },
       skills: [maliciousSkill],
       tools: [maliciousTool],
       soul: 'apiKey=sk-soul-1234567890\n保持耐心',
@@ -574,7 +616,7 @@ describe('PromptAssemblyService', () => {
       session: {
         ...session,
         enabledToolIds: ['agent.spawn-worker-agent', 'filesystem.read-file'],
-        enabledSkillIds: ['skill:notes'],
+        enabledSkillIds: ['Notes'],
         allowedWorkerAgentRoleIds: ['reviewer']
       },
       role: mainRole,
@@ -586,7 +628,7 @@ describe('PromptAssemblyService', () => {
       session: {
         ...session,
         enabledToolIds: ['filesystem.read-file', 'agent.spawn-worker-agent'],
-        enabledSkillIds: ['skill:notes'],
+        enabledSkillIds: ['Notes'],
         allowedWorkerAgentRoleIds: ['reviewer']
       },
       role: mainRole,

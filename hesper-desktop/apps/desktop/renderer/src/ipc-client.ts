@@ -99,10 +99,10 @@ export function createFallbackHesperApi(): HesperDesktopApi {
   let sessions: SessionDto[] = []
   let tools: ToolDto[] = fallbackBuiltinTools.map((tool) => ({ ...tool }))
   const skills: SkillDto[] = [
-    { id: 'builtin:install-skills', name: 'Install Skills', description: 'Install reusable skills into the user skill directory.', source: 'builtin' },
-    { id: 'builtin:notes', name: 'Notes', source: 'builtin' },
-    { id: 'workspace:notes', name: 'Workspace Notes', source: 'workspace' },
-    { id: 'project:notes', name: 'Project Notes', source: 'project' }
+    { id: 'Install Skills', name: 'Install Skills', description: 'Install reusable skills into the user skill directory.', source: 'builtin' },
+    { id: 'Notes', name: 'Notes', source: 'builtin' },
+    { id: 'Workspace Notes', name: 'Workspace Notes', source: 'workspace' },
+    { id: 'Project Notes', name: 'Project Notes', source: 'project' }
   ]
   let roles: ManagedRoleDto[] = []
   let sshKeys: SshKeyDto[] = []

@@ -108,6 +108,25 @@ function skillCompare(left: Skill, right: Skill): number {
   return left.id.localeCompare(right.id)
 }
 
+function skillNameKey(name: string): string {
+  return name.trim().toLocaleLowerCase()
+}
+
+function assertUniqueSkillNames(skills: Skill[]): void {
+  const seen = new Map<string, Skill>()
+  for (const skill of skills) {
+    const key = skillNameKey(skill.name)
+    const existing = seen.get(key)
+    if (existing) {
+      const locations = [existing, skill]
+        .map((candidate) => candidate.sourcePath ?? candidate.path ?? `${candidate.source}:${candidate.name}`)
+        .join(', ')
+      throw new Error(`Duplicate skill name "${skill.name}" found at ${locations}. Skill names are unique skill IDs; rename or remove one of the duplicate skills.`)
+    }
+    seen.set(key, skill)
+  }
+}
+
 function installSkillsContent(now: () => Date): string {
   return [
     '---',
@@ -116,7 +135,9 @@ function installSkillsContent(now: () => Date): string {
     '---',
     'When the user asks to install or update a skill, create or update a directory under `~/.hesper/skills/<slug>/` and write the skill instructions to `SKILL.md`.',
     '',
-    'Use the format `~/.hesper/skills/<slug>/SKILL.md`. Include YAML-like frontmatter with `name` and `description`, then put the reusable agent guidance in the body.',
+    'Skill names are unique skill IDs. Before installing a new skill, make sure no existing built-in or user skill has the same `name`; update the existing skill only when the user is clearly asking to update that same skill.',
+    '',
+    'Use the format `~/.hesper/skills/<slug>/SKILL.md`. Include YAML-like frontmatter with unique `name` and `description`, then put the reusable agent guidance in the body.',
     '',
     'Do not write skills into project folders unless the user explicitly asks for a project-local skill.',
     '',
@@ -157,7 +178,7 @@ async function scanRoot(options: {
     }
     const parsed = parseSkillMarkdown(slug, content)
     skills.push({
-      id: `${source}:${slug}`,
+      id: parsed.name,
       name: parsed.name,
       source,
       path: joinPath(root, slug),
@@ -189,6 +210,7 @@ export function createSkillFileService(options: SkillFileServiceOptions): SkillF
         ...(await scanRoot({ fs, root: options.paths.builtinSkillsDir, source: 'builtin' })),
         ...(await scanRoot({ fs, root: options.paths.userSkillsDir, source: 'user' }))
       ].sort(skillCompare)
+      assertUniqueSkillNames(scanned)
       skills = scanned
       return [...skills]
     })().finally(() => {

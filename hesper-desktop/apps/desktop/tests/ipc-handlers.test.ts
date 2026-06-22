@@ -89,10 +89,10 @@ describe('desktop service container', () => {
 
   it('supports injecting a skill service for desktop runtime and tools', async () => {
     const persistence = await createInMemoryPersistence()
-    const researchSkill = { id: 'user:research', name: 'Research', description: 'Find references', source: 'user' as const, prompt: 'Research carefully.' }
+    const researchSkill = { id: 'Research', name: 'Research', description: 'Find references', source: 'user' as const, prompt: 'Research carefully.' }
     const skillService: SkillService = {
       listSkills: vi.fn(() => [researchSkill]),
-      getSkill: vi.fn((id) => id === 'user:research' ? researchSkill : undefined)
+      getSkill: vi.fn((id) => id === 'Research' ? researchSkill : undefined)
     }
     const container = createServiceContainer({ persistence, agentMode: 'mock', skillService })
 
@@ -103,14 +103,14 @@ describe('desktop service container', () => {
       sessionId: 'session-1',
       allowedToolIds: ['skills.list']
     })
-    expect(JSON.parse(listResult.content)).toEqual([expect.objectContaining({ id: 'user:research', name: 'Research' })])
+    expect(JSON.parse(listResult.content)).toEqual([expect.objectContaining({ id: 'Research', name: 'Research' })])
 
-    const getResult = await container.toolRunner.run(container.toolCatalogService.get('skills.get')!, { id: 'user:research' }, {
+    const getResult = await container.toolRunner.run(container.toolCatalogService.get('skills.get')!, { id: 'Research' }, {
       runId: 'run-1',
       sessionId: 'session-1',
       allowedToolIds: ['skills.get']
     })
-    expect(JSON.parse(getResult.content)).toMatchObject({ id: 'user:research', prompt: 'Research carefully.' })
+    expect(JSON.parse(getResult.content)).toMatchObject({ id: 'Research', prompt: 'Research carefully.' })
   })
 
   it('injects role management tools into the production tool runner', async () => {
@@ -816,10 +816,10 @@ describe('registerIpcHandlers', () => {
   it('exposes skills through typed IPC handlers and refreshes async services', async () => {
     const persistence = await createInMemoryPersistence()
     const skills = [
-      { id: 'builtin:install-skills', name: 'Install Skills', description: 'Install reusable skills.', source: 'builtin' as const },
-      { id: 'user:research', name: 'Research', source: 'user' as const, prompt: 'Research carefully.' }
+      { id: 'Install Skills', name: 'Install Skills', description: 'Install reusable skills.', source: 'builtin' as const },
+      { id: 'Research', name: 'Research', source: 'user' as const, prompt: 'Research carefully.' }
     ]
-    const refreshedSkills = [...skills, { id: 'user:writer', name: 'Writer', source: 'user' as const }]
+    const refreshedSkills = [...skills, { id: 'Writer', name: 'Writer', source: 'user' as const }]
     const skillService: SkillService & { refreshSkills: ReturnType<typeof vi.fn> } = {
       listSkills: vi.fn(() => skills),
       getSkill: vi.fn((id: string) => skills.find((skill) => skill.id === id)),
@@ -840,8 +840,8 @@ describe('registerIpcHandlers', () => {
     registerIpcHandlers({ ipcMain, dialog, container })
 
     await expect(handles.get(ipcChannels.skillsList)?.({ sender: { id: 1 } })).resolves.toEqual(skills)
-    await expect(handles.get(ipcChannels.skillsGet)?.({ sender: { id: 1 } }, 'user:research')).resolves.toMatchObject({ id: 'user:research', prompt: 'Research carefully.' })
-    await expect(handles.get(ipcChannels.skillsGet)?.({ sender: { id: 1 } }, 'user:missing')).resolves.toBeUndefined()
+    await expect(handles.get(ipcChannels.skillsGet)?.({ sender: { id: 1 } }, 'Research')).resolves.toMatchObject({ id: 'Research', prompt: 'Research carefully.' })
+    await expect(handles.get(ipcChannels.skillsGet)?.({ sender: { id: 1 } }, 'Missing')).resolves.toBeUndefined()
     await expect(handles.get(ipcChannels.skillsRefresh)?.({ sender: { id: 1 } })).resolves.toEqual(refreshedSkills)
     expect(skillService.refreshSkills).toHaveBeenCalledTimes(1)
   })

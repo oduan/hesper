@@ -221,8 +221,8 @@ describe('session settings and restore flow', () => {
     const user = userEvent.setup()
     listSessions.mockResolvedValueOnce([createSession()] as any)
     refreshSkills.mockResolvedValueOnce([
-      { id: 'builtin:install-skills', name: '安装技能', description: '安装可复用技能', source: 'builtin', prompt: '安装说明' },
-      { id: 'workspace:writer', name: '写作助手', source: 'workspace', prompt: '写作说明' }
+      { id: '安装技能', name: '安装技能', description: '安装可复用技能', source: 'builtin', prompt: '安装说明' },
+      { id: '写作助手', name: '写作助手', source: 'workspace', prompt: '写作说明' }
     ])
 
     render(<App />)

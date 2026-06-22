@@ -322,7 +322,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
     {
       id: 'skills.list',
       name: 'List Skills',
-      description: 'List all available skills with metadata including id, name, description, source, path, sourcePath, prompt, allowed tool IDs, and enabled status. Returns metadata only and never returns credentials.',
+      description: 'List all available skills with metadata including id, name, description, source, path, sourcePath, prompt, allowed tool IDs, and enabled status. Skill id is the unique skill name. Returns metadata only and never returns credentials.',
       category: 'agent',
       icon: '🧩',
       display: { name: 'List Skills', names: { 'zh-CN': '列出技能' } },
@@ -331,7 +331,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
     {
       id: 'skills.get',
       name: 'Get Skill',
-      description: 'Get detailed information for one available skill by id, including prompt text and source metadata. Returns a controlled not_found result when the skill id does not exist.',
+      description: 'Get detailed information for one available skill by skill name/id, including prompt text and source metadata. Skill names are unique IDs. Returns a controlled not_found result when the skill name does not exist.',
       category: 'agent',
       icon: '🧩',
       display: { name: 'Get Skill', names: { 'zh-CN': '查看技能' }, resourceFields: ['id'] },
@@ -339,7 +339,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
         type: 'object',
         required: ['id'],
         properties: {
-          id: { type: 'string', description: 'Skill id to inspect, for example builtin:install-skills or user:review.' }
+          id: { type: 'string', description: 'Skill name/id to inspect, for example Install Skills or Code Review.' }
         }
       }
     },

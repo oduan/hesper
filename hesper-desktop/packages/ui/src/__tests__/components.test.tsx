@@ -273,10 +273,10 @@ describe('ui components', () => {
         activeSection="skills"
         title="技能"
         skills={[
-          { id: 'builtin:install-skills', name: '安装技能', description: '安装可复用技能' },
-          { id: 'workspace:writer', name: '写作助手' }
+          { id: '安装技能', name: '安装技能', description: '安装可复用技能' },
+          { id: '写作助手', name: '写作助手' }
         ]}
-        activeSkillId="builtin:install-skills"
+        activeSkillId="安装技能"
         onSelectSkill={onSelectSkill}
       >
         <div>Skill detail</div>
@@ -290,7 +290,7 @@ describe('ui components', () => {
     expect(screen.getByText('暂无简介')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '写作助手 暂无简介' }))
-    expect(onSelectSkill).toHaveBeenCalledWith('workspace:writer')
+    expect(onSelectSkill).toHaveBeenCalledWith('写作助手')
   })
 
   it('renders fallback description for roles without description', async () => {
