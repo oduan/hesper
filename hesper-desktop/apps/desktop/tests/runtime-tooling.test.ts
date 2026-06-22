@@ -178,6 +178,14 @@ describe('desktop runtime tooling', () => {
     expect(mainProcessSource).toContain("app.setName('Hesper')")
   })
 
+  it('keeps the default user data directory stable when the display name changes', () => {
+    const mainProcessSource = fs.readFileSync(mainProcessPath, 'utf8')
+
+    expect(mainProcessSource).toContain("const defaultUserDataPath = path.join(app.getPath('appData'), '@hesper', 'desktop')")
+    expect(mainProcessSource).toContain("app.setPath('userData', configuredUserDataPath ?? defaultUserDataPath)")
+    expect(mainProcessSource.indexOf("app.setPath('userData'")).toBeLessThan(mainProcessSource.indexOf("app.getPath('userData')"))
+  })
+
   it('fails dev startup instead of opening another app on the renderer dev port', () => {
     const startElectronDevSource = fs.readFileSync(startElectronDevPath, 'utf8')
     const rendererViteConfigSource = fs.readFileSync(rendererViteConfigPath, 'utf8')

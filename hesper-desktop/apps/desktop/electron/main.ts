@@ -21,15 +21,15 @@ const fallbackIconPath = path.resolve(__dirname, '../assets/hesper-icon.png')
 
 app.setName('Hesper')
 
+const defaultUserDataPath = path.join(app.getPath('appData'), '@hesper', 'desktop')
+
 function resolveAppIconPath(): string | undefined {
   const iconPath = process.platform === 'win32' ? windowsIconPath : fallbackIconPath
   return fs.existsSync(iconPath) ? iconPath : undefined
 }
 
 const configuredUserDataPath = process.env.HESPER_USER_DATA_DIR
-if (configuredUserDataPath) {
-  app.setPath('userData', configuredUserDataPath)
-}
+app.setPath('userData', configuredUserDataPath ?? defaultUserDataPath)
 
 let mainWindow: BrowserWindow | null = null
 let container: ServiceContainer | null = null
