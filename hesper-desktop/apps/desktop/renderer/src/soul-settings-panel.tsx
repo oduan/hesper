@@ -1,8 +1,12 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { darkTheme } from '@hesper/ui'
 import type { AppSettings, UpdateSettingsInput } from '../../electron/ipc-contract'
 
 const SOUL_SAVE_DEBOUNCE_MS = 300
+const SOUL_READONLY_TEXTAREA_MIN_HEIGHT = 160
+const SOUL_EDITING_TEXTAREA_MIN_HEIGHT = 420
+const SOUL_EDITING_TEXTAREA_VIEWPORT_OFFSET = 220
+const soulEditingTextareaMinHeight = `min(${SOUL_EDITING_TEXTAREA_MIN_HEIGHT}px, calc(100vh - ${SOUL_EDITING_TEXTAREA_VIEWPORT_OFFSET}px))`
 
 export type SoulSettingsPanelProps = {
   settings: Pick<AppSettings, 'soul'>
@@ -27,6 +31,19 @@ export function SoulSettingsPanel({ settings, error, onUpdate }: SoulSettingsPan
       saveTimeoutRef.current = null
     }
   }, [])
+
+  const syncTextareaHeight = useCallback(() => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+
+    const availableEditingHeight = Math.max(SOUL_READONLY_TEXTAREA_MIN_HEIGHT, window.innerHeight - SOUL_EDITING_TEXTAREA_VIEWPORT_OFFSET)
+    const minHeight = isEditing
+      ? Math.min(SOUL_EDITING_TEXTAREA_MIN_HEIGHT, availableEditingHeight)
+      : SOUL_READONLY_TEXTAREA_MIN_HEIGHT
+
+    textarea.style.height = 'auto'
+    textarea.style.height = `${Math.max(textarea.scrollHeight, minHeight)}px`
+  }, [isEditing])
 
   const flushDraft = useCallback(() => {
     clearPendingSave()
@@ -80,6 +97,15 @@ export function SoulSettingsPanel({ settings, error, onUpdate }: SoulSettingsPan
 
     return clearPendingSave
   }, [clearPendingSave, draft, flushDraft])
+
+  useLayoutEffect(() => {
+    syncTextareaHeight()
+  }, [draft, isEditing, syncTextareaHeight])
+
+  useEffect(() => {
+    window.addEventListener('resize', syncTextareaHeight)
+    return () => window.removeEventListener('resize', syncTextareaHeight)
+  }, [syncTextareaHeight])
 
   useEffect(() => {
     if (!isEditing) {
@@ -136,11 +162,11 @@ export function SoulSettingsPanel({ settings, error, onUpdate }: SoulSettingsPan
     </section>
   )
 }
-
 const panelStyle: CSSProperties = {
   height: '100%',
   minHeight: 0,
-  overflow: 'auto',
+  overflowX: 'auto',
+  overflowY: 'auto',
   display: 'grid',
   alignContent: 'start',
   gap: darkTheme.spacing.lg,
@@ -207,7 +233,9 @@ const textareaBaseStyle: CSSProperties = {
   width: '100%',
   boxSizing: 'border-box',
   color: 'var(--hesper-color-text, #c0caf5)',
-  minHeight: 160,
+  minHeight: SOUL_READONLY_TEXTAREA_MIN_HEIGHT,
+  overflowX: 'hidden',
+  overflowY: 'hidden',
   resize: 'none',
   fontFamily: 'inherit',
   lineHeight: 1.5
@@ -216,6 +244,7 @@ const textareaBaseStyle: CSSProperties = {
 function getTextareaStyle(isEditing: boolean): CSSProperties {
   return {
     ...textareaBaseStyle,
+    minHeight: isEditing ? soulEditingTextareaMinHeight : SOUL_READONLY_TEXTAREA_MIN_HEIGHT,
     borderStyle: isEditing ? 'solid' : 'none',
     borderWidth: isEditing ? 1 : 0,
     borderColor: darkTheme.color.border,

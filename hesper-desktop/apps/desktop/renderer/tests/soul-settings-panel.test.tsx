@@ -221,7 +221,20 @@ describe('SoulSettingsPanel', () => {
     expect(onUpdate).toHaveBeenLastCalledWith({ soul: '第二次编辑' })
   })
 
-  it('keeps the textarea non-resizable in both read-only and editing states', () => {
+  it('keeps textarea overflow hidden and lets the SOUL page own scrolling', () => {
+    const { rerender } = render(<SoulSettingsPanel settings={{ soul: '短身份' }} onUpdate={vi.fn()} />)
+
+    const panel = screen.getByRole('region', { name: 'SOUL 设置面板' })
+    const textarea = screen.getByLabelText('身份设定') as HTMLTextAreaElement
+    Object.defineProperty(textarea, 'scrollHeight', { configurable: true, value: 720 })
+
+    rerender(<SoulSettingsPanel settings={{ soul: Array.from({ length: 40 }, (_, index) => `身份设定第 ${index + 1} 行`).join('\n') }} onUpdate={vi.fn()} />)
+
+    expect(window.getComputedStyle(panel).overflowY).toBe('auto')
+    expect(window.getComputedStyle(textarea).overflowY).toBe('hidden')
+    expect(textarea.style.height).toBe('720px')
+  })
+  it('makes the editing textarea taller while keeping page-level scrolling', () => {
     render(<SoulSettingsPanel settings={{ soul: '' }} onUpdate={vi.fn()} />)
 
     const textarea = screen.getByLabelText('身份设定')
@@ -229,6 +242,10 @@ describe('SoulSettingsPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '编辑' }))
 
+    const panel = screen.getByRole('region', { name: 'SOUL 设置面板' })
+
     expect(window.getComputedStyle(textarea).resize).toBe('none')
+    expect(window.getComputedStyle(panel).overflowY).toBe('auto')
+    expect(textarea).toHaveStyle({ minHeight: 'min(420px, calc(100vh - 220px))', overflowY: 'hidden' })
   })
 })
