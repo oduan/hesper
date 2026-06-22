@@ -564,7 +564,7 @@ const skillMentionPillStyle = {
   border: 0,
   borderRadius: '6px',
   background: themeTokens.color.softControl,
-  boxShadow: `0 0 0 4px ${themeTokens.color.softControl}`,
+  boxShadow: `3px 0 0 3px ${themeTokens.color.softControl}`,
   boxDecorationBreak: 'clone',
   WebkitBoxDecorationBreak: 'clone',
   color: themeTokens.color.text,
