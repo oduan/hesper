@@ -1,10 +1,11 @@
 import '@testing-library/jest-dom/vitest'
+import { useState } from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { AgentRun, LocalFilePreview, Message, RunStep, Session, WorkerAgentInvocation } from '@hesper/shared'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppShell } from '../layout/AppShell'
-import { Composer } from '../conversation/Composer'
+import { Composer, type ComposerSkillMention } from '../conversation/Composer'
 import { ConversationView } from '../conversation/ConversationView'
 import { FullscreenOutput } from '../conversation/FullscreenOutput'
 import { MarkdownOutput } from '../conversation/MarkdownOutput'
@@ -881,6 +882,44 @@ describe('ui components', () => {
       prompt: expect.stringContaining('技能：中文写作'),
       displayPrompt: '请用 @中文写作 完成'
     }))
+  })
+
+  it('keeps selected skill mention metadata when the composer remounts', async () => {
+    const user = userEvent.setup()
+    const skillOptions = [{ id: 'skill-research', name: 'Research' }]
+
+    function SkillMentionDraftHarness({ visible }: { visible: boolean }) {
+      const [draft, setDraft] = useState('')
+      const [skillMentions, setSkillMentions] = useState<ComposerSkillMention[]>([])
+
+      return visible ? (
+        <Composer
+          workspacePath="C:/dev/hesper"
+          modelId="mock/hesper-fast"
+          skillOptions={skillOptions}
+          skillMentions={skillMentions}
+          value={draft}
+          onDraftChange={setDraft}
+          onSkillMentionsChange={setSkillMentions}
+          onSend={() => undefined}
+        />
+      ) : <div>隐藏输入框</div>
+    }
+
+    const { container, rerender } = render(<SkillMentionDraftHarness visible />)
+    const textarea = screen.getByLabelText('消息输入框')
+    await user.type(textarea, '@')
+    await user.keyboard('{Enter}')
+
+    expect(textarea).toHaveValue('@Research ')
+    expect(container.querySelector('[data-skill-mention-pill="true"]')).toHaveTextContent('@Research')
+
+    rerender(<SkillMentionDraftHarness visible={false} />)
+    expect(screen.queryByLabelText('消息输入框')).not.toBeInTheDocument()
+
+    rerender(<SkillMentionDraftHarness visible />)
+    expect(screen.getByLabelText('消息输入框')).toHaveValue('@Research ')
+    expect(container.querySelector('[data-skill-mention-pill="true"]')).toHaveTextContent('@Research')
   })
 
   it('deletes a selected skill mention as one pill', async () => {

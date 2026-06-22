@@ -6,7 +6,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { themeTokens } from '@hesper/ui'
-import { App, clearSessionSendError, pruneSessionSendErrors } from '../src/App'
+import { App, clearSessionSendError, pruneSessionRecord, pruneSessionSendErrors } from '../src/App'
 
 function createDeferred<T>() {
   let resolve!: (value: T) => void
@@ -260,6 +260,15 @@ describe('renderer App', () => {
 
   it('prunes send-error entries for sessions that are no longer visible', () => {
     expect(pruneSessionSendErrors({ 'session-1': 'failed', 'session-2': 'keep' }, ['session-2'])).toEqual({ 'session-2': 'keep' })
+  })
+
+  it('prunes generic session-scoped records for sessions that are no longer visible', () => {
+    expect(pruneSessionRecord({
+      'session-1': [{ start: 0, end: 9 }],
+      'session-2': [{ start: 3, end: 12 }]
+    }, ['session-2'])).toEqual({
+      'session-2': [{ start: 3, end: 12 }]
+    })
   })
 
   afterEach(() => {

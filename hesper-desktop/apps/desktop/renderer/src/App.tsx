@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react'
 import { createId, defaultAppThemeId, nowIso, type Message, type RunStep, type Session, type WorkerAgentInvocation } from '@hesper/shared'
-import { AppShell, ConversationView, resolveThemeVariant, themeTokens, type AppSection, type ComposerSendOptions, type ConversationShortcutCommand, type SkillOption } from '@hesper/ui'
+import { AppShell, ConversationView, resolveThemeVariant, themeTokens, type AppSection, type ComposerSendOptions, type ComposerSkillMention, type ConversationShortcutCommand, type SkillOption } from '@hesper/ui'
 import { AppStoreProvider, useAppStore } from './app-store'
 import { hesperApi } from './ipc-client'
 import { defaultFallbackModelId, fallbackSessionModelCatalog, loadAvailableModelCatalog, mergeModelOptions, type SessionModelCatalog } from './model-options'
@@ -52,10 +52,14 @@ export function clearSessionSendError(errors: Record<string, string>, sessionId:
   return next
 }
 
-export function pruneSessionSendErrors(errors: Record<string, string>, visibleSessionIds: string[]): Record<string, string> {
+export function pruneSessionRecord<T>(record: Record<string, T>, visibleSessionIds: string[]): Record<string, T> {
   const visible = new Set(visibleSessionIds)
-  const next = Object.fromEntries(Object.entries(errors).filter(([sessionId]) => visible.has(sessionId)))
-  return Object.keys(next).length === Object.keys(errors).length ? errors : next
+  const next = Object.fromEntries(Object.entries(record).filter(([sessionId]) => visible.has(sessionId))) as Record<string, T>
+  return Object.keys(next).length === Object.keys(record).length ? record : next
+}
+
+export function pruneSessionSendErrors(errors: Record<string, string>, visibleSessionIds: string[]): Record<string, string> {
+  return pruneSessionRecord(errors, visibleSessionIds)
 }
 
 function applySessionSettingsOverride(session: Session, override?: SessionSettingsOverride): Session {
@@ -138,6 +142,7 @@ function AppContent() {
   const [titleGenerationError, setTitleGenerationError] = useState<string>()
   const [sendErrorsBySession, setSendErrorsBySession] = useState<Record<string, string>>({})
   const [draftsBySession, setDraftsBySession] = useState<Record<string, string>>({})
+  const [draftSkillMentionsBySession, setDraftSkillMentionsBySession] = useState<Record<string, ComposerSkillMention[]>>({})
   const [pendingSettingsBySession, setPendingSettingsBySession] = useState<Record<string, SessionSettingsOverride>>({})
   const [shortcutCommand, setShortcutCommand] = useState<ConversationShortcutCommand>()
   const [sessionModelCatalog, setSessionModelCatalog] = useState<SessionModelCatalog>(fallbackSessionModelCatalog)
@@ -725,14 +730,11 @@ function AppContent() {
 
   useEffect(() => {
     const visibleSessionIds = state.sessions.map((session) => session.id)
-    setSendErrorsBySession((current) => pruneSessionSendErrors(current, visibleSessionIds))
-    setDraftsBySession((current) => pruneSessionSendErrors(current, visibleSessionIds))
-    setPendingSettingsBySession((current) => {
-      const visible = new Set(visibleSessionIds)
-      const next = Object.fromEntries(Object.entries(current).filter(([sessionId]) => visible.has(sessionId)))
-      return Object.keys(next).length === Object.keys(current).length ? current : next
-    })
-    setHistoryErrorsBySession((current) => pruneSessionSendErrors(current, visibleSessionIds))
+    setSendErrorsBySession((current) => pruneSessionRecord(current, visibleSessionIds))
+    setDraftsBySession((current) => pruneSessionRecord(current, visibleSessionIds))
+    setDraftSkillMentionsBySession((current) => pruneSessionRecord(current, visibleSessionIds))
+    setPendingSettingsBySession((current) => pruneSessionRecord(current, visibleSessionIds))
+    setHistoryErrorsBySession((current) => pruneSessionRecord(current, visibleSessionIds))
     const visible = new Set(visibleSessionIds)
     loadedHistorySessionIdsRef.current = new Set([...loadedHistorySessionIdsRef.current].filter((sessionId) => visible.has(sessionId)))
     loadingHistorySessionIdsRef.current = new Set([...loadingHistorySessionIdsRef.current].filter((sessionId) => visible.has(sessionId)))
@@ -1376,10 +1378,21 @@ function AppContent() {
             modelOptionGroups={sessionModelCatalog.optionGroups}
             skillOptions={skills.map(toSkillOption)}
             draftValue={draftsBySession[activeSession.id] ?? ''}
+            draftSkillMentions={draftSkillMentionsBySession[activeSession.id] ?? []}
             running={Boolean(activeRunningRunId)}
             loadLocalFilePreview={(path) => hesperApi.files.preview({ sessionId: activeSession.id, path })}
             onDraftChange={(value) => {
               setDraftsBySession((current) => ({ ...current, [activeSession.id]: value }))
+            }}
+            onDraftSkillMentionsChange={(mentions) => {
+              setDraftSkillMentionsBySession((current) => {
+                if (mentions.length === 0) {
+                  const next = { ...current }
+                  delete next[activeSession.id]
+                  return next
+                }
+                return { ...current, [activeSession.id]: mentions }
+              })
             }}
             onStop={() => {
               if (!activeRunningRunId) return

@@ -15,15 +15,23 @@ export type ComposerSendOptions = {
   displayPrompt?: string
 }
 
+export type ComposerSkillMention = {
+  start: number
+  end: number
+  skill: SkillOption
+}
+
 export type ComposerProps = {
   workspacePath?: string
   modelId: string
   modelOptions?: string[]
   modelOptionGroups?: ModelOptionGroup[]
   skillOptions?: SkillOption[]
+  skillMentions?: ComposerSkillMention[]
   value?: string
   running?: boolean
   onDraftChange?: (value: string) => void
+  onSkillMentionsChange?: (mentions: ComposerSkillMention[]) => void
   onSend: (content: string, options?: ComposerSendOptions) => void
   onStop?: () => void
   onSelectWorkspace?: () => void
@@ -37,11 +45,7 @@ type MentionToken = {
   query: string
 }
 
-type SkillMentionRange = {
-  start: number
-  end: number
-  skill: SkillOption
-}
+type SkillMentionRange = ComposerSkillMention
 
 type ComposerSegment =
   | { kind: 'text'; text: string }
@@ -55,9 +59,11 @@ export function Composer({
   modelOptions = defaultModelOptions,
   modelOptionGroups,
   skillOptions = [],
+  skillMentions: controlledSkillMentions,
   value: controlledValue,
   running = false,
   onDraftChange,
+  onSkillMentionsChange,
   onSend,
   onStop,
   onSelectWorkspace,
@@ -69,9 +75,10 @@ export function Composer({
   const [activeSkillIndex, setActiveSkillIndex] = useState(0)
   const [dismissedMentionStart, setDismissedMentionStart] = useState<number>()
   const [textareaScrollTop, setTextareaScrollTop] = useState(0)
-  const [selectedSkillMentions, setSelectedSkillMentions] = useState<SkillMentionRange[]>([])
+  const [internalSkillMentions, setInternalSkillMentions] = useState<SkillMentionRange[]>([])
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const value = controlledValue ?? internalValue
+  const selectedSkillMentions = controlledSkillMentions ?? internalSkillMentions
   const lastHandledSendSignalRef = useRef(0)
   const canSend = useMemo(() => value.trim().length > 0, [value])
   const mentionToken = useMemo(() => findMentionToken(value, selectionStart), [selectionStart, value])
@@ -89,14 +96,16 @@ export function Composer({
     if (controlledValue === undefined) {
       setInternalValue(nextValue)
     }
-    if (nextSkillMentions !== undefined) {
-      setSelectedSkillMentions(nextSkillMentions)
-    } else if (nextValue.length === 0) {
-      setSelectedSkillMentions([])
+    const resolvedSkillMentions = nextSkillMentions ?? (nextValue.length === 0 ? [] : undefined)
+    if (resolvedSkillMentions !== undefined) {
+      if (controlledSkillMentions === undefined) {
+        setInternalSkillMentions(resolvedSkillMentions)
+      }
+      onSkillMentionsChange?.(resolvedSkillMentions)
     }
     onDraftChange?.(nextValue)
     setDismissedMentionStart(undefined)
-  }, [controlledValue, onDraftChange])
+  }, [controlledSkillMentions, controlledValue, onDraftChange, onSkillMentionsChange])
 
   const updateSelectionStart = useCallback(() => {
     setSelectionStart(textareaRef.current?.selectionStart ?? 0)
