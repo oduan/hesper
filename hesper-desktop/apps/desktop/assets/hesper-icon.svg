@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" data-icon="hesper-evening-star-line" role="img" aria-labelledby="title desc">
+  <title id="title">Hesper evening star line icon</title>
+  <desc id="desc">A minimal line-style evening star with an orbital arc on a dark rounded square.</desc>
+  <defs>
+    <linearGradient id="tile" x1="128" y1="96" x2="896" y2="928" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#111827"/>
+      <stop offset="1" stop-color="#050812"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="36%" cy="26%" r="58%">
+      <stop stop-color="#6366F1" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#111827" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="stroke" x1="284" y1="292" x2="856" y2="824" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C4B5FD"/>
+      <stop offset="1" stop-color="#22D3EE"/>
+    </linearGradient>
+  </defs>
+  <rect x="96" y="96" width="832" height="832" rx="232" fill="url(#tile)"/>
+  <rect x="96" y="96" width="832" height="832" rx="232" fill="url(#glow)"/>
+  <rect x="98" y="98" width="828" height="828" rx="230" fill="none" stroke="white" stroke-opacity="0.12" stroke-width="4"/>
+  <path d="M252 690 C382 818 706 824 856 634" fill="none" stroke="url(#stroke)" stroke-width="54" stroke-linecap="round" opacity="0.86"/>
+  <path d="M512 292 L576 448 L740 512 L576 576 L512 740 L448 576 L284 512 L448 448 Z" fill="none" stroke="url(#stroke)" stroke-width="66" stroke-linejoin="round" stroke-linecap="round"/>
+</svg>
