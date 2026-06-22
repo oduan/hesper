@@ -1,6 +1,6 @@
 import { useMemo, type CSSProperties, type ReactNode } from 'react'
 import type { AgentRun, Message, MessageContentType, RunStep, WorkerAgentInvocation } from '@hesper/shared'
-import { darkTheme } from '../theme'
+import { themeTokens } from '../theme'
 import { MarkdownOutput } from './MarkdownOutput'
 import { RunSteps } from './RunSteps'
 import { createSandboxedHtmlDocument } from './html-document'
@@ -126,54 +126,54 @@ export function WorkerAgentRunViewer({ invocation, run, steps, messages, streami
 
 const viewerStyle: CSSProperties = {
   display: 'grid',
-  gap: darkTheme.spacing.xl,
+  gap: themeTokens.spacing.xl,
   minWidth: 0
 }
 
 const introGridStyle: CSSProperties = {
   display: 'grid',
   gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-  gap: darkTheme.spacing.md,
+  gap: themeTokens.spacing.md,
   alignItems: 'start'
 }
 
 const sectionStyle: CSSProperties = {
   display: 'grid',
-  gap: darkTheme.spacing.md,
+  gap: themeTokens.spacing.md,
   minWidth: 0
 }
 
 const sectionTitleStyle: CSSProperties = {
   margin: 0,
-  fontSize: darkTheme.typography.body,
+  fontSize: themeTokens.typography.body,
   lineHeight: 1.25,
   fontWeight: 800,
-  color: darkTheme.color.text
+  color: themeTokens.color.text
 }
 
 const cardStyle: CSSProperties = {
   minWidth: 0,
   display: 'grid',
-  gap: darkTheme.spacing.md,
-  border: `1px solid ${darkTheme.color.border}`,
-  borderRadius: darkTheme.radius.lg,
-  background: darkTheme.color.surfaceMuted,
-  padding: darkTheme.spacing.lg
+  gap: themeTokens.spacing.md,
+  border: `1px solid ${themeTokens.color.border}`,
+  borderRadius: themeTokens.radius.lg,
+  background: themeTokens.color.surfaceMuted,
+  padding: themeTokens.spacing.lg
 }
 
 const cardTitleStyle: CSSProperties = {
   margin: 0,
-  fontSize: darkTheme.typography.body,
+  fontSize: themeTokens.typography.body,
   lineHeight: 1.25,
-  color: darkTheme.color.text,
+  color: themeTokens.color.text,
   fontWeight: 800
 }
 
 const monoBlockStyle: CSSProperties = {
   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
-  fontSize: darkTheme.typography.body,
+  fontSize: themeTokens.typography.body,
   lineHeight: 1.55,
-  color: darkTheme.color.text,
+  color: themeTokens.color.text,
   whiteSpace: 'pre-wrap',
   overflowWrap: 'anywhere'
 }
@@ -184,8 +184,8 @@ const metaStackStyle: CSSProperties = {
 }
 
 const metaTextStyle: CSSProperties = {
-  color: darkTheme.color.textMuted,
-  fontSize: darkTheme.typography.body,
+  color: themeTokens.color.textMuted,
+  fontSize: themeTokens.typography.body,
   lineHeight: 1.45
 }
 
@@ -201,39 +201,40 @@ const toolCodeStyle: CSSProperties = {
   display: 'inline-block',
   maxWidth: '100%',
   padding: '2px 8px',
-  borderRadius: darkTheme.radius.sm,
-  background: darkTheme.color.surface,
-  border: `1px solid ${darkTheme.color.border}`,
-  color: darkTheme.color.text,
+  borderRadius: themeTokens.radius.sm,
+  background: themeTokens.color.surface,
+  border: `1px solid ${themeTokens.color.border}`,
+  color: themeTokens.color.text,
   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
-  fontSize: darkTheme.typography.body,
+  fontSize: themeTokens.typography.body,
   overflowWrap: 'anywhere'
 }
 
 const emptyStateStyle: CSSProperties = {
   margin: 0,
-  color: darkTheme.color.textMuted
+  color: themeTokens.color.textMuted
 }
 
 const plainTextStyle: CSSProperties = {
   whiteSpace: 'pre-wrap',
   overflowWrap: 'anywhere',
   lineHeight: 1.55,
-  color: darkTheme.color.text
+  color: themeTokens.color.text
 }
 
 const streamingBlockStyle: CSSProperties = {
   ...plainTextStyle,
-  padding: darkTheme.spacing.md,
-  borderRadius: darkTheme.radius.lg,
-  border: `1px solid ${darkTheme.color.border}`,
-  background: darkTheme.color.surfaceMuted
+  padding: themeTokens.spacing.md,
+  borderRadius: themeTokens.radius.lg,
+  border: `1px solid ${themeTokens.color.border}`,
+  background: themeTokens.color.surfaceMuted
 }
 
+// User-supplied HTML/preview content keeps a neutral white canvas so external documents render predictably.
 const iframeStyle: CSSProperties = {
   width: '100%',
   minHeight: 240,
   border: 0,
-  borderRadius: darkTheme.radius.lg,
+  borderRadius: themeTokens.radius.lg,
   background: '#fff'
 }

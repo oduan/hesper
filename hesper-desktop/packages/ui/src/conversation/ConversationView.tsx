@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type WheelEvent } from 'react'
 import type { AgentRun, LocalFilePreview, Message, RunStep, Session } from '@hesper/shared'
-import { darkTheme } from '../theme'
+import { themeTokens } from '../theme'
 import { Composer, type ModelOptionGroup } from './Composer'
 import { LocalFilePreviewDialog } from './LocalFilePreviewDialog'
 import { MessageBubble } from './MessageBubble'
@@ -614,7 +614,7 @@ export function ConversationView({
   }, [scrollMessagesToBottom])
 
   return (
-    <div data-hesper-conversation-root="true" style={{ height: '100%', minHeight: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', fontSize: darkTheme.typography.body }}>
+    <div data-hesper-conversation-root="true" style={{ height: '100%', minHeight: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', fontSize: themeTokens.typography.body }}>
       <section
         aria-label="会话详情"
         style={{ display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr) auto', minWidth: 0, minHeight: 0 }}
@@ -627,10 +627,10 @@ export function ConversationView({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            padding: `${darkTheme.spacing.lg} ${darkTheme.spacing.lg} ${darkTheme.spacing.sm}`
+            padding: `${themeTokens.spacing.lg} ${themeTokens.spacing.lg} ${themeTokens.spacing.sm}`
           }}
         >
-          <h2 style={{ margin: 0, maxWidth: '65%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: darkTheme.typography.body, lineHeight: 1.2, textAlign: 'center', fontWeight: 700 }}>{session.title}</h2>
+          <h2 style={{ margin: 0, maxWidth: '65%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: themeTokens.typography.body, lineHeight: 1.2, textAlign: 'center', fontWeight: 700 }}>{session.title}</h2>
         </header>
         <div style={messagesAreaStyle} onWheelCapture={handleConversationWheelCapture}>
           <div
@@ -645,7 +645,7 @@ export function ConversationView({
               minWidth: 0,
               overflowX: 'hidden',
               overflowY: 'auto',
-              paddingRight: darkTheme.spacing.xs
+              paddingRight: themeTokens.spacing.xs
             }}
           >
             <div
@@ -653,8 +653,8 @@ export function ConversationView({
               style={{
                 display: 'grid',
                 alignContent: 'start',
-                gap: darkTheme.spacing.md,
-                padding: `0 ${darkTheme.spacing.lg} ${darkTheme.spacing.md} ${darkTheme.spacing.lg}`
+                gap: themeTokens.spacing.md,
+                padding: `0 ${themeTokens.spacing.lg} ${themeTokens.spacing.md} ${themeTokens.spacing.lg}`
               }}
             >
             {orderedMessages.map((message) => {
@@ -686,7 +686,7 @@ export function ConversationView({
                   <MessageBubble message={message} />
                 )}
                 {shouldShowMessageRunSteps(message, messageSteps) ? (
-                  <div style={{ marginTop: darkTheme.spacing.sm }}>
+                  <div style={{ marginTop: themeTokens.spacing.sm }}>
                     <RunSteps
                       steps={messageSteps}
                       autoExpanded={message.role === 'user' && (!message.runId || !finalOutputRunIds.has(message.runId))}
@@ -716,7 +716,7 @@ export function ConversationView({
                       anchorRefs.current[streamingAnchorId] = node
                     }}
                     tabIndex={-1}
-                    style={{ marginTop: darkTheme.spacing.sm, outline: 'none', minWidth: 0 }}
+                    style={{ marginTop: themeTokens.spacing.sm, outline: 'none', minWidth: 0 }}
                   >
                     <OutputBlock
                       content={messageStreamingText}
@@ -817,7 +817,7 @@ const messagesAreaStyle = {
 } satisfies CSSProperties
 
 const composerAreaStyle = {
-  padding: `${darkTheme.spacing.md} ${darkTheme.spacing.lg} ${darkTheme.spacing.lg}`
+  padding: `${themeTokens.spacing.md} ${themeTokens.spacing.lg} ${themeTokens.spacing.lg}`
 } satisfies CSSProperties
 
 const jumpToBottomButtonStyle = {
@@ -829,11 +829,11 @@ const jumpToBottomButtonStyle = {
   border: 0,
   outline: 0,
   borderRadius: 999,
-  background: 'var(--hesper-color-soft-control, rgba(122, 162, 247, 0.14))',
-  color: darkTheme.color.text,
+  background: themeTokens.color.softControl,
+  color: themeTokens.color.text,
   display: 'inline-grid',
   placeItems: 'center',
-  boxShadow: '0 12px 32px rgba(0, 0, 0, 0.32)',
+  boxShadow: `0 12px 32px ${themeTokens.color.shadow}`,
   cursor: 'pointer',
   zIndex: 2
 } satisfies CSSProperties

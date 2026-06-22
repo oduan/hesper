@@ -1,6 +1,6 @@
-import type { ReactNode } from 'react'
+import { useLayoutEffect, useMemo, type ReactNode } from 'react'
 import type { Session, ToolDefinition } from '@hesper/shared'
-import { createThemeVariables, darkTheme, type ThemeMode } from '../theme'
+import { createThemeVariables, themeTokens, type ThemeMode } from '../theme'
 import { ActivityRail, type AppSection } from './ActivityRail'
 import { EntityListPane, type RoleListItem, type SettingsCategory } from './EntityListPane'
 import { TitleBar, type DesktopPlatform, type WindowControlAction } from './TitleBar'
@@ -22,7 +22,7 @@ export type AppShellProps = {
   activeRoleId?: string
   roleSelectionDisabled?: boolean
   activeSettingsCategory?: SettingsCategory
-  appearance?: { themeMode: ThemeMode; fontSize: number }
+  appearance?: { themeId?: string; themeMode: ThemeMode; fontSize: number }
   onCreateSession?: () => void | Promise<void>
   onSelectSection?: (section: AppSection) => void
   onSelectSession?: (sessionId: string) => void
@@ -71,7 +71,52 @@ export function AppShell({
   onWindowClose,
   children
 }: AppShellProps) {
-  const themeVariables = createThemeVariables(appearance?.themeMode ?? 'dark', appearance?.fontSize ?? 14)
+  const themeId = appearance?.themeId ?? 'catppuccin'
+  const themeMode = appearance?.themeMode ?? 'dark'
+  const fontSize = appearance?.fontSize ?? 14
+  const themeVariables = useMemo(
+    () => createThemeVariables({
+      themeId,
+      mode: themeMode,
+      fontSize
+    }),
+    [fontSize, themeId, themeMode]
+  )
+
+  useLayoutEffect(() => {
+    if (typeof document === 'undefined') {
+      return
+    }
+
+    const root = document.documentElement
+    const previousVariables = new Map<string, string>()
+    const previousColorScheme = root.style.colorScheme
+
+    for (const [name, value] of Object.entries(themeVariables)) {
+      if (name === 'colorScheme') {
+        root.style.colorScheme = String(value)
+        continue
+      }
+
+      if (!name.startsWith('--')) {
+        continue
+      }
+
+      previousVariables.set(name, root.style.getPropertyValue(name))
+      root.style.setProperty(name, String(value))
+    }
+
+    return () => {
+      root.style.colorScheme = previousColorScheme
+      for (const [name, value] of previousVariables) {
+        if (value) {
+          root.style.setProperty(name, value)
+        } else {
+          root.style.removeProperty(name)
+        }
+      }
+    }
+  }, [themeVariables])
 
   return (
     <div
@@ -80,12 +125,12 @@ export function AppShell({
         height: '100vh',
         minHeight: 0,
         overflow: 'hidden',
-        background: darkTheme.color.background,
-        color: darkTheme.color.text,
+        background: themeTokens.color.background,
+        color: themeTokens.color.text,
         display: 'grid',
         gridTemplateRows: '36px minmax(0, 1fr)',
         fontFamily: 'Inter, Segoe UI, sans-serif',
-        fontSize: darkTheme.typography.body
+        fontSize: themeTokens.typography.body
       }}
     >
       <TitleBar
@@ -101,9 +146,9 @@ export function AppShell({
           minHeight: 0,
           display: 'grid',
           gridTemplateColumns: '204px 427px minmax(0, 1fr)',
-          gap: darkTheme.spacing.sm,
+          gap: themeTokens.spacing.sm,
           overflow: 'hidden',
-          padding: `0 ${darkTheme.spacing.sm} ${darkTheme.spacing.sm} 0`
+          padding: `0 ${themeTokens.spacing.sm} ${themeTokens.spacing.sm} 0`
         }}
       >
         <ActivityRail
@@ -141,11 +186,11 @@ export function AppShell({
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
-            borderRadius: darkTheme.radius.xl,
-            background: darkTheme.color.surface
+            borderRadius: themeTokens.radius.xl,
+            background: themeTokens.color.surface
           }}
         >
-          <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', padding: activeSection === 'sessions' ? 0 : darkTheme.spacing.lg }}>{children}</div>
+          <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', padding: activeSection === 'sessions' ? 0 : themeTokens.spacing.lg }}>{children}</div>
         </section>
       </div>
     </div>

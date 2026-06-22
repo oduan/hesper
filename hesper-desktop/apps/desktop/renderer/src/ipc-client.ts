@@ -32,6 +32,7 @@ const defaultSettings: AppSettings = {
   defaultModelId: 'mock/hesper-fast',
   defaultOutputMode: 'markdown',
   themeMode: 'dark',
+  themeId: 'catppuccin',
   fontSize: 14,
   soul: ''
 }
@@ -208,6 +209,7 @@ export function createFallbackHesperApi(): HesperDesktopApi {
         defaultModelId: input.defaultModelId ?? defaultSettings.defaultModelId,
         defaultOutputMode: input.defaultOutputMode ?? defaultSettings.defaultOutputMode,
         themeMode: input.themeMode ?? defaultSettings.themeMode,
+        themeId: input.themeId ?? defaultSettings.themeId,
         fontSize: input.fontSize ?? defaultSettings.fontSize,
         soul: input.soul ?? defaultSettings.soul
       })

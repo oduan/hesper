@@ -235,6 +235,7 @@ CREATE TABLE IF NOT EXISTS app_settings (
   default_model_id TEXT NOT NULL,
   default_output_mode TEXT NOT NULL,
   theme_mode TEXT NOT NULL,
+  theme_id TEXT NOT NULL DEFAULT 'catppuccin',
   font_size INTEGER NOT NULL DEFAULT 14,
   soul TEXT NOT NULL DEFAULT '',
   updated_at TEXT NOT NULL
@@ -287,7 +288,8 @@ const migrationColumns: Record<string, string[]> = {
   ],
   app_settings: [
     'font_size INTEGER NOT NULL DEFAULT 14',
-    "soul TEXT NOT NULL DEFAULT ''"
+    "soul TEXT NOT NULL DEFAULT ''",
+    "theme_id TEXT NOT NULL DEFAULT 'catppuccin'"
   ]
 }
 

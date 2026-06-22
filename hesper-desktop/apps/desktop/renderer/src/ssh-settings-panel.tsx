@@ -1,3 +1,4 @@
+import { themeTokens } from '@hesper/ui'
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
 import type { CreateSshKeyInput, CreateSshServerInput, SshKeyDto, SshServerDto, UpdateSshServerInput } from '../../electron/ipc-contract'
 
@@ -354,14 +355,14 @@ function maskUsername(username: string): string {
   return `${trimmed.slice(0, 1)}***${trimmed.slice(-1)}`
 }
 
-const mutedTextColor = 'var(--hesper-color-text-muted, #737aa2)'
-const bodyTextColor = 'var(--hesper-color-text, #c0caf5)'
-const surfaceColor = 'var(--hesper-color-surface, #16161e)'
-const surfaceMutedColor = 'var(--hesper-color-surface-muted, #24283b)'
-const borderColor = 'var(--hesper-color-border, #414868)'
-const accentColor = 'var(--hesper-color-accent, #7aa2f7)'
-const dangerTextColor = 'var(--hesper-color-danger, #f7768e)'
-const softControlColor = 'var(--hesper-color-soft-control, rgba(122, 162, 247, 0.14))'
+const mutedTextColor = themeTokens.color.textMuted
+const bodyTextColor = themeTokens.color.text
+const surfaceColor = themeTokens.color.surface
+const surfaceMutedColor = themeTokens.color.surfaceMuted
+const borderColor = themeTokens.color.border
+const accentColor = themeTokens.color.accent
+const dangerTextColor = themeTokens.color.danger
+const softControlColor = themeTokens.color.softControl
 const bodyFontSize = 'var(--hesper-font-size, 14px)'
 
 const settingsPanelStyle: CSSProperties = {
@@ -429,12 +430,6 @@ const sectionTitleStyle: CSSProperties = {
   lineHeight: 1.2
 }
 
-const sectionDescriptionStyle: CSSProperties = {
-  margin: '4px 0 0',
-  color: mutedTextColor,
-  lineHeight: 1.45
-}
-
 const listStyle: CSSProperties = {
   display: 'grid',
   gap: 0,
@@ -455,7 +450,7 @@ const itemStyle: CSSProperties = {
 const separatorStyle: CSSProperties = {
   height: 1,
   margin: '0 14px',
-  background: 'var(--hesper-color-border-subtle, rgba(65, 72, 104, 0.45))'
+  background: themeTokens.color.borderSubtle
 }
 
 const itemInfoStyle: CSSProperties = {
@@ -519,7 +514,7 @@ const errorTextStyle: CSSProperties = {
   padding: '10px 12px',
   borderRadius: 12,
   color: dangerTextColor,
-  background: 'rgba(247, 118, 142, 0.12)'
+  background: themeTokens.color.dangerSoft
 }
 
 function secondaryActionStyle(disabled: boolean): CSSProperties {
@@ -614,7 +609,7 @@ const overlayFormStyle: CSSProperties = {
   borderRadius: 22,
   border: `1px solid ${borderColor}`,
   background: surfaceMutedColor,
-  boxShadow: '0 24px 64px rgba(0, 0, 0, 0.32)',
+  boxShadow: `0 24px 64px ${themeTokens.color.shadow}`,
   padding: 24
 }
 

@@ -68,6 +68,7 @@ function escapeHtml(value: string): string {
 function htmlPage(title: string, message: string): string {
   const safeTitle = escapeHtml(title)
   const safeMessage = escapeHtml(message)
+  // External OAuth callback page is served outside the renderer, before app theme variables exist.
   return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${safeTitle}</title><style>:root{color-scheme:light}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#eef1f7;color:#343b56;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.card{width:min(520px,calc(100vw - 48px));padding:48px 42px;border:1px solid #dde2eb;border-radius:28px;background:rgba(244,246,251,.82);box-shadow:0 18px 50px rgba(36,42,64,.10);text-align:center}.mark{width:56px;height:48px;margin:0 auto 28px;background:#8036f5;clip-path:polygon(18% 0,100% 0,100% 38%,58% 38%,58% 62%,100% 62%,100% 100%,18% 100%,18% 76%,0 76%,0 24%,18% 24%)}h1{margin:0;font-size:30px;line-height:1.2;font-weight:780}p{margin:18px 0 0;color:#8f97ae;font-size:18px;line-height:1.55}.hint{margin-top:28px;color:#a2a9ba;font-size:16px}</style></head><body><main class="card"><div class="mark" aria-hidden="true"></div><h1>${safeTitle}</h1><p>${safeMessage}</p><p class="hint">你可以关闭此页面并返回 Hesper。</p></main></body></html>`
 }
 

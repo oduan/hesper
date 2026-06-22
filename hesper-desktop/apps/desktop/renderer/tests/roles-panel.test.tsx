@@ -3,6 +3,7 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { themeTokens } from '@hesper/ui'
 import { RolesPanel } from '../src/roles-panel'
 
 const tools = [
@@ -222,12 +223,12 @@ describe('RolesPanel', () => {
 
     const deleteButton = screen.getByRole('button', { name: '删除角色' })
     expect(deleteButton).toHaveStyle({
-      background: 'var(--hesper-color-danger-soft, rgba(220, 38, 38, 0.20))',
-      color: 'var(--hesper-color-danger-strong, #dc2626)'
+      background: themeTokens.color.dangerSoft,
+      color: themeTokens.color.dangerStrong
     })
     expect(deleteButton.getAttribute('style')).toContain('border-width: 1px')
     expect(deleteButton.getAttribute('style')).toContain('border-style: solid')
-    expect(deleteButton.getAttribute('style')).toContain('border-color: var(--hesper-color-danger, #ef4444)')
+    expect(deleteButton.getAttribute('style')).toContain(`border-color: ${themeTokens.color.danger}`)
 
     await user.click(deleteButton)
 

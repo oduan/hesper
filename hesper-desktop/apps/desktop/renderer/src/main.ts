@@ -4,6 +4,7 @@ if (!root) {
   throw new Error('Renderer root element not found')
 }
 
+// Standalone fallback page renders before the React app/theme variables are available.
 root.innerHTML = `
   <main style="min-height:100vh;display:grid;place-items:center;margin:0;background:#0f172a;color:#e2e8f0;font-family:Inter,system-ui,sans-serif;">
     <section style="text-align:center;">

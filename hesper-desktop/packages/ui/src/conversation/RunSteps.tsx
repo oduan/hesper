@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import type { AgentRun, Message, RunStep, RunStepStatus, WorkerAgentInvocation } from '@hesper/shared'
-import { darkTheme } from '../theme'
+import { themeTokens } from '../theme'
 import { isTopFullscreenDialog, pushFullscreenDialog, removeFullscreenDialog } from './fullscreen-dialog-stack'
 import { MarkdownOutput } from './MarkdownOutput'
 import { RunningStatusIcon } from './RunningStatusIcon'
@@ -44,13 +44,13 @@ function compareCreatedAt(left: RunStep, right: RunStep): number {
 function getStatusColor(status: RunStepStatus): string {
   switch (status) {
     case 'succeeded':
-      return darkTheme.color.success
+      return themeTokens.color.success
     case 'failed':
-      return darkTheme.color.danger
+      return themeTokens.color.danger
     case 'running':
-      return darkTheme.color.accent
+      return themeTokens.color.accent
     case 'pending':
-      return darkTheme.color.textMuted
+      return themeTokens.color.textMuted
   }
 }
 
@@ -449,10 +449,10 @@ export function RunSteps({ steps, autoExpanded = false, runStartedAt, runEndedAt
       aria-label="步骤流"
       style={{
         display: 'grid',
-        gap: darkTheme.spacing.sm,
+        gap: themeTokens.spacing.sm,
         borderStyle: 'none',
         background: 'transparent',
-        padding: darkTheme.spacing.md
+        padding: themeTokens.spacing.md
       }}
     >
       <style>{stepRowHoverCss}</style>
@@ -533,14 +533,14 @@ const summaryButtonStyle: CSSProperties = {
   columnGap: summaryControlGap,
   border: 0,
   background: 'transparent',
-  color: darkTheme.color.text,
+  color: themeTokens.color.text,
   padding: 0,
   cursor: 'pointer',
   textAlign: 'left'
 }
 
 const chevronStyle: CSSProperties = {
-  color: darkTheme.color.textMuted,
+  color: themeTokens.color.textMuted,
   fontSize: 16,
   lineHeight: 1,
   justifySelf: 'center'
@@ -552,15 +552,15 @@ const countBadgeStyle: CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',
-  fontSize: darkTheme.typography.body,
-  borderRadius: darkTheme.radius.sm,
-  border: `1px solid ${darkTheme.color.border}`,
-  color: darkTheme.color.textMuted,
+  fontSize: themeTokens.typography.body,
+  borderRadius: themeTokens.radius.sm,
+  border: `1px solid ${themeTokens.color.border}`,
+  color: themeTokens.color.textMuted,
   padding: '0 7px'
 }
 
 const elapsedTimeStyle: CSSProperties = {
-  color: darkTheme.color.textMuted,
+  color: themeTokens.color.textMuted,
   fontVariantNumeric: 'tabular-nums',
   whiteSpace: 'nowrap'
 }
@@ -570,7 +570,7 @@ const summaryTextStyle: CSSProperties = {
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
-  fontSize: darkTheme.typography.body
+  fontSize: themeTokens.typography.body
 }
 
 const listStyle: CSSProperties = {
@@ -578,7 +578,7 @@ const listStyle: CSSProperties = {
   margin: 0,
   padding: 0,
   display: 'grid',
-  gap: darkTheme.spacing.sm
+  gap: themeTokens.spacing.sm
 }
 
 const statusIconSlotStyle: CSSProperties = {
@@ -594,7 +594,7 @@ const toolSuccessIconSlotStyle: CSSProperties = {
   ...statusIconSlotStyle,
   fontSize: 15,
   lineHeight: 1,
-  filter: 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.20))'
+  filter: `drop-shadow(0 2px 4px ${themeTokens.color.shadow})`
 }
 
 const toolSuccessIconTextStyle: CSSProperties = {
@@ -620,11 +620,11 @@ const stepRowButtonStyle: CSSProperties = {
   display: 'grid',
   gridTemplateColumns: rowColumns,
   alignItems: 'center',
-  columnGap: darkTheme.spacing.sm,
+  columnGap: themeTokens.spacing.sm,
   border: 0,
   outline: 0,
   background: 'transparent',
-  color: darkTheme.color.text,
+  color: themeTokens.color.text,
   padding: 0,
   cursor: 'pointer',
   textAlign: 'left',
@@ -636,7 +636,7 @@ const stepTextStyle: CSSProperties = {
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
-  fontSize: darkTheme.typography.body,
+  fontSize: themeTokens.typography.body,
   lineHeight: 1.35
 }
 
@@ -645,11 +645,11 @@ const primarySegmentStyle: CSSProperties = {
 }
 
 const mutedSeparatorStyle: CSSProperties = {
-  color: darkTheme.color.textMuted
+  color: themeTokens.color.textMuted
 }
 
 const mutedSegmentStyle: CSSProperties = {
-  color: darkTheme.color.textMuted
+  color: themeTokens.color.textMuted
 }
 
 const stepFullscreenOverlayStyle: CSSProperties = {
@@ -658,7 +658,7 @@ const stepFullscreenOverlayStyle: CSSProperties = {
   right: 0,
   bottom: 0,
   left: 0,
-  background: darkTheme.color.surface,
+  background: themeTokens.color.surface,
   display: 'block',
   padding: 0,
   boxSizing: 'border-box',
@@ -677,8 +677,8 @@ const stepFullscreenShellStyle: CSSProperties = {
 
 const stepFullscreenActionsStyle: CSSProperties = {
   position: 'absolute',
-  top: darkTheme.spacing.lg,
-  right: darkTheme.spacing.lg,
+  top: themeTokens.spacing.lg,
+  right: themeTokens.spacing.lg,
   zIndex: 2,
   display: 'flex'
 }
@@ -688,9 +688,9 @@ const stepFullscreenIconButtonStyle: CSSProperties = {
   height: 34,
   border: 0,
   outline: 0,
-  borderRadius: darkTheme.radius.md,
+  borderRadius: themeTokens.radius.md,
   background: 'transparent',
-  color: darkTheme.color.text,
+  color: themeTokens.color.text,
   display: 'inline-grid',
   placeItems: 'center',
   cursor: 'pointer'
@@ -711,7 +711,7 @@ const stepFullscreenScrollAreaStyle: CSSProperties = {
   overflowAnchor: 'none',
   willChange: 'scroll-position',
   boxSizing: 'border-box',
-  padding: `${darkTheme.spacing.xl} ${darkTheme.spacing.lg}`
+  padding: `${themeTokens.spacing.xl} ${themeTokens.spacing.lg}`
 }
 
 const stepFullscreenBodyStyle: CSSProperties = {
@@ -720,31 +720,31 @@ const stepFullscreenBodyStyle: CSSProperties = {
   margin: '0 auto',
   background: 'transparent',
   borderStyle: 'none',
-  color: darkTheme.color.text
+  color: themeTokens.color.text
 }
 
 const toolDetailGridStyle: CSSProperties = {
   display: 'grid',
   gridTemplateColumns: 'minmax(0, 1fr)',
-  gap: darkTheme.spacing.lg,
+  gap: themeTokens.spacing.lg,
   alignItems: 'start'
 }
 
 const toolDetailBlockStyle: CSSProperties = {
   minWidth: 0,
   display: 'grid',
-  gap: darkTheme.spacing.md,
-  border: `1px solid ${darkTheme.color.border}`,
-  borderRadius: darkTheme.radius.lg,
-  background: darkTheme.color.surfaceMuted,
-  padding: darkTheme.spacing.lg
+  gap: themeTokens.spacing.md,
+  border: `1px solid ${themeTokens.color.border}`,
+  borderRadius: themeTokens.radius.lg,
+  background: themeTokens.color.surfaceMuted,
+  padding: themeTokens.spacing.lg
 }
 
 const toolDetailTitleStyle: CSSProperties = {
   margin: 0,
-  fontSize: darkTheme.typography.body,
+  fontSize: themeTokens.typography.body,
   lineHeight: 1.25,
-  color: darkTheme.color.text,
+  color: themeTokens.color.text,
   fontWeight: 800
 }
 
@@ -756,12 +756,12 @@ const toolDetailPreStyle: CSSProperties = {
   whiteSpace: 'pre-wrap',
   overflowWrap: 'anywhere',
   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
-  fontSize: darkTheme.typography.body,
+  fontSize: themeTokens.typography.body,
   lineHeight: 1.55,
-  color: darkTheme.color.text
+  color: themeTokens.color.text
 }
 
 const toolDetailEmptyStyle: CSSProperties = {
   margin: 0,
-  color: darkTheme.color.textMuted
+  color: themeTokens.color.textMuted
 }

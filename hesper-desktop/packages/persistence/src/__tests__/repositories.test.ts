@@ -266,6 +266,7 @@ describe('persistence repositories', () => {
       defaultModelId: 'deepseek-chat',
       defaultOutputMode: 'html',
       themeMode: 'dark',
+      themeId: 'dracula',
       fontSize: 16,
       soul: 'Helpful, calm, and precise.',
       updatedAt: now
@@ -280,8 +281,29 @@ describe('persistence repositories', () => {
         defaultModelId: 'deepseek-chat',
         defaultOutputMode: 'html',
         themeMode: 'dark',
+        themeId: 'dracula',
         fontSize: 16,
         soul: 'Helpful, calm, and precise.',
+        updatedAt: now
+      })
+    } finally {
+      fs.rmSync(tempFile, { force: true })
+    }
+  })
+
+  it('migrates legacy application settings to the default built-in theme id', async () => {
+    const tempFile = path.join(os.tmpdir(), `hesper-legacy-settings-${Date.now()}.sqlite`)
+    fs.writeFileSync(tempFile, await createLegacySettingsDatabaseBytes())
+
+    try {
+      const migrated = await createFilePersistence(tempFile)
+      expect(await migrated.settings.get()).toEqual({
+        defaultModelId: 'legacy-model',
+        defaultOutputMode: 'html',
+        themeMode: 'dark',
+        themeId: 'catppuccin',
+        fontSize: 16,
+        soul: '',
         updatedAt: now
       })
     } finally {
@@ -299,6 +321,7 @@ describe('persistence repositories', () => {
         defaultModelId: 'legacy-model',
         defaultOutputMode: 'html',
         themeMode: 'dark',
+        themeId: 'catppuccin',
         fontSize: 16,
         soul: '',
         updatedAt: now

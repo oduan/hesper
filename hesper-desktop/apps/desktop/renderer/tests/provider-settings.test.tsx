@@ -3,6 +3,7 @@ import '@testing-library/jest-dom/vitest'
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { resolveThemeVariant, themeTokens } from '@hesper/ui'
 import { App } from '../src/App'
 
 const now = '2026-06-10T03:00:00.000Z'
@@ -241,11 +242,12 @@ function resetProviderMocks() {
   listTools.mockResolvedValue([])
   listRoles.mockResolvedValue([])
   setToolEnabled.mockImplementation(async (input: any) => ({ id: input.id, name: input.id, description: input.id, category: 'system', inputSchema: {}, enabled: input.enabled }))
-  getSettings.mockResolvedValue({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', fontSize: 14, soul: '' })
+  getSettings.mockResolvedValue({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', themeId: 'catppuccin', fontSize: 14, soul: '' })
   updateSettings.mockImplementation(async (input: any) => ({
     defaultModelId: input.defaultModelId ?? 'mock/hesper-fast',
     defaultOutputMode: input.defaultOutputMode ?? 'markdown',
     themeMode: input.themeMode ?? 'dark',
+    themeId: input.themeId ?? 'catppuccin',
     fontSize: input.fontSize ?? 14,
     soul: input.soul ?? ''
   }))
@@ -300,7 +302,7 @@ describe('provider settings panel', () => {
 
     expect(connectionList).toHaveStyle({
       gap: '0px',
-      background: 'var(--hesper-color-surface-muted, #24283b)'
+      background: themeTokens.color.surfaceMuted
     })
     expect(mockItem?.style.border).toBe('0px')
     expect(mockItem?.style.boxShadow).toBe('none')
@@ -310,7 +312,7 @@ describe('provider settings panel', () => {
     expect(separators?.[0]).toHaveStyle({
       height: '1px',
       margin: '0px 14px',
-      background: 'var(--hesper-color-border-subtle, rgba(65, 72, 104, 0.45))'
+      background: themeTokens.color.borderSubtle
     })
     expect(deepSeekItem?.style.borderTopWidth).toBe('0px')
     expect(deepSeekItem?.style.borderTopStyle).toBe('none')
@@ -327,6 +329,29 @@ describe('provider settings panel', () => {
     expect(menu).toHaveStyle({ position: 'fixed' })
     expect(connectionList?.querySelector('[role="menu"]')).not.toBeInTheDocument()
     expect(deepSeekItem).toHaveStyle({ overflow: 'visible' })
+  })
+
+  it('keeps body portal connection menus on the selected app theme variables', async () => {
+    const user = userEvent.setup()
+    const draculaPalette = resolveThemeVariant('dracula', 'dark').palette
+    const tokyoNightPalette = resolveThemeVariant('tokyo-night', 'dark').palette
+    getSettings.mockResolvedValueOnce({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', themeId: 'dracula', fontSize: 16, soul: '' })
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: '设置' }))
+    await user.click(await screen.findByRole('button', { name: '打开连接菜单 DeepSeek' }))
+
+    const menu = await screen.findByRole('menu', { name: 'DeepSeek 连接菜单' })
+    expect(menu.parentElement).toBe(document.body)
+    expect(menu).toHaveStyle({ background: themeTokens.color.surfaceMuted })
+    expect(screen.getByRole('menuitem', { name: '编辑' })).toHaveStyle({ color: themeTokens.color.text })
+    expect(screen.getByRole('menuitem', { name: '删除' })).toHaveStyle({ color: themeTokens.color.danger })
+
+    expect(document.documentElement.style.getPropertyValue('--hesper-color-surface-muted')).toBe(draculaPalette.surfaceMuted)
+    expect(document.documentElement.style.getPropertyValue('--hesper-color-text')).toBe(draculaPalette.text)
+    expect(document.documentElement.style.getPropertyValue('--hesper-color-danger')).toBe(draculaPalette.danger)
+    expect(document.documentElement.style.getPropertyValue('--hesper-color-surface-muted')).not.toBe(tokyoNightPalette.surfaceMuted)
+    expect(document.documentElement.style.getPropertyValue('--hesper-font-size')).toBe('16px')
   })
 
   it('renames a connection inline from the hover edit icon on blur', async () => {

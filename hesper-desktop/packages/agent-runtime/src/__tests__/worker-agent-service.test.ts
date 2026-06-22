@@ -178,7 +178,7 @@ class AbortableAdapter implements AgentAdapter {
     this.inputs.push(input)
     this.startedRunIds.push(input.runId)
     await emit({ type: 'message.delta', runId: input.runId, delta: `started:${input.prompt}` })
-    await new Promise<void>((resolve, reject) => {
+    await new Promise<void>((resolve) => {
       this.releases.set(input.runId, resolve)
       input.signal.addEventListener('abort', () => {
         this.abortedRunIds.push(input.runId)

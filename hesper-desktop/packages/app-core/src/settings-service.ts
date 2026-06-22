@@ -1,11 +1,11 @@
 import type { Persistence } from '@hesper/persistence'
-
-export type ThemeMode = 'system' | 'light' | 'dark'
+import { defaultAppThemeId, type AppThemeId, type ThemeMode } from '@hesper/shared'
 
 export type AppSettings = {
   defaultModelId: string
   defaultOutputMode: 'markdown' | 'html'
   themeMode: ThemeMode
+  themeId: AppThemeId
   fontSize: number
   soul: string
 }
@@ -25,6 +25,7 @@ const defaults: AppSettings = {
   defaultModelId: 'mock/hesper-fast',
   defaultOutputMode: 'markdown',
   themeMode: 'system',
+  themeId: defaultAppThemeId,
   fontSize: 14,
   soul: ''
 }
@@ -43,6 +44,7 @@ export function createSettingsService(options: SettingsServiceOptions): Settings
             defaultModelId: persisted.defaultModelId,
             defaultOutputMode: persisted.defaultOutputMode,
             themeMode: persisted.themeMode,
+            themeId: persisted.themeId,
             fontSize: persisted.fontSize,
             soul: persisted.soul
           }

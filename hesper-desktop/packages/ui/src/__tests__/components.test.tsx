@@ -11,6 +11,7 @@ import { MarkdownOutput } from '../conversation/MarkdownOutput'
 import { MessageBubble } from '../conversation/MessageBubble'
 import { OutputBlock } from '../conversation/OutputBlock'
 import { RunSteps } from '../conversation/RunSteps'
+import { themeTokens } from '../theme'
 
 const now = '2026-06-10T03:00:00.000Z'
 
@@ -119,8 +120,11 @@ describe('ui components', () => {
     fireEvent.contextMenu(sessionRow)
     expect(sessionRow).not.toHaveClass('is-selected')
     const menu = screen.getByRole('menu', { name: '会话操作' })
-    expect(menu).toHaveStyle({ background: 'var(--hesper-color-surface-muted, #24283b)', borderRadius: '12px', padding: '4px 0' })
+    expect(menu).toHaveStyle({ background: themeTokens.color.surfaceMuted, borderRadius: '12px', padding: '4px 0' })
+    expect(menu).toHaveStyle({ boxShadow: `0 18px 50px ${themeTokens.color.shadow}` })
     expect(menu.querySelector('style')).toHaveTextContent('.hesper-session-menu-item:hover::after')
+    expect(menu.querySelector('style')).toHaveTextContent(`background: ${themeTokens.color.hover};`)
+    expect(menu.querySelector('style')).not.toHaveTextContent('background: var(--hesper-color-hover);')
     expect(menu.querySelector('style')).not.toHaveTextContent('keyframes')
     for (const label of ['重命名', '重新生成标题', '删除']) {
       const item = within(menu).getByRole('menuitem', { name: label })
@@ -143,11 +147,10 @@ describe('ui components', () => {
       expect(icon).toHaveAttribute('height', '14')
     }
     expect(windowControlButtons.map((button) => button.style.color)).toEqual([
-      'var(--hesper-color-text-muted, #737aa2)',
-      'var(--hesper-color-text-muted, #737aa2)',
-      'var(--hesper-color-text-muted, #737aa2)'
+      themeTokens.color.textMuted,
+      themeTokens.color.textMuted,
+      themeTokens.color.textMuted
     ])
-    expect(windowControlButtons[2]).not.toHaveStyle({ color: '#f3f4f6' })
 
     await user.click(screen.getByRole('button', { name: '最小化窗口' }))
     await user.click(screen.getByRole('button', { name: '最大化窗口' }))
@@ -207,17 +210,21 @@ describe('ui components', () => {
     const readTrack = readSwitch.querySelector('[data-tool-toggle-track="true"]') as HTMLElement
     const readKnob = readSwitch.querySelector('[data-tool-toggle-knob="true"]') as HTMLElement
     expect(readSwitch).toHaveAttribute('aria-checked', 'true')
-    expect(readTrack).toHaveStyle({ background: 'var(--hesper-color-tool-toggle, #7aa2f7)' })
+    expect(readTrack).toHaveStyle({ background: themeTokens.color.toolToggle })
+    expect(readTrack).toHaveStyle({ boxShadow: `0 0 0 3px ${themeTokens.color.toolToggleSoft}` })
     expect(readKnob).toHaveStyle({ transform: 'translateX(22px)' })
+    expect(readKnob).toHaveStyle({ boxShadow: `0 3px 10px ${themeTokens.color.shadow}` })
 
     const writeRow = screen.getByText('Write File').closest('[role="button"]') as HTMLElement
     const writeSwitch = screen.getByRole('switch', { name: 'Write File 全局开关' })
     const writeTrack = writeSwitch.querySelector('[data-tool-toggle-track="true"]') as HTMLElement
     const writeKnob = writeSwitch.querySelector('[data-tool-toggle-knob="true"]') as HTMLElement
     expect(writeSwitch).toHaveAttribute('aria-checked', 'false')
-    expect(writeTrack).toHaveStyle({ background: 'var(--hesper-color-surface-muted, #24283b)' })
+    expect(writeTrack).toHaveStyle({ background: themeTokens.color.surfaceMuted })
+    expect(writeTrack).toHaveStyle({ boxShadow: `inset 0 0 0 1px ${themeTokens.color.borderSubtle}` })
     expect(writeKnob).toHaveStyle({ transform: 'translateX(0)' })
-    expect(writeKnob).toHaveStyle({ background: 'var(--hesper-color-text-muted, #737aa2)' })
+    expect(writeKnob).toHaveStyle({ background: themeTokens.color.textMuted })
+    expect(writeKnob).toHaveStyle({ boxShadow: `0 2px 7px ${themeTokens.color.shadow}` })
 
     await user.click(writeRow)
     expect(onSelectTool).toHaveBeenCalledWith('filesystem.write-file')
@@ -562,7 +569,7 @@ describe('ui components', () => {
     )
 
     expect(screen.getByRole('button', { name: '带更新时间的会话' })).toBeInTheDocument()
-    expect(screen.getByText('59秒')).toHaveStyle({ color: 'var(--hesper-color-text-muted, #737aa2)', opacity: '0.72' })
+    expect(screen.getByText('59秒')).toHaveStyle({ color: themeTokens.color.textMuted, opacity: '0.72' })
 
     act(() => {
       vi.advanceTimersByTime(15_000)
@@ -745,6 +752,9 @@ describe('ui components', () => {
     const modelListbox = screen.getByRole('listbox', { name: '选择模型选项' })
     expect(modelListbox).toHaveStyle({ display: 'grid' })
     expect(modelListbox.querySelector('style')).toHaveTextContent('.hesper-themed-select-option:hover')
+    expect(modelListbox.querySelector('style')).toHaveTextContent(`background: ${themeTokens.color.hover} !important;`)
+    expect(modelListbox.querySelector('style')).toHaveTextContent(`color: ${themeTokens.color.text} !important;`)
+    expect(modelListbox.querySelector('style')).not.toHaveTextContent('background: var(--hesper-color-hover) !important;')
     expect(within(modelListbox).getByRole('option', { name: 'mock/hesper-fast' })).toHaveClass('hesper-themed-select-option')
 
     await user.type(textarea, 'hello')
@@ -900,7 +910,9 @@ describe('ui components', () => {
 
     expect(screen.getByRole('heading', { level: 2, name: 'Summary' })).toBeInTheDocument()
     expect(screen.getByText('important')).toHaveStyle({ fontWeight: '700' })
-    expect(screen.getByText('inline code').tagName).toBe('CODE')
+    const inlineCode = screen.getByText('inline code')
+    expect(inlineCode.tagName).toBe('CODE')
+    expect(inlineCode).toHaveStyle({ background: themeTokens.color.softControl, color: themeTokens.color.text })
     const list = screen.getByRole('list')
     expect(list).toBeInTheDocument()
     expect(within(list).getByText('first item')).toBeInTheDocument()
@@ -1200,6 +1212,13 @@ describe('ui components', () => {
 
     await waitFor(() => expect(screen.queryByRole('dialog', { name: '本地文件全屏预览' })).not.toBeInTheDocument())
     expect(screen.getByRole('dialog', { name: '步骤全屏查看' })).toBeInTheDocument()
+  })
+
+  it('renders markdown code blocks with semantic theme colors', () => {
+    render(<OutputBlock content={'```ts\nconst value = 1\n```'} contentType="markdown" />)
+
+    const codeBlock = screen.getByText('const value = 1').closest('pre')
+    expect(codeBlock).toHaveStyle({ background: themeTokens.color.codeBackground, color: themeTokens.color.text })
   })
 
   it('auto-expands running steps, shows elapsed time before the first tool intent, and stops when final output appears', () => {
@@ -1680,13 +1699,13 @@ describe('ui components', () => {
 
     const dialog = screen.getByRole('dialog', { name: '输出全屏查看' })
     expect(dialog).toHaveStyle({ position: 'fixed', top: '36px', right: '0px', bottom: '0px', left: '0px', display: 'block' })
-    expect(dialog).toHaveStyle({ background: 'var(--hesper-color-surface, #16161e)' })
+    expect(dialog).toHaveStyle({ background: themeTokens.color.surface })
     expect(dialog).not.toHaveStyle({ backdropFilter: 'blur(18px) saturate(140%)' })
 
     const contentShell = screen.getByLabelText('最大化输出内容')
     expect(contentShell).toHaveStyle({ width: '100%', height: '100%', background: 'transparent', borderStyle: 'none' })
     expect(contentShell).not.toHaveStyle({ maxWidth: '1120px' })
-    expect(contentShell).not.toHaveStyle({ boxShadow: '0 24px 80px rgba(0, 0, 0, 0.38)' })
+    expect(contentShell.style.boxShadow).toBe('')
 
     const contentBody = screen.getByLabelText('最大化输出正文')
     expect(contentBody).toHaveStyle({ maxWidth: '1120px', margin: '0 auto' })
@@ -1964,8 +1983,8 @@ describe('ui components', () => {
 
     const item = screen.getByRole('listitem')
     expect(within(item).getByText('工具：web_fetch-url')).toBeInTheDocument()
-    expect(within(item).getByText('搜索 Hesper 是什么')).toHaveStyle({ color: 'var(--hesper-color-text-muted, #737aa2)' })
-    expect(within(item).getByText('{"url":"https://example.com"}')).toHaveStyle({ color: 'var(--hesper-color-text-muted, #737aa2)' })
+    expect(within(item).getByText('搜索 Hesper 是什么')).toHaveStyle({ color: themeTokens.color.textMuted })
+    expect(within(item).getByText('{"url":"https://example.com"}')).toHaveStyle({ color: themeTokens.color.textMuted })
   })
 
   it('renders structured tool call rows as action then purpose without inline resource', () => {
@@ -1997,7 +2016,7 @@ describe('ui components', () => {
     expect(item).not.toHaveTextContent('README.md')
     expect(item).not.toHaveTextContent('filesystem_read-file')
     expect(item.querySelector('[data-hesper-tool-resource="true"]')).not.toBeInTheDocument()
-    expect(within(item).getByText('读取 README 了解项目结构')).toHaveStyle({ color: 'var(--hesper-color-text-muted, #737aa2)' })
+    expect(within(item).getByText('读取 README 了解项目结构')).toHaveStyle({ color: themeTokens.color.textMuted })
   })
 
   it('shows tool call fullscreen details as separate input and output blocks', async () => {

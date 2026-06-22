@@ -1,7 +1,35 @@
 :root {
   color-scheme: light;
-  --hesper-body-background: var(--hesper-color-background, #1a1b26);
-  --hesper-body-text: var(--hesper-color-text, #c0caf5);
+  /* Central bootstrap defaults before React/AppShell injects the selected theme variables. */
+  --hesper-color-background: #1a1b26;
+  --hesper-color-surface: #16161e;
+  --hesper-color-surface-muted: #24283b;
+  --hesper-color-text: #c0caf5;
+  --hesper-color-text-muted: #737aa2;
+  --hesper-color-border: #414868;
+  --hesper-color-accent: #7aa2f7;
+  --hesper-color-accent-contrast: #16161e;
+  --hesper-color-success: #9ece6a;
+  --hesper-color-danger: #f7768e;
+  --hesper-color-warning: #e0af68;
+  --hesper-color-hover: rgba(122, 162, 247, 0.12);
+  --hesper-color-soft-control: rgba(122, 162, 247, 0.14);
+  --hesper-color-tool-toggle: #7aa2f7;
+  --hesper-color-tool-toggle-soft: rgba(122, 162, 247, 0.14);
+  --hesper-color-danger-soft: rgba(247, 118, 142, 0.14);
+  --hesper-color-danger-strong: #f7768e;
+  --hesper-color-success-soft: rgba(158, 206, 106, 0.16);
+  --hesper-color-warning-soft: rgba(224, 175, 104, 0.16);
+  --hesper-color-border-subtle: rgba(65, 72, 104, 0.38);
+  --hesper-color-neutral-soft: rgba(192, 202, 245, 0.10);
+  --hesper-color-code-background: #16161e;
+  --hesper-color-shadow: rgba(192, 202, 245, 0.18);
+  --hesper-color-preview-background: #16161e;
+  --hesper-color-scrollbar-thumb: rgba(192, 202, 245, 0.10);
+  --hesper-color-scrollbar-thumb-hover: rgba(192, 202, 245, 0.24);
+  --hesper-color-scrollbar-thumb-active: rgba(192, 202, 245, 0.38);
+  --hesper-body-background: var(--hesper-color-background);
+  --hesper-body-text: var(--hesper-color-text);
 }
 
 *,
@@ -62,7 +90,7 @@ button {
   border: 0;
   border-radius: 10px;
   background: transparent;
-  color: var(--hesper-color-text-muted, #737aa2);
+  color: var(--hesper-color-text-muted);
   padding: 7px 10px;
   text-align: left;
   font-size: var(--hesper-font-size, 14px);
@@ -73,12 +101,12 @@ button {
 
 .hesper-nav-item:hover,
 .hesper-nav-item.is-active {
-  background: var(--hesper-color-hover, rgba(122, 162, 247, 0.12));
-  color: var(--hesper-color-text, #c0caf5);
+  background: var(--hesper-color-hover);
+  color: var(--hesper-color-text);
 }
 
 .hesper-nav-item-strong {
-  color: var(--hesper-color-text, #c0caf5);
+  color: var(--hesper-color-text);
 }
 
 .hesper-list-row {
@@ -89,7 +117,7 @@ button {
   box-shadow: none;
   border-radius: 10px;
   background: transparent;
-  color: var(--hesper-color-text, #c0caf5);
+  color: var(--hesper-color-text);
   padding: 7px 10px;
   text-align: left;
   cursor: pointer;
@@ -110,11 +138,11 @@ button {
 
 .hesper-list-row:hover,
 .hesper-list-row.is-active {
-  background: var(--hesper-color-hover, rgba(122, 162, 247, 0.12));
+  background: var(--hesper-color-hover);
 }
 
 .hesper-list-row.is-selected {
-  background: var(--hesper-color-soft-control, rgba(122, 162, 247, 0.14));
+  background: var(--hesper-color-soft-control);
 }
 
 .hesper-settings-row {
@@ -123,7 +151,7 @@ button {
   border: 0;
   border-radius: 12px;
   background: transparent;
-  color: var(--hesper-color-text, #c0caf5);
+  color: var(--hesper-color-text);
   padding: 10px 12px;
   text-align: left;
   cursor: pointer;
@@ -135,7 +163,7 @@ button {
 
 .hesper-settings-row:hover,
 .hesper-settings-row.is-active {
-  background: var(--hesper-color-hover, rgba(122, 162, 247, 0.12));
+  background: var(--hesper-color-hover);
 }
 
 .hesper-scroll-invisible {
@@ -149,7 +177,7 @@ button {
 
 .hesper-theme-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: var(--hesper-color-scrollbar-thumb, rgba(192, 202, 245, 0.10)) transparent;
+  scrollbar-color: var(--hesper-color-scrollbar-thumb) transparent;
 }
 
 .hesper-theme-scrollbar::-webkit-scrollbar {
@@ -166,18 +194,18 @@ button {
   min-height: 24px;
   border: 0;
   border-radius: 999px;
-  background: var(--hesper-color-scrollbar-thumb, rgba(192, 202, 245, 0.10)) border-box;
+  background: var(--hesper-color-scrollbar-thumb) border-box;
   background-clip: padding-box;
   transition: background 120ms ease;
 }
 
 .hesper-theme-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: var(--hesper-color-scrollbar-thumb-hover, rgba(192, 202, 245, 0.24)) border-box;
+  background: var(--hesper-color-scrollbar-thumb-hover) border-box;
   background-clip: padding-box;
 }
 
 .hesper-theme-scrollbar::-webkit-scrollbar-thumb:active {
-  background: var(--hesper-color-scrollbar-thumb-active, rgba(192, 202, 245, 0.38)) border-box;
+  background: var(--hesper-color-scrollbar-thumb-active) border-box;
   background-clip: padding-box;
 }
 
@@ -188,7 +216,7 @@ button {
 
 .hesper-soft-control:hover,
 .hesper-send-button:hover:not(:disabled) {
-  background: var(--hesper-color-soft-control, rgba(122, 162, 247, 0.14)) !important;
+  background: var(--hesper-color-soft-control) !important;
 }
 
 .hesper-output-block {
@@ -205,6 +233,6 @@ button {
 
 [data-theme='dark'] {
   color-scheme: dark;
-  --hesper-body-background: var(--hesper-color-background, #1a1b26);
-  --hesper-body-text: var(--hesper-color-text, #c0caf5);
+  --hesper-body-background: var(--hesper-color-background);
+  --hesper-body-text: var(--hesper-color-text);
 }

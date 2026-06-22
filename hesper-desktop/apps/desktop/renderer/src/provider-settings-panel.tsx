@@ -1,3 +1,4 @@
+import { themeTokens } from '@hesper/ui'
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import type {
@@ -1093,15 +1094,15 @@ function ConnectionDialog({
   )
 }
 
-const mutedTextColor = 'var(--hesper-color-text-muted, #737aa2)'
-const bodyTextColor = 'var(--hesper-color-text, #c0caf5)'
-const surfaceColor = 'var(--hesper-color-surface, #16161e)'
-const surfaceMutedColor = 'var(--hesper-color-surface-muted, #24283b)'
-const borderColor = 'var(--hesper-color-border, #414868)'
-const accentColor = 'var(--hesper-color-accent, #7aa2f7)'
-const dangerTextColor = 'var(--hesper-color-danger, #f7768e)'
-const successTextColor = 'var(--hesper-color-success, #9ece6a)'
-const softControlColor = 'var(--hesper-color-soft-control, rgba(122, 162, 247, 0.14))'
+const mutedTextColor = themeTokens.color.textMuted
+const bodyTextColor = themeTokens.color.text
+const surfaceColor = themeTokens.color.surface
+const surfaceMutedColor = themeTokens.color.surfaceMuted
+const borderColor = themeTokens.color.border
+const accentColor = themeTokens.color.accent
+const dangerTextColor = themeTokens.color.danger
+const successTextColor = themeTokens.color.success
+const softControlColor = themeTokens.color.softControl
 const bodyFontSize = 'var(--hesper-font-size, 14px)'
 
 const settingsPanelStyle: CSSProperties = {
@@ -1183,7 +1184,7 @@ const connectionItemStyle: CSSProperties = {
 const connectionItemSeparatorStyle: CSSProperties = {
   height: 1,
   margin: '0 14px',
-  background: 'var(--hesper-color-border-subtle, rgba(65, 72, 104, 0.45))',
+  background: themeTokens.color.borderSubtle,
   pointerEvents: 'none'
 }
 
@@ -1279,7 +1280,7 @@ const connectionMenuStyle: CSSProperties = {
   borderRadius: 12,
   background: surfaceMutedColor,
   padding: 6,
-  boxShadow: '0 18px 36px rgba(0, 0, 0, 0.28)'
+  boxShadow: `0 18px 36px ${themeTokens.color.shadow}`
 }
 
 const connectionMenuItemStyle: CSSProperties = {
@@ -1335,11 +1336,6 @@ const secondaryActionStyle: CSSProperties = {
   cursor: 'pointer'
 }
 
-const disabledActionStyle: CSSProperties = {
-  opacity: 0.55,
-  cursor: 'not-allowed'
-}
-
 const fullWindowOverlayStyle: CSSProperties = {
   position: 'fixed',
   top: 36,
@@ -1378,16 +1374,16 @@ const overlayFormStyle: CSSProperties = {
   borderRadius: 22,
   border: `1px solid ${borderColor}`,
   background: surfaceMutedColor,
-  boxShadow: '0 24px 64px rgba(0, 0, 0, 0.32)',
+  boxShadow: `0 24px 64px ${themeTokens.color.shadow}`,
   padding: 24
 }
 
-const onboardingBackgroundColor = '#eef1f7'
-const onboardingTextColor = '#515873'
-const onboardingMutedColor = '#9da4b8'
-const onboardingBorderColor = '#dde2eb'
-const onboardingCardColor = 'rgba(244, 246, 251, 0.72)'
-const onboardingIconColor = '#111827'
+const onboardingBackgroundColor = themeTokens.color.background
+const onboardingTextColor = themeTokens.color.text
+const onboardingMutedColor = themeTokens.color.textMuted
+const onboardingBorderColor = themeTokens.color.border
+const onboardingCardColor = themeTokens.color.surfaceMuted
+const onboardingIconColor = themeTokens.color.accent
 
 const onboardingOverlayStyle: CSSProperties = {
   background: onboardingBackgroundColor,
@@ -1455,14 +1451,14 @@ const connectionTypeRowStyle: CSSProperties = {
   alignItems: 'center',
   gap: 12,
   textAlign: 'left',
-  boxShadow: '0 1px 3px rgba(36, 42, 64, 0.05), 0 8px 18px rgba(36, 42, 64, 0.04)'
+  boxShadow: `0 8px 18px ${themeTokens.color.shadow}`
 }
 
 const connectionTypeIconStyle: CSSProperties = {
   width: 34,
   height: 34,
   borderRadius: 10,
-  background: '#e8ebf3',
+  background: themeTokens.color.softControl,
   display: 'grid',
   placeItems: 'center',
   color: onboardingIconColor,
@@ -1512,13 +1508,13 @@ const onboardingSecondaryButtonStyle: CSSProperties = {
   minHeight: 40,
   borderRadius: 12,
   border: `1px solid ${onboardingBorderColor}`,
-  background: 'rgba(244, 246, 251, 0.72)',
+  background: onboardingCardColor,
   color: onboardingMutedColor,
   padding: '0 18px',
   cursor: 'pointer',
   fontSize: bodyFontSize,
   fontWeight: 620,
-  boxShadow: '0 2px 5px rgba(36, 42, 64, 0.04)'
+  boxShadow: `0 2px 5px ${themeTokens.color.shadow}`
 }
 
 const onboardingPrimaryButtonStyle: CSSProperties = {
@@ -1561,7 +1557,7 @@ const codexAuthHeaderStyle: CSSProperties = {
 
 const codexAuthTitleStyle: CSSProperties = {
   margin: 0,
-  color: '#343b56',
+  color: onboardingTextColor,
   fontSize: 18,
   lineHeight: 1.25,
   fontWeight: 720
@@ -1597,7 +1593,7 @@ const codexAuthFeedbackStyle: CSSProperties = {
 }
 
 const codexAuthErrorTextStyle: CSSProperties = {
-  color: '#c2415b'
+  color: themeTokens.color.danger
 }
 
 const codexAuthFooterStyle: CSSProperties = {

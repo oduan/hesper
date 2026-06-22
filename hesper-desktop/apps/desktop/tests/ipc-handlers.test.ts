@@ -1893,8 +1893,8 @@ describe('registerIpcHandlers', () => {
     registerIpcHandlers({ ipcMain, dialog, container, savePersistence })
 
     await expect(
-      handles.get(ipcChannels.settingsUpdate)?.({ sender: { id: 1 } }, { defaultModelId: 'deepseek-chat', defaultOutputMode: 'html', themeMode: 'dark', fontSize: 16, soul: '保持中文输出。' })
-    ).resolves.toEqual({ defaultModelId: 'deepseek-chat', defaultOutputMode: 'html', themeMode: 'dark', fontSize: 16, soul: '保持中文输出。' })
+      handles.get(ipcChannels.settingsUpdate)?.({ sender: { id: 1 } }, { defaultModelId: 'deepseek-chat', defaultOutputMode: 'html', themeMode: 'dark', themeId: 'tokyo-night', fontSize: 16, soul: '保持中文输出。' })
+    ).resolves.toEqual({ defaultModelId: 'deepseek-chat', defaultOutputMode: 'html', themeMode: 'dark', themeId: 'tokyo-night', fontSize: 16, soul: '保持中文输出。' })
     expect(savePersistence).toHaveBeenCalled()
 
     const restoredContainer = createServiceContainer({ persistence, agentMode: 'mock' })
@@ -1911,6 +1911,7 @@ describe('registerIpcHandlers', () => {
       defaultModelId: 'deepseek-chat',
       defaultOutputMode: 'html',
       themeMode: 'dark',
+      themeId: 'tokyo-night',
       fontSize: 16,
       soul: '保持中文输出。'
     })
@@ -1937,7 +1938,11 @@ describe('registerIpcHandlers', () => {
     ).rejects.toThrow()
 
     await expect(
-      handles.get(ipcChannels.settingsUpdate)?.({ sender: { id: 1 } }, { defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'html', fontSize: 15 })
-    ).resolves.toMatchObject({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'html', fontSize: 15 })
+      handles.get(ipcChannels.settingsUpdate)?.({ sender: { id: 1 } }, { themeId: 'solarized' })
+    ).rejects.toThrow()
+
+    await expect(
+      handles.get(ipcChannels.settingsUpdate)?.({ sender: { id: 1 } }, { defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'html', themeId: 'dracula', fontSize: 15 })
+    ).resolves.toMatchObject({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'html', themeId: 'dracula', fontSize: 15 })
   })
 })

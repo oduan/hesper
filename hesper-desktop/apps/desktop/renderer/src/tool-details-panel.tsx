@@ -1,4 +1,5 @@
 import { useState, type CSSProperties, type FormEvent } from 'react'
+import { themeTokens } from '@hesper/ui'
 import type { ToolCredentialStatus, ToolDto } from '../../electron/ipc-contract'
 
 type ToolDetailsPanelProps = {
@@ -187,14 +188,14 @@ const headerStyle: CSSProperties = {
   alignItems: 'start',
   gap: 18,
   padding: 18,
-  border: '1px solid var(--hesper-color-border, #414868)',
+  border: `1px solid ${themeTokens.color.border}`,
   borderRadius: 16,
-  background: 'var(--hesper-color-surface-muted, #24283b)'
+  background: themeTokens.color.surfaceMuted
 }
 
 const eyebrowStyle: CSSProperties = {
   margin: '0 0 8px',
-  color: 'var(--hesper-color-text-muted, #9aa5ce)',
+  color: themeTokens.color.textMuted,
   fontSize: 11,
   fontWeight: 800,
   letterSpacing: '0.08em',
@@ -209,13 +210,13 @@ const titleStyle: CSSProperties = {
 
 const descriptionStyle: CSSProperties = {
   margin: '10px 0 0',
-  color: 'var(--hesper-color-text-muted, #9aa5ce)',
+  color: themeTokens.color.textMuted,
   lineHeight: 1.55
 }
 
 const mutedTextStyle: CSSProperties = {
   margin: 0,
-  color: 'var(--hesper-color-text-muted, #9aa5ce)',
+  color: themeTokens.color.textMuted,
   lineHeight: 1.55
 }
 
@@ -223,8 +224,8 @@ const errorTextStyle: CSSProperties = {
   margin: 0,
   padding: '10px 12px',
   borderRadius: 12,
-  color: 'var(--hesper-color-danger, #f7768e)',
-  background: 'rgba(247, 118, 142, 0.12)'
+  color: themeTokens.color.danger,
+  background: themeTokens.color.dangerSoft
 }
 
 const infoGridStyle: CSSProperties = {
@@ -239,12 +240,12 @@ const infoItemStyle: CSSProperties = {
   gap: 6,
   padding: 14,
   borderRadius: 14,
-  background: 'var(--hesper-color-surface-muted, #24283b)',
-  border: '1px solid var(--hesper-color-border, #414868)'
+  background: themeTokens.color.surfaceMuted,
+  border: `1px solid ${themeTokens.color.border}`
 }
 
 const infoLabelStyle: CSSProperties = {
-  color: 'var(--hesper-color-text-muted, #9aa5ce)',
+  color: themeTokens.color.textMuted,
   fontSize: 11,
   fontWeight: 800,
   letterSpacing: '0.04em'
@@ -267,8 +268,8 @@ const apiKeySectionStyle: CSSProperties = {
   gap: 14,
   padding: 16,
   borderRadius: 16,
-  border: '1px solid var(--hesper-color-border, #414868)',
-  background: 'var(--hesper-color-surface-muted, #24283b)'
+  border: `1px solid ${themeTokens.color.border}`,
+  background: themeTokens.color.surfaceMuted
 }
 
 const sectionTitleStyle: CSSProperties = {
@@ -278,7 +279,7 @@ const sectionTitleStyle: CSSProperties = {
 
 const warningTextStyle: CSSProperties = {
   margin: '8px 0 0',
-  color: 'var(--hesper-color-warning, #e0af68)',
+  color: themeTokens.color.warning,
   lineHeight: 1.45
 }
 
@@ -297,13 +298,13 @@ function apiKeyStatusBadgeStyle(hasApiKey: boolean): CSSProperties {
     padding: '4px 10px',
     fontSize: 12,
     fontWeight: 800,
-    color: hasApiKey ? 'var(--hesper-color-tool-toggle, #7aa2f7)' : 'var(--hesper-color-text-muted, #737aa2)',
-    background: hasApiKey ? 'var(--hesper-color-tool-toggle-soft, rgba(122, 162, 247, 0.14))' : 'rgba(148, 163, 184, 0.12)'
+    color: hasApiKey ? themeTokens.color.toolToggle : themeTokens.color.textMuted,
+    background: hasApiKey ? themeTokens.color.toolToggleSoft : themeTokens.color.neutralSoft
   }
 }
 
 const apiKeyUpdatedStyle: CSSProperties = {
-  color: 'var(--hesper-color-text-muted, #9aa5ce)',
+  color: themeTokens.color.textMuted,
   fontSize: 12
 }
 
@@ -315,7 +316,7 @@ const apiKeyFormStyle: CSSProperties = {
 const apiKeyInputLabelStyle: CSSProperties = {
   display: 'grid',
   gap: 6,
-  color: 'var(--hesper-color-text-muted, #9aa5ce)',
+  color: themeTokens.color.textMuted,
   fontSize: 12,
   fontWeight: 800
 }
@@ -323,9 +324,9 @@ const apiKeyInputLabelStyle: CSSProperties = {
 const apiKeyInputStyle: CSSProperties = {
   minHeight: 34,
   borderRadius: 10,
-  border: '1px solid var(--hesper-color-border, #414868)',
-  background: 'var(--hesper-color-surface, #1f2335)',
-  color: 'var(--hesper-color-text, #c0caf5)',
+  border: `1px solid ${themeTokens.color.border}`,
+  background: themeTokens.color.surface,
+  color: themeTokens.color.text,
   padding: '0 10px',
   outline: 'none'
 }
@@ -342,8 +343,8 @@ function primaryButtonStyle(disabled: boolean): CSSProperties {
     border: 0,
     borderRadius: 10,
     padding: '0 12px',
-    background: 'var(--hesper-color-tool-toggle, #7aa2f7)',
-    color: 'var(--hesper-color-surface, #16161e)',
+    background: themeTokens.color.toolToggle,
+    color: themeTokens.color.surface,
     fontWeight: 800,
     cursor: disabled ? 'not-allowed' : 'pointer',
     opacity: disabled ? 0.55 : 1
@@ -353,11 +354,11 @@ function primaryButtonStyle(disabled: boolean): CSSProperties {
 function secondaryButtonStyle(disabled: boolean): CSSProperties {
   return {
     minHeight: 32,
-    border: '1px solid var(--hesper-color-border, #414868)',
+    border: `1px solid ${themeTokens.color.border}`,
     borderRadius: 10,
     padding: '0 12px',
     background: 'transparent',
-    color: 'var(--hesper-color-text-muted, #9aa5ce)',
+    color: themeTokens.color.textMuted,
     fontWeight: 800,
     cursor: disabled ? 'not-allowed' : 'pointer',
     opacity: disabled ? 0.55 : 1
@@ -370,9 +371,9 @@ const schemaBlockStyle: CSSProperties = {
   overflow: 'auto',
   padding: 14,
   borderRadius: 14,
-  border: '1px solid var(--hesper-color-border, #414868)',
-  background: 'rgba(0, 0, 0, 0.18)',
-  color: 'var(--hesper-color-text, #c0caf5)',
+  border: `1px solid ${themeTokens.color.border}`,
+  background: themeTokens.color.codeBackground,
+  color: themeTokens.color.text,
   fontSize: 12,
   lineHeight: 1.5
 }
@@ -383,7 +384,7 @@ function detailSwitchStyle(_enabled: boolean, pending: boolean): CSSProperties {
     border: 0,
     borderRadius: 999,
     background: 'transparent',
-    color: 'var(--hesper-color-text, #c0caf5)',
+    color: themeTokens.color.text,
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -401,9 +402,9 @@ function detailSwitchTrackStyle(enabled: boolean): CSSProperties {
     width: 46,
     height: 24,
     borderRadius: 999,
-    border: `1px solid ${enabled ? 'var(--hesper-color-tool-toggle, #7aa2f7)' : 'var(--hesper-color-border, #414868)'}`,
-    background: enabled ? 'var(--hesper-color-tool-toggle, #7aa2f7)' : 'var(--hesper-color-surface-muted, #24283b)',
-    boxShadow: enabled ? '0 0 0 3px var(--hesper-color-tool-toggle-soft, rgba(122, 162, 247, 0.14))' : 'inset 0 0 0 1px rgba(148, 163, 184, 0.10)',
+    border: `1px solid ${enabled ? themeTokens.color.toolToggle : themeTokens.color.border}`,
+    background: enabled ? themeTokens.color.toolToggle : themeTokens.color.surfaceMuted,
+    boxShadow: enabled ? `0 0 0 3px ${themeTokens.color.toolToggleSoft}` : `inset 0 0 0 1px ${themeTokens.color.borderSubtle}`,
     transition: 'background 160ms ease, border-color 160ms ease, box-shadow 160ms ease'
   }
 }
@@ -416,8 +417,8 @@ function detailSwitchKnobStyle(enabled: boolean): CSSProperties {
     width: 18,
     height: 18,
     borderRadius: 999,
-    background: enabled ? 'var(--hesper-color-surface, #16161e)' : 'var(--hesper-color-text-muted, #737aa2)',
-    boxShadow: enabled ? '0 3px 10px rgba(0, 0, 0, 0.24)' : '0 2px 7px rgba(0, 0, 0, 0.18)',
+    background: enabled ? themeTokens.color.surface : themeTokens.color.textMuted,
+    boxShadow: enabled ? `0 3px 10px ${themeTokens.color.shadow}` : `0 2px 7px ${themeTokens.color.shadow}`,
     transform: enabled ? 'translateX(22px)' : 'translateX(0)',
     transition: 'transform 160ms ease, background 160ms ease, box-shadow 160ms ease'
   }
@@ -425,7 +426,7 @@ function detailSwitchKnobStyle(enabled: boolean): CSSProperties {
 
 function detailSwitchLabelStyle(enabled: boolean): CSSProperties {
   return {
-    color: enabled ? 'var(--hesper-color-tool-toggle, #7aa2f7)' : 'var(--hesper-color-text-muted, #737aa2)',
+    color: enabled ? themeTokens.color.toolToggle : themeTokens.color.textMuted,
     whiteSpace: 'nowrap'
   }
 }

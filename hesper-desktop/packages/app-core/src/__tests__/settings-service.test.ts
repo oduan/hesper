@@ -64,6 +64,7 @@ describe('createSettingsService', () => {
       defaultModelId: 'mock/hesper-fast',
       defaultOutputMode: 'markdown',
       themeMode: 'system',
+      themeId: 'catppuccin',
       fontSize: 14,
       soul: ''
     })
@@ -77,6 +78,7 @@ describe('createSettingsService', () => {
       defaultModelId: 'deepseek-chat',
       defaultOutputMode: 'html',
       themeMode: 'dark',
+      themeId: 'dracula',
       fontSize: 16,
       soul: 'Helpful, calm, and precise.'
     })
@@ -86,6 +88,7 @@ describe('createSettingsService', () => {
       defaultModelId: 'deepseek-chat',
       defaultOutputMode: 'html',
       themeMode: 'dark',
+      themeId: 'dracula',
       fontSize: 16,
       soul: 'Helpful, calm, and precise.'
     })
@@ -98,7 +101,7 @@ describe('createSettingsService', () => {
     const firstUpdate = service.updateSettings({ defaultModelId: 'deepseek-chat' })
     await waitForExpectation(() => expect(saveSpy).toHaveBeenCalledTimes(1))
 
-    const secondUpdate = service.updateSettings({ soul: 'Curious, calm, and steady.' })
+    const secondUpdate = service.updateSettings({ themeMode: 'dark', themeId: 'tokyo-night', soul: 'Curious, calm, and steady.' })
     expect(getSpy).toHaveBeenCalledTimes(1)
 
     releaseFirstSave()
@@ -107,7 +110,8 @@ describe('createSettingsService', () => {
     await expect(service.getSettings()).resolves.toEqual({
       defaultModelId: 'deepseek-chat',
       defaultOutputMode: 'markdown',
-      themeMode: 'system',
+      themeMode: 'dark',
+      themeId: 'tokyo-night',
       fontSize: 14,
       soul: 'Curious, calm, and steady.'
     })
@@ -146,6 +150,7 @@ describe('createSettingsService', () => {
       defaultModelId: 'mock/hesper-fast',
       defaultOutputMode: 'markdown',
       themeMode: 'system',
+      themeId: 'catppuccin',
       fontSize: 14,
       soul: 'Resilient, calm, and focused.'
     })
@@ -153,6 +158,7 @@ describe('createSettingsService', () => {
       defaultModelId: 'mock/hesper-fast',
       defaultOutputMode: 'markdown',
       themeMode: 'system',
+      themeId: 'catppuccin',
       fontSize: 14,
       soul: 'Resilient, calm, and focused.'
     })

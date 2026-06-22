@@ -79,6 +79,7 @@ function createMainWindow(): BrowserWindow {
     minHeight: 720,
     frame: false,
     show: false,
+    // Bootstrap fallback shown before renderer theme variables are available.
     backgroundColor: '#111827',
     ...(appIconPath ? { icon: appIconPath } : {}),
     webPreferences: {

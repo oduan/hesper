@@ -1,4 +1,4 @@
-import { darkTheme } from '../theme'
+import { themeTokens } from '../theme'
 
 export type NavigationItem = {
   id: string
@@ -30,12 +30,12 @@ export function RightNavigation({ open, items, onClose, onNavigate }: RightNavig
       aria-label="右侧导航"
       style={{
         width: 280,
-        borderLeft: `1px solid ${darkTheme.color.border}`,
-        background: darkTheme.color.surface,
-        padding: darkTheme.spacing.md,
+        borderLeft: `1px solid ${themeTokens.color.border}`,
+        background: themeTokens.color.surface,
+        padding: themeTokens.spacing.md,
         display: 'grid',
         alignContent: 'start',
-        gap: darkTheme.spacing.sm
+        gap: themeTokens.spacing.sm
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -46,7 +46,7 @@ export function RightNavigation({ open, items, onClose, onNavigate }: RightNavig
           </button>
         ) : null}
       </div>
-      <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: darkTheme.spacing.xs }}>
+      <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: themeTokens.spacing.xs }}>
         {items.map((item) => (
           <li key={item.id}>
             <button
@@ -55,15 +55,15 @@ export function RightNavigation({ open, items, onClose, onNavigate }: RightNavig
               style={{
                 width: '100%',
                 textAlign: 'left',
-                borderRadius: darkTheme.radius.md,
-                border: `1px solid ${darkTheme.color.border}`,
-                background: darkTheme.color.surfaceMuted,
-                color: darkTheme.color.text,
-                padding: darkTheme.spacing.sm,
+                borderRadius: themeTokens.radius.md,
+                border: `1px solid ${themeTokens.color.border}`,
+                background: themeTokens.color.surfaceMuted,
+                color: themeTokens.color.text,
+                padding: themeTokens.spacing.sm,
                 cursor: 'pointer'
               }}
             >
-              <div style={{ fontSize: darkTheme.typography.body, color: darkTheme.color.textMuted }}>{kindLabels[item.kind]}</div>
+              <div style={{ fontSize: themeTokens.typography.body, color: themeTokens.color.textMuted }}>{kindLabels[item.kind]}</div>
               <div>{item.label}</div>
             </button>
           </li>

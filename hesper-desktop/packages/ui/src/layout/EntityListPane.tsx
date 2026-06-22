@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import type { Session, ToolDefinition } from '@hesper/shared'
 import { RunningStatusIcon } from '../conversation/RunningStatusIcon'
-import { darkTheme } from '../theme'
+import { themeTokens } from '../theme'
 import type { AppSection } from './ActivityRail'
 
 type ToolListItem = ToolDefinition & { enabled: boolean }
@@ -90,7 +90,7 @@ function NewMessageIcon() {
           strokeWidth="1.45"
           strokeLinejoin="round"
         />
-        <circle cx="11.9" cy="4.2" r="2.15" fill="var(--hesper-color-accent, #7aa2f7)" stroke="var(--hesper-color-surface, #16161e)" strokeWidth="1" />
+        <circle cx="11.9" cy="4.2" r="2.15" fill={themeTokens.color.accent} stroke={themeTokens.color.surface} strokeWidth="1" />
       </svg>
     </span>
   )
@@ -349,17 +349,17 @@ export function EntityListPane({
         minWidth: 0,
         minHeight: 0,
         boxSizing: 'border-box',
-        background: darkTheme.color.surface,
-        borderRadius: darkTheme.radius.xl,
-        padding: darkTheme.spacing.lg,
+        background: themeTokens.color.surface,
+        borderRadius: themeTokens.radius.xl,
+        padding: themeTokens.spacing.lg,
         display: 'flex',
         flexDirection: 'column',
-        gap: darkTheme.spacing.md,
+        gap: themeTokens.spacing.md,
         overflow: 'hidden'
       }}
     >
       <header style={{ position: 'relative', minHeight: 24 }}>
-        <h2 style={{ margin: 0, fontSize: darkTheme.typography.body, lineHeight: '24px', textAlign: 'center', fontWeight: 700 }}>{heading}</h2>
+        <h2 style={{ margin: 0, fontSize: themeTokens.typography.body, lineHeight: '24px', textAlign: 'center', fontWeight: 700 }}>{heading}</h2>
       </header>
       {activeSection === 'sessions' ? (
         sessions.length > 0 ? (
@@ -430,7 +430,7 @@ export function EntityListPane({
             })}
           </ul>
         ) : (
-          <div style={{ margin: 'auto', color: darkTheme.color.textMuted, fontSize: darkTheme.typography.body, textAlign: 'center' }}>暂无会话</div>
+          <div style={{ margin: 'auto', color: themeTokens.color.textMuted, fontSize: themeTokens.typography.body, textAlign: 'center' }}>暂无会话</div>
         )
       ) : activeSection === 'roles' ? (
         <div style={{ display: 'grid', minHeight: 0 }}>
@@ -470,7 +470,7 @@ export function EntityListPane({
               })}
             </ul>
           ) : (
-            <div style={{ margin: 'auto', color: darkTheme.color.textMuted, fontSize: darkTheme.typography.body, textAlign: 'center' }}>暂无角色</div>
+            <div style={{ margin: 'auto', color: themeTokens.color.textMuted, fontSize: themeTokens.typography.body, textAlign: 'center' }}>暂无角色</div>
           )}
         </div>
       ) : activeSection === 'tools' ? (
@@ -511,7 +511,7 @@ export function EntityListPane({
             })}
           </ul>
         ) : (
-          <div style={{ margin: 'auto', color: darkTheme.color.textMuted, fontSize: darkTheme.typography.body, textAlign: 'center' }}>暂无内置工具</div>
+          <div style={{ margin: 'auto', color: themeTokens.color.textMuted, fontSize: themeTokens.typography.body, textAlign: 'center' }}>暂无内置工具</div>
         )
       ) : activeSection === 'settings' ? (
         <nav aria-label="设置分类" style={{ display: 'grid', gap: 4 }}>
@@ -527,13 +527,13 @@ export function EntityListPane({
                 onClick={() => onSelectSettingsCategory?.(category.id)}
               >
                 <span style={{ fontWeight: 700 }}>{category.title}</span>
-                <span style={{ fontSize: darkTheme.typography.body, color: darkTheme.color.textMuted }}>{category.description}</span>
+                <span style={{ fontSize: themeTokens.typography.body, color: themeTokens.color.textMuted }}>{category.description}</span>
               </button>
             )
           })}
         </nav>
       ) : (
-        <div style={{ margin: 'auto', color: darkTheme.color.textMuted, fontSize: darkTheme.typography.body, textAlign: 'center' }}>该区域将在后续任务接入真实数据。</div>
+        <div style={{ margin: 'auto', color: themeTokens.color.textMuted, fontSize: themeTokens.typography.body, textAlign: 'center' }}>该区域将在后续任务接入真实数据。</div>
       )}
       {sessionMenu ? (
         <div
@@ -556,7 +556,7 @@ export function EntityListPane({
               onClick={() => handleMenuAction(item.key, sessionMenu)}
               style={{
                 ...sessionMenuItemStyle,
-                ...(item.danger ? { color: darkTheme.color.danger } : {})
+                ...(item.danger ? { color: themeTokens.color.danger } : {})
               }}
             >
               <span>{item.label}</span>
@@ -586,7 +586,7 @@ export function EntityListPane({
               onClick={() => handleRoleMenuAction(item.key, roleMenu)}
               style={{
                 ...sessionMenuItemStyle,
-                ...(item.danger ? { color: darkTheme.color.danger } : {})
+                ...(item.danger ? { color: themeTokens.color.danger } : {})
               }}
             >
               <span>{item.label}</span>
@@ -661,7 +661,7 @@ const roleDescriptionStyle: CSSProperties = {
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
-  color: 'var(--hesper-color-text-muted, #9aa5ce)',
+  color: themeTokens.color.textMuted,
   fontSize: 12,
   lineHeight: '16px'
 }
@@ -685,7 +685,7 @@ const toolDescriptionStyle: CSSProperties = {
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
-  color: 'var(--hesper-color-text-muted, #9aa5ce)',
+  color: themeTokens.color.textMuted,
   fontSize: 12,
   lineHeight: '16px'
 }
@@ -713,9 +713,9 @@ function toolToggleTrackStyle(enabled: boolean): CSSProperties {
     width: 46,
     height: 24,
     borderRadius: 999,
-    border: `1px solid ${enabled ? 'var(--hesper-color-tool-toggle, #7aa2f7)' : 'var(--hesper-color-border, #414868)'}`,
-    background: enabled ? 'var(--hesper-color-tool-toggle, #7aa2f7)' : 'var(--hesper-color-surface-muted, #24283b)',
-    boxShadow: enabled ? '0 0 0 3px var(--hesper-color-tool-toggle-soft, rgba(122, 162, 247, 0.14))' : 'inset 0 0 0 1px rgba(148, 163, 184, 0.10)',
+    border: `1px solid ${enabled ? themeTokens.color.toolToggle : themeTokens.color.border}`,
+    background: enabled ? themeTokens.color.toolToggle : themeTokens.color.surfaceMuted,
+    boxShadow: enabled ? `0 0 0 3px ${themeTokens.color.toolToggleSoft}` : `inset 0 0 0 1px ${themeTokens.color.borderSubtle}`,
     transition: 'background 160ms ease, border-color 160ms ease, box-shadow 160ms ease'
   }
 }
@@ -728,8 +728,8 @@ function toolToggleKnobStyle(enabled: boolean): CSSProperties {
     width: 18,
     height: 18,
     borderRadius: 999,
-    background: enabled ? 'var(--hesper-color-surface, #16161e)' : 'var(--hesper-color-text-muted, #737aa2)',
-    boxShadow: enabled ? '0 3px 10px rgba(0, 0, 0, 0.24)' : '0 2px 7px rgba(0, 0, 0, 0.18)',
+    background: enabled ? themeTokens.color.surface : themeTokens.color.textMuted,
+    boxShadow: enabled ? `0 3px 10px ${themeTokens.color.shadow}` : `0 2px 7px ${themeTokens.color.shadow}`,
     transform: enabled ? 'translateX(22px)' : 'translateX(0)',
     transition: 'transform 160ms ease, background 160ms ease, box-shadow 160ms ease'
   }
@@ -753,7 +753,7 @@ const sessionTitleTextStyle: CSSProperties = {
 
 const sessionRelativeTimeStyle: CSSProperties = {
   flex: '0 0 auto',
-  color: 'var(--hesper-color-text-muted, #737aa2)',
+  color: themeTokens.color.textMuted,
   fontSize: 11,
   fontWeight: 600,
   opacity: 0.72,
@@ -766,17 +766,17 @@ const newMessageIconSlotStyle: CSSProperties = {
   flex: '0 0 18px',
   display: 'inline-grid',
   placeItems: 'center',
-  color: 'var(--hesper-color-accent, #7aa2f7)'
+  color: themeTokens.color.accent
 }
 
 const renameInputStyle: CSSProperties = {
   width: '100%',
   minWidth: 0,
   border: 0,
-  outline: '1px solid rgba(124, 108, 255, 0.55)',
+  outline: `1px solid ${themeTokens.color.accent}`,
   borderRadius: 6,
-  background: 'var(--hesper-color-soft-control, rgba(122, 162, 247, 0.14))',
-  color: darkTheme.color.text,
+  background: themeTokens.color.softControl,
+  color: themeTokens.color.text,
   font: 'inherit',
   fontWeight: 600,
   padding: '4px 6px'
@@ -787,10 +787,10 @@ const sessionMenuStyle: CSSProperties = {
   zIndex: 1000,
   minWidth: 180,
   padding: '4px 0',
-  borderRadius: darkTheme.radius.md,
-  border: `1px solid ${darkTheme.color.border}`,
-  background: darkTheme.color.surfaceMuted,
-  boxShadow: '0 18px 50px rgba(0, 0, 0, 0.36)',
+  borderRadius: themeTokens.radius.md,
+  border: `1px solid ${themeTokens.color.border}`,
+  background: themeTokens.color.surfaceMuted,
+  boxShadow: `0 18px 50px ${themeTokens.color.shadow}`,
   overflow: 'hidden'
 }
 
@@ -803,13 +803,13 @@ const sessionMenuItemStyle: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'flex-start',
-  padding: `0 ${darkTheme.spacing.md}`,
+  padding: `0 ${themeTokens.spacing.md}`,
   border: 0,
   outline: 0,
   borderRadius: 0,
   background: 'transparent',
-  color: darkTheme.color.text,
-  fontSize: darkTheme.typography.body,
+  color: themeTokens.color.text,
+  fontSize: themeTokens.typography.body,
   cursor: 'pointer',
   textAlign: 'left'
 }
@@ -820,7 +820,7 @@ const sessionMenuHoverCss = `
   position: absolute;
   inset: 0;
   z-index: 0;
-  background: var(--hesper-color-hover, rgba(122, 162, 247, 0.12));
+  background: ${themeTokens.color.hover};
   opacity: 0;
   transition: opacity 160ms ease;
 }
