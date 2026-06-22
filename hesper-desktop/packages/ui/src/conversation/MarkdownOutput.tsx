@@ -300,7 +300,7 @@ function renderBlock(block: MarkdownBlock, index: number, onLocalFileClick?: ((p
       return <ol key={index} style={listStyle}>{block.items.map((item, itemIndex) => <li key={itemIndex} style={listItemStyle}>{renderInline(item, `ol-${index}-${itemIndex}`, onLocalFileClick)}</li>)}</ol>
     case 'code':
       return (
-        <pre key={index} style={codeBlockStyle}>
+        <pre key={index} data-hesper-markdown-code-scroll="true" style={codeBlockStyle}>
           <code>{block.text}</code>
         </pre>
       )
@@ -308,7 +308,7 @@ function renderBlock(block: MarkdownBlock, index: number, onLocalFileClick?: ((p
       return <blockquote key={index} style={blockquoteStyle}>{renderInline(block.text, `blockquote-${index}`, onLocalFileClick)}</blockquote>
     case 'table':
       return (
-        <div key={index} style={tableWrapStyle} className="hesper-theme-scrollbar">
+        <div key={index} data-hesper-markdown-table-scroll="true" style={tableWrapStyle} className="hesper-theme-scrollbar">
           <table style={tableStyle}>
             <thead>
               <tr>
@@ -340,6 +340,8 @@ export const MarkdownOutput = memo(function MarkdownOutput({ content, onLocalFil
 })
 
 const rootStyle: CSSProperties = {
+  minWidth: 0,
+  maxWidth: '100%',
   lineHeight: 1.6,
   fontSize: darkTheme.typography.body,
   color: darkTheme.color.text
@@ -383,16 +385,19 @@ const inlineCodeStyle: CSSProperties = {
 }
 
 const codeBlockStyle: CSSProperties = {
+  maxWidth: '100%',
+  minWidth: 0,
   margin: '0 0 10px',
   padding: darkTheme.spacing.md,
-  overflow: 'auto',
+  overflowX: 'auto',
+  overflowY: 'hidden',
   borderRadius: darkTheme.radius.md,
   background: darkTheme.color.surface,
   color: darkTheme.color.text,
   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
   fontSize: darkTheme.typography.body,
   lineHeight: 1.5,
-  whiteSpace: 'pre-wrap'
+  whiteSpace: 'pre'
 }
 
 const linkStyle: CSSProperties = {
@@ -408,12 +413,16 @@ const blockquoteStyle: CSSProperties = {
 }
 
 const tableWrapStyle: CSSProperties = {
+  maxWidth: '100%',
+  minWidth: 0,
   margin: '0 0 10px',
-  overflowX: 'auto'
+  overflowX: 'auto',
+  overflowY: 'hidden'
 }
 
 const tableStyle: CSSProperties = {
-  width: '100%',
+  width: 'max-content',
+  minWidth: '100%',
   borderCollapse: 'collapse',
   fontSize: darkTheme.typography.body
 }

@@ -913,6 +913,35 @@ describe('ui components', () => {
     expect(screen.queryByText('| Name | Status |')).not.toBeInTheDocument()
   })
 
+  it('keeps wide markdown tables and code blocks scrolling inside the output instead of the conversation page', () => {
+    renderConversationWithAssistant([
+      '| Column A | Column B | Column C |',
+      '| --- | --- | --- |',
+      '| very-long-unbroken-value-that-should-not-widen-the-conversation | another-very-long-unbroken-value-that-stays-inside-the-table | final-wide-value |',
+      '',
+      '```text',
+      'very-long-unbroken-code-line-that-should-scroll-inside-the-code-block-instead-of-the-message-list',
+      '```'
+    ].join('\n'))
+
+    const messageList = screen.getByLabelText('消息列表')
+    expect(messageList).toHaveStyle({ overflowX: 'hidden', overflowY: 'auto' })
+
+    const outputScroller = screen.getByLabelText('输出内容滚动区')
+    expect(outputScroller).toHaveStyle({ overflowX: 'hidden', overflowY: 'auto', minWidth: '0px' })
+
+    const outputBlock = outputScroller.closest('.hesper-output-block')
+    expect(outputBlock).toHaveStyle({ maxWidth: '100%', minWidth: '0px' })
+
+    const tableScroller = screen.getByRole('table').parentElement
+    expect(tableScroller).toHaveAttribute('data-hesper-markdown-table-scroll', 'true')
+    expect(tableScroller).toHaveStyle({ maxWidth: '100%', minWidth: '0px', overflowX: 'auto' })
+
+    const codeScroller = screen.getByText(/very-long-unbroken-code-line/).closest('pre')
+    expect(codeScroller).toHaveAttribute('data-hesper-markdown-code-scroll', 'true')
+    expect(codeScroller).toHaveStyle({ maxWidth: '100%', minWidth: '0px', overflowX: 'auto' })
+  })
+
   it('recognizes workspace markdown links and preserves regular web links', async () => {
     const user = userEvent.setup()
     const onLocalFileClick = vi.fn()

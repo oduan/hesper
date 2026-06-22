@@ -541,7 +541,9 @@ export function ConversationView({
             style={{
               height: '100%',
               minHeight: 0,
-              overflow: 'auto',
+              minWidth: 0,
+              overflowX: 'hidden',
+              overflowY: 'auto',
               display: 'grid',
               alignContent: 'start',
               gap: darkTheme.spacing.md,
@@ -564,7 +566,7 @@ export function ConversationView({
                   anchorRefs.current[anchorId] = node
                 }}
                 tabIndex={-1}
-                style={{ outline: 'none' }}
+                style={{ outline: 'none', minWidth: 0 }}
               >
                 {message.role === 'assistant' ? (
                   <OutputBlock
@@ -607,7 +609,7 @@ export function ConversationView({
                       anchorRefs.current[streamingAnchorId] = node
                     }}
                     tabIndex={-1}
-                    style={{ marginTop: darkTheme.spacing.sm, outline: 'none' }}
+                    style={{ marginTop: darkTheme.spacing.sm, outline: 'none', minWidth: 0 }}
                   >
                     <OutputBlock
                       content={messageStreamingText}
@@ -649,7 +651,7 @@ export function ConversationView({
                   anchorRefs.current['streaming-output'] = node
                 }}
                 tabIndex={-1}
-                style={{ outline: 'none' }}
+                style={{ outline: 'none', minWidth: 0 }}
               >
                 <OutputBlock
                   content={streamingText}

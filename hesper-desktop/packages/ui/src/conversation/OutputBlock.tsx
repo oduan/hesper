@@ -48,6 +48,8 @@ export const OutputBlock = memo(function OutputBlock({ content, contentType, clo
         style={{
           contain: 'paint',
           position: 'relative',
+          minWidth: 0,
+          maxWidth: '100%',
           height: contentType === 'html' ? outputBlockHtmlHeight : 'auto',
           maxHeight: outputBlockMaxHeight,
           overflow: 'hidden',
@@ -82,9 +84,11 @@ export const OutputBlock = memo(function OutputBlock({ content, contentType, clo
           data-hesper-output-scroll="true"
           style={{
             boxSizing: 'border-box',
+            minWidth: 0,
             height: contentType === 'html' ? '100%' : 'auto',
             maxHeight: contentType === 'html' ? '100%' : outputBlockMaxHeight,
-            overflow: 'auto',
+            overflowX: 'hidden',
+            overflowY: 'auto',
             overscrollBehavior: 'contain',
             overflowAnchor: 'none',
             willChange: 'scroll-position',
