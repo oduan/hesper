@@ -34,7 +34,7 @@ async function chooseThemedOption(user: ReturnType<typeof userEvent.setup>, labe
   await user.click(await screen.findByRole('option', { name: option }))
 }
 
-const { listSessions, setWorkspace, setModel, setOutputMode, selectDirectory, onEvent, enqueue, stopRun, getSettings, updateSettings, listModels, listTools, setToolEnabled, listRoles } = vi.hoisted(() => ({
+const { listSessions, setWorkspace, setModel, setOutputMode, selectDirectory, onEvent, enqueue, stopRun, getSettings, updateSettings, listModels, listTools, setToolEnabled, listSkills, refreshSkills, listRoles } = vi.hoisted(() => ({
   listSessions: vi.fn(async () => []),
   setWorkspace: vi.fn(async (input: { id: string; workspacePath?: string }) =>
     createSession({ id: input.id, workspacePath: input.workspacePath, updatedAt: '2026-06-10T03:05:00.000Z' })
@@ -81,6 +81,8 @@ const { listSessions, setWorkspace, setModel, setOutputMode, selectDirectory, on
     inputSchema: { type: 'object', required: ['path'], properties: { path: { type: 'string' } } },
     enabled: input.enabled
   })),
+  listSkills: vi.fn(async (): Promise<any[]> => []),
+  refreshSkills: vi.fn(async (): Promise<any[]> => []),
   listRoles: vi.fn(async () => [])
 }))
 
@@ -114,6 +116,11 @@ vi.mock('../src/ipc-client', () => ({
     tools: {
       list: listTools,
       setEnabled: setToolEnabled
+    },
+    skills: {
+      list: listSkills,
+      get: vi.fn(),
+      refresh: refreshSkills
     },
     roles: {
       list: listRoles,
@@ -149,8 +156,12 @@ describe('session settings and restore flow', () => {
     listModels.mockClear()
     listTools.mockClear()
     setToolEnabled.mockClear()
+    listSkills.mockReset()
+    refreshSkills.mockReset()
     listRoles.mockReset()
     onEvent.mockImplementation(() => () => undefined)
+    listSkills.mockResolvedValue([])
+    refreshSkills.mockResolvedValue([])
     listRoles.mockResolvedValue([])
     enqueue.mockResolvedValue({ runId: 'run-1' })
     stopRun.mockResolvedValue(undefined)
@@ -206,9 +217,13 @@ describe('session settings and restore flow', () => {
     expect(screen.getByRole('button', { name: '选择工作目录' })).toHaveTextContent('C:/active')
   })
 
-  it('shows tools page, keeps skills placeholder, and renders roles management from the activity rail', async () => {
+  it('shows tools page, renders skills management, and renders roles management from the activity rail', async () => {
     const user = userEvent.setup()
     listSessions.mockResolvedValueOnce([createSession()] as any)
+    refreshSkills.mockResolvedValueOnce([
+      { id: 'builtin:install-skills', name: '安装技能', description: '安装可复用技能', source: 'builtin', prompt: '安装说明' },
+      { id: 'workspace:writer', name: '写作助手', source: 'workspace', prompt: '写作说明' }
+    ])
 
     render(<App />)
 
@@ -219,7 +234,12 @@ describe('session settings and restore flow', () => {
     expect(screen.getByRole('region', { name: '工具详情' })).toHaveTextContent('Read File')
 
     await user.click(screen.getByRole('button', { name: '技能' }))
-    expect(screen.getByRole('region', { name: 'Skills 即将支持 占位区域' })).toBeInTheDocument()
+    expect(await screen.findByLabelText('技能列表')).toBeInTheDocument()
+    expect(refreshSkills).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('region', { name: '技能详情' })).toHaveTextContent('安装技能')
+    expect(screen.getByRole('region', { name: '技能说明' })).toHaveTextContent('安装说明')
+    await user.click(screen.getByRole('button', { name: '写作助手 暂无简介' }))
+    expect(screen.getByRole('region', { name: '技能详情' })).toHaveTextContent('写作助手')
 
     await user.click(screen.getByRole('button', { name: '角色' }))
     expect(screen.queryByText('Roles 即将支持')).not.toBeInTheDocument()

@@ -10,6 +10,7 @@ import { createPersistenceSaveQueue } from './persistence-save-queue'
 import { installNavigationGuards, resolveRendererLoadTarget } from './renderer-security'
 import { resolveAgentMode } from './agent-mode'
 import { createServiceContainer, type ServiceContainer } from './service-container'
+import { createElectronSkillService, startSkillService } from './skill-service-lifecycle'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -36,6 +37,10 @@ let container: ServiceContainer | null = null
 let disposeIpcHandlers: (() => void) | undefined
 let persistencePath = ''
 let persistenceFlushTimer: NodeJS.Timeout | undefined
+
+function stopSkillAutoScan(): void {
+  (container?.skillService as { stopAutoScan?: () => void } | undefined)?.stopAutoScan?.()
+}
 
 const persistenceSaveQueue = createPersistenceSaveQueue({
   exportBytes: () => {
@@ -109,7 +114,9 @@ async function loadRenderer(window: BrowserWindow): Promise<void> {
 async function bootstrap(): Promise<void> {
   persistencePath = path.join(app.getPath('userData'), 'hesper.sqlite')
   const persistence = await createFilePersistence(persistencePath)
-  container = createServiceContainer({ persistence, agentMode: resolveAgentMode(), credentialCodec: createElectronSafeStorageCredentialCodec(safeStorage) })
+  const skillService = createElectronSkillService()
+  await startSkillService(skillService)
+  container = createServiceContainer({ persistence, agentMode: resolveAgentMode(), credentialCodec: createElectronSafeStorageCredentialCodec(safeStorage), skillService })
   disposeIpcHandlers = registerIpcHandlers({ ipcMain, dialog, container, savePersistence, schedulePersistenceSave, openExternal: (url) => shell.openExternal(url) })
   await savePersistence()
 
@@ -132,6 +139,7 @@ const beforeQuitHandler = createBeforeQuitHandler({
   flushScheduledPersistence,
   savePersistence,
   disposeIpcHandlers: () => {
+    stopSkillAutoScan()
     disposeIpcHandlers?.()
     disposeIpcHandlers = undefined
   },

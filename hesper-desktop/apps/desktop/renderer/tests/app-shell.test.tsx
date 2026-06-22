@@ -18,7 +18,7 @@ function createDeferred<T>() {
   return { promise, resolve, reject }
 }
 
-const { listSessions, createSession, updateTitle, deleteSession, generateTitle, markViewed, listRoles, createRole, updateRole, deleteRole, listMessages, listMessagesByRun, listRuns, listSteps, listWorkerInvocationsByParentRun, filesPreview, enqueue, stopRun, onEvent, getSettings, updateSettings, listProviders, listModels, listTools, setToolEnabled, toolCredentialStatus, saveToolApiKey, deleteToolApiKey, sshKeysList, sshKeysCreate, sshKeysDelete, sshServersList, sshServersCreate, sshServersUpdate, sshServersDelete, minimizeWindow, toggleMaximizeWindow, closeWindow } = vi.hoisted(() => ({
+const { listSessions, createSession, updateTitle, deleteSession, generateTitle, markViewed, listRoles, createRole, updateRole, deleteRole, listSkills, refreshSkills, listMessages, listMessagesByRun, listRuns, listSteps, listWorkerInvocationsByParentRun, filesPreview, enqueue, stopRun, onEvent, getSettings, updateSettings, listProviders, listModels, listTools, setToolEnabled, toolCredentialStatus, saveToolApiKey, deleteToolApiKey, sshKeysList, sshKeysCreate, sshKeysDelete, sshServersList, sshServersCreate, sshServersUpdate, sshServersDelete, minimizeWindow, toggleMaximizeWindow, closeWindow } = vi.hoisted(() => ({
   listSessions: vi.fn(async () => []),
   createSession: vi.fn(async () => ({
     id: 'session-1',
@@ -64,6 +64,8 @@ const { listSessions, createSession, updateTitle, deleteSession, generateTitle, 
   createRole: vi.fn(async (input) => ({ id: 'role-created', description: '', systemPrompt: '', defaultToolIds: [], ...input })),
   updateRole: vi.fn(async (input) => ({ id: input.id, name: input.name ?? 'Role', description: input.description ?? '', systemPrompt: input.systemPrompt ?? '', defaultToolIds: input.defaultToolIds ?? [] })),
   deleteRole: vi.fn(async (id: string) => ({ deleted: true as const, id })),
+  listSkills: vi.fn(async () => []),
+  refreshSkills: vi.fn(async () => []),
   listMessages: vi.fn(async (_sessionId?: string) => []),
   listMessagesByRun: vi.fn(async (_input?: { sessionId: string; runId: string }) => []),
   listRuns: vi.fn(async (_sessionId?: string): Promise<any[]> => []),
@@ -224,6 +226,7 @@ vi.mock('../src/ipc-client', () => ({
     sshKeys: { list: sshKeysList, create: sshKeysCreate, delete: sshKeysDelete },
     sshServers: { list: sshServersList, create: sshServersCreate, update: sshServersUpdate, delete: sshServersDelete },
     roles: { list: listRoles, create: createRole, update: updateRole, delete: deleteRole },
+    skills: { list: listSkills, refresh: refreshSkills },
     window: {
       platform: 'win32',
       minimize: minimizeWindow,
@@ -275,6 +278,8 @@ describe('renderer App', () => {
     createRole.mockClear()
     updateRole.mockClear()
     deleteRole.mockClear()
+    listSkills.mockReset()
+    refreshSkills.mockReset()
     listMessages.mockReset()
     listMessagesByRun.mockReset()
     listRuns.mockReset()
@@ -305,6 +310,8 @@ describe('renderer App', () => {
     closeWindow.mockClear()
     listSessions.mockResolvedValue([])
     listRoles.mockResolvedValue([])
+    listSkills.mockResolvedValue([])
+    refreshSkills.mockResolvedValue([])
     listMessages.mockResolvedValue([])
     listMessagesByRun.mockResolvedValue([])
     listRuns.mockResolvedValue([])
@@ -1989,6 +1996,43 @@ describe('renderer App', () => {
       prompt: 'use configured model',
       modelId: 'deepseek-chat'
     }))
+  })
+
+  it('sends skill mentions with injected prompt while keeping the visible user text optimistic', async () => {
+    const user = userEvent.setup()
+
+    listSkills.mockResolvedValueOnce([
+      { id: 'skill-cn', name: '中文写作', description: '中文润色', source: 'workspace' }
+    ] as any)
+    listSessions.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        title: 'Task skills',
+        status: 'active',
+        workspacePath: 'C:/workspace',
+        defaultModelId: 'mock/hesper-fast',
+        outputMode: 'markdown',
+        createdAt: '2026-06-10T03:00:00.000Z',
+        updatedAt: '2026-06-10T03:00:00.000Z'
+      }
+    ] as any)
+
+    render(<App />)
+
+    const composer = await screen.findByPlaceholderText(/输入消息/)
+    await waitFor(() => expect(listSkills).toHaveBeenCalled())
+    await user.type(composer, '请 @中')
+    await user.keyboard('{Enter}')
+    await user.type(composer, '完成')
+    await user.click(screen.getByRole('button', { name: '发送' }))
+
+    expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: 'session-1',
+      prompt: expect.stringContaining('技能：中文写作'),
+      displayPrompt: '请 @中文写作 完成'
+    }))
+    expect(await screen.findByText('请 @中文写作 完成')).toBeInTheDocument()
+    expect(screen.queryByText(/以下是用户通过 @ 提及的技能/)).not.toBeInTheDocument()
   })
 
   it('removes optimistic user message and shows an error when enqueue fails', async () => {

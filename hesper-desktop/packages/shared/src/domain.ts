@@ -133,7 +133,7 @@ export type Skill = {
   id: string
   name: string
   description?: string
-  source: 'builtin' | 'workspace' | 'project'
+  source: 'builtin' | 'workspace' | 'project' | 'user'
   path?: string
   sourcePath?: string
   prompt?: string

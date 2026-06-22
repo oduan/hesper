@@ -14,6 +14,7 @@ import type {
   ModelProviderDto,
   RunStepDto,
   SessionDto,
+  SkillDto,
   SshKeyDto,
   SshServerDto,
   WorkerAgentInvocationDto,
@@ -97,6 +98,12 @@ export function createFallbackHesperApi(): HesperDesktopApi {
   let nextRunNumber = 1
   let sessions: SessionDto[] = []
   let tools: ToolDto[] = fallbackBuiltinTools.map((tool) => ({ ...tool }))
+  const skills: SkillDto[] = [
+    { id: 'builtin:install-skills', name: 'Install Skills', description: 'Install reusable skills into the user skill directory.', source: 'builtin' },
+    { id: 'builtin:notes', name: 'Notes', source: 'builtin' },
+    { id: 'workspace:notes', name: 'Workspace Notes', source: 'workspace' },
+    { id: 'project:notes', name: 'Project Notes', source: 'project' }
+  ]
   let roles: ManagedRoleDto[] = []
   let sshKeys: SshKeyDto[] = []
   let sshServers: SshServerDto[] = []
@@ -362,6 +369,14 @@ export function createFallbackHesperApi(): HesperDesktopApi {
           warning: 'Secure credential storage is unavailable in renderer fallback mode.'
         }
       }
+    },
+    skills: {
+      list: async () => skills.map((skill) => ({ ...skill })),
+      get: async (id: string) => {
+        const skill = skills.find((candidate) => candidate.id === id)
+        return skill ? { ...skill } : undefined
+      },
+      refresh: async () => skills.map((skill) => ({ ...skill }))
     },
     sshKeys: {
       list: async () => sshKeys.map(cloneSshKey),

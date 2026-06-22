@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type WheelEvent } from 'react'
 import type { AgentRun, LocalFilePreview, Message, RunStep, Session } from '@hesper/shared'
 import { themeTokens } from '../theme'
-import { Composer, type ModelOptionGroup } from './Composer'
+import { Composer, type ComposerSendOptions, type ModelOptionGroup, type SkillOption } from './Composer'
 import { LocalFilePreviewDialog } from './LocalFilePreviewDialog'
 import { MessageBubble } from './MessageBubble'
 import { OutputBlock } from './OutputBlock'
@@ -25,10 +25,11 @@ export type ConversationViewProps = {
   modelId: string
   modelOptions?: string[]
   modelOptionGroups?: ModelOptionGroup[]
+  skillOptions?: SkillOption[]
   draftValue?: string
   running?: boolean
   onDraftChange?: (value: string) => void
-  onSend: (content: string) => void
+  onSend: (content: string, options?: ComposerSendOptions) => void
   onStop?: () => void
   onSelectWorkspace?: () => void
   onModelChange?: (modelId: string) => void
@@ -284,6 +285,7 @@ export function ConversationView({
   modelId,
   modelOptions,
   modelOptionGroups,
+  skillOptions,
   draftValue,
   running = false,
   onDraftChange,
@@ -785,6 +787,7 @@ export function ConversationView({
             modelId={modelId}
             {...(modelOptions ? { modelOptions } : {})}
             {...(modelOptionGroups ? { modelOptionGroups } : {})}
+            {...(skillOptions ? { skillOptions } : {})}
             {...(draftValue !== undefined ? { value: draftValue } : {})}
             running={running}
             {...(onDraftChange ? { onDraftChange } : {})}

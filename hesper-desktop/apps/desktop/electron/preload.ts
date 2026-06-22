@@ -99,6 +99,11 @@ const hesperApi: HesperDesktopApi = {
     saveApiKey: (input) => ipcRenderer.invoke(ipcChannels.toolsSaveApiKey, input),
     deleteApiKey: (input) => ipcRenderer.invoke(ipcChannels.toolsDeleteApiKey, input)
   },
+  skills: {
+    list: () => ipcRenderer.invoke(ipcChannels.skillsList),
+    get: (id) => ipcRenderer.invoke(ipcChannels.skillsGet, id),
+    refresh: () => ipcRenderer.invoke(ipcChannels.skillsRefresh)
+  },
   sshKeys: {
     list: () => ipcRenderer.invoke(ipcChannels.sshKeysList),
     create: (input) => ipcRenderer.invoke(ipcChannels.sshKeysCreate, input),

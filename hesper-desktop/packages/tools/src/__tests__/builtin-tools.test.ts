@@ -4,9 +4,11 @@ import { createBuiltinToolDefinitions } from '../builtin-tools'
 describe('builtin tools', () => {
   it('contains the builtin tool set including SOUL, model listing, Worker Agent management, and SSH tools', () => {
     const tools = createBuiltinToolDefinitions()
-    expect(tools).toHaveLength(33)
+    expect(tools).toHaveLength(35)
     expect(tools.map((tool) => tool.id)).toEqual(
       expect.arrayContaining([
+        'skills.list',
+        'skills.get',
         'models.list-available',
         'soul.get',
         'soul.update',
@@ -44,6 +46,8 @@ describe('builtin tools', () => {
         'roles.find',
         'roles.create',
         'roles.update',
+        'skills.list',
+        'skills.get',
         'models.list-available',
         'soul.get',
         'soul.update',
@@ -356,6 +360,30 @@ describe('builtin tools', () => {
       expect(defaultModelRef.description).not.toContain('does not require defaultModelId')
       expect(defaultModelRef.required).toEqual(['providerId', 'modelId'])
     }
+
+    expect(tools.find((tool) => tool.id === 'skills.list')).toMatchObject({
+      name: 'List Skills',
+      category: 'agent',
+      icon: '🧩',
+      description: expect.stringContaining('available skills'),
+      inputSchema: { type: 'object', properties: {} }
+    })
+    expect(tools.find((tool) => tool.id === 'skills.get')).toMatchObject({
+      name: 'Get Skill',
+      category: 'agent',
+      icon: '🧩',
+      display: {
+        names: { 'zh-CN': '查看技能' },
+        resourceFields: ['id']
+      },
+      inputSchema: {
+        type: 'object',
+        required: ['id'],
+        properties: {
+          id: expect.objectContaining({ type: 'string' })
+        }
+      }
+    })
 
     expect(tools.find((tool) => tool.id === 'models.list-available')).toMatchObject({
       name: 'List Available Models',

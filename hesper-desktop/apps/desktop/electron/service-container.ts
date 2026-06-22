@@ -15,7 +15,8 @@ import {
   createToolCatalogService,
   createToolSettingsService,
   type CredentialVaultCodec,
-  type ProviderOAuthGateway
+  type ProviderOAuthGateway,
+  type SkillService
 } from '@hesper/app-core'
 import type { Persistence } from '@hesper/persistence'
 import type { ModelConfig, ModelProviderConfig, Role, SshExecutionStatus } from '@hesper/shared'
@@ -30,6 +31,7 @@ export type ServiceContainerOptions = {
   credentialCodec?: CredentialVaultCodec
   connectionTestFetch?: typeof fetch
   oauthGateway?: ProviderOAuthGateway
+  skillService?: SkillService
 }
 
 export type ServiceContainer = ReturnType<typeof createServiceContainer>
@@ -195,7 +197,7 @@ export function createServiceContainer(options: ServiceContainerOptions) {
     listRoles: () => baseRoleService.listRoles().map((role) => withMainAgentSoulTools(role)!),
     getRole: (id: string) => withMainAgentSoulTools(baseRoleService.getRole(id))
   }
-  const skillService = createDefaultSkillService()
+  const skillService = options.skillService ?? createDefaultSkillService()
   const toolDefinitions = createBuiltinToolDefinitions()
   const toolCatalogService = createToolCatalogService(toolDefinitions)
   const roleManagementService = createRoleManagementService({ persistence: options.persistence, toolCatalogService })
@@ -276,6 +278,10 @@ export function createServiceContainer(options: ServiceContainerOptions) {
         listRoles: async () => (await listRuntimeRoles()).map(roleToToolRecord),
         createRole: (input) => roleManagementService.createRole(input),
         updateRole: (input) => roleManagementService.updateRole(input)
+      },
+      skillTools: {
+        listSkills: async () => skillService.listSkills(),
+        getSkill: async (id) => skillService.getSkill(id)
       },
       workerAgentTools: {
         spawn: (input, context) => workerAgentService.spawn(input, context),

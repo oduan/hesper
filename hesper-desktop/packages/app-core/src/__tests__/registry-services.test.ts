@@ -25,6 +25,8 @@ describe('registry services', () => {
       'roles.find',
       'roles.create',
       'roles.update',
+      'skills.list',
+      'skills.get',
       'models.list-available',
       'agent.spawn-worker-agent',
       'agent.list-worker-agents',
@@ -64,7 +66,20 @@ describe('registry services', () => {
       'web.fetch-url',
       'web.search'
     ])
+    expect(roles.find((role) => role.id === 'main-agent')?.allowedSkillIds).toEqual([
+      'builtin:notes',
+      'builtin:files',
+      'builtin:web',
+      'builtin:install-skills'
+    ])
+    expect(roles.find((role) => role.id === 'main-agent')?.defaultSkillIds).toEqual([
+      'builtin:notes',
+      'builtin:files',
+      'builtin:web',
+      'builtin:install-skills'
+    ])
     expect(skills.map((skill) => skill.id)).toEqual([
+      'builtin:install-skills',
       'builtin:notes',
       'workspace:notes',
       'project:notes'

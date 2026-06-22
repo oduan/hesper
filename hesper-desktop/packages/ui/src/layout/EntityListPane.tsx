@@ -12,6 +12,12 @@ export type RoleListItem = {
   description?: string
 }
 
+export type SkillListItem = {
+  id: string
+  name: string
+  description?: string
+}
+
 export type SettingsCategory = 'ai' | 'appearance' | 'ssh' | 'soul'
 
 export type EntityListPaneProps = {
@@ -25,12 +31,15 @@ export type EntityListPaneProps = {
   pendingToolIds?: string[]
   roles?: RoleListItem[]
   activeRoleId?: string
+  skills?: SkillListItem[]
+  activeSkillId?: string
   roleSelectionDisabled?: boolean
   activeSettingsCategory?: SettingsCategory
   onSelectSession?: (sessionId: string) => void
   onSelectTool?: (toolId: string) => void
   onToggleToolEnabled?: (toolId: string, enabled: boolean) => void
   onSelectRole?: (roleId: string) => void
+  onSelectSkill?: (skillId: string) => void
   onSelectSettingsCategory?: (category: SettingsCategory) => void
   onRenameSession?: (sessionId: string, title: string) => void
   onRegenerateSessionTitle?: (sessionId: string, sessionIds?: string[]) => void
@@ -123,19 +132,22 @@ export function EntityListPane({
   pendingToolIds = [],
   roles = [],
   activeRoleId,
+  skills = [],
+  activeSkillId,
   roleSelectionDisabled = false,
   activeSettingsCategory = 'ai',
   onSelectSession,
   onSelectTool,
   onToggleToolEnabled,
   onSelectRole,
+  onSelectSkill,
   onSelectSettingsCategory,
   onRenameSession,
   onRegenerateSessionTitle,
   onDeleteSession,
   onDeleteRole
 }: EntityListPaneProps) {
-  const heading = title ?? (activeSection === 'sessions' ? '所有会话' : activeSection === 'settings' ? '设置' : activeSection === 'tools' ? '工具' : activeSection === 'roles' ? '角色' : '列表')
+  const heading = title ?? (activeSection === 'sessions' ? '所有会话' : activeSection === 'settings' ? '设置' : activeSection === 'tools' ? '工具' : activeSection === 'roles' ? '角色' : activeSection === 'skills' ? '技能' : '列表')
   const runningSessionIdSet = new Set(runningSessionIds)
   const pendingToolIdSet = new Set(pendingToolIds)
   const [sessionMenu, setSessionMenu] = useState<SessionMenuState>()
@@ -473,6 +485,33 @@ export function EntityListPane({
             <div style={{ margin: 'auto', color: themeTokens.color.textMuted, fontSize: themeTokens.typography.body, textAlign: 'center' }}>暂无角色</div>
           )}
         </div>
+      ) : activeSection === 'skills' ? (
+        skills.length > 0 ? (
+          <ul aria-label="技能列表" className="hesper-theme-scrollbar" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 4, overflow: 'auto', minHeight: 0 }}>
+            {skills.map((skill) => {
+              const isActive = skill.id === activeSkillId
+              const skillDescription = skill.description || '暂无简介'
+              return (
+                <li key={skill.id}>
+                  <button
+                    type="button"
+                    className={`hesper-list-row${isActive ? ' is-active' : ''}`}
+                    aria-current={isActive ? 'page' : undefined}
+                    aria-selected={isActive ? 'true' : undefined}
+                    aria-label={`${skill.name} ${skillDescription}`.trim()}
+                    onClick={() => onSelectSkill?.(skill.id)}
+                    style={roleRowStyle}
+                  >
+                    <span style={roleNameStyle}>{skill.name}</span>
+                    <span style={roleDescriptionStyle}>{skillDescription}</span>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        ) : (
+          <div style={{ margin: 'auto', color: themeTokens.color.textMuted, fontSize: themeTokens.typography.body, textAlign: 'center' }}>暂无技能</div>
+        )
       ) : activeSection === 'tools' ? (
         tools.length > 0 ? (
           <ul aria-label="工具列表" className="hesper-theme-scrollbar" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 4, overflow: 'auto', minHeight: 0 }}>

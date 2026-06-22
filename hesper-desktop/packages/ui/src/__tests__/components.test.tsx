@@ -262,6 +262,36 @@ describe('ui components', () => {
     expect(onSelectRole).toHaveBeenCalledWith('role-search')
   })
 
+  it('renders skill list rows with descriptions and selection', async () => {
+    const user = userEvent.setup()
+    const onSelectSkill = vi.fn()
+
+    render(
+      <AppShell
+        sessions={[]}
+        activeSection="skills"
+        title="技能"
+        skills={[
+          { id: 'builtin:install-skills', name: '安装技能', description: '安装可复用技能' },
+          { id: 'workspace:writer', name: '写作助手' }
+        ]}
+        activeSkillId="builtin:install-skills"
+        onSelectSkill={onSelectSkill}
+      >
+        <div>Skill detail</div>
+      </AppShell>
+    )
+
+    expect(screen.getByRole('button', { name: '技能' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByLabelText('技能列表')).toHaveClass('hesper-theme-scrollbar')
+    expect(screen.getByRole('button', { name: '安装技能 安装可复用技能' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByText('安装可复用技能')).toBeInTheDocument()
+    expect(screen.getByText('暂无简介')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '写作助手 暂无简介' }))
+    expect(onSelectSkill).toHaveBeenCalledWith('workspace:writer')
+  })
+
   it('renders fallback description for roles without description', async () => {
     const user = userEvent.setup()
     const onSelectRole = vi.fn()
@@ -802,6 +832,93 @@ describe('ui components', () => {
     await user.click(openAiModel)
 
     expect(onModelChange).toHaveBeenCalledWith('gpt-4o')
+  })
+
+  it('filters and inserts skill mentions from an independent @ token', async () => {
+    const user = userEvent.setup()
+    const onSend = vi.fn()
+
+    render(
+      <Composer
+        workspacePath="C:/dev/hesper"
+        modelId="mock/hesper-fast"
+        skillOptions={[
+          { id: 'skill-research', name: 'Research', description: 'Find sources' },
+          { id: 'skill-cn', name: '中文写作', description: '中文润色' },
+          { id: 'skill-code', name: 'Code Review' }
+        ]}
+        onSend={onSend}
+      />
+    )
+
+    const textarea = screen.getByLabelText('消息输入框')
+    await user.type(textarea, '请用 @中')
+
+    const listbox = screen.getByRole('listbox', { name: '技能提及建议' })
+    const cnOption = within(listbox).getByRole('option', { name: '选择技能 中文写作：中文润色' })
+    expect(cnOption).toHaveTextContent(/^中文写作$/)
+    expect(within(listbox).queryByText('中文润色')).not.toBeInTheDocument()
+    expect(within(listbox).queryByRole('option', { name: /Research/ })).not.toBeInTheDocument()
+
+    await user.keyboard('{Enter}')
+    expect(textarea).toHaveValue('请用 @中文写作 ')
+    expect(textarea).toHaveFocus()
+
+    await user.keyboard('完成{Control>}{Enter}{/Control}')
+    expect(onSend).toHaveBeenCalledWith('请用 @中文写作 完成', expect.objectContaining({
+      prompt: expect.stringContaining('技能：中文写作'),
+      displayPrompt: '请用 @中文写作 完成'
+    }))
+  })
+
+  it('moves skill mention selection with arrow keys and closes suggestions with Escape', async () => {
+    const user = userEvent.setup()
+
+    render(
+      <Composer
+        workspacePath="C:/dev/hesper"
+        modelId="mock/hesper-fast"
+        skillOptions={[
+          { id: 'skill-research', name: 'Research' },
+          { id: 'skill-code', name: 'Code Review' }
+        ]}
+        onSend={() => undefined}
+      />
+    )
+
+    const textarea = screen.getByLabelText('消息输入框')
+    await user.type(textarea, '@')
+    expect(screen.getByRole('option', { name: '选择技能 Research' })).toHaveAttribute('aria-selected', 'true')
+
+    await user.keyboard('{ArrowDown}{Enter}')
+    expect(textarea).toHaveValue('@Code Review ')
+
+    await user.clear(textarea)
+    await user.type(textarea, '@')
+    expect(screen.getByRole('listbox', { name: '技能提及建议' })).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('listbox', { name: '技能提及建议' })).not.toBeInTheDocument()
+  })
+
+  it('keeps literal @ characters out of skill mention suggestions and injection', async () => {
+    const user = userEvent.setup()
+    const onSend = vi.fn()
+
+    render(
+      <Composer
+        workspacePath="C:/dev/hesper"
+        modelId="mock/hesper-fast"
+        skillOptions={[{ id: 'skill-research', name: 'Research', description: 'Find sources' }]}
+        onSend={onSend}
+      />
+    )
+
+    const textarea = screen.getByLabelText('消息输入框')
+    await user.type(textarea, 'email@example.com @missing')
+    expect(screen.queryByRole('listbox', { name: '技能提及建议' })).not.toBeInTheDocument()
+
+    await user.keyboard('{Control>}{Enter}{/Control}')
+    expect(onSend).toHaveBeenCalledWith('email@example.com @missing')
   })
 
   it('renders a stop button instead of send while the session is running', async () => {
