@@ -249,7 +249,7 @@ function baseSystemLines(options: {
   role?: Role | undefined
 }): string[] {
   return [
-    options.mode === 'main' ? 'You are the hesper desktop Agent.' : 'You are a constrained hesper Worker Agent.',
+    options.mode === 'main' ? 'You are the Hesper Agent.' : 'You are a constrained Hesper Worker Agent.',
     `Session: ${sanitizeText(options.session.id)}`,
     `Workspace: ${sanitizeText(options.session.workspacePath ?? 'not selected')}`,
     `Output mode: ${sanitizeText(options.session.outputMode)}`,

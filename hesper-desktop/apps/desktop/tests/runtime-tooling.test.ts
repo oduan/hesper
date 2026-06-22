@@ -7,7 +7,10 @@ import desktopPackage from '../package.json'
 
 const appRoot = path.resolve(import.meta.dirname, '..')
 const ipcContractPath = path.join(appRoot, 'electron', 'ipc-contract.ts')
+const mainProcessPath = path.join(appRoot, 'electron', 'main.ts')
 const preloadPath = path.join(appRoot, 'electron', 'preload.cjs')
+const rendererFallbackPath = path.join(appRoot, 'renderer', 'src', 'main.ts')
+const rendererIndexPath = path.join(appRoot, 'renderer', 'index.html')
 const startElectronDevPath = path.join(appRoot, 'scripts', 'start-electron-dev.mjs')
 const rendererViteConfigPath = path.join(appRoot, 'renderer', 'vite.config.ts')
 const defaultRendererDevServerUrl = 'http://127.0.0.1:5273'
@@ -160,6 +163,21 @@ describe('desktop runtime tooling', () => {
     expect(startElectronDevSource).toContain('electron')
   })
 
+  it('uses Hesper as the user-visible application name', () => {
+    const mainProcessSource = fs.readFileSync(mainProcessPath, 'utf8')
+    const rendererFallbackSource = fs.readFileSync(rendererFallbackPath, 'utf8')
+    const rendererIndexSource = fs.readFileSync(rendererIndexPath, 'utf8')
+    const startElectronDevSource = fs.readFileSync(startElectronDevPath, 'utf8')
+
+    expect(desktopPackage.productName).toBe('Hesper')
+    expect(rendererIndexSource).toContain('<title>Hesper</title>')
+    expect(rendererFallbackSource).toContain('>Hesper shell</h1>')
+    expect(rendererFallbackSource).not.toContain('hesper desktop')
+    expect(startElectronDevSource).toContain("const expectedRendererTitle = 'Hesper'")
+    expect(startElectronDevSource).not.toContain('hesper desktop')
+    expect(mainProcessSource).toContain("app.setName('Hesper')")
+  })
+
   it('fails dev startup instead of opening another app on the renderer dev port', () => {
     const startElectronDevSource = fs.readFileSync(startElectronDevPath, 'utf8')
     const rendererViteConfigSource = fs.readFileSync(rendererViteConfigPath, 'utf8')
@@ -167,6 +185,6 @@ describe('desktop runtime tooling', () => {
     expect(rendererViteConfigSource).toContain('strictPort: true')
     expect(rendererViteConfigSource).toContain(`port: ${defaultRendererDevServerPort}`)
     expect(startElectronDevSource).toContain('assertRendererDevServer')
-    expect(startElectronDevSource).toContain('hesper desktop')
+    expect(startElectronDevSource).toContain("const expectedRendererTitle = 'Hesper'")
   })
 })

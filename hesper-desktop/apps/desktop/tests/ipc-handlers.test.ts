@@ -56,7 +56,7 @@ describe('desktop service container', () => {
       skills: container.skillService.listSkills(),
       tools: container.toolCatalogService.list(),
       assignableWorkerAgentRoles: container.roleService.listRoles()
-    }).systemPrompt).toContain('hesper desktop Agent')
+    }).systemPrompt).toContain('Hesper Agent')
   })
 
   it('injects role management tools into the production tool runner', async () => {

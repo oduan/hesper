@@ -116,7 +116,7 @@ describe('PromptAssemblyService', () => {
       assignableWorkerAgentRoles: [reviewerRole, dangerousRole]
     })
 
-    expect(output.systemPrompt).toContain('hesper desktop Agent')
+    expect(output.systemPrompt).toContain('Hesper Agent')
     expect(output.systemPrompt).toContain('Workspace: "C:/workspace/hesper"')
     expect(output.systemPrompt).toContain('Role: "Main Agent"')
     expect(output.systemPrompt).toContain('You coordinate coding work.')

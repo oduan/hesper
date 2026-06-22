@@ -19,6 +19,8 @@ const preloadPath = path.resolve(__dirname, 'preload.cjs')
 const windowsIconPath = path.resolve(__dirname, '../assets/hesper-icon.ico')
 const fallbackIconPath = path.resolve(__dirname, '../assets/hesper-icon.png')
 
+app.setName('Hesper')
+
 function resolveAppIconPath(): string | undefined {
   const iconPath = process.platform === 'win32' ? windowsIconPath : fallbackIconPath
   return fs.existsSync(iconPath) ? iconPath : undefined
