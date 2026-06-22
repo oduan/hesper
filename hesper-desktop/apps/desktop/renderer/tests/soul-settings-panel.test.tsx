@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SoulSettingsPanel } from '../src/soul-settings-panel'
 
@@ -15,10 +16,55 @@ describe('SoulSettingsPanel', () => {
     vi.useRealTimers()
   })
 
-  it('debounces idle saves until 300ms elapses', () => {
+  it('keeps the textarea read-only until edit is clicked', async () => {
+    vi.useRealTimers()
+    const onUpdate = vi.fn()
+    const user = userEvent.setup({ delay: null })
+
+    render(<SoulSettingsPanel settings={{ soul: '初始身份' }} onUpdate={onUpdate} />)
+
+    const textarea = screen.getByLabelText('身份设定')
+    expect(textarea).toHaveAttribute('readonly')
+    expect(textarea).toHaveAttribute('aria-readonly', 'true')
+
+    await user.type(textarea, '新的身份')
+
+    expect(textarea).toHaveValue('初始身份')
+    expect(onUpdate).not.toHaveBeenCalled()
+  })
+
+  it('shows an edit button next to the label and enables editing after click', async () => {
+    vi.useRealTimers()
+    const onUpdate = vi.fn()
+    const user = userEvent.setup({ delay: null })
+
+    render(<SoulSettingsPanel settings={{ soul: '' }} onUpdate={onUpdate} />)
+
+    const editButton = screen.getByRole('button', { name: '编辑' })
+    const textarea = screen.getByLabelText('身份设定')
+
+    expect(editButton).toHaveAccessibleName('编辑')
+    expect(textarea).toHaveAttribute('readonly')
+    expect(textarea).toHaveAttribute('aria-readonly', 'true')
+
+    await user.click(editButton)
+
+    expect(textarea).not.toHaveAttribute('readonly')
+    expect(textarea).toHaveAttribute('aria-readonly', 'false')
+
+    await user.type(textarea, '新的身份')
+    expect(textarea).toHaveValue('新的身份')
+
+    await waitFor(() => expect(onUpdate).toHaveBeenCalledWith({ soul: '新的身份' }))
+    expect(onUpdate).toHaveBeenCalledTimes(1)
+  })
+
+  it('debounces idle saves until 300ms elapses after editing is enabled', () => {
     const onUpdate = vi.fn()
 
     render(<SoulSettingsPanel settings={{ soul: '' }} onUpdate={onUpdate} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }))
 
     const textarea = screen.getByLabelText('身份设定')
     fireEvent.change(textarea, { target: { value: '新的身份' } })
@@ -42,6 +88,8 @@ describe('SoulSettingsPanel', () => {
     const latestOnUpdate = vi.fn()
 
     const { rerender } = render(<SoulSettingsPanel settings={{ soul: '' }} onUpdate={firstOnUpdate} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }))
 
     const textarea = screen.getByLabelText('身份设定')
     fireEvent.change(textarea, { target: { value: '新的身份' } })
@@ -71,6 +119,8 @@ describe('SoulSettingsPanel', () => {
 
     render(<SoulSettingsPanel settings={{ soul: '' }} onUpdate={onUpdate} />)
 
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }))
+
     const textarea = screen.getByLabelText('身份设定')
     fireEvent.change(textarea, { target: { value: '新的身份' } })
     fireEvent.blur(textarea)
@@ -88,6 +138,8 @@ describe('SoulSettingsPanel', () => {
     const onUpdate = vi.fn()
 
     const { unmount } = render(<SoulSettingsPanel settings={{ soul: '' }} onUpdate={onUpdate} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }))
 
     const textarea = screen.getByLabelText('身份设定')
     fireEvent.change(textarea, { target: { value: '新的身份' } })
@@ -123,6 +175,8 @@ describe('SoulSettingsPanel', () => {
 
     const { rerender } = render(<SoulSettingsPanel settings={{ soul: '旧身份' }} onUpdate={onUpdate} />)
 
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }))
+
     const textarea = screen.getByLabelText('身份设定')
     expect(textarea).toHaveValue('旧身份')
 
@@ -150,23 +204,24 @@ describe('SoulSettingsPanel', () => {
     expect(onUpdate).toHaveBeenLastCalledWith({ soul: '第二次编辑' })
   })
 
-  it('renders the soul field without card chrome or textarea inset', () => {
+  it('renders the soul field without borders while keeping a filled, non-resizable textarea', () => {
     render(<SoulSettingsPanel settings={{ soul: '' }} onUpdate={vi.fn()} />)
 
     const textarea = screen.getByLabelText('身份设定')
     const textareaStyle = window.getComputedStyle(textarea)
     expect(textareaStyle.borderTopStyle).toBe('none')
-    expect(['transparent', 'rgba(0, 0, 0, 0)']).toContain(textareaStyle.backgroundColor)
+    expect(['transparent', 'rgba(0, 0, 0, 0)']).not.toContain(textareaStyle.backgroundColor)
     expect(textareaStyle.paddingLeft).toBe('0px')
     expect(textareaStyle.paddingRight).toBe('0px')
+    expect(textareaStyle.resize).toBe('none')
 
-    const fieldWrapper = screen.getByText('身份设定').closest('label')?.parentElement
+    const fieldWrapper = textarea.parentElement
     expect(fieldWrapper).not.toBeNull()
 
     const fieldWrapperStyle = window.getComputedStyle(fieldWrapper as HTMLElement)
     expect(fieldWrapperStyle.borderTopStyle).toBe('none')
     expect(['transparent', 'rgba(0, 0, 0, 0)']).toContain(fieldWrapperStyle.backgroundColor)
-    expect(fieldWrapperStyle.paddingLeft).toBe('0px')
-    expect(fieldWrapperStyle.paddingRight).toBe('0px')
+    expect(['0px', '0']).toContain(fieldWrapperStyle.paddingLeft)
+    expect(['0px', '0']).toContain(fieldWrapperStyle.paddingRight)
   })
 })

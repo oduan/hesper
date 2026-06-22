@@ -12,12 +12,14 @@ export type SoulSettingsPanelProps = {
 
 export function SoulSettingsPanel({ settings, error, onUpdate }: SoulSettingsPanelProps) {
   const [draft, setDraft] = useState(settings.soul)
+  const [isEditing, setIsEditing] = useState(false)
   const draftRef = useRef(settings.soul)
   const savedSoulRef = useRef(settings.soul)
   const lastSeenSettingsSoulRef = useRef(settings.soul)
   const lastSubmittedSoulRef = useRef(settings.soul)
   const saveTimeoutRef = useRef<number | null>(null)
   const onUpdateRef = useRef(onUpdate)
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
 
   const clearPendingSave = useCallback(() => {
     if (saveTimeoutRef.current !== null) {
@@ -37,6 +39,10 @@ export function SoulSettingsPanel({ settings, error, onUpdate }: SoulSettingsPan
     lastSubmittedSoulRef.current = nextSoul
     void onUpdateRef.current({ soul: nextSoul })
   }, [clearPendingSave])
+
+  const handleEditClick = useCallback(() => {
+    setIsEditing(true)
+  }, [])
 
   useEffect(() => {
     onUpdateRef.current = onUpdate
@@ -70,6 +76,14 @@ export function SoulSettingsPanel({ settings, error, onUpdate }: SoulSettingsPan
     return clearPendingSave
   }, [clearPendingSave, draft, flushDraft])
 
+  useEffect(() => {
+    if (!isEditing) {
+      return
+    }
+
+    textareaRef.current?.focus()
+  }, [isEditing])
+
   useEffect(() => clearPendingSave, [clearPendingSave])
 
   return (
@@ -82,18 +96,37 @@ export function SoulSettingsPanel({ settings, error, onUpdate }: SoulSettingsPan
       {error ? <p role="alert" style={errorStyle}>设置保存失败：{error}</p> : null}
 
       <div style={cardStyle}>
-        <label style={fieldStyle}>
-          <span style={labelStyle}>身份设定</span>
+        <div style={fieldStyle}>
+          <div style={fieldHeaderStyle}>
+            <span style={labelStyle}>身份设定</span>
+            <button
+              type="button"
+              aria-label="编辑"
+              onClick={handleEditClick}
+              style={editButtonStyle}
+            >
+              编辑
+            </button>
+          </div>
           <textarea
+            ref={textareaRef}
             aria-label="身份设定"
+            aria-readonly={!isEditing}
+            readOnly={!isEditing}
             value={draft}
-            onChange={(event) => setDraft(event.target.value)}
+            onChange={(event) => {
+              if (!isEditing) {
+                return
+              }
+
+              setDraft(event.target.value)
+            }}
             onBlur={flushDraft}
             placeholder="写下主 Agent 的身份、口吻、原则或长期行为偏好。"
             rows={8}
             style={textareaStyle}
           />
-        </label>
+        </div>
       </div>
     </section>
   )
@@ -141,10 +174,28 @@ const fieldStyle: CSSProperties = {
   gap: 8
 }
 
+const fieldHeaderStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: darkTheme.spacing.md
+}
+
 const labelStyle: CSSProperties = {
   fontSize: 13,
   color: 'var(--hesper-color-text-muted, #9aa5ce)',
   fontWeight: 700
+}
+
+const editButtonStyle: CSSProperties = {
+  border: `1px solid ${darkTheme.color.border}`,
+  borderRadius: darkTheme.radius.md,
+  background: darkTheme.color.surface,
+  color: darkTheme.color.text,
+  padding: '4px 10px',
+  font: 'inherit',
+  lineHeight: 1.4,
+  cursor: 'pointer'
 }
 
 const textareaStyle: CSSProperties = {
@@ -152,11 +203,11 @@ const textareaStyle: CSSProperties = {
   boxSizing: 'border-box',
   border: 'none',
   borderRadius: 0,
-  background: 'transparent',
+  backgroundColor: darkTheme.color.surfaceMuted,
   color: 'var(--hesper-color-text, #c0caf5)',
-  padding: 0,
+  padding: '12px 0',
   minHeight: 160,
-  resize: 'vertical',
+  resize: 'none',
   fontFamily: 'inherit',
   lineHeight: 1.5
 }
