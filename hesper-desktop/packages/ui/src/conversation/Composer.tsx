@@ -37,6 +37,16 @@ type MentionToken = {
   query: string
 }
 
+type SkillMentionRange = {
+  start: number
+  end: number
+  skill: SkillOption
+}
+
+type ComposerSegment =
+  | { kind: 'text'; text: string }
+  | { kind: 'skill'; text: string; skill: SkillOption }
+
 const defaultModelOptions = ['mock/hesper-fast', 'openai/gpt-4o', 'anthropic/claude-sonnet-4-20250514']
 
 export function Composer({
@@ -58,11 +68,16 @@ export function Composer({
   const [selectionStart, setSelectionStart] = useState(0)
   const [activeSkillIndex, setActiveSkillIndex] = useState(0)
   const [dismissedMentionStart, setDismissedMentionStart] = useState<number>()
+  const [textareaScrollTop, setTextareaScrollTop] = useState(0)
+  const [selectedSkillMentions, setSelectedSkillMentions] = useState<SkillMentionRange[]>([])
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const value = controlledValue ?? internalValue
   const lastHandledSendSignalRef = useRef(0)
   const canSend = useMemo(() => value.trim().length > 0, [value])
   const mentionToken = useMemo(() => findMentionToken(value, selectionStart), [selectionStart, value])
+  const skillMentionRanges = useMemo(() => normalizeSkillMentionRanges(value, selectedSkillMentions), [selectedSkillMentions, value])
+  const composerSegments = useMemo(() => createComposerSegments(value, skillMentionRanges), [skillMentionRanges, value])
+  const hasSkillMentionPills = skillMentionRanges.length > 0
   const filteredSkills = useMemo(() => {
     if (!mentionToken || skillOptions.length === 0) return []
     const query = mentionToken.query.toLocaleLowerCase()
@@ -70,9 +85,14 @@ export function Composer({
   }, [mentionToken, skillOptions])
   const showSkillMenu = Boolean(mentionToken && mentionToken.start !== dismissedMentionStart && filteredSkills.length > 0)
 
-  const setComposerValue = useCallback((nextValue: string) => {
+  const setComposerValue = useCallback((nextValue: string, nextSkillMentions?: SkillMentionRange[]) => {
     if (controlledValue === undefined) {
       setInternalValue(nextValue)
+    }
+    if (nextSkillMentions !== undefined) {
+      setSelectedSkillMentions(nextSkillMentions)
+    } else if (nextValue.length === 0) {
+      setSelectedSkillMentions([])
     }
     onDraftChange?.(nextValue)
     setDismissedMentionStart(undefined)
@@ -94,14 +114,36 @@ export function Composer({
 
   const confirmSkill = useCallback((skill: SkillOption) => {
     if (!mentionToken) return
-    const replacement = `@${skill.name} `
+    const mentionText = createSkillMentionText(skill)
+    const replacement = `${mentionText} `
     const nextValue = `${value.slice(0, mentionToken.start)}${replacement}${value.slice(mentionToken.end)}`
     const cursor = mentionToken.start + replacement.length
-    setComposerValue(nextValue)
+    const shiftedMentions = adjustSkillMentionRanges(value, nextValue, skillMentionRanges, mentionToken.start, mentionToken.end)
+    const nextSkillMentions = insertSkillMentionRange(shiftedMentions, {
+      start: mentionToken.start,
+      end: mentionToken.start + mentionText.length,
+      skill
+    })
+    setComposerValue(nextValue, nextSkillMentions)
     setActiveSkillIndex(0)
     setDismissedMentionStart(undefined)
     focusTextarea(cursor)
-  }, [focusTextarea, mentionToken, setComposerValue, value])
+  }, [focusTextarea, mentionToken, setComposerValue, skillMentionRanges, value])
+
+  const deleteSkillMentionAtSelection = useCallback((key: 'Backspace' | 'Delete') => {
+    const textarea = textareaRef.current
+    if (!textarea) return false
+
+    const deletion = createSkillMentionDeletion(value, textarea.selectionStart, textarea.selectionEnd, key, skillMentionRanges)
+    if (!deletion) return false
+
+    const nextSkillMentions = adjustSkillMentionRanges(value, deletion.value, skillMentionRanges, deletion.start, deletion.end)
+    setComposerValue(deletion.value, nextSkillMentions)
+    setActiveSkillIndex(0)
+    setDismissedMentionStart(undefined)
+    focusTextarea(deletion.cursor)
+    return true
+  }, [focusTextarea, setComposerValue, skillMentionRanges, value])
 
   const handleSend = useCallback(() => {
     if (running) {
@@ -120,7 +162,7 @@ export function Composer({
     } else {
       onSend(content)
     }
-    setComposerValue('')
+    setComposerValue('', [])
     setActiveSkillIndex(0)
   }, [onSend, onStop, running, setComposerValue, skillOptions, value])
 
@@ -178,52 +220,72 @@ export function Composer({
           })}
         </div>
       ) : null}
-      <textarea
-        ref={textareaRef}
-        className="hesper-theme-scrollbar"
-        aria-label="消息输入框"
-        placeholder="输入消息，支持 @skills"
-        rows={4}
-        value={value}
-        onChange={(event: ChangeEvent<HTMLTextAreaElement>) => {
-          setComposerValue(event.target.value)
-          setSelectionStart(event.target.selectionStart)
-        }}
-        onClick={updateSelectionStart}
-        onKeyUp={updateSelectionStart}
-        onSelect={updateSelectionStart}
-        onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
-          if (showSkillMenu) {
-            if (event.key === 'ArrowDown') {
+      <div style={editorWrapperStyle}>
+        {hasSkillMentionPills ? (
+          <div aria-hidden="true" style={{ ...highlightMirrorStyle, transform: `translateY(-${textareaScrollTop}px)` }}>
+            {composerSegments.map((segment, index) => segment.kind === 'skill' ? (
+              <span key={`${segment.skill.id}-${index}`} data-skill-mention-pill="true" style={skillMentionPillStyle}>{segment.text}</span>
+            ) : (
+              <span key={`text-${index}`}>{segment.text}</span>
+            ))}
+          </div>
+        ) : null}
+        <textarea
+          ref={textareaRef}
+          className="hesper-theme-scrollbar"
+          aria-label="消息输入框"
+          placeholder="输入消息，支持 @skills"
+          rows={4}
+          value={value}
+          onChange={(event: ChangeEvent<HTMLTextAreaElement>) => {
+            const nextValue = event.target.value
+            setComposerValue(nextValue, adjustSkillMentionRanges(value, nextValue, skillMentionRanges))
+            setSelectionStart(event.target.selectionStart)
+          }}
+          onClick={updateSelectionStart}
+          onKeyUp={updateSelectionStart}
+          onSelect={updateSelectionStart}
+          onScroll={(event) => setTextareaScrollTop(event.currentTarget.scrollTop)}
+          onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
+            if ((event.key === 'Backspace' || event.key === 'Delete') && deleteSkillMentionAtSelection(event.key)) {
               event.preventDefault()
-              setActiveSkillIndex((index) => (index + 1) % filteredSkills.length)
               return
             }
-            if (event.key === 'ArrowUp') {
-              event.preventDefault()
-              setActiveSkillIndex((index) => (index <= 0 ? filteredSkills.length - 1 : index - 1))
-              return
+            if (showSkillMenu) {
+              if (event.key === 'ArrowDown') {
+                event.preventDefault()
+                setActiveSkillIndex((index) => (index + 1) % filteredSkills.length)
+                return
+              }
+              if (event.key === 'ArrowUp') {
+                event.preventDefault()
+                setActiveSkillIndex((index) => (index <= 0 ? filteredSkills.length - 1 : index - 1))
+                return
+              }
+              if (event.key === 'Enter' && !event.metaKey && !event.ctrlKey && !event.shiftKey) {
+                event.preventDefault()
+                const skill = filteredSkills[activeSkillIndex]
+                if (skill) confirmSkill(skill)
+                return
+              }
+              if (event.key === 'Escape') {
+                event.preventDefault()
+                setDismissedMentionStart(mentionToken?.start)
+                setActiveSkillIndex(0)
+                return
+              }
             }
-            if (event.key === 'Enter' && !event.metaKey && !event.ctrlKey && !event.shiftKey) {
+            if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
               event.preventDefault()
-              const skill = filteredSkills[activeSkillIndex]
-              if (skill) confirmSkill(skill)
-              return
+              handleSend()
             }
-            if (event.key === 'Escape') {
-              event.preventDefault()
-              setDismissedMentionStart(mentionToken?.start)
-              setActiveSkillIndex(0)
-              return
-            }
-          }
-          if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-            event.preventDefault()
-            handleSend()
-          }
-        }}
-        style={textareaStyle}
-      />
+          }}
+          style={{
+            ...textareaStyle,
+            ...(hasSkillMentionPills ? transparentTextareaStyle : {})
+          }}
+        />
+      </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: themeTokens.spacing.md, alignItems: 'center', flexWrap: 'wrap' }}>
         <button
           type="button"
@@ -291,6 +353,116 @@ function findMentionToken(value: string, caret: number): MentionToken | undefine
   }
 }
 
+function createSkillMentionText(skill: SkillOption): string {
+  return `@${skill.name}`
+}
+
+function normalizeSkillMentionRanges(content: string, ranges: SkillMentionRange[]): SkillMentionRange[] {
+  return ranges
+    .filter((range) => content.slice(range.start, range.end) === createSkillMentionText(range.skill))
+    .sort((left, right) => left.start - right.start)
+}
+
+function insertSkillMentionRange(ranges: SkillMentionRange[], inserted: SkillMentionRange): SkillMentionRange[] {
+  return [...ranges.filter((range) => inserted.start >= range.end || inserted.end <= range.start), inserted]
+    .sort((left, right) => left.start - right.start)
+}
+
+function adjustSkillMentionRanges(
+  previousValue: string,
+  nextValue: string,
+  ranges: SkillMentionRange[],
+  explicitChangeStart?: number,
+  explicitChangeEnd?: number
+): SkillMentionRange[] {
+  if (ranges.length === 0) return []
+
+  const change = explicitChangeStart === undefined || explicitChangeEnd === undefined
+    ? findTextChangeBounds(previousValue, nextValue)
+    : { start: explicitChangeStart, oldEnd: explicitChangeEnd }
+  const delta = nextValue.length - previousValue.length
+
+  const adjusted = ranges.flatMap((range): SkillMentionRange[] => {
+    if (change.oldEnd <= range.start) {
+      return [{ ...range, start: range.start + delta, end: range.end + delta }]
+    }
+    if (change.start >= range.end) {
+      return [range]
+    }
+    return []
+  })
+
+  return normalizeSkillMentionRanges(nextValue, adjusted)
+}
+
+function findTextChangeBounds(previousValue: string, nextValue: string): { start: number; oldEnd: number } {
+  let start = 0
+  while (start < previousValue.length && start < nextValue.length && previousValue[start] === nextValue[start]) {
+    start += 1
+  }
+
+  let previousEnd = previousValue.length
+  let nextEnd = nextValue.length
+  while (previousEnd > start && nextEnd > start && previousValue[previousEnd - 1] === nextValue[nextEnd - 1]) {
+    previousEnd -= 1
+    nextEnd -= 1
+  }
+
+  return { start, oldEnd: previousEnd }
+}
+
+function createComposerSegments(content: string, ranges: SkillMentionRange[]): ComposerSegment[] {
+  if (ranges.length === 0) return [{ kind: 'text', text: content }]
+
+  const segments: ComposerSegment[] = []
+  let cursor = 0
+  for (const range of ranges) {
+    if (range.start > cursor) {
+      segments.push({ kind: 'text', text: content.slice(cursor, range.start) })
+    }
+    segments.push({ kind: 'skill', text: content.slice(range.start, range.end), skill: range.skill })
+    cursor = range.end
+  }
+  if (cursor < content.length) {
+    segments.push({ kind: 'text', text: content.slice(cursor) })
+  }
+  return segments
+}
+
+function createSkillMentionDeletion(
+  content: string,
+  selectionStart: number,
+  selectionEnd: number,
+  key: 'Backspace' | 'Delete',
+  ranges: SkillMentionRange[]
+): { value: string; cursor: number; start: number; end: number } | undefined {
+  if (ranges.length === 0) return undefined
+
+  if (selectionStart !== selectionEnd) {
+    const intersecting = ranges.filter((range) => selectionStart < range.end && selectionEnd > range.start)
+    if (intersecting.length === 0) return undefined
+
+    const start = Math.min(selectionStart, ...intersecting.map((range) => range.start))
+    const end = Math.max(selectionEnd, ...intersecting.map((range) => expandSkillMentionDeletionEnd(content, range.end)))
+    return { value: `${content.slice(0, start)}${content.slice(end)}`, cursor: start, start, end }
+  }
+
+  const caret = selectionStart
+  const range = ranges.find((candidate) => {
+    const expandedEnd = expandSkillMentionDeletionEnd(content, candidate.end)
+    if (key === 'Backspace') return caret > candidate.start && caret <= expandedEnd
+    return caret >= candidate.start && caret < expandedEnd
+  })
+  if (!range) return undefined
+
+  const end = expandSkillMentionDeletionEnd(content, range.end)
+  return { value: `${content.slice(0, range.start)}${content.slice(end)}`, cursor: range.start, start: range.start, end }
+}
+
+function expandSkillMentionDeletionEnd(content: string, end: number): number {
+  return end < content.length && /\s/.test(content[end] ?? '') ? end + 1 : end
+}
+
 function createInjectedPrompt(content: string, skills: SkillOption[]): string | undefined {
   const referencedSkills = findReferencedSkills(content, skills)
   if (referencedSkills.length === 0) return undefined
@@ -321,7 +493,8 @@ function escapeRegExp(value: string): string {
 const skillMenuStyle = {
   position: 'absolute',
   left: themeTokens.spacing.md,
-  right: themeTokens.spacing.md,
+  width: '20%',
+  boxSizing: 'border-box',
   bottom: 'calc(100% - 14px)',
   zIndex: 20,
   display: 'grid',
@@ -359,6 +532,50 @@ const skillNameStyle = {
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap'
+} satisfies CSSProperties
+
+const editorWrapperStyle = {
+  position: 'relative',
+  minHeight: 96,
+  maxHeight: 210,
+  overflow: 'hidden'
+} satisfies CSSProperties
+
+const highlightMirrorStyle = {
+  position: 'absolute',
+  inset: 0,
+  width: '100%',
+  boxSizing: 'border-box',
+  pointerEvents: 'none',
+  overflow: 'hidden',
+  color: themeTokens.color.text,
+  padding: '0 1px',
+  fontFamily: 'inherit',
+  fontSize: themeTokens.typography.body,
+  fontWeight: 'inherit',
+  letterSpacing: 'inherit',
+  lineHeight: 1.5,
+  whiteSpace: 'pre-wrap',
+  overflowWrap: 'anywhere'
+} satisfies CSSProperties
+
+const skillMentionPillStyle = {
+  display: 'inline',
+  border: 0,
+  borderRadius: themeTokens.radius.md,
+  background: themeTokens.color.softControl,
+  boxShadow: `0 0 0 2px ${themeTokens.color.softControl}`,
+  boxDecorationBreak: 'clone',
+  WebkitBoxDecorationBreak: 'clone',
+  color: themeTokens.color.text,
+  padding: 0,
+  lineHeight: 1.5,
+  whiteSpace: 'pre-wrap'
+} satisfies CSSProperties
+
+const transparentTextareaStyle = {
+  color: 'transparent',
+  caretColor: themeTokens.color.text
 } satisfies CSSProperties
 
 const textareaStyle = {

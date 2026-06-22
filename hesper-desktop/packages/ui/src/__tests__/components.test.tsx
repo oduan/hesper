@@ -838,7 +838,7 @@ describe('ui components', () => {
     const user = userEvent.setup()
     const onSend = vi.fn()
 
-    render(
+    const { container } = render(
       <Composer
         workspacePath="C:/dev/hesper"
         modelId="mock/hesper-fast"
@@ -855,6 +855,7 @@ describe('ui components', () => {
     await user.type(textarea, '请用 @中')
 
     const listbox = screen.getByRole('listbox', { name: '技能提及建议' })
+    expect(listbox).toHaveStyle({ width: '20%' })
     const cnOption = within(listbox).getByRole('option', { name: '选择技能 中文写作：中文润色' })
     expect(cnOption).toHaveTextContent(/^中文写作$/)
     expect(within(listbox).queryByText('中文润色')).not.toBeInTheDocument()
@@ -862,6 +863,10 @@ describe('ui components', () => {
 
     await user.keyboard('{Enter}')
     expect(textarea).toHaveValue('请用 @中文写作 ')
+    const pill = container.querySelector('[data-skill-mention-pill="true"]') as HTMLElement
+    expect(pill).toHaveTextContent('@中文写作')
+    expect(pill).toHaveStyle({ background: themeTokens.color.softControl, borderRadius: themeTokens.radius.md })
+    expect(pill.style.border).toBe('0px')
     expect(textarea).toHaveFocus()
 
     await user.keyboard('完成{Control>}{Enter}{/Control}')
@@ -869,6 +874,82 @@ describe('ui components', () => {
       prompt: expect.stringContaining('技能：中文写作'),
       displayPrompt: '请用 @中文写作 完成'
     }))
+  })
+
+  it('deletes a selected skill mention as one pill', async () => {
+    const user = userEvent.setup()
+
+    const { container } = render(
+      <Composer
+        workspacePath="C:/dev/hesper"
+        modelId="mock/hesper-fast"
+        skillOptions={[{ id: 'skill-research', name: 'Research' }]}
+        onSend={() => undefined}
+      />
+    )
+
+    const textarea = screen.getByLabelText('消息输入框') as HTMLTextAreaElement
+    await user.type(textarea, '@')
+    await user.keyboard('{Enter}')
+
+    expect(textarea).toHaveValue('@Research ')
+    expect(container.querySelector('[data-skill-mention-pill="true"]')).toHaveTextContent('@Research')
+
+    textarea.setSelectionRange('@Research '.length, '@Research '.length)
+    fireEvent.keyDown(textarea, { key: 'Backspace', code: 'Backspace' })
+
+    expect(textarea).toHaveValue('')
+    expect(container.querySelector('[data-skill-mention-pill="true"]')).not.toBeInTheDocument()
+  })
+
+  it('deletes a selected skill mention with Delete from the pill start', async () => {
+    const user = userEvent.setup()
+
+    const { container } = render(
+      <Composer
+        workspacePath="C:/dev/hesper"
+        modelId="mock/hesper-fast"
+        skillOptions={[{ id: 'skill-research', name: 'Research' }]}
+        onSend={() => undefined}
+      />
+    )
+
+    const textarea = screen.getByLabelText('消息输入框') as HTMLTextAreaElement
+    await user.type(textarea, '@')
+    await user.keyboard('{Enter}')
+
+    expect(container.querySelector('[data-skill-mention-pill="true"]')).toHaveTextContent('@Research')
+
+    textarea.setSelectionRange(0, 0)
+    fireEvent.keyDown(textarea, { key: 'Delete', code: 'Delete' })
+
+    expect(textarea).toHaveValue('')
+    expect(container.querySelector('[data-skill-mention-pill="true"]')).not.toBeInTheDocument()
+  })
+
+  it('keeps manually typed skill-looking @ text as ordinary text', async () => {
+    const user = userEvent.setup()
+
+    const { container } = render(
+      <Composer
+        workspacePath="C:/dev/hesper"
+        modelId="mock/hesper-fast"
+        skillOptions={[{ id: 'skill-research', name: 'Research' }]}
+        onSend={() => undefined}
+      />
+    )
+
+    const textarea = screen.getByLabelText('消息输入框') as HTMLTextAreaElement
+    await user.type(textarea, '@Research ')
+
+    expect(textarea).toHaveValue('@Research ')
+    expect(container.querySelector('[data-skill-mention-pill="true"]')).not.toBeInTheDocument()
+
+    textarea.setSelectionRange('@Research '.length, '@Research '.length)
+    await user.keyboard('{Backspace}')
+
+    expect(textarea).toHaveValue('@Research')
+    expect(container.querySelector('[data-skill-mention-pill="true"]')).not.toBeInTheDocument()
   })
 
   it('moves skill mention selection with arrow keys and closes suggestions with Escape', async () => {
