@@ -64,7 +64,8 @@ describe('createSettingsService', () => {
       defaultModelId: 'mock/hesper-fast',
       defaultOutputMode: 'markdown',
       themeMode: 'system',
-      fontSize: 14
+      fontSize: 14,
+      soul: ''
     })
   })
 
@@ -76,7 +77,8 @@ describe('createSettingsService', () => {
       defaultModelId: 'deepseek-chat',
       defaultOutputMode: 'html',
       themeMode: 'dark',
-      fontSize: 16
+      fontSize: 16,
+      soul: 'Helpful, calm, and precise.'
     })
 
     const second = createSettingsService({ persistence })
@@ -84,7 +86,8 @@ describe('createSettingsService', () => {
       defaultModelId: 'deepseek-chat',
       defaultOutputMode: 'html',
       themeMode: 'dark',
-      fontSize: 16
+      fontSize: 16,
+      soul: 'Helpful, calm, and precise.'
     })
   })
 
@@ -95,7 +98,7 @@ describe('createSettingsService', () => {
     const firstUpdate = service.updateSettings({ defaultModelId: 'deepseek-chat' })
     await waitForExpectation(() => expect(saveSpy).toHaveBeenCalledTimes(1))
 
-    const secondUpdate = service.updateSettings({ themeMode: 'dark' })
+    const secondUpdate = service.updateSettings({ soul: 'Curious, calm, and steady.' })
     expect(getSpy).toHaveBeenCalledTimes(1)
 
     releaseFirstSave()
@@ -104,8 +107,9 @@ describe('createSettingsService', () => {
     await expect(service.getSettings()).resolves.toEqual({
       defaultModelId: 'deepseek-chat',
       defaultOutputMode: 'markdown',
-      themeMode: 'dark',
-      fontSize: 14
+      themeMode: 'system',
+      fontSize: 14,
+      soul: 'Curious, calm, and steady.'
     })
   })
 
@@ -131,7 +135,7 @@ describe('createSettingsService', () => {
     const firstUpdate = service.updateSettings({ defaultModelId: 'broken-model' })
     await waitForExpectation(() => expect(settings.save).toHaveBeenCalledTimes(1))
 
-    const secondUpdate = service.updateSettings({ themeMode: 'dark' })
+    const secondUpdate = service.updateSettings({ soul: 'Resilient, calm, and focused.' })
     expect(settings.get).toHaveBeenCalledTimes(1)
 
     rejectFirstSave(new Error('save failed'))
@@ -141,14 +145,16 @@ describe('createSettingsService', () => {
     await expect(secondUpdate).resolves.toEqual({
       defaultModelId: 'mock/hesper-fast',
       defaultOutputMode: 'markdown',
-      themeMode: 'dark',
-      fontSize: 14
+      themeMode: 'system',
+      fontSize: 14,
+      soul: 'Resilient, calm, and focused.'
     })
     await expect(service.getSettings()).resolves.toEqual({
       defaultModelId: 'mock/hesper-fast',
       defaultOutputMode: 'markdown',
-      themeMode: 'dark',
-      fontSize: 14
+      themeMode: 'system',
+      fontSize: 14,
+      soul: 'Resilient, calm, and focused.'
     })
   })
 })

@@ -57,6 +57,11 @@ export type ModelToolHandlers = {
   listAvailableModels(): Promise<unknown>
 }
 
+export type SoulToolHandlers = {
+  getSoul(): Promise<string>
+  updateSoul(soul: string): Promise<string>
+}
+
 export type SleepOptions = {
   signal?: AbortSignal
 }
@@ -73,6 +78,7 @@ export type BuiltinToolExecutorOptions = {
   workerAgentTools?: WorkerAgentToolHandlers
   sshTools?: SshToolHandlers
   modelTools?: ModelToolHandlers
+  soulTools?: SoulToolHandlers
   now?: () => string
   sleep?: (durationMs: number, options?: SleepOptions) => Promise<void>
 }
@@ -335,6 +341,36 @@ async function listAvailableModelsTool(tool: ToolDefinition, modelTools: ModelTo
   if (!modelTools) return modelToolsUnavailable(tool)
   const catalog = await modelTools.listAvailableModels()
   return { content: jsonContent(catalog), details: { toolId: tool.id, catalog } }
+}
+
+function soulArg(args: unknown): string {
+  const input = argsObject(args)
+  if (!Object.prototype.hasOwnProperty.call(input, 'soul')) {
+    throw new Error('Tool argument is required: soul')
+  }
+  const value = input.soul
+  if (typeof value !== 'string') throw new Error('Tool argument must be a string: soul')
+  return value
+}
+
+function soulToolsUnavailable(tool: ToolDefinition): ToolExecutionResult {
+  return {
+    content: 'SOUL tools are not available in this runtime.',
+    details: { code: 'not_available', toolId: tool.id },
+    isError: true
+  }
+}
+
+async function getSoulTool(tool: ToolDefinition, soulTools: SoulToolHandlers | undefined): Promise<ToolExecutionResult> {
+  if (!soulTools) return soulToolsUnavailable(tool)
+  const soul = await soulTools.getSoul()
+  return { content: jsonContent({ soul }), details: { toolId: tool.id, soul } }
+}
+
+async function updateSoulTool(tool: ToolDefinition, args: unknown, soulTools: SoulToolHandlers | undefined): Promise<ToolExecutionResult> {
+  if (!soulTools) return soulToolsUnavailable(tool)
+  const soul = await soulTools.updateSoul(soulArg(args))
+  return { content: jsonContent({ soul }), details: { toolId: tool.id, soul } }
 }
 
 function requireWorkspace(context: ToolExecutionContext): string {
@@ -1378,6 +1414,10 @@ export function createBuiltinToolExecutor(options: BuiltinToolExecutorOptions = 
           return updateRoleTool(tool, args, options.roleTools)
         case 'models.list-available':
           return listAvailableModelsTool(tool, options.modelTools)
+        case 'soul.get':
+          return getSoulTool(tool, options.soulTools)
+        case 'soul.update':
+          return updateSoulTool(tool, args, options.soulTools)
         case 'ssh.list-servers':
           return runSshTool(tool, args, context, options.sshTools, 'listServers')
         case 'ssh.run-commands':

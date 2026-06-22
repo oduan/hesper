@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest'
 import { createBuiltinToolDefinitions } from '../builtin-tools'
 
 describe('builtin tools', () => {
-  it('contains the builtin tool set including model listing, Worker Agent management, and SSH tools', () => {
+  it('contains the builtin tool set including SOUL, model listing, Worker Agent management, and SSH tools', () => {
     const tools = createBuiltinToolDefinitions()
-    expect(tools).toHaveLength(31)
+    expect(tools).toHaveLength(33)
     expect(tools.map((tool) => tool.id)).toEqual(
       expect.arrayContaining([
         'models.list-available',
+        'soul.get',
+        'soul.update',
         'agent.spawn-worker-agent',
         'agent.list-worker-agents',
         'agent.get-worker-agent',
@@ -43,6 +45,8 @@ describe('builtin tools', () => {
         'roles.create',
         'roles.update',
         'models.list-available',
+        'soul.get',
+        'soul.update',
         'agent.spawn-worker-agent',
         'agent.list-worker-agents',
         'agent.get-worker-agent',
@@ -75,6 +79,19 @@ describe('builtin tools', () => {
       display: {
         names: { 'zh-CN': '抓取网页' },
         resourceFields: ['url']
+      }
+    })
+    expect(tools.find((tool) => tool.id === 'soul.get')).toMatchObject({
+      display: {
+        name: 'Get SOUL',
+        names: { 'zh-CN': '查看 SOUL' }
+      }
+    })
+    expect(tools.find((tool) => tool.id === 'soul.update')).toMatchObject({
+      display: {
+        name: 'Update SOUL',
+        names: { 'zh-CN': '更新 SOUL' },
+        resourceFields: ['soul']
       }
     })
     expect(tools.find((tool) => tool.id === 'agent.spawn-worker-agent')).toMatchObject({
@@ -345,6 +362,25 @@ describe('builtin tools', () => {
       category: 'agent',
       icon: '🤖',
       inputSchema: { type: 'object', properties: {} }
+    })
+
+    expect(tools.find((tool) => tool.id === 'soul.get')).toMatchObject({
+      name: 'Get SOUL',
+      category: 'agent',
+      icon: '🪶',
+      inputSchema: { type: 'object', properties: {} }
+    })
+    expect(tools.find((tool) => tool.id === 'soul.update')).toMatchObject({
+      name: 'Update SOUL',
+      category: 'agent',
+      icon: '🪶',
+      inputSchema: {
+        type: 'object',
+        required: ['soul'],
+        properties: {
+          soul: expect.objectContaining({ type: 'string' })
+        }
+      }
     })
 
     expect(tools.find((tool) => tool.id === 'agent.spawn-worker-agent')).toMatchObject({

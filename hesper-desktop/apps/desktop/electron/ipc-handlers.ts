@@ -217,11 +217,13 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       maxWorkerAgentsPerRun: session.maxWorkerAgentsPerRun ?? 64
     }
 
+    const settings = await options.container.settingsService.getSettings()
     const prompt = options.container.promptAssemblyService.assembleMainPrompt({
       session: sessionForPrompt,
       role,
       skills: options.container.skillService.listSkills(),
-      tools: options.container.toolCatalogService.list()
+      tools: options.container.toolCatalogService.list(),
+      soul: settings.soul
     })
 
     return omitUndefined({ systemPrompt: prompt.systemPrompt, enabledToolIds: sessionForPrompt.enabledToolIds, workspacePath: resolvedWorkspacePath })

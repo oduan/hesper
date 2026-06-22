@@ -329,6 +329,30 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
       inputSchema: { type: 'object', properties: {} }
     },
     {
+      id: 'soul.get',
+      name: 'Get SOUL',
+      description: 'Get the current saved SOUL text for this desktop runtime.',
+      category: 'agent',
+      icon: '🪶',
+      display: { name: 'Get SOUL', names: { 'zh-CN': '查看 SOUL' } },
+      inputSchema: { type: 'object', properties: {} }
+    },
+    {
+      id: 'soul.update',
+      name: 'Update SOUL',
+      description: 'Update the saved SOUL text for this desktop runtime. Provide soul: "" to clear it.',
+      category: 'agent',
+      icon: '🪶',
+      display: { name: 'Update SOUL', names: { 'zh-CN': '更新 SOUL' }, resourceFields: ['soul'] },
+      inputSchema: {
+        type: 'object',
+        required: ['soul'],
+        properties: {
+          soul: { type: 'string', description: 'SOUL text to save. Empty string clears the saved SOUL.' }
+        }
+      }
+    },
+    {
       id: 'agent.spawn-worker-agent',
       name: 'Spawn Worker Agent',
       description: 'Create a constrained Worker Agent child run with either any existing roleId or a one-off temporaryRole, task, limited tool set, and optional model override. Use roles.find or roles.list first when you need to inspect existing reusable roles. Use temporaryRole when no suitable existing role fits a single run; temporaryRole is not saved as a reusable role and is not written to the role library; the invocation persists a roleSnapshot for tracing. Do not call roles.create for one-off Worker Agent tasks; only create roles when the user explicitly approves adding a reusable role. Use models.list-available first to choose a provider-aware modelRef when possible; modelRef takes precedence over modelId, temporaryRole/default role defaults, and the parent run model. If no explicit model is provided, temporaryRole.defaultModelRef/default role defaultModelRef is used before temporaryRole.defaultModelId/default role defaultModelId, then the parent run model. By default waits only for a bounded timeout and returns a diagnosis if still running.',

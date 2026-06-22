@@ -8,6 +8,7 @@ import type { AppSettings, CreateSshKeyInput, CreateSshServerInput, ManagedRoleD
 import { AppearanceSettingsPanel } from './appearance-settings-panel'
 import { ProviderSettingsPanel } from './provider-settings-panel'
 import { createShortcutHandler } from './shortcuts'
+import { SoulSettingsPanel } from './soul-settings-panel'
 import { SshSettingsPanel } from './ssh-settings-panel'
 import { ToolDetailsPanel } from './tool-details-panel'
 import { RolesPanel } from './roles-panel'
@@ -29,13 +30,14 @@ type SessionSettingsField = keyof SessionSettingsOverride
 
 type RequestTokensBySession = Record<string, Partial<Record<SessionSettingsField, number>>>
 
-type SettingsCategory = 'ai' | 'appearance' | 'ssh'
+type SettingsCategory = 'ai' | 'appearance' | 'ssh' | 'soul'
 
 const defaultAppSettings: AppSettings = {
   defaultModelId: 'mock/hesper-fast',
   defaultOutputMode: 'markdown',
   themeMode: 'system',
-  fontSize: 14
+  fontSize: 14,
+  soul: ''
 }
 
 export function clearSessionSendError(errors: Record<string, string>, sessionId: string): Record<string, string> {
@@ -1218,6 +1220,8 @@ function AppContent() {
               onUpdateServer={updateSshServer}
               onDeleteServer={deleteSshServer}
             />
+          ) : activeSettingsCategory === 'soul' ? (
+            <SoulSettingsPanel settings={appSettings} {...(settingsError ? { error: settingsError } : {})} onUpdate={updateAppSettings} />
           ) : (
             <ProviderSettingsPanel onModelRegistryChanged={refreshSessionModelOptions} />
           )
@@ -1356,7 +1360,8 @@ function applySettingsPatch(settings: AppSettings, patch: UpdateSettingsInput): 
     ...(patch.defaultModelId !== undefined ? { defaultModelId: patch.defaultModelId } : {}),
     ...(patch.defaultOutputMode !== undefined ? { defaultOutputMode: patch.defaultOutputMode } : {}),
     ...(patch.themeMode !== undefined ? { themeMode: patch.themeMode } : {}),
-    ...(patch.fontSize !== undefined ? { fontSize: patch.fontSize } : {})
+    ...(patch.fontSize !== undefined ? { fontSize: patch.fontSize } : {}),
+    ...(patch.soul !== undefined ? { soul: patch.soul } : {})
   }
 }
 

@@ -84,7 +84,7 @@ describe('desktop service container', () => {
       skills: container.skillService.listSkills(),
       tools: container.toolCatalogService.list(),
       assignableWorkerAgentRoles: container.roleService.listRoles()
-    }).systemPrompt).toContain('hesper desktop Agent')
+    }).systemPrompt).toContain('Hesper Agent')
   })
 
   it('injects role management tools into the production tool runner', async () => {
@@ -124,6 +124,30 @@ describe('desktop service container', () => {
     await expect(persistence.roles.list()).resolves.toEqual([
       expect.objectContaining({ id: created.id, name: 'Tool-created role' })
     ])
+  })
+
+  it('injects SOUL tools into the production tool runner', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock' })
+
+    const initial = await container.toolRunner.run(container.toolCatalogService.get('soul.get')!, {}, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['soul.get']
+    })
+
+    expect(initial.isError).not.toBe(true)
+    expect(JSON.parse(initial.content)).toEqual({ soul: '' })
+
+    const updated = await container.toolRunner.run(container.toolCatalogService.get('soul.update')!, { soul: 'Softly curious and steady.' }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['soul.update']
+    })
+
+    expect(updated.isError).not.toBe(true)
+    expect(JSON.parse(updated.content)).toEqual({ soul: 'Softly curious and steady.' })
+    await expect(container.settingsService.getSettings()).resolves.toMatchObject({ soul: 'Softly curious and steady.' })
   })
 
   it('delegates SSH tools through the production tool runner without exposing connection details', async () => {
@@ -789,19 +813,21 @@ describe('registerIpcHandlers', () => {
     const enqueueSpy = vi.spyOn(container.agentRuntime, 'enqueue').mockResolvedValueOnce({ id: 'run-assembled' } as Awaited<ReturnType<typeof container.agentRuntime.enqueue>>)
     const createUserMessageSpy = vi.spyOn(container.conversationService, 'createUserMessage')
 
+    await container.settingsService.updateSettings({ soul: 'Softly curious and steady.' })
     registerIpcHandlers({ ipcMain, dialog, container, savePersistence, schedulePersistenceSave })
     const session = await container.sessionService.createSession({ title: 'Prompt assembly IPC', workspacePath: 'C:/workspace' })
     await container.roleManagementService.createRole({ name: 'Custom Worker', defaultToolIds: ['filesystem.read-file'] })
 
     await expect(handles.get(ipcChannels.agentEnqueue)?.({ sender: { id: 1 } }, { sessionId: session.id, prompt: 'Use assembled prompt', modelId: 'mock/hesper-fast', messageId: 'message-client-1', messageCreatedAt: '2026-06-10T03:00:02.000Z' })).resolves.toEqual({ runId: 'run-assembled' })
 
-    const expectedDefaultEnabledTools = ['filesystem.read-file', 'filesystem.write-file', 'filesystem.edit-file', 'filesystem.delete-file', 'filesystem.delete-directory', 'filesystem.list-directory', 'filesystem.find', 'filesystem.search', 'git.status', 'git.run', 'roles.list', 'roles.find', 'roles.create', 'roles.update', 'models.list-available', 'agent.spawn-worker-agent', 'agent.list-worker-agents', 'agent.get-worker-agent', 'agent.wait-worker-agent', 'agent.cancel-worker-agent', 'ssh.list-servers', 'ssh.run-commands', 'ssh.list-executions', 'ssh.get-execution-output', 'time.current', 'time.sleep', 'time.wait-until', 'system.execute-command', 'system.show-notification']
+    const expectedDefaultEnabledTools = ['filesystem.read-file', 'filesystem.write-file', 'filesystem.edit-file', 'filesystem.delete-file', 'filesystem.delete-directory', 'filesystem.list-directory', 'filesystem.find', 'filesystem.search', 'git.status', 'git.run', 'roles.list', 'roles.find', 'roles.create', 'roles.update', 'models.list-available', 'soul.get', 'soul.update', 'agent.spawn-worker-agent', 'agent.list-worker-agents', 'agent.get-worker-agent', 'agent.wait-worker-agent', 'agent.cancel-worker-agent', 'ssh.list-servers', 'ssh.run-commands', 'ssh.list-executions', 'ssh.get-execution-output', 'time.current', 'time.sleep', 'time.wait-until', 'system.execute-command', 'system.show-notification']
     expect(promptSpy).toHaveBeenCalledWith(expect.objectContaining({
       session: expect.objectContaining({
         id: session.id,
         workspacePath: 'C:/workspace',
         enabledToolIds: expectedDefaultEnabledTools
       }),
+      soul: 'Softly curious and steady.',
       role: expect.objectContaining({ id: 'main-agent' }),
       skills: expect.any(Array),
       tools: expect.any(Array)
@@ -902,7 +928,7 @@ describe('registerIpcHandlers', () => {
       { sessionId: session.id, prompt: 'Do not expose disabled web fetch', modelId: 'mock/hesper-fast' }
     )).resolves.toEqual({ runId: 'run-global-filter' })
 
-    const expectedEnabledTools = ['filesystem.read-file', 'filesystem.write-file', 'filesystem.edit-file', 'filesystem.delete-file', 'filesystem.delete-directory', 'filesystem.list-directory', 'filesystem.find', 'filesystem.search', 'git.status', 'git.run', 'roles.list', 'roles.find', 'roles.create', 'roles.update', 'models.list-available', 'agent.spawn-worker-agent', 'agent.list-worker-agents', 'agent.get-worker-agent', 'agent.wait-worker-agent', 'agent.cancel-worker-agent', 'ssh.list-servers', 'ssh.run-commands', 'ssh.list-executions', 'ssh.get-execution-output', 'time.current', 'time.sleep', 'time.wait-until', 'system.execute-command']
+    const expectedEnabledTools = ['filesystem.read-file', 'filesystem.write-file', 'filesystem.edit-file', 'filesystem.delete-file', 'filesystem.delete-directory', 'filesystem.list-directory', 'filesystem.find', 'filesystem.search', 'git.status', 'git.run', 'roles.list', 'roles.find', 'roles.create', 'roles.update', 'models.list-available', 'soul.get', 'soul.update', 'agent.spawn-worker-agent', 'agent.list-worker-agents', 'agent.get-worker-agent', 'agent.wait-worker-agent', 'agent.cancel-worker-agent', 'ssh.list-servers', 'ssh.run-commands', 'ssh.list-executions', 'ssh.get-execution-output', 'time.current', 'time.sleep', 'time.wait-until', 'system.execute-command']
     expect(promptSpy).toHaveBeenLastCalledWith(expect.objectContaining({
       session: expect.objectContaining({ enabledToolIds: expectedEnabledTools })
     }))
@@ -1867,8 +1893,8 @@ describe('registerIpcHandlers', () => {
     registerIpcHandlers({ ipcMain, dialog, container, savePersistence })
 
     await expect(
-      handles.get(ipcChannels.settingsUpdate)?.({ sender: { id: 1 } }, { defaultModelId: 'deepseek-chat', defaultOutputMode: 'html', themeMode: 'dark', fontSize: 16 })
-    ).resolves.toEqual({ defaultModelId: 'deepseek-chat', defaultOutputMode: 'html', themeMode: 'dark', fontSize: 16 })
+      handles.get(ipcChannels.settingsUpdate)?.({ sender: { id: 1 } }, { defaultModelId: 'deepseek-chat', defaultOutputMode: 'html', themeMode: 'dark', fontSize: 16, soul: '保持中文输出。' })
+    ).resolves.toEqual({ defaultModelId: 'deepseek-chat', defaultOutputMode: 'html', themeMode: 'dark', fontSize: 16, soul: '保持中文输出。' })
     expect(savePersistence).toHaveBeenCalled()
 
     const restoredContainer = createServiceContainer({ persistence, agentMode: 'mock' })
@@ -1885,7 +1911,8 @@ describe('registerIpcHandlers', () => {
       defaultModelId: 'deepseek-chat',
       defaultOutputMode: 'html',
       themeMode: 'dark',
-      fontSize: 16
+      fontSize: 16,
+      soul: '保持中文输出。'
     })
   })
 

@@ -166,11 +166,35 @@ function createAvailableModelCatalog(providers: ModelProviderConfig[], models: M
   }
 }
 
+const mainAgentSoulToolIds = ['soul.get', 'soul.update'] as const
+
+function withMainAgentSoulTools(role: Role | undefined): Role | undefined {
+  if (!role) return undefined
+  if (role.id !== 'main-agent') return role
+
+  const defaultToolIds = (role.defaultToolIds ?? []).filter((toolId) => !mainAgentSoulToolIds.includes(toolId as typeof mainAgentSoulToolIds[number]))
+  const insertAt = defaultToolIds.indexOf('models.list-available')
+  const insertionIndex = insertAt >= 0 ? insertAt + 1 : defaultToolIds.length
+
+  return {
+    ...role,
+    defaultToolIds: [
+      ...defaultToolIds.slice(0, insertionIndex),
+      ...mainAgentSoulToolIds,
+      ...defaultToolIds.slice(insertionIndex)
+    ]
+  }
+}
+
 export function createServiceContainer(options: ServiceContainerOptions) {
   const sessionService = createSessionService(options.persistence)
   const conversationService = createConversationService(options.persistence)
   const settingsService = createSettingsService({ persistence: options.persistence })
-  const roleService = createDefaultRoleService()
+  const baseRoleService = createDefaultRoleService()
+  const roleService = {
+    listRoles: () => baseRoleService.listRoles().map((role) => withMainAgentSoulTools(role)!),
+    getRole: (id: string) => withMainAgentSoulTools(baseRoleService.getRole(id))
+  }
   const skillService = createDefaultSkillService()
   const toolDefinitions = createBuiltinToolDefinitions()
   const toolCatalogService = createToolCatalogService(toolDefinitions)
@@ -303,6 +327,10 @@ export function createServiceContainer(options: ServiceContainerOptions) {
           ] as const))
           return createAvailableModelCatalog(providers, models, new Map(credentialEntries))
         }
+      },
+      soulTools: {
+        getSoul: async () => (await settingsService.getSettings()).soul,
+        updateSoul: async (soul) => (await settingsService.updateSettings({ soul })).soul
       }
     })
   })

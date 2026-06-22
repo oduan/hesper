@@ -85,12 +85,13 @@ const { listSessions, createSession, updateTitle, deleteSession, generateTitle, 
     endedAt: '2026-06-10T03:00:05.000Z'
   })),
   onEvent: vi.fn(() => () => undefined),
-  getSettings: vi.fn(async () => ({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', fontSize: 14 })),
-  updateSettings: vi.fn(async (input: Partial<{ defaultModelId: string; defaultOutputMode: 'markdown' | 'html'; themeMode: 'system' | 'light' | 'dark'; fontSize: number }>) => ({
+  getSettings: vi.fn(async () => ({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', fontSize: 14, soul: '' })),
+  updateSettings: vi.fn(async (input: Partial<{ defaultModelId: string; defaultOutputMode: 'markdown' | 'html'; themeMode: 'system' | 'light' | 'dark'; fontSize: number; soul: string }>) => ({
     defaultModelId: input.defaultModelId ?? 'mock/hesper-fast',
     defaultOutputMode: input.defaultOutputMode ?? 'markdown',
     themeMode: input.themeMode ?? 'dark',
-    fontSize: input.fontSize ?? 14
+    fontSize: input.fontSize ?? 14,
+    soul: input.soul ?? ''
   })),
   listProviders: vi.fn(async () => []),
   listModels: vi.fn(async () => []),
@@ -415,12 +416,13 @@ describe('renderer App', () => {
       createdAt: '2026-06-10T03:00:00.000Z',
       updatedAt: '2026-06-10T03:00:00.000Z'
     }))
-    getSettings.mockResolvedValue({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', fontSize: 14 })
+    getSettings.mockResolvedValue({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', fontSize: 14, soul: '' })
     updateSettings.mockImplementation(async (input) => ({
       defaultModelId: input.defaultModelId ?? 'mock/hesper-fast',
       defaultOutputMode: input.defaultOutputMode ?? 'markdown',
       themeMode: input.themeMode ?? 'dark',
-      fontSize: input.fontSize ?? 14
+      fontSize: input.fontSize ?? 14,
+      soul: input.soul ?? ''
     }))
   })
 
@@ -1157,11 +1159,12 @@ describe('renderer App', () => {
 
   it('opens appearance settings and persists theme mode and global font size', async () => {
     const user = userEvent.setup()
-    let storedSettings: { defaultModelId: string; defaultOutputMode: 'markdown' | 'html'; themeMode: 'system' | 'light' | 'dark'; fontSize: number } = {
+    let storedSettings: { defaultModelId: string; defaultOutputMode: 'markdown' | 'html'; themeMode: 'system' | 'light' | 'dark'; fontSize: number; soul: string } = {
       defaultModelId: 'mock/hesper-fast',
       defaultOutputMode: 'markdown',
       themeMode: 'dark',
-      fontSize: 14
+      fontSize: 14,
+      soul: ''
     }
     getSettings.mockImplementation(async () => storedSettings)
     updateSettings.mockImplementation(async (input) => {
@@ -1198,6 +1201,39 @@ describe('renderer App', () => {
     await user.click(screen.getByRole('button', { name: '16px' }))
     await waitFor(() => expect(updateSettings).toHaveBeenCalledWith({ fontSize: 16 }))
     expect(screen.getByLabelText('主工作区').parentElement?.style.getPropertyValue('--hesper-font-size')).toBe('16px')
+  })
+
+  it('opens soul settings and persists the soul text', async () => {
+    const user = userEvent.setup()
+    let storedSettings: { defaultModelId: string; defaultOutputMode: 'markdown' | 'html'; themeMode: 'system' | 'light' | 'dark'; fontSize: number; soul: string } = {
+      defaultModelId: 'mock/hesper-fast',
+      defaultOutputMode: 'markdown',
+      themeMode: 'dark',
+      fontSize: 14,
+      soul: ''
+    }
+    getSettings.mockImplementation(async () => storedSettings)
+    updateSettings.mockImplementation(async (input) => {
+      storedSettings = { ...storedSettings, ...input }
+      return storedSettings
+    })
+
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: '设置' }))
+    await user.click(screen.getByRole('button', { name: 'SOUL 设置' }))
+
+    expect(screen.getByRole('region', { name: 'SOUL 设置面板' })).toBeInTheDocument()
+    expect(screen.getByText('设置主 Agent 的身份、口吻和行为偏好。')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '编辑' }))
+
+    const soulInput = screen.getByLabelText('身份设定')
+    await user.type(soulInput, '你是耐心的代码助手。')
+
+    expect(soulInput).toHaveValue('你是耐心的代码助手。')
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledWith({ soul: '你是耐心的代码助手。' }))
+    expect(updateSettings).toHaveBeenCalledTimes(1)
   })
 
   it('loads the active session conversation history after sessions load and renders persisted messages', async () => {

@@ -12,7 +12,15 @@ function tool(id: string): ToolDefinition {
     id,
     name: id,
     description: id,
-    category: id.startsWith('filesystem') ? 'filesystem' : id.startsWith('git') ? 'git' : id.startsWith('web') ? 'web' : id.startsWith('agent') ? 'agent' : 'system',
+    category: id.startsWith('filesystem')
+      ? 'filesystem'
+      : id.startsWith('git')
+        ? 'git'
+        : id.startsWith('web')
+          ? 'web'
+          : id.startsWith('agent') || id.startsWith('soul') || id.startsWith('roles') || id.startsWith('models')
+            ? 'agent'
+            : 'system',
     inputSchema: { type: 'object', properties: {} }
   }
 }
@@ -682,6 +690,71 @@ describe('createBuiltinToolExecutor', () => {
     })).resolves.toEqual({
       content: 'Model listing tools are not available in this runtime.',
       details: { code: 'not_available', toolId: 'models.list-available' },
+      isError: true
+    })
+  })
+
+  it('gets and updates SOUL through injected handlers', async () => {
+    const getSoul = vi.fn(async () => 'Curious, calm, and steady.')
+    const updateSoul = vi.fn(async (soul: string) => soul)
+    const executor = createBuiltinToolExecutor({ soulTools: { getSoul, updateSoul } })
+
+    const getResult = await executor.execute(tool('soul.get'), {}, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['soul.get']
+    })
+
+    expect(getSoul).toHaveBeenCalledTimes(1)
+    expect(JSON.parse(getResult.content)).toEqual({ soul: 'Curious, calm, and steady.' })
+    expect(getResult.details).toEqual({ toolId: 'soul.get', soul: 'Curious, calm, and steady.' })
+
+    const updateResult = await executor.execute(tool('soul.update'), { soul: 'Resilient, focused, and kind.' }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['soul.update']
+    })
+
+    expect(updateSoul).toHaveBeenCalledWith('Resilient, focused, and kind.')
+    expect(JSON.parse(updateResult.content)).toEqual({ soul: 'Resilient, focused, and kind.' })
+    expect(updateResult.details).toEqual({ toolId: 'soul.update', soul: 'Resilient, focused, and kind.' })
+  })
+
+  it('allows clearing SOUL with an empty string', async () => {
+    const updateSoul = vi.fn(async (soul: string) => soul)
+    const executor = createBuiltinToolExecutor({ soulTools: { getSoul: async () => 'filled', updateSoul } })
+
+    const result = await executor.execute(tool('soul.update'), { soul: '' }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['soul.update']
+    })
+
+    expect(updateSoul).toHaveBeenCalledWith('')
+    expect(JSON.parse(result.content)).toEqual({ soul: '' })
+    expect(result.details).toEqual({ toolId: 'soul.update', soul: '' })
+  })
+
+  it('returns a controlled error when SOUL tools are unavailable', async () => {
+    const executor = createBuiltinToolExecutor()
+
+    await expect(executor.execute(tool('soul.get'), {}, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['soul.get']
+    })).resolves.toEqual({
+      content: 'SOUL tools are not available in this runtime.',
+      details: { code: 'not_available', toolId: 'soul.get' },
+      isError: true
+    })
+
+    await expect(executor.execute(tool('soul.update'), { soul: 'Updated' }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      allowedToolIds: ['soul.update']
+    })).resolves.toEqual({
+      content: 'SOUL tools are not available in this runtime.',
+      details: { code: 'not_available', toolId: 'soul.update' },
       isError: true
     })
   })

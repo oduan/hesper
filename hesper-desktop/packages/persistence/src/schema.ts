@@ -236,6 +236,7 @@ CREATE TABLE IF NOT EXISTS app_settings (
   default_output_mode TEXT NOT NULL,
   theme_mode TEXT NOT NULL,
   font_size INTEGER NOT NULL DEFAULT 14,
+  soul TEXT NOT NULL DEFAULT '',
   updated_at TEXT NOT NULL
 );
 `
@@ -285,7 +286,8 @@ const migrationColumns: Record<string, string[]> = {
     'worker_agent_guidance TEXT'
   ],
   app_settings: [
-    'font_size INTEGER NOT NULL DEFAULT 14'
+    'font_size INTEGER NOT NULL DEFAULT 14',
+    "soul TEXT NOT NULL DEFAULT ''"
   ]
 }
 
