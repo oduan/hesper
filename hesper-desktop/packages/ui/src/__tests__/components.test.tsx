@@ -856,7 +856,11 @@ describe('ui components', () => {
     await user.type(textarea, '请用 @中')
 
     const listbox = screen.getByRole('listbox', { name: '技能提及建议' })
+    expect(listbox).toHaveClass('hesper-skill-mention-menu')
     expect(listbox).toHaveStyle({ width: '20%' })
+    const scrollbarStyle = [...container.querySelectorAll('style')].find((style) => style.textContent?.includes('.hesper-skill-mention-menu::-webkit-scrollbar'))
+    expect(scrollbarStyle?.textContent).toContain('width: 4px')
+    expect(scrollbarStyle?.textContent).toContain('var(--hesper-color-scrollbar-thumb')
     const cnOption = within(listbox).getByRole('option', { name: '选择技能 中文写作：中文润色' })
     expect(cnOption).toHaveTextContent(/^中文写作$/)
     expect(within(listbox).queryByText('中文润色')).not.toBeInTheDocument()
@@ -999,33 +1003,44 @@ describe('ui components', () => {
     expect(container.querySelector('[data-skill-mention-pill="true"]')).not.toBeInTheDocument()
   })
 
-  it('moves skill mention selection with arrow keys and closes suggestions with Escape', async () => {
+  it('moves skill mention selection with arrow keys, scrolls it into view, and closes suggestions with Escape', async () => {
     const user = userEvent.setup()
+    const originalScrollIntoView = window.HTMLElement.prototype.scrollIntoView
+    const scrollIntoView = vi.fn()
+    Object.defineProperty(window.HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: scrollIntoView })
 
-    render(
-      <Composer
-        workspacePath="C:/dev/hesper"
-        modelId="mock/hesper-fast"
-        skillOptions={[
-          { id: 'skill-research', name: 'Research' },
-          { id: 'skill-code', name: 'Code Review' }
-        ]}
-        onSend={() => undefined}
-      />
-    )
+    try {
+      render(
+        <Composer
+          workspacePath="C:/dev/hesper"
+          modelId="mock/hesper-fast"
+          skillOptions={[
+            { id: 'skill-research', name: 'Research' },
+            { id: 'skill-code', name: 'Code Review' },
+            { id: 'skill-docs', name: 'Docs Writer' }
+          ]}
+          onSend={() => undefined}
+        />
+      )
 
-    const textarea = screen.getByLabelText('消息输入框')
-    await user.type(textarea, '@')
-    expect(screen.getByRole('option', { name: '选择技能 Research' })).toHaveAttribute('aria-selected', 'true')
+      const textarea = screen.getByLabelText('消息输入框')
+      await user.type(textarea, '@')
+      expect(screen.getByRole('option', { name: '选择技能 Research' })).toHaveAttribute('aria-selected', 'true')
+      await waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' }))
+      scrollIntoView.mockClear()
 
-    await user.keyboard('{ArrowDown}{Enter}')
-    expect(textarea).toHaveValue('@Code Review ')
+      await user.keyboard('{ArrowDown}{Enter}')
+      await waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' }))
+      expect(textarea).toHaveValue('@Code Review ')
 
-    await user.clear(textarea)
-    await user.type(textarea, '@')
-    expect(screen.getByRole('listbox', { name: '技能提及建议' })).toBeInTheDocument()
-    await user.keyboard('{Escape}')
-    expect(screen.queryByRole('listbox', { name: '技能提及建议' })).not.toBeInTheDocument()
+      await user.clear(textarea)
+      await user.type(textarea, '@')
+      expect(screen.getByRole('listbox', { name: '技能提及建议' })).toBeInTheDocument()
+      await user.keyboard('{Escape}')
+      expect(screen.queryByRole('listbox', { name: '技能提及建议' })).not.toBeInTheDocument()
+    } finally {
+      Object.defineProperty(window.HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: originalScrollIntoView })
+    }
   })
 
   it('keeps literal @ characters out of skill mention suggestions and injection', async () => {

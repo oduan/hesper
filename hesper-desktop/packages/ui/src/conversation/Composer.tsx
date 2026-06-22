@@ -77,6 +77,7 @@ export function Composer({
   const [textareaScrollTop, setTextareaScrollTop] = useState(0)
   const [internalSkillMentions, setInternalSkillMentions] = useState<SkillMentionRange[]>([])
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const skillOptionRefs = useRef<Array<HTMLButtonElement | null>>([])
   const value = controlledValue ?? internalValue
   const selectedSkillMentions = controlledSkillMentions ?? internalSkillMentions
   const lastHandledSendSignalRef = useRef(0)
@@ -190,6 +191,11 @@ export function Composer({
     }
   }, [activeSkillIndex, filteredSkills.length])
 
+  useEffect(() => {
+    if (!showSkillMenu) return
+    skillOptionRefs.current[activeSkillIndex]?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
+  }, [activeSkillIndex, filteredSkills.length, showSkillMenu])
+
   return (
     <section
       aria-label="消息输入区"
@@ -204,7 +210,9 @@ export function Composer({
       }}
     >
       {showSkillMenu ? (
-        <div role="listbox" aria-label="技能提及建议" style={skillMenuStyle}>
+        <>
+          <style>{skillMenuScrollbarCss}</style>
+          <div role="listbox" aria-label="技能提及建议" className="hesper-skill-mention-menu" style={skillMenuStyle}>
           {filteredSkills.map((skill, index) => {
             const selected = index === activeSkillIndex
             const label = skill.description ? `选择技能 ${skill.name}：${skill.description}` : `选择技能 ${skill.name}`
@@ -216,6 +224,9 @@ export function Composer({
                 aria-label={label}
                 aria-selected={selected}
                 className="hesper-skill-mention-option"
+                ref={(node) => {
+                  skillOptionRefs.current[index] = node
+                }}
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => confirmSkill(skill)}
                 style={{
@@ -227,7 +238,8 @@ export function Composer({
               </button>
             )
           })}
-        </div>
+          </div>
+        </>
       ) : null}
       <div style={editorWrapperStyle}>
         {hasSkillMentionPills ? (
@@ -500,6 +512,30 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
+const skillMenuScrollbarCss = `
+.hesper-skill-mention-menu {
+  scrollbar-width: thin;
+  scrollbar-color: var(--hesper-color-scrollbar-thumb, ${themeTokens.color.scrollbarThumb}) transparent;
+}
+.hesper-skill-mention-menu::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+.hesper-skill-mention-menu::-webkit-scrollbar-track {
+  background: transparent;
+}
+.hesper-skill-mention-menu::-webkit-scrollbar-thumb {
+  background: var(--hesper-color-scrollbar-thumb, ${themeTokens.color.scrollbarThumb});
+  border-radius: 999px;
+}
+.hesper-skill-mention-menu::-webkit-scrollbar-thumb:hover {
+  background: var(--hesper-color-scrollbar-thumb-hover, ${themeTokens.color.scrollbarThumbHover});
+}
+.hesper-skill-mention-menu::-webkit-scrollbar-thumb:active {
+  background: var(--hesper-color-scrollbar-thumb-active, ${themeTokens.color.scrollbarThumbActive});
+}
+`
+
 const skillMentionSelectionCss = `
 .hesper-skill-mention-textarea::selection {
   background: #0067d7;
@@ -524,7 +560,8 @@ const skillMenuStyle = {
   display: 'grid',
   gap: 2,
   maxHeight: 180,
-  overflow: 'auto',
+  overflowY: 'auto',
+  overflowX: 'hidden',
   border: `1px solid ${themeTokens.color.border}`,
   borderRadius: themeTokens.radius.lg,
   background: 'var(--hesper-color-surface, #1f2335)',
