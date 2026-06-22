@@ -493,13 +493,13 @@ function escapeRegExp(value: string): string {
 
 const skillMentionSelectionCss = `
 .hesper-skill-mention-textarea::selection {
-  background: var(--hesper-color-accent, ${themeTokens.color.accent});
-  color: var(--hesper-color-accent-contrast, ${themeTokens.color.accentContrast});
-  -webkit-text-fill-color: var(--hesper-color-accent-contrast, ${themeTokens.color.accentContrast});
+  background: Highlight;
+  color: HighlightText;
+  -webkit-text-fill-color: HighlightText;
 }
 .hesper-skill-mention-textarea::-moz-selection {
-  background: var(--hesper-color-accent, ${themeTokens.color.accent});
-  color: var(--hesper-color-accent-contrast, ${themeTokens.color.accentContrast});
+  background: Highlight;
+  color: HighlightText;
 }
 `
 
