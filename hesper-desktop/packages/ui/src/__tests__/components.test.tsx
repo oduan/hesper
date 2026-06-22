@@ -872,9 +872,10 @@ describe('ui components', () => {
     expect(pill.style.border).toBe('0px')
     expect(textarea).toHaveClass('hesper-skill-mention-textarea')
     const selectionStyle = [...container.querySelectorAll('style')].find((style) => style.textContent?.includes('.hesper-skill-mention-textarea::selection'))
-    expect(selectionStyle?.textContent).toContain('background: Highlight')
-    expect(selectionStyle?.textContent).toContain('color: HighlightText')
-    expect(selectionStyle?.textContent).toContain('-webkit-text-fill-color: HighlightText')
+    expect(selectionStyle?.textContent).toContain('background: #0067d7')
+    expect(selectionStyle?.textContent).toContain('color: #ffffff')
+    expect(selectionStyle?.textContent).toContain('-webkit-text-fill-color: #ffffff')
+    expect(selectionStyle?.textContent).toContain('text-shadow: none')
     expect(textarea).toHaveFocus()
 
     await user.keyboard('完成{Control>}{Enter}{/Control}')

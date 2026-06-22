@@ -502,13 +502,15 @@ function escapeRegExp(value: string): string {
 
 const skillMentionSelectionCss = `
 .hesper-skill-mention-textarea::selection {
-  background: Highlight;
-  color: HighlightText;
-  -webkit-text-fill-color: HighlightText;
+  background: #0067d7;
+  color: #ffffff;
+  -webkit-text-fill-color: #ffffff;
+  text-shadow: none;
 }
 .hesper-skill-mention-textarea::-moz-selection {
-  background: Highlight;
-  color: HighlightText;
+  background: #0067d7;
+  color: #ffffff;
+  text-shadow: none;
 }
 `
 
