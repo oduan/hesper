@@ -869,6 +869,10 @@ describe('ui components', () => {
     expect(pill).toHaveStyle({ boxShadow: `1px 0 0 1px ${themeTokens.color.softControl}`, lineHeight: '1.5' })
     expect(pill.style.fontSize).toBe('')
     expect(pill.style.border).toBe('0px')
+    expect(textarea).toHaveClass('hesper-skill-mention-textarea')
+    const selectionStyle = [...container.querySelectorAll('style')].find((style) => style.textContent?.includes('.hesper-skill-mention-textarea::selection'))
+    expect(selectionStyle?.textContent).toContain('color: var(--hesper-color-accent-contrast')
+    expect(selectionStyle?.textContent).toContain('-webkit-text-fill-color: var(--hesper-color-accent-contrast')
     expect(textarea).toHaveFocus()
 
     await user.keyboard('完成{Control>}{Enter}{/Control}')

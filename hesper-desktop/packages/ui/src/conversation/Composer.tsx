@@ -230,9 +230,10 @@ export function Composer({
             ))}
           </div>
         ) : null}
+        {hasSkillMentionPills ? <style>{skillMentionSelectionCss}</style> : null}
         <textarea
           ref={textareaRef}
-          className="hesper-theme-scrollbar"
+          className={hasSkillMentionPills ? 'hesper-theme-scrollbar hesper-skill-mention-textarea' : 'hesper-theme-scrollbar'}
           aria-label="消息输入框"
           placeholder="输入消息，支持 @skills"
           rows={4}
@@ -489,6 +490,18 @@ function findReferencedSkills(content: string, skills: SkillOption[]): SkillOpti
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
+
+const skillMentionSelectionCss = `
+.hesper-skill-mention-textarea::selection {
+  background: var(--hesper-color-accent, ${themeTokens.color.accent});
+  color: var(--hesper-color-accent-contrast, ${themeTokens.color.accentContrast});
+  -webkit-text-fill-color: var(--hesper-color-accent-contrast, ${themeTokens.color.accentContrast});
+}
+.hesper-skill-mention-textarea::-moz-selection {
+  background: var(--hesper-color-accent, ${themeTokens.color.accent});
+  color: var(--hesper-color-accent-contrast, ${themeTokens.color.accentContrast});
+}
+`
 
 const skillMenuStyle = {
   position: 'absolute',
