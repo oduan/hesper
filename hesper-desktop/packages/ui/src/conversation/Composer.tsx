@@ -564,13 +564,12 @@ const skillMentionPillStyle = {
   border: 0,
   borderRadius: '3px',
   background: themeTokens.color.softControl,
-  boxShadow: `0 0 0 2px ${themeTokens.color.softControl}`,
+  boxShadow: `1px 0 0 1px ${themeTokens.color.softControl}`,
   boxDecorationBreak: 'clone',
   WebkitBoxDecorationBreak: 'clone',
   color: themeTokens.color.text,
-  fontSize: '0.92em',
   padding: 0,
-  lineHeight: 1.2,
+  lineHeight: 1.5,
   whiteSpace: 'pre-wrap'
 } satisfies CSSProperties
 
