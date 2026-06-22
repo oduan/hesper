@@ -44,6 +44,11 @@ export function SoulSettingsPanel({ settings, error, onUpdate }: SoulSettingsPan
     setIsEditing(true)
   }, [])
 
+  const handleTextareaBlur = useCallback(() => {
+    flushDraft()
+    setIsEditing(false)
+  }, [flushDraft])
+
   useEffect(() => {
     onUpdateRef.current = onUpdate
   }, [onUpdate])
@@ -121,10 +126,10 @@ export function SoulSettingsPanel({ settings, error, onUpdate }: SoulSettingsPan
 
               setDraft(event.target.value)
             }}
-            onBlur={flushDraft}
+            onBlur={handleTextareaBlur}
             placeholder="写下主 Agent 的身份、口吻、原则或长期行为偏好。"
             rows={8}
-            style={textareaStyle}
+            style={getTextareaStyle(isEditing)}
           />
         </div>
       </div>
@@ -198,18 +203,26 @@ const editButtonStyle: CSSProperties = {
   cursor: 'pointer'
 }
 
-const textareaStyle: CSSProperties = {
+const textareaBaseStyle: CSSProperties = {
   width: '100%',
   boxSizing: 'border-box',
-  border: 'none',
-  borderRadius: 0,
-  backgroundColor: darkTheme.color.surfaceMuted,
   color: 'var(--hesper-color-text, #c0caf5)',
-  padding: '12px 0',
   minHeight: 160,
   resize: 'none',
   fontFamily: 'inherit',
   lineHeight: 1.5
+}
+
+function getTextareaStyle(isEditing: boolean): CSSProperties {
+  return {
+    ...textareaBaseStyle,
+    borderStyle: isEditing ? 'solid' : 'none',
+    borderWidth: isEditing ? 1 : 0,
+    borderColor: darkTheme.color.border,
+    borderRadius: isEditing ? darkTheme.radius.md : 0,
+    backgroundColor: isEditing ? darkTheme.color.surfaceMuted : 'transparent',
+    padding: isEditing ? '12px' : '12px 0'
+  }
 }
 
 const errorStyle: CSSProperties = {

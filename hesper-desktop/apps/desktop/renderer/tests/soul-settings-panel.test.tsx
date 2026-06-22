@@ -5,6 +5,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SoulSettingsPanel } from '../src/soul-settings-panel'
 
+const transparentBackgrounds = ['transparent', 'rgba(0, 0, 0, 0)']
+
 describe('SoulSettingsPanel', () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -16,7 +18,7 @@ describe('SoulSettingsPanel', () => {
     vi.useRealTimers()
   })
 
-  it('keeps the textarea read-only until edit is clicked', async () => {
+  it('keeps the textarea read-only and chromeless until edit is clicked', async () => {
     vi.useRealTimers()
     const onUpdate = vi.fn()
     const user = userEvent.setup({ delay: null })
@@ -24,8 +26,13 @@ describe('SoulSettingsPanel', () => {
     render(<SoulSettingsPanel settings={{ soul: '初始身份' }} onUpdate={onUpdate} />)
 
     const textarea = screen.getByLabelText('身份设定')
+    const textareaStyle = window.getComputedStyle(textarea)
+
     expect(textarea).toHaveAttribute('readonly')
     expect(textarea).toHaveAttribute('aria-readonly', 'true')
+    expect(textareaStyle.borderTopStyle).toBe('none')
+    expect(transparentBackgrounds).toContain(textareaStyle.backgroundColor)
+    expect(textareaStyle.resize).toBe('none')
 
     await user.type(textarea, '新的身份')
 
@@ -33,7 +40,7 @@ describe('SoulSettingsPanel', () => {
     expect(onUpdate).not.toHaveBeenCalled()
   })
 
-  it('shows an edit button next to the label and enables editing after click', async () => {
+  it('shows textarea chrome and enables editing after clicking edit', async () => {
     vi.useRealTimers()
     const onUpdate = vi.fn()
     const user = userEvent.setup({ delay: null })
@@ -49,8 +56,12 @@ describe('SoulSettingsPanel', () => {
 
     await user.click(editButton)
 
+    const textareaStyle = window.getComputedStyle(textarea)
     expect(textarea).not.toHaveAttribute('readonly')
     expect(textarea).toHaveAttribute('aria-readonly', 'false')
+    expect(textareaStyle.borderTopStyle).not.toBe('none')
+    expect(transparentBackgrounds).not.toContain(textareaStyle.backgroundColor)
+    expect(textareaStyle.resize).toBe('none')
 
     await user.type(textarea, '新的身份')
     expect(textarea).toHaveValue('新的身份')
@@ -114,7 +125,7 @@ describe('SoulSettingsPanel', () => {
     expect(latestOnUpdate).toHaveBeenCalledWith({ soul: '新的身份' })
   })
 
-  it('flushes immediately on blur without waiting for the debounce window', () => {
+  it('flushes immediately on blur, exits editing, and removes textarea chrome', () => {
     const onUpdate = vi.fn()
 
     render(<SoulSettingsPanel settings={{ soul: '' }} onUpdate={onUpdate} />)
@@ -125,8 +136,14 @@ describe('SoulSettingsPanel', () => {
     fireEvent.change(textarea, { target: { value: '新的身份' } })
     fireEvent.blur(textarea)
 
+    const textareaStyle = window.getComputedStyle(textarea)
     expect(onUpdate).toHaveBeenCalledTimes(1)
     expect(onUpdate).toHaveBeenCalledWith({ soul: '新的身份' })
+    expect(textarea).toHaveAttribute('readonly')
+    expect(textarea).toHaveAttribute('aria-readonly', 'true')
+    expect(textareaStyle.borderTopStyle).toBe('none')
+    expect(transparentBackgrounds).toContain(textareaStyle.backgroundColor)
+    expect(textareaStyle.resize).toBe('none')
 
     act(() => {
       vi.advanceTimersByTime(300)
@@ -204,24 +221,14 @@ describe('SoulSettingsPanel', () => {
     expect(onUpdate).toHaveBeenLastCalledWith({ soul: '第二次编辑' })
   })
 
-  it('renders the soul field without borders while keeping a filled, non-resizable textarea', () => {
+  it('keeps the textarea non-resizable in both read-only and editing states', () => {
     render(<SoulSettingsPanel settings={{ soul: '' }} onUpdate={vi.fn()} />)
 
     const textarea = screen.getByLabelText('身份设定')
-    const textareaStyle = window.getComputedStyle(textarea)
-    expect(textareaStyle.borderTopStyle).toBe('none')
-    expect(['transparent', 'rgba(0, 0, 0, 0)']).not.toContain(textareaStyle.backgroundColor)
-    expect(textareaStyle.paddingLeft).toBe('0px')
-    expect(textareaStyle.paddingRight).toBe('0px')
-    expect(textareaStyle.resize).toBe('none')
+    expect(window.getComputedStyle(textarea).resize).toBe('none')
 
-    const fieldWrapper = textarea.parentElement
-    expect(fieldWrapper).not.toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }))
 
-    const fieldWrapperStyle = window.getComputedStyle(fieldWrapper as HTMLElement)
-    expect(fieldWrapperStyle.borderTopStyle).toBe('none')
-    expect(['transparent', 'rgba(0, 0, 0, 0)']).toContain(fieldWrapperStyle.backgroundColor)
-    expect(['0px', '0']).toContain(fieldWrapperStyle.paddingLeft)
-    expect(['0px', '0']).toContain(fieldWrapperStyle.paddingRight)
+    expect(window.getComputedStyle(textarea).resize).toBe('none')
   })
 })
