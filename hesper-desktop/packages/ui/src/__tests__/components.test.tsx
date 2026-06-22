@@ -108,6 +108,7 @@ describe('ui components', () => {
     expect(screen.getByLabelText('实体列表')).toHaveStyle({ boxSizing: 'border-box' })
     expect(screen.getByLabelText('会话列表')).toHaveClass('hesper-theme-scrollbar')
     expect(screen.getByLabelText('主工作区')).toHaveStyle({ gridTemplateColumns: '204px 427px minmax(0, 1fr)' })
+    expect(screen.getByLabelText('详情区域').firstElementChild).toHaveStyle({ padding: '0px' })
     const sessionRow = screen.getByRole('button', { name: '视频脚本生成' })
     expect(sessionRow).toHaveStyle({ alignItems: 'center' })
     expect(sessionRow).toHaveTextContent('视频脚本生成')
@@ -197,6 +198,7 @@ describe('ui components', () => {
     )
 
     expect(screen.getByRole('button', { name: '工具' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByLabelText('详情区域').firstElementChild).toHaveStyle({ padding: '16px' })
     expect(screen.getByLabelText('工具列表')).toHaveClass('hesper-theme-scrollbar')
     expect(screen.getByText('Read File').closest('[role="button"]')).toHaveClass('is-active')
     expect(screen.getByText('Read a text file from the selected workspace.')).toBeInTheDocument()
@@ -1424,6 +1426,161 @@ describe('ui components', () => {
     screen.getByRole('heading', { name: '测试会话' }).dispatchEvent(ctrlWheelOnConversationChrome)
     expect(ctrlWheelOnConversationChrome.defaultPrevented).toBe(true)
     expect(conversationScroller.scrollTop).toBe(420)
+  })
+
+  it('lets output block edge wheels continue scrolling the conversation while containing inner scroll', () => {
+    const messages = [
+      {
+        id: 'edge-user-1',
+        sessionId: 'session-1',
+        role: 'user',
+        content: '请生成长输出',
+        contentType: 'markdown',
+        runId: 'run-edge-1',
+        createdAt: now
+      },
+      {
+        id: 'edge-assistant-1',
+        sessionId: 'session-1',
+        role: 'assistant',
+        content: Array.from({ length: 60 }, (_, index) => `可滚动输出第 ${index + 1} 行`).join('\n\n'),
+        contentType: 'markdown',
+        runId: 'run-edge-1',
+        createdAt: '2026-06-10T03:00:01.000Z'
+      }
+    ] satisfies Message[]
+
+    render(
+      <ConversationView
+        session={baseSession}
+        messages={messages}
+        steps={[]}
+        streamingText=""
+        modelId="mock/hesper-fast"
+        onSend={() => undefined}
+      />
+    )
+
+    const conversationScroller = screen.getByLabelText('消息列表') as HTMLElement
+    const outputScroller = screen.getByLabelText('输出内容滚动区') as HTMLElement
+    Object.defineProperty(outputScroller, 'clientHeight', { configurable: true, value: 120 })
+    Object.defineProperty(outputScroller, 'scrollHeight', { configurable: true, value: 480 })
+
+    conversationScroller.scrollTop = 50
+    outputScroller.scrollTop = 120
+    fireEvent.wheel(outputScroller, { deltaY: 64 })
+    expect(conversationScroller.scrollTop).toBe(50)
+
+    conversationScroller.scrollTop = 140
+    outputScroller.scrollTop = 360
+    fireEvent.wheel(outputScroller, { deltaY: 80 })
+    expect(conversationScroller.scrollTop).toBe(220)
+
+    conversationScroller.scrollTop = 300
+    outputScroller.scrollTop = 0
+    fireEvent.wheel(outputScroller, { deltaY: -90 })
+    expect(conversationScroller.scrollTop).toBe(210)
+  })
+
+  it('lets wide markdown tables consume horizontal wheel without scrolling the conversation', () => {
+    const messages = [
+      {
+        id: 'table-user-1',
+        sessionId: 'session-1',
+        role: 'user',
+        content: '请生成宽表格',
+        contentType: 'markdown',
+        runId: 'run-table-1',
+        createdAt: now
+      },
+      {
+        id: 'table-assistant-1',
+        sessionId: 'session-1',
+        role: 'assistant',
+        content: [
+          '| 第一列 | 第二列 | 第三列 | 第四列 | 第五列 |',
+          '| --- | --- | --- | --- | --- |',
+          '| 很长的单元格内容一 | 很长的单元格内容二 | 很长的单元格内容三 | 很长的单元格内容四 | 很长的单元格内容五 |'
+        ].join('\n'),
+        contentType: 'markdown',
+        runId: 'run-table-1',
+        createdAt: '2026-06-10T03:00:01.000Z'
+      }
+    ] satisfies Message[]
+
+    render(
+      <ConversationView
+        session={baseSession}
+        messages={messages}
+        steps={[]}
+        streamingText=""
+        modelId="mock/hesper-fast"
+        onSend={() => undefined}
+      />
+    )
+
+    const conversationScroller = screen.getByLabelText('消息列表') as HTMLElement
+    const outputScroller = screen.getByLabelText('输出内容滚动区') as HTMLElement
+    const table = screen.getByRole('table')
+    const tableScroller = table.closest('.hesper-theme-scrollbar') as HTMLElement
+    expect(tableScroller).not.toBe(outputScroller)
+
+    Object.defineProperty(outputScroller, 'clientWidth', { configurable: true, value: 320 })
+    Object.defineProperty(outputScroller, 'scrollWidth', { configurable: true, value: 320 })
+    Object.defineProperty(outputScroller, 'clientHeight', { configurable: true, value: 120 })
+    Object.defineProperty(outputScroller, 'scrollHeight', { configurable: true, value: 120 })
+    Object.defineProperty(tableScroller, 'clientWidth', { configurable: true, value: 160 })
+    Object.defineProperty(tableScroller, 'scrollWidth', { configurable: true, value: 640 })
+
+    conversationScroller.scrollTop = 25
+    conversationScroller.scrollLeft = 10
+    tableScroller.scrollLeft = 120
+
+    const horizontalWheel = new WheelEvent('wheel', { deltaX: 80, bubbles: true, cancelable: true })
+    tableScroller.dispatchEvent(horizontalWheel)
+
+    expect(horizontalWheel.defaultPrevented).toBe(false)
+    expect(conversationScroller.scrollTop).toBe(25)
+    expect(conversationScroller.scrollLeft).toBe(10)
+  })
+
+  it('scrolls the message list when wheeling over conversation title and message padding chrome', () => {
+    render(
+      <ConversationView
+        session={baseSession}
+        messages={[
+          {
+            id: 'padding-user-1',
+            sessionId: 'session-1',
+            role: 'user',
+            content: '第一条消息',
+            contentType: 'markdown',
+            createdAt: now
+          },
+          {
+            id: 'padding-assistant-1',
+            sessionId: 'session-1',
+            role: 'assistant',
+            content: '第一条回复',
+            contentType: 'markdown',
+            createdAt: '2026-06-10T03:00:01.000Z'
+          }
+        ]}
+        steps={[]}
+        streamingText=""
+        modelId="mock/hesper-fast"
+        onSend={() => undefined}
+      />
+    )
+
+    const conversationScroller = screen.getByLabelText('消息列表') as HTMLElement
+    conversationScroller.scrollTop = 0
+
+    fireEvent.wheel(conversationScroller, { deltaY: 42 })
+    expect(conversationScroller.scrollTop).toBe(42)
+
+    fireEvent.wheel(screen.getByRole('heading', { name: '测试会话' }), { deltaY: 58 })
+    expect(conversationScroller.scrollTop).toBe(100)
   })
 
   it('opens fullscreen output when ctrl-left-clicking inside an output block', () => {

@@ -147,12 +147,73 @@ function getElementTarget(target: EventTarget | null): Element | null {
   return target instanceof Element ? target : null
 }
 
-function isInsideOutputScrollArea(target: EventTarget | null): boolean {
-  return Boolean(getElementTarget(target)?.closest('[data-hesper-output-scroll="true"]'))
+function getOutputScrollArea(target: EventTarget | null): HTMLElement | null {
+  const outputScroller = getElementTarget(target)?.closest('[data-hesper-output-scroll="true"]')
+  return outputScroller instanceof HTMLElement ? outputScroller : null
 }
 
 function isInsideFullscreenOutput(target: EventTarget | null): boolean {
   return Boolean(getElementTarget(target)?.closest('[data-hesper-fullscreen-output="true"]'))
+}
+
+function hasUsableScrollMetrics(element: HTMLElement): boolean {
+  return element.clientHeight > 0 || element.scrollHeight > 0 || element.clientWidth > 0 || element.scrollWidth > 0
+}
+
+function isScrollableOverflow(value: string): boolean {
+  return value === 'auto' || value === 'scroll' || value === 'overlay'
+}
+
+function getScrollableOverflow(element: HTMLElement, axis: 'x' | 'y'): string {
+  const style = window.getComputedStyle(element)
+  const axisOverflow = axis === 'x' ? style.overflowX : style.overflowY
+  const inlineAxisOverflow = axis === 'x' ? element.style.overflowX : element.style.overflowY
+
+  if (isScrollableOverflow(axisOverflow)) return axisOverflow
+  if (isScrollableOverflow(inlineAxisOverflow)) return inlineAxisOverflow
+  if (isScrollableOverflow(style.overflow)) return style.overflow
+  if (isScrollableOverflow(element.style.overflow)) return element.style.overflow
+
+  return axisOverflow || inlineAxisOverflow || style.overflow || element.style.overflow
+}
+
+function canScrollElementOnAxisByDelta(element: HTMLElement, axis: 'x' | 'y', delta: number): boolean {
+  if (delta === 0 || !isScrollableOverflow(getScrollableOverflow(element, axis))) {
+    return false
+  }
+
+  if (axis === 'x') {
+    if (element.scrollWidth <= element.clientWidth + 1) return false
+    return delta > 0
+      ? element.scrollLeft + element.clientWidth < element.scrollWidth - 1
+      : element.scrollLeft > 0
+  }
+
+  if (element.scrollHeight <= element.clientHeight + 1) return false
+  return delta > 0
+    ? element.scrollTop + element.clientHeight < element.scrollHeight - 1
+    : element.scrollTop > 0
+}
+
+function canScrollElementByDelta(element: HTMLElement, deltaX: number, deltaY: number): boolean {
+  return canScrollElementOnAxisByDelta(element, 'x', deltaX) || canScrollElementOnAxisByDelta(element, 'y', deltaY)
+}
+
+function findNearestScrollConsumerWithinOutput(target: EventTarget | null, outputScroller: HTMLElement, deltaX: number, deltaY: number): HTMLElement | null {
+  let current = getElementTarget(target)
+
+  while (current && outputScroller.contains(current)) {
+    if (current instanceof HTMLElement && canScrollElementByDelta(current, deltaX, deltaY)) {
+      return current
+    }
+
+    if (current === outputScroller) {
+      break
+    }
+    current = current.parentElement
+  }
+
+  return null
 }
 
 function scrollElementByDelta(element: HTMLElement, deltaX: number, deltaY: number): void {
@@ -174,6 +235,19 @@ function scrollScrollerTo(scroller: HTMLElement, top: number): void {
     scroller.scrollTo({ top: nextTop, behavior: 'auto' })
   } else {
     scroller.scrollTop = nextTop
+  }
+}
+
+function createResizeObserver(callback: ResizeObserverCallback): ResizeObserver | undefined {
+  const ResizeObserverConstructor = globalThis.ResizeObserver
+  if (typeof ResizeObserverConstructor === 'undefined') {
+    return undefined
+  }
+
+  try {
+    return new ResizeObserverConstructor(callback)
+  } catch {
+    return (ResizeObserverConstructor as unknown as (observerCallback: ResizeObserverCallback) => ResizeObserver)(callback)
   }
 }
 
@@ -226,6 +300,7 @@ export function ConversationView({
   ensureGlobalCtrlWheelListener()
   const anchorRefs = useRef<Record<string, HTMLElement | null>>({})
   const messagesScrollRef = useRef<HTMLDivElement | null>(null)
+  const messagesContentRef = useRef<HTMLDivElement | null>(null)
   const localFilePreviewRequestRef = useRef(0)
   const pinnedToBottomRef = useRef(true)
   const didMeasureContentRef = useRef(false)
@@ -354,7 +429,7 @@ export function ConversationView({
     element?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
 
-  const scrollMessagesToBottom = (behavior: ScrollBehavior = 'smooth') => {
+  const scrollMessagesToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
     const element = messagesScrollRef.current
     if (!element) {
       return
@@ -367,7 +442,7 @@ export function ConversationView({
     }
     pinnedToBottomRef.current = true
     setShowJumpToBottom(false)
-  }
+  }, [])
 
   const updateMessagesScrollState = useCallback(() => {
     const element = messagesScrollRef.current
@@ -396,22 +471,14 @@ export function ConversationView({
     updateMessagesScrollState()
   }
 
-  const handleMessagesWheelCapture = (event: WheelEvent<HTMLDivElement>) => {
-    if (isInsideFullscreenOutput(event.target)) {
+  const handleConversationWheelCapture = (event: WheelEvent<HTMLElement>) => {
+    if (isInsideFullscreenOutput(event.target) || (event.deltaX === 0 && event.deltaY === 0)) {
       return
     }
 
-    if (isInsideOutputScrollArea(event.target) && !event.ctrlKey && !event.metaKey) {
-      return
-    }
-
-    if (event.deltaX === 0 && event.deltaY === 0) {
-      return
-    }
-
-    event.preventDefault()
-    event.stopPropagation()
     if (event.ctrlKey || event.metaKey) {
+      event.preventDefault()
+      event.stopPropagation()
       const scroller = messagesScrollRef.current
       if (scroller) {
         jumpToUserMessageByWheel(scroller, event.deltaY !== 0 ? event.deltaY : event.deltaX)
@@ -419,6 +486,16 @@ export function ConversationView({
       }
       return
     }
+
+    const outputScroller = getOutputScrollArea(event.target)
+    if (outputScroller) {
+      if (findNearestScrollConsumerWithinOutput(event.target, outputScroller, event.deltaX, event.deltaY) || !hasUsableScrollMetrics(outputScroller)) {
+        return
+      }
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
     scrollMessagesByDelta(event.deltaX, event.deltaY)
   }
 
@@ -511,45 +588,75 @@ export function ConversationView({
     } else {
       setShowJumpToBottom(true)
     }
-  }, [contentSignature])
+  }, [contentSignature, scrollMessagesToBottom])
+
+  useEffect(() => {
+    const scrollElement = messagesScrollRef.current
+    const contentElement = messagesContentRef.current
+    if (!scrollElement || !contentElement) {
+      return undefined
+    }
+
+    const resizeObserver = createResizeObserver(() => {
+      if (pinnedToBottomRef.current) {
+        scrollMessagesToBottom('auto')
+      } else if (!isNearScrollBottom(scrollElement)) {
+        setShowJumpToBottom(true)
+      }
+    })
+
+    if (!resizeObserver) {
+      return undefined
+    }
+
+    resizeObserver.observe(contentElement)
+    return () => resizeObserver.disconnect()
+  }, [scrollMessagesToBottom])
 
   return (
     <div data-hesper-conversation-root="true" style={{ height: '100%', minHeight: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', fontSize: darkTheme.typography.body }}>
       <section
         aria-label="会话详情"
-        style={{ display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr) auto', gap: darkTheme.spacing.md, minWidth: 0, minHeight: 0 }}
+        style={{ display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr) auto', minWidth: 0, minHeight: 0 }}
       >
         <header
+          onWheelCapture={handleConversationWheelCapture}
           style={{
             position: 'relative',
             minHeight: 32,
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center'
+            justifyContent: 'center',
+            padding: `${darkTheme.spacing.lg} ${darkTheme.spacing.lg} ${darkTheme.spacing.sm}`
           }}
         >
           <h2 style={{ margin: 0, maxWidth: '65%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: darkTheme.typography.body, lineHeight: 1.2, textAlign: 'center', fontWeight: 700 }}>{session.title}</h2>
         </header>
-        <div style={messagesAreaStyle}>
+        <div style={messagesAreaStyle} onWheelCapture={handleConversationWheelCapture}>
           <div
             ref={messagesScrollRef}
             aria-label="消息列表"
             className="hesper-theme-scrollbar"
             data-hesper-message-list="true"
             onScroll={handleMessagesScroll}
-            onWheelCapture={handleMessagesWheelCapture}
             style={{
               height: '100%',
               minHeight: 0,
               minWidth: 0,
               overflowX: 'hidden',
               overflowY: 'auto',
-              display: 'grid',
-              alignContent: 'start',
-              gap: darkTheme.spacing.md,
               paddingRight: darkTheme.spacing.xs
             }}
           >
+            <div
+              ref={messagesContentRef}
+              style={{
+                display: 'grid',
+                alignContent: 'start',
+                gap: darkTheme.spacing.md,
+                padding: `0 ${darkTheme.spacing.lg} ${darkTheme.spacing.md} ${darkTheme.spacing.lg}`
+              }}
+            >
             {orderedMessages.map((message) => {
             const anchorId = createMessageAnchorId(message.id)
             const messageSteps = getMessageSteps(message)
@@ -661,6 +768,7 @@ export function ConversationView({
                 />
               </div>
             ) : null}
+            </div>
           </div>
           {showJumpToBottom ? (
             <button type="button" aria-label="滚动到底部" onClick={() => scrollMessagesToBottom('smooth')} style={jumpToBottomButtonStyle}>
@@ -671,20 +779,22 @@ export function ConversationView({
             </button>
           ) : null}
         </div>
-        <Composer
-          {...(session.workspacePath ? { workspacePath: session.workspacePath } : {})}
-          modelId={modelId}
-          {...(modelOptions ? { modelOptions } : {})}
-          {...(modelOptionGroups ? { modelOptionGroups } : {})}
-          {...(draftValue !== undefined ? { value: draftValue } : {})}
-          running={running}
-          {...(onDraftChange ? { onDraftChange } : {})}
-          {...(onStop ? { onStop } : {})}
-          {...(onSelectWorkspace ? { onSelectWorkspace } : {})}
-          {...(onModelChange ? { onModelChange } : {})}
-          onSend={onSend}
-          sendSignal={shortcutCommand?.type === 'send' ? shortcutCommand.nonce : 0}
-        />
+        <div style={composerAreaStyle}>
+          <Composer
+            {...(session.workspacePath ? { workspacePath: session.workspacePath } : {})}
+            modelId={modelId}
+            {...(modelOptions ? { modelOptions } : {})}
+            {...(modelOptionGroups ? { modelOptionGroups } : {})}
+            {...(draftValue !== undefined ? { value: draftValue } : {})}
+            running={running}
+            {...(onDraftChange ? { onDraftChange } : {})}
+            {...(onStop ? { onStop } : {})}
+            {...(onSelectWorkspace ? { onSelectWorkspace } : {})}
+            {...(onModelChange ? { onModelChange } : {})}
+            onSend={onSend}
+            sendSignal={shortcutCommand?.type === 'send' ? shortcutCommand.nonce : 0}
+          />
+        </div>
       </section>
       {localFilePreviewState ? (
         <LocalFilePreviewDialog
@@ -704,6 +814,10 @@ const messagesAreaStyle = {
   position: 'relative',
   minHeight: 0,
   overflow: 'hidden'
+} satisfies CSSProperties
+
+const composerAreaStyle = {
+  padding: `${darkTheme.spacing.md} ${darkTheme.spacing.lg} ${darkTheme.spacing.lg}`
 } satisfies CSSProperties
 
 const jumpToBottomButtonStyle = {
