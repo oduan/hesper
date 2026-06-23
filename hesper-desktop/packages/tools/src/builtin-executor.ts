@@ -1003,6 +1003,8 @@ type SearchCondition =
   | { not: SearchCondition }
   | { nameGlob: string }
   | { nameRegex: string }
+  | { pathGlob: string }
+  | { pathRegex: string }
   | { contentContains: string }
   | { contentRegex: string }
 
@@ -1026,7 +1028,9 @@ function isSearchCondition(value: unknown): value is SearchCondition {
   if (Array.isArray(record.all)) return record.all.every(isSearchCondition)
   if (Array.isArray(record.any)) return record.any.every(isSearchCondition)
   if (record.not !== undefined) return isSearchCondition(record.not)
-  return typeof record.nameGlob === 'string' || typeof record.nameRegex === 'string' || typeof record.contentContains === 'string' || typeof record.contentRegex === 'string'
+  return typeof record.nameGlob === 'string' || typeof record.nameRegex === 'string'
+    || typeof record.pathGlob === 'string' || typeof record.pathRegex === 'string'
+    || typeof record.contentContains === 'string' || typeof record.contentRegex === 'string'
 }
 
 function parseSearchCondition(args: unknown): SearchCondition {
@@ -1042,10 +1046,18 @@ function escapeRegExp(value: string): string {
 }
 
 function globToRegExp(glob: string, caseSensitive: boolean): RegExp {
-  const source = glob.split('').map((char) => {
-    if (char === '*') return '.*'
-    if (char === '?') return '.'
-    return escapeRegExp(char)
+  // Split on '**' first, handle each segment, then join with '.*' (cross-directory)
+  const parts = glob.split(/(\*\*)/g)
+  const source = parts.map((part) => {
+    if (part === '**') return '.*'
+    // For non-** parts, * and ? must NOT cross /
+    let segment = ''
+    for (const char of part) {
+      if (char === '*') segment += '[^/]*'
+      else if (char === '?') segment += '[^/]'
+      else segment += escapeRegExp(char)
+    }
+    return segment
   }).join('')
   return new RegExp(`^${source}$`, caseSensitive ? '' : 'i')
 }
@@ -1062,12 +1074,12 @@ function conditionNeedsContent(condition: SearchCondition): boolean {
   return false
 }
 
-function findLineMatches(lines: string[], matcher: (line: string) => boolean): SearchLineMatch[] {
+function findLineMatches(lines: string[], matcher: (line: string) => boolean, contextLines = 2): SearchLineMatch[] {
   const matches: SearchLineMatch[] = []
   for (const [index, line] of lines.entries()) {
     if (!matcher(line)) continue
-    const start = Math.max(0, index - 2)
-    const end = Math.min(lines.length - 1, index + 2)
+    const start = Math.max(0, index - contextLines)
+    const end = Math.min(lines.length - 1, index + contextLines)
     matches.push({
       lineNumber: index + 1,
       line,
@@ -1084,6 +1096,8 @@ function evaluateSearchCondition(condition: SearchCondition, file: SearchFileCon
   if ('not' in condition) return !evaluateSearchCondition(condition.not, file)
   if ('nameGlob' in condition) return globToRegExp(condition.nameGlob, file.caseSensitive).test(file.name)
   if ('nameRegex' in condition) return new RegExp(condition.nameRegex, file.caseSensitive ? '' : 'i').test(file.name)
+  if ('pathGlob' in condition) return globToRegExp(condition.pathGlob, file.caseSensitive).test(file.relativePath)
+  if ('pathRegex' in condition) return new RegExp(condition.pathRegex, file.caseSensitive ? '' : 'i').test(file.relativePath)
   const lines = file.lines ?? []
   if ('contentContains' in condition) {
     const needle = normalizeForCase(condition.contentContains, file.caseSensitive)
@@ -1092,18 +1106,18 @@ function evaluateSearchCondition(condition: SearchCondition, file: SearchFileCon
   return findLineMatches(lines, (line) => new RegExp(condition.contentRegex, file.caseSensitive ? '' : 'i').test(line)).length > 0
 }
 
-function collectPositiveContentMatches(condition: SearchCondition, file: SearchFileContext): SearchLineMatch[] {
-  if ('all' in condition) return condition.all.flatMap((child) => collectPositiveContentMatches(child, file))
-  if ('any' in condition) return condition.any.flatMap((child) => evaluateSearchCondition(child, file) ? collectPositiveContentMatches(child, file) : [])
+function collectPositiveContentMatches(condition: SearchCondition, file: SearchFileContext, contextLines = 2): SearchLineMatch[] {
+  if ('all' in condition) return condition.all.flatMap((child) => collectPositiveContentMatches(child, file, contextLines))
+  if ('any' in condition) return condition.any.flatMap((child) => evaluateSearchCondition(child, file) ? collectPositiveContentMatches(child, file, contextLines) : [])
   if ('not' in condition) return []
   const lines = file.lines ?? []
   if ('contentContains' in condition) {
     const needle = normalizeForCase(condition.contentContains, file.caseSensitive)
-    return findLineMatches(lines, (line) => normalizeForCase(line, file.caseSensitive).includes(needle))
+    return findLineMatches(lines, (line) => normalizeForCase(line, file.caseSensitive).includes(needle), contextLines)
   }
   if ('contentRegex' in condition) {
     const regex = new RegExp(condition.contentRegex, file.caseSensitive ? '' : 'i')
-    return findLineMatches(lines, (line) => regex.test(line))
+    return findLineMatches(lines, (line) => regex.test(line), contextLines)
   }
   return []
 }
@@ -1139,6 +1153,9 @@ async function searchFiles(tool: ToolDefinition, args: unknown, context: ToolExe
   const maxResults = numberArg(args, 'maxResults', 50, { min: 1, max: 500, integer: true })
   const maxFileBytes = numberArg(args, 'maxFileBytes', defaultSearchMaxFileBytes, { min: 1, max: 1024 * 1024, integer: true })
   const maxScannedEntries = numberArg(args, 'maxScannedEntries', 25_000, { min: 1, max: 25_000, integer: true })
+  const maxMatchesPerFile = numberArg(args, 'maxMatchesPerFile', 20, { min: 1, max: 200, integer: true })
+  const maxTotalLineMatches = numberArg(args, 'maxTotalLineMatches', 200, { min: 1, max: 2000, integer: true })
+  const contextLines = numberArg(args, 'contextLines', 2, { min: 0, max: 5, integer: true })
   const includeIgnored = booleanArg(args, 'includeIgnored')
   const respectGitIgnore = booleanArg(args, 'respectGitIgnore', true)
 
@@ -1151,6 +1168,8 @@ async function searchFiles(tool: ToolDefinition, args: unknown, context: ToolExe
 
   const walked = await walkWorkspaceDirectory(rootPath, workspacePath, { maxEntries: maxScannedEntries, filter, includeIgnored })
   const results: Array<{ path: string; name: string; type: 'file'; matches: SearchLineMatch[]; truncated?: boolean }> = []
+  let totalLineMatches = 0
+  let truncatedReason: 'maxTotalLineMatches' | 'maxMatchesPerFile' | 'maxScannedEntries' | undefined
   for (const entry of walked.entries) {
     if (results.length >= maxResults) break
     if (entry.type !== 'file') continue
@@ -1163,15 +1182,42 @@ async function searchFiles(tool: ToolDefinition, args: unknown, context: ToolExe
       truncated = content.truncated
     }
     if (!evaluateSearchCondition(condition, fileContext)) continue
+
+    // Collect all matches for this file, then apply per-file budget
+    const allFileMatches = collectPositiveContentMatches(condition, fileContext, contextLines)
+    const remainingBudget = maxTotalLineMatches - totalLineMatches
+    const fileBudget = Math.min(maxMatchesPerFile, remainingBudget)
+    const fileMatches = allFileMatches.slice(0, fileBudget)
+    totalLineMatches += fileMatches.length
+    if (allFileMatches.length > fileMatches.length) {
+      truncated = true
+      truncatedReason = fileMatches.length >= maxMatchesPerFile ? 'maxMatchesPerFile' : 'maxTotalLineMatches'
+    }
+
     results.push({
       path: relativePath,
       name: basename(entry.path),
       type: 'file',
-      matches: collectPositiveContentMatches(condition, fileContext),
+      matches: fileMatches,
       ...(truncated ? { truncated } : {})
     })
+
+    // If global budget exhausted, stop scanning further files
+    if (totalLineMatches >= maxTotalLineMatches) {
+      if (!truncatedReason) truncatedReason = 'maxTotalLineMatches'
+      break
+    }
   }
-  const resultTruncated = results.length >= maxResults || walked.truncated
+
+  // Determine overall truncation
+  const budgetTruncated = totalLineMatches >= maxTotalLineMatches || results.some((r) => r.truncated)
+  const resultTruncated = results.length >= maxResults || walked.truncated || budgetTruncated
+  if (!truncatedReason && walked.truncated) {
+    truncatedReason = 'maxScannedEntries'
+  } else if (!truncatedReason && budgetTruncated) {
+    truncatedReason = 'maxTotalLineMatches'
+  }
+
   const result: Record<string, unknown> = {
     path: toWorkspaceRelativePath(workspacePath, rootPath),
     results,
@@ -1179,8 +1225,15 @@ async function searchFiles(tool: ToolDefinition, args: unknown, context: ToolExe
     scannedEntries: walked.scannedEntries,
     skippedIgnoredEntries: walked.skippedIgnoredEntries
   }
-  if (walked.truncated && walked.truncatedReason) {
-    result.truncatedReason = walked.truncatedReason
+  if (truncatedReason) {
+    result.truncatedReason = truncatedReason
+  }
+  if (totalLineMatches > 0) {
+    result.totalLineMatches = totalLineMatches
+  }
+  // Only add suggestion when truncation is due to match budgets (not walker truncation)
+  if (truncatedReason && truncatedReason !== 'maxScannedEntries') {
+    result.suggestion = 'Narrow path, add pathGlob/nameGlob, or use a more specific content query before retrying.'
   }
   return {
     content: jsonContent(result),

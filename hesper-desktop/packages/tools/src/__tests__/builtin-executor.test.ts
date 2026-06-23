@@ -1195,4 +1195,125 @@ describe('createBuiltinToolExecutor', () => {
     expect(allResults.length).toBeGreaterThanOrEqual(2)
     expect(JSON.stringify(allResults)).toContain('pkg.ts')
   })
+
+  it('limits content search line matches per file and overall', async () => {
+    const root = await workspace()
+    await mkdir(join(root, 'src'), { recursive: true })
+    await writeFile(join(root, 'src', 'many-a.ts'), Array.from({ length: 40 }, (_, index) => `needle a ${index + 1}`).join('\n'), 'utf8')
+    await writeFile(join(root, 'src', 'many-b.ts'), Array.from({ length: 40 }, (_, index) => `needle b ${index + 1}`).join('\n'), 'utf8')
+    const executor = createBuiltinToolExecutor()
+
+    const searched = await executor.execute(tool('filesystem.search'), {
+      condition: { contentContains: 'needle' },
+      maxMatchesPerFile: 5,
+      maxTotalLineMatches: 8,
+      maxResults: 10
+    }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.search']
+    })
+
+    const parsed = JSON.parse(searched.content)
+    expect(parsed.truncated).toBe(true)
+    expect(parsed.truncatedReason).toBe('maxTotalLineMatches')
+    expect(parsed.totalLineMatches).toBe(8)
+    expect(parsed.results[0].matches).toHaveLength(5)
+    expect(parsed.results.some((result: { truncated?: boolean }) => result.truncated)).toBe(true)
+    expect(parsed.suggestion).toContain('Narrow path')
+  })
+
+  it('supports pathGlob to narrow search scope', async () => {
+    const root = await workspace()
+    await mkdir(join(root, 'packages', 'tools', 'src'), { recursive: true })
+    await mkdir(join(root, 'packages', 'ui', 'src'), { recursive: true })
+    await writeFile(join(root, 'packages', 'tools', 'src', 'tool.ts'), 'const marker = "needle"\n', 'utf8')
+    await writeFile(join(root, 'packages', 'ui', 'src', 'view.ts'), 'const marker = "needle"\n', 'utf8')
+    const executor = createBuiltinToolExecutor()
+
+    const searched = await executor.execute(tool('filesystem.search'), {
+      condition: { all: [{ pathGlob: 'packages/tools/**/*.ts' }, { contentContains: 'needle' }] }
+    }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.search']
+    })
+
+    const parsed = JSON.parse(searched.content)
+    expect(parsed.results).toHaveLength(1)
+    expect(parsed.results[0].path).toBe('packages/tools/src/tool.ts')
+  })
+
+  it('supports pathRegex filter in search condition', async () => {
+    const root = await workspace()
+    await mkdir(join(root, 'packages', 'tools', 'src'), { recursive: true })
+    await mkdir(join(root, 'packages', 'ui', 'src'), { recursive: true })
+    await writeFile(join(root, 'packages', 'tools', 'src', 'tool.ts'), 'const marker = "needle"\n', 'utf8')
+    await writeFile(join(root, 'packages', 'ui', 'src', 'view.ts'), 'const marker = "needle"\n', 'utf8')
+    const executor = createBuiltinToolExecutor()
+
+    const searched = await executor.execute(tool('filesystem.search'), {
+      condition: { all: [{ pathRegex: '^packages/tools/' }, { contentContains: 'needle' }] }
+    }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.search']
+    })
+
+    const parsed = JSON.parse(searched.content)
+    expect(parsed.results).toHaveLength(1)
+    expect(parsed.results[0].path).toBe('packages/tools/src/tool.ts')
+  })
+
+  it('contextLines: 0 returns no before/after context', async () => {
+    const root = await workspace()
+    await mkdir(join(root, 'src'), { recursive: true })
+    await writeFile(join(root, 'src', 'app.ts'), 'one\ntwo needle\nthree\nfour needle\nfive\n', 'utf8')
+    const executor = createBuiltinToolExecutor()
+
+    const searched = await executor.execute(tool('filesystem.search'), {
+      condition: { contentContains: 'needle' },
+      contextLines: 0
+    }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.search']
+    })
+
+    const parsed = JSON.parse(searched.content)
+    expect(parsed.results).toHaveLength(1)
+    for (const file of parsed.results) {
+      for (const match of file.matches) {
+        expect(match.before).toHaveLength(0)
+        expect(match.after).toHaveLength(0)
+      }
+    }
+  })
+
+  it('maxMatchesPerFile stops collecting matches per file', async () => {
+    const root = await workspace()
+    await mkdir(join(root, 'src'), { recursive: true })
+    await writeFile(join(root, 'src', 'many.ts'), Array.from({ length: 30 }, (_, index) => `needle line ${index + 1}`).join('\n'), 'utf8')
+    const executor = createBuiltinToolExecutor()
+
+    const searched = await executor.execute(tool('filesystem.search'), {
+      condition: { contentContains: 'needle' },
+      maxMatchesPerFile: 3,
+      maxTotalLineMatches: 200,
+      maxResults: 10
+    }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.search']
+    })
+
+    const parsed = JSON.parse(searched.content)
+    expect(parsed.results[0].matches).toHaveLength(3)
+    expect(parsed.results[0].truncated).toBe(true)
+  })
 })
