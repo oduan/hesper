@@ -1433,6 +1433,16 @@ function AppContent() {
                 setSendErrorsBySession
               })
             }}
+            onRetryRun={(message, run) => {
+              pendingTitlePromptsBySessionRef.current[activeSession.id] = message.content
+              void sendMessage({
+                session: activeSession,
+                modelId: run.modelId,
+                content: message.content,
+                dispatch,
+                setSendErrorsBySession
+              })
+            }}
             {...(shortcutCommand ? { shortcutCommand } : {})}
           />
         </>

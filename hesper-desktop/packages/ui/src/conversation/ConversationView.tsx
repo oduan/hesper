@@ -32,6 +32,7 @@ export type ConversationViewProps = {
   onDraftChange?: (value: string) => void
   onDraftSkillMentionsChange?: (mentions: ComposerSkillMention[]) => void
   onSend: (content: string, options?: ComposerSendOptions) => void
+  onRetryRun?: (message: Message, run: AgentRun) => void
   onStop?: () => void
   onSelectWorkspace?: () => void
   onModelChange?: (modelId: string) => void
@@ -294,6 +295,7 @@ export function ConversationView({
   onDraftChange,
   onDraftSkillMentionsChange,
   onSend,
+  onRetryRun,
   onStop,
   onSelectWorkspace,
   onModelChange,
@@ -350,6 +352,10 @@ export function ConversationView({
   const getMessageRun = (message: Message): AgentRun | undefined => (
     message.runId ? runsById?.[message.runId] : undefined
   )
+  const shouldShowRetryRun = (message: Message): boolean => {
+    const run = getMessageRun(message)
+    return Boolean(message.role === 'user' && run?.status === 'failed' && onRetryRun)
+  }
   const getMessageRunEndedAt = (message: Message): string | undefined => {
     const run = getMessageRun(message)
     if (run?.endedAt) return run.endedAt
@@ -714,6 +720,26 @@ export function ConversationView({
                     />
                   </div>
                 ) : null}
+                {shouldShowRetryRun(message) ? (
+                  <div style={retryRunActionRowStyle}>
+                    <button
+                      type="button"
+                      aria-label="重试失败运行"
+                      disabled={running}
+                      onClick={() => {
+                        const run = getMessageRun(message)
+                        if (!run || running) return
+                        onRetryRun?.(message, run)
+                      }}
+                      style={{
+                        ...retryRunButtonStyle,
+                        ...(running ? retryRunButtonDisabledStyle : {})
+                      }}
+                    >
+                      重试
+                    </button>
+                  </div>
+                ) : null}
                 {messageStreamingText ? (
                   <div
                     id={streamingAnchorId}
@@ -851,4 +877,27 @@ const jumpToBottomIconStyle = {
   width: 21,
   height: 21,
   display: 'block'
+} satisfies CSSProperties
+
+const retryRunActionRowStyle = {
+  display: 'flex',
+  justifyContent: 'flex-start',
+  marginTop: themeTokens.spacing.sm,
+  paddingLeft: themeTokens.spacing.md
+} satisfies CSSProperties
+
+const retryRunButtonStyle = {
+  border: 0,
+  borderRadius: 999,
+  background: themeTokens.color.softControl,
+  color: themeTokens.color.text,
+  cursor: 'pointer',
+  padding: '6px 12px',
+  fontSize: themeTokens.typography.body,
+  lineHeight: 1.2
+} satisfies CSSProperties
+
+const retryRunButtonDisabledStyle = {
+  cursor: 'not-allowed',
+  opacity: 0.45
 } satisfies CSSProperties
