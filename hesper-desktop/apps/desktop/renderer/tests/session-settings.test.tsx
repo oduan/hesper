@@ -214,7 +214,7 @@ describe('session settings and restore flow', () => {
     render(<App />)
 
     expect(await screen.findByRole('heading', { name: 'Active current' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '选择工作目录' })).toHaveTextContent('C:/active')
+    expect(screen.getByRole('button', { name: '选择文件夹：active' })).toHaveTextContent('active')
   })
 
   it('shows tools page, renders skills management, and renders roles management from the activity rail', async () => {
@@ -256,12 +256,12 @@ describe('session settings and restore flow', () => {
 
     await screen.findByRole('heading', { name: 'Current chat' })
 
-    await user.click(screen.getByRole('button', { name: '选择工作目录' }))
+    await user.click(screen.getByRole('button', { name: /^选择文件夹/ }))
     expect(selectDirectory).toHaveBeenCalledTimes(1)
     await waitFor(() => {
       expect(setWorkspace).toHaveBeenCalledWith({ id: 'session-1', workspacePath: 'D:/updated-workspace' })
     })
-    expect(screen.getByRole('button', { name: '选择工作目录' })).toHaveTextContent('D:/updated-workspace')
+    expect(screen.getByRole('button', { name: '选择文件夹：updated-workspace' })).toHaveTextContent('updated-workspace')
 
     await chooseThemedOption(user, '选择模型', 'gpt-4o')
     await waitFor(() => {
@@ -310,7 +310,7 @@ describe('session settings and restore flow', () => {
 
     await screen.findByRole('heading', { name: 'Current chat' })
 
-    await user.click(screen.getByRole('button', { name: '选择工作目录' }))
+    await user.click(screen.getByRole('button', { name: /^选择文件夹/ }))
     await user.type(screen.getByPlaceholderText(/输入消息/), 'send with new workspace')
     await user.click(screen.getByRole('button', { name: '发送' }))
 
@@ -320,7 +320,7 @@ describe('session settings and restore flow', () => {
 
     deferred.resolve(createSession({ workspacePath: 'D:/updated-workspace', updatedAt: '2026-06-10T03:05:00.000Z' }))
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: '选择工作目录' })).toHaveTextContent('D:/updated-workspace')
+      expect(screen.getByRole('button', { name: '选择文件夹：updated-workspace' })).toHaveTextContent('updated-workspace')
     })
   })
 
@@ -386,17 +386,17 @@ describe('session settings and restore flow', () => {
     render(<App />)
 
     await screen.findByRole('heading', { name: 'Current chat' })
-    await user.click(screen.getByRole('button', { name: '选择工作目录' }))
-    await user.click(screen.getByRole('button', { name: '选择工作目录' }))
+    await user.click(screen.getByRole('button', { name: /^选择文件夹/ }))
+    await user.click(screen.getByRole('button', { name: /^选择文件夹/ }))
 
     second.resolve(createSession({ workspacePath: 'E:/workspace-two', updatedAt: '2026-06-10T03:05:02.000Z' }))
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: '选择工作目录' })).toHaveTextContent('E:/workspace-two')
+      expect(screen.getByRole('button', { name: '选择文件夹：workspace-two' })).toHaveTextContent('workspace-two')
     })
 
     first.resolve(createSession({ workspacePath: 'D:/workspace-one', updatedAt: '2026-06-10T03:05:01.000Z' }))
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: '选择工作目录' })).toHaveTextContent('E:/workspace-two')
+      expect(screen.getByRole('button', { name: '选择文件夹：workspace-two' })).toHaveTextContent('workspace-two')
     })
 
     await user.type(screen.getByPlaceholderText(/输入消息/), 'use latest workspace')

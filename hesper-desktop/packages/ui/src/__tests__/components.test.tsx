@@ -764,8 +764,14 @@ describe('ui components', () => {
     const user = userEvent.setup()
     render(<Composer workspacePath="C:/dev/hesper" modelId="mock/hesper-fast" onSend={() => undefined} />)
     const textarea = screen.getByPlaceholderText(/输入消息/)
+    const workspaceButton = screen.getByRole('button', { name: '选择文件夹：hesper' })
     const modelSelect = screen.getByRole('button', { name: '选择模型' })
     const sendButton = screen.getByRole('button', { name: '发送' })
+
+    expect(workspaceButton).toHaveTextContent('hesper')
+    expect(workspaceButton).not.toHaveTextContent('C:/dev/hesper')
+    expect(workspaceButton).not.toHaveTextContent('工作目录')
+    expect(workspaceButton.querySelector('[data-hesper-workspace-icon="empty-house"]')).toBeInTheDocument()
 
     expect(sendButton).toBeDisabled()
     expect(screen.getByLabelText('消息输入区')).toHaveStyle({ borderRadius: '20px' })

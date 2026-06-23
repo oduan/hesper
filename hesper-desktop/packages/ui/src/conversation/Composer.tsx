@@ -106,6 +106,7 @@ export function Composer({
   }, [mentionToken, skillOptions])
   const showSkillMenu = Boolean(mentionToken && mentionToken.start !== dismissedMentionStart && filteredSkills.length > 0)
   const selectedThinkingLevelLabel = composerThinkingLevelOptions.find((option) => option.value === thinkingLevel)?.label ?? '高'
+  const workspaceDisplayName = useMemo(() => formatWorkspaceDisplayName(workspacePath), [workspacePath])
 
   const setComposerValue = useCallback((nextValue: string, nextSkillMentions?: SkillMentionRange[]) => {
     if (controlledValue === undefined) {
@@ -335,11 +336,16 @@ export function Composer({
         <button
           type="button"
           className="hesper-soft-control"
-          aria-label="选择工作目录"
+          aria-label={`选择文件夹：${workspaceDisplayName}`}
           onClick={() => onSelectWorkspace?.()}
-          style={controlButtonStyle}
+          style={{ ...controlButtonStyle, ...workspaceButtonStyle }}
         >
-          工作目录：{workspacePath ?? '未设置'}
+          <svg data-hesper-workspace-icon="empty-house" aria-hidden="true" viewBox="0 0 16 16" style={workspaceIconStyle}>
+            <path d="M2.75 7.1 8 2.85l5.25 4.25" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M4.45 6.9v5.25h7.1V6.9" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+            <path d="M6.65 12.15V9.05h2.7v3.1" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+          </svg>
+          <span style={workspaceLabelStyle}>{workspaceDisplayName}</span>
         </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: themeTokens.spacing.xs, flexWrap: 'wrap' }}>
           <div style={modelControlStyle}>
@@ -389,6 +395,18 @@ export function Composer({
       </div>
     </section>
   )
+}
+
+function formatWorkspaceDisplayName(workspacePath?: string): string {
+  const trimmed = workspacePath?.trim()
+  if (!trimmed) {
+    return '未设置'
+  }
+
+  const withoutTrailingSeparators = trimmed.replace(/[\\/]+$/u, '')
+  const normalized = withoutTrailingSeparators || trimmed
+  const segments = normalized.split(/[\\/]/u).filter(Boolean)
+  return segments.at(-1) ?? normalized
 }
 
 function isComposerThinkingLevel(value: string): value is ComposerThinkingLevel {
@@ -728,6 +746,26 @@ const controlButtonStyle = {
   padding: `${themeTokens.spacing.xs} ${themeTokens.spacing.sm}`,
   fontSize: themeTokens.typography.body,
   maxWidth: '100%',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap'
+} satisfies CSSProperties
+
+const workspaceButtonStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: themeTokens.spacing.xs
+} satisfies CSSProperties
+
+const workspaceIconStyle = {
+  width: 16,
+  height: 16,
+  display: 'block',
+  flex: '0 0 auto'
+} satisfies CSSProperties
+
+const workspaceLabelStyle = {
+  minWidth: 0,
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap'
