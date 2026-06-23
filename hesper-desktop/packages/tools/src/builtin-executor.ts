@@ -750,9 +750,10 @@ class GitIgnoreFilter {
   /** Set of workspace-relative directory paths that contain at least one visible file. */
   private visibleDirPrefixes: Set<string> | null = null
 
-  async init(workspacePath: string): Promise<void> {
+  async init(workspacePath: string, rootRelative?: string): Promise<void> {
     try {
-      const { stdout } = await execFileAsync('git', ['-C', workspacePath, 'ls-files', '--cached', '--others', '--exclude-standard', '-z', '--', '.'], {
+      const target = rootRelative && rootRelative !== '.' ? rootRelative : '.'
+      const { stdout } = await execFileAsync('git', ['-C', workspacePath, 'ls-files', '--cached', '--others', '--exclude-standard', '-z', '--', target], {
         timeout: 5000,
         maxBuffer: 1024 * 1024
       })
@@ -926,14 +927,16 @@ async function findFileSystemEntries(tool: ToolDefinition, args: unknown, contex
   const pattern = new RegExp(stringArg(args, 'pattern'), flags)
   const options = metadataOptions(args)
   const maxResults = numberArg(args, 'maxResults', 200, { min: 1, max: 1000, integer: true })
+  const maxScannedEntries = numberArg(args, 'maxScannedEntries', 25_000, { min: 1, max: 25_000, integer: true })
 
+  const rootRelative = toWorkspaceRelativePath(workspacePath, rootPath)
   let filter: GitIgnoreFilter | undefined
   if (respectGitIgnore && !includeIgnored) {
     filter = new GitIgnoreFilter()
-    await filter.init(workspacePath)
+    await filter.init(workspacePath, rootRelative)
   }
 
-  const walked = await walkWorkspaceDirectory(rootPath, workspacePath, { maxEntries: 25_000, filter, includeIgnored })
+  const walked = await walkWorkspaceDirectory(rootPath, workspacePath, { maxEntries: maxScannedEntries, filter, includeIgnored })
   const matches = walked.entries.flatMap((entry) => {
     const name = basename(entry.path)
     if (!pattern.test(name)) return []
@@ -1098,16 +1101,18 @@ async function searchFiles(tool: ToolDefinition, args: unknown, context: ToolExe
   const caseSensitive = booleanArg(args, 'caseSensitive')
   const maxResults = numberArg(args, 'maxResults', 50, { min: 1, max: 500, integer: true })
   const maxFileBytes = numberArg(args, 'maxFileBytes', defaultSearchMaxFileBytes, { min: 1, max: 1024 * 1024, integer: true })
+  const maxScannedEntries = numberArg(args, 'maxScannedEntries', 25_000, { min: 1, max: 25_000, integer: true })
   const includeIgnored = booleanArg(args, 'includeIgnored')
   const respectGitIgnore = booleanArg(args, 'respectGitIgnore', true)
 
+  const rootRelative = toWorkspaceRelativePath(workspacePath, rootPath)
   let filter: GitIgnoreFilter | undefined
   if (respectGitIgnore && !includeIgnored) {
     filter = new GitIgnoreFilter()
-    await filter.init(workspacePath)
+    await filter.init(workspacePath, rootRelative)
   }
 
-  const walked = await walkWorkspaceDirectory(rootPath, workspacePath, { maxEntries: 25_000, filter, includeIgnored })
+  const walked = await walkWorkspaceDirectory(rootPath, workspacePath, { maxEntries: maxScannedEntries, filter, includeIgnored })
   const results: Array<{ path: string; name: string; type: 'file'; matches: SearchLineMatch[]; truncated?: boolean }> = []
   for (const entry of walked.entries) {
     if (results.length >= maxResults) break

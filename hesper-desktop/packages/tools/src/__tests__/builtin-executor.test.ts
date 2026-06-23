@@ -1117,32 +1117,26 @@ describe('createBuiltinToolExecutor', () => {
     expect(matchAll.skippedIgnoredEntries).toBe(0)
   })
 
-  it('sets truncated: true when walker exceeds maxScannedEntries', async () => {
+  it('reports walker truncation via maxScannedEntries parameter', async () => {
     const root = await workspace()
-    // Create many directories to trigger maxEntries truncation
-    // We can't easily pass maxEntries to walkWorkspaceDirectory from the tool
-    // args, but we can verify the code merges walked.truncated by creating a
-    // huge number of files to ensure the 25_000 maxEntries cap is hit.
-    for (let i = 0; i < 100; i++) {
+    // Create 5 directories each with 2 files = 15 entries (5 dirs + 10 files)
+    for (let i = 0; i < 5; i++) {
       await mkdir(join(root, `dir${i}`), { recursive: true })
-      for (let j = 0; j < 10; j++) {
-        await writeFile(join(root, `dir${i}`, `f${j}.ts`), 'const x = 1\n', 'utf8')
-      }
+      await writeFile(join(root, `dir${i}`, `f.ts`), 'const x = 1\n', 'utf8')
+      await writeFile(join(root, `dir${i}`, `g.ts`), 'const x = 2\n', 'utf8')
     }
     const executor = createBuiltinToolExecutor()
 
-    // Search with a pattern matching all ts files
-    const found = await executor.execute(tool('filesystem.find'), { pattern: '.*\\.ts$' }, {
+    // Set maxScannedEntries=2 — walker will truncate after scanning only 2 entries
+    const found = await executor.execute(tool('filesystem.find'), { pattern: '.*', maxScannedEntries: 2, maxResults: 1000 }, {
       runId: 'run-1',
       sessionId: 'session-1',
       workspacePath: root,
       allowedToolIds: ['filesystem.find']
     })
     const result = JSON.parse(found.content)
-    // With 1000+ files in 100 dirs, walker should truncate
-    expect(result.scannedEntries).toBeGreaterThan(0)
-    // Either walker truncated or result truncated
-    // We only verify the field exists and is boolean
-    expect(typeof result.truncated).toBe('boolean')
+    expect(result.truncated).toBe(true)
+    expect(result.truncatedReason).toBe('maxScannedEntries')
+    expect(result.scannedEntries).toBe(2)
   })
 })
