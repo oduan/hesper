@@ -1190,8 +1190,24 @@ function AppContent() {
   }
 
   const deleteSessions = async (sessionId: string, sessionIds?: string[]) => {
-    for (const targetSessionId of normalizeSessionActionIds(sessionId, sessionIds)) {
-      await deleteSession(targetSessionId)
+    const targetSessionIds = normalizeSessionActionIds(sessionId, sessionIds)
+    if (targetSessionIds.length === 1) {
+      await deleteSession(targetSessionIds[0]!)
+      return
+    }
+
+    const deletedSessionIds: string[] = []
+    for (const targetSessionId of targetSessionIds) {
+      try {
+        await hesperApi.sessions.delete(targetSessionId)
+        deletedSessionIds.push(targetSessionId)
+      } catch (error) {
+        console.warn('Failed to delete session', targetSessionId, error)
+      }
+    }
+
+    if (deletedSessionIds.length > 0) {
+      dispatch({ type: 'sessions.deleted', sessionIds: deletedSessionIds })
     }
   }
 

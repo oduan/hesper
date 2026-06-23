@@ -84,6 +84,57 @@ describe('app-store reducer', () => {
     expect(ignoredRevert.sessions[0]).toMatchObject({ id: 'session-old', updatedAt: '2026-06-10T03:12:00.000Z' })
   })
 
+  it('batch deletes sessions once and reassigns the active session when the current one is removed', () => {
+    const loaded = appReducer(initialAppState, {
+      type: 'sessions.loaded',
+      sessions: [
+        {
+          id: 'session-archived',
+          title: 'Archived',
+          status: 'archived',
+          outputMode: 'markdown',
+          createdAt: now,
+          updatedAt: '2026-06-10T03:05:00.000Z'
+        },
+        {
+          id: 'session-active-next',
+          title: 'Next active',
+          status: 'active',
+          outputMode: 'markdown',
+          createdAt: now,
+          updatedAt: '2026-06-10T03:04:00.000Z'
+        },
+        {
+          id: 'session-active-current',
+          title: 'Current active',
+          status: 'active',
+          outputMode: 'markdown',
+          createdAt: now,
+          updatedAt: '2026-06-10T03:03:00.000Z'
+        }
+      ]
+    })
+
+    const afterDelete = appReducer({
+      ...loaded,
+      activeSessionId: 'session-active-current'
+    }, {
+      type: 'sessions.deleted',
+      sessionIds: ['session-active-current', 'session-archived']
+    } as any)
+
+    expect(afterDelete.sessions.map((session) => session.id)).toEqual(['session-active-next'])
+    expect(afterDelete.activeSessionId).toBe('session-active-next')
+
+    const preservedActive = appReducer(loaded, {
+      type: 'sessions.deleted',
+      sessionIds: ['session-archived']
+    } as any)
+
+    expect(preservedActive.activeSessionId).toBe('session-active-next')
+    expect(preservedActive.sessions.map((session) => session.id)).toEqual(['session-active-next', 'session-active-current'])
+  })
+
   it('stores optimistic user messages locally', () => {
     const sessionLoadedState = appReducer(initialAppState, {
       type: 'sessions.loaded',

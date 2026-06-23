@@ -22,6 +22,7 @@ export type AppAction =
   | { type: 'sessions.loaded'; sessions: Session[] }
   | { type: 'session.created'; session: Session }
   | { type: 'session.updated'; session: Session }
+  | { type: 'sessions.deleted'; sessionIds: string[] }
   | { type: 'session.touched'; sessionId: string; updatedAt: string }
   | { type: 'session.touch-reverted'; sessionId: string; optimisticUpdatedAt: string; previousUpdatedAt: string }
   | { type: 'session.selected'; sessionId: string }
@@ -226,6 +227,18 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           [action.session.id]: state.messagesBySession[action.session.id] ?? []
         }
       }
+    }
+    case 'sessions.deleted': {
+      const deletedSessionIds = new Set(action.sessionIds)
+      const sessions = sortSessions(state.sessions.filter((session) => !deletedSessionIds.has(session.id)))
+      if (!state.activeSessionId || !deletedSessionIds.has(state.activeSessionId)) {
+        return {
+          ...state,
+          sessions
+        }
+      }
+
+      return withActiveSessionId({ ...state, sessions }, pickActiveSessionId(undefined, sessions))
     }
     case 'session.touched': {
       return {
