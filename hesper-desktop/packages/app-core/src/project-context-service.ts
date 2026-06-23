@@ -22,18 +22,10 @@ export type DiscoverProjectContextFilesOptions = {
 }
 
 function normalizeRelativePath(relativePath: string): string {
-  return relativePath.split(path.sep).join('/')
+  return relativePath.replace(/[\\/]+/g, '/')
 }
 
-function pathDepth(relativePath: string): number {
-  return normalizeRelativePath(relativePath).split('/').length - 1
-}
-
-function compareProjectContextPaths(left: string, right: string): number {
-  const leftDepth = pathDepth(left)
-  const rightDepth = pathDepth(right)
-  if (leftDepth !== rightDepth) return leftDepth - rightDepth
-
+function compareNames(left: string, right: string): number {
   const leftLower = left.toLowerCase()
   const rightLower = right.toLowerCase()
   if (leftLower < rightLower) return -1
@@ -48,28 +40,36 @@ export async function discoverProjectContextFiles(options: DiscoverProjectContex
   if (maxFiles <= 0) return []
 
   const results: string[] = []
+  const directoryQueue: Array<{ absolutePath: string; relativePath: string }> = [
+    { absolutePath: options.workspacePath, relativePath: '' }
+  ]
 
-  async function visit(absoluteDirectoryPath: string, relativeDirectoryPath: string): Promise<void> {
-    const entries = await readdir(absoluteDirectoryPath, { withFileTypes: true })
+  while (directoryQueue.length > 0 && results.length < maxFiles) {
+    const directory = directoryQueue.shift()!
+    const entries = (await readdir(directory.absolutePath, { withFileTypes: true }))
+      .sort((left, right) => compareNames(left.name, right.name))
 
-    await Promise.all(entries.map(async (entry) => {
-      const entryNameLower = entry.name.toLowerCase()
-      const relativePath = relativeDirectoryPath ? `${relativeDirectoryPath}/${entry.name}` : entry.name
-      const absolutePath = path.join(absoluteDirectoryPath, entry.name)
+    for (const entry of entries) {
+      if (results.length >= maxFiles) break
+      if (!entry.isFile() || !PROJECT_CONTEXT_FILE_NAMES.has(entry.name.toLowerCase())) continue
 
-      if (entry.isDirectory()) {
-        if (IGNORED_DIRECTORY_NAMES.has(entryNameLower)) return
-        await visit(absolutePath, relativePath)
-        return
-      }
+      const relativePath = directory.relativePath ? `${directory.relativePath}/${entry.name}` : entry.name
+      results.push(normalizeRelativePath(relativePath))
+    }
 
-      if (entry.isFile() && PROJECT_CONTEXT_FILE_NAMES.has(entryNameLower)) {
-        results.push(normalizeRelativePath(relativePath))
-      }
-    }))
+    if (results.length >= maxFiles) break
+
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue
+      if (IGNORED_DIRECTORY_NAMES.has(entry.name.toLowerCase())) continue
+
+      const relativePath = directory.relativePath ? `${directory.relativePath}/${entry.name}` : entry.name
+      directoryQueue.push({
+        absolutePath: path.join(directory.absolutePath, entry.name),
+        relativePath: normalizeRelativePath(relativePath)
+      })
+    }
   }
 
-  await visit(options.workspacePath, '')
-
-  return results.sort(compareProjectContextPaths).slice(0, maxFiles)
+  return results
 }

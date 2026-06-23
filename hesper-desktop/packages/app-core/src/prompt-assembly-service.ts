@@ -359,6 +359,14 @@ function escapeXmlAttribute(value: unknown): string {
     .replace(/>/g, '&gt;')
 }
 
+function safeProjectContextPathLiteral(file: string): string {
+  const normalized = redactText(file, 500).replace(/\\/g, '/')
+  return JSON.stringify(normalized)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026')
+}
+
 function renderProjectContextFiles(workspacePath: string | undefined, projectContextFiles: string[] | undefined): string[] {
   const files = (projectContextFiles ?? []).filter((file) => file.trim()).slice(0, 30)
   if (files.length === 0) return []
@@ -367,7 +375,7 @@ function renderProjectContextFiles(workspacePath: string | undefined, projectCon
     `<project_context_files working_directory="${escapeXmlAttribute(workspacePath ?? 'not selected')}">`,
     ...files.map((file) => {
       const normalized = redactText(file, 500).replace(/\\/g, '/')
-      return `- ${normalized}${normalized.includes('/') ? '' : ' (root)'}`
+      return `- ${safeProjectContextPathLiteral(file)}${normalized.includes('/') ? '' : ' (root)'}`
     }),
     '</project_context_files>'
   ]
