@@ -1,3 +1,4 @@
+import { discoverProjectContextFiles } from '@hesper/app-core'
 import { agentRuntimeEventSchema, modelConfigSchema, modelProviderConfigSchema, sshKeySchema, sshServerSchema, type Role } from '@hesper/shared'
 import { BrowserWindow, type Dialog, type IpcMain, type IpcMainInvokeEvent } from 'electron'
 import { z } from 'zod'
@@ -229,12 +230,21 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
     }
 
     const settings = await options.container.settingsService.getSettings()
+    let projectContextFiles: string[] | undefined
+    if (resolvedWorkspacePath) {
+      try {
+        projectContextFiles = await discoverProjectContextFiles({ workspacePath: resolvedWorkspacePath })
+      } catch {
+        projectContextFiles = undefined
+      }
+    }
     const prompt = options.container.promptAssemblyService.assembleMainPrompt({
       session: sessionForPrompt,
       role,
       skills: options.container.skillService.listSkills(),
       tools: options.container.toolCatalogService.list(),
-      soul: settings.soul
+      soul: settings.soul,
+      ...(projectContextFiles?.length ? { projectContextFiles } : {})
     })
 
     return omitUndefined({ systemPrompt: prompt.systemPrompt, enabledToolIds: sessionForPrompt.enabledToolIds, workspacePath: resolvedWorkspacePath })

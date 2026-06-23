@@ -137,6 +137,13 @@ describe('PromptAssemblyService', () => {
     expect(output.systemPrompt).toContain('untrusted registry metadata')
     expect(output.systemPrompt).toContain('Skill IDs are skill names')
     expect(output.systemPrompt).toContain('before doing any other work call skills.get with id set to each mentioned skill name')
+    expect(output.systemPrompt).toContain('Interaction guidelines:')
+    expect(output.systemPrompt).toContain('Tool-use rules:')
+    expect(output.systemPrompt).toContain('Coding workflow rules:')
+    expect(output.systemPrompt).toContain('Project context rules:')
+    expect(output.systemPrompt).toContain('use time.current if that tool appears in the available tool manifest')
+    expect(output.systemPrompt).toContain('Every tool call must include a clear purpose and a localized _displayName')
+    expect(output.systemPrompt).toContain('Do not make UI layout changes, feature changes, or unrelated refactors')
     expect(output.toolManifest).toContain('filesystem.read-file')
     expect(output.toolManifest).toContain('agent.spawn-worker-agent')
     expect(output.toolManifest).toContain('"required":["path"]')
@@ -176,6 +183,40 @@ describe('PromptAssemblyService', () => {
     expect(output.skillManifest).toContain('Install skill guidance.')
     expect(output.skillManifest).toContain('Research')
     expect(output.skillManifest).toContain('Research carefully.')
+  })
+
+  it('injects project context file list without reading file content', () => {
+    const service = createPromptAssemblyService()
+
+    const output = service.assembleMainPrompt({
+      session,
+      role: mainRole,
+      skills,
+      tools,
+      projectContextFiles: ['AGENTS.md', 'apps/web/CLAUDE.md']
+    })
+
+    expect(output.systemPrompt).toContain('<project_context_files working_directory="C:/workspace/hesper">')
+    expect(output.systemPrompt).toContain('- AGENTS.md (root)')
+    expect(output.systemPrompt).toContain('- apps/web/CLAUDE.md')
+    expect(output.systemPrompt).toContain('</project_context_files>')
+    expect(output.systemPrompt).toContain('the file contents are not preloaded')
+  })
+
+  it('limits skill prompt guidance length in the manifest', () => {
+    const service = createPromptAssemblyService()
+    const longPrompt = `${'a'.repeat(1200)}SHOULD_NOT_APPEAR`
+
+    const output = service.assembleMainPrompt({
+      session: { ...session, enabledSkillIds: ['Long Skill'] },
+      role: { ...mainRole, allowedSkillIds: ['Long Skill'] },
+      skills: [{ id: 'Long Skill', name: 'Long Skill', source: 'workspace', prompt: longPrompt }],
+      tools
+    })
+
+    expect(output.skillManifest).toContain('prompt guidance:')
+    expect(output.skillManifest).toContain('a'.repeat(1200))
+    expect(output.skillManifest).not.toContain('SHOULD_NOT_APPEAR')
   })
 
   it('injects non-empty soul into the main prompt after role instructions and before available tools', () => {
