@@ -663,6 +663,43 @@ describe('registerIpcHandlers', () => {
     }
   })
 
+  it('schedules persistence for high-frequency session and role deletes without awaiting full saves', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock' })
+    const savePersistence = vi.fn(async () => {})
+    const schedulePersistenceSave = vi.fn()
+    const handles = new Map<string, (event: any, ...args: any[]) => Promise<unknown> | unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (event: any, ...args: any[]) => Promise<unknown> | unknown) => {
+        handles.set(channel, handler)
+      }),
+      removeHandler: vi.fn()
+    }
+    const dialog = {
+      showOpenDialog: vi.fn(async () => ({ canceled: true, filePaths: [] }))
+    }
+
+    registerIpcHandlers({ ipcMain, dialog, container, savePersistence, schedulePersistenceSave })
+
+    const createdSession = await handles.get(ipcChannels.sessionsCreate)?.({ sender: { id: 1 } }, { title: 'Fast path session' }) as { id: string; status: string; title: string }
+    expect(createdSession).toMatchObject({ title: 'Fast path session', status: 'active' })
+    expect(schedulePersistenceSave).toHaveBeenCalledTimes(1)
+    expect(savePersistence).not.toHaveBeenCalled()
+
+    const deletedSession = await handles.get(ipcChannels.sessionsDelete)?.({ sender: { id: 1 } }, createdSession.id) as { id: string; status: string }
+    expect(deletedSession).toMatchObject({ id: createdSession.id, status: 'deleted' })
+    expect(schedulePersistenceSave).toHaveBeenCalledTimes(2)
+    expect(savePersistence).not.toHaveBeenCalled()
+
+    const role = await container.roleManagementService.createRole({
+      name: 'Fast path role',
+      systemPrompt: 'You are a fast path role.'
+    })
+    await expect(handles.get(ipcChannels.rolesDelete)?.({ sender: { id: 1 } }, role.id)).resolves.toEqual({ deleted: true, id: role.id })
+    expect(schedulePersistenceSave).toHaveBeenCalledTimes(3)
+    expect(savePersistence).not.toHaveBeenCalled()
+  })
+
   it('returns the original session without saving when title generation returns no title', async () => {
     const persistence = await createInMemoryPersistence()
     const container = createServiceContainer({ persistence, agentMode: 'mock' })
@@ -1114,6 +1151,7 @@ describe('registerIpcHandlers', () => {
     const persistence = await createInMemoryPersistence()
     const container = createServiceContainer({ persistence, agentMode: 'mock' })
     const savePersistence = vi.fn(async () => {})
+    const schedulePersistenceSave = vi.fn()
     const handles = new Map<string, (event: any, ...args: any[]) => Promise<unknown> | unknown>()
     const ipcMain = {
       handle: vi.fn((channel: string, handler: (event: any, ...args: any[]) => Promise<unknown> | unknown) => {
@@ -1123,7 +1161,7 @@ describe('registerIpcHandlers', () => {
     }
     const dialog = { showOpenDialog: vi.fn(async () => ({ canceled: true, filePaths: [] })) }
 
-    registerIpcHandlers({ ipcMain, dialog, container, savePersistence })
+    registerIpcHandlers({ ipcMain, dialog, container, savePersistence, schedulePersistenceSave })
 
     const created = await handles.get(ipcChannels.rolesCreate)?.({ sender: { id: 1 } }, {
       name: '运维助手',
@@ -1152,7 +1190,8 @@ describe('registerIpcHandlers', () => {
 
     await expect(handles.get(ipcChannels.rolesDelete)?.({ sender: { id: 1 } }, created.id)).resolves.toEqual({ deleted: true, id: created.id })
     await expect(handles.get(ipcChannels.rolesList)?.({ sender: { id: 1 } })).resolves.toEqual([])
-    expect(savePersistence).toHaveBeenCalledTimes(3)
+    expect(schedulePersistenceSave).toHaveBeenCalledTimes(1)
+    expect(savePersistence).toHaveBeenCalledTimes(2)
   })
 
   it('does not persist a user message when runtime enqueue fails', async () => {
