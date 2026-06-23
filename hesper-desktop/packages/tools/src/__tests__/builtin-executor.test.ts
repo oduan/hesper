@@ -1521,7 +1521,7 @@ describe('createBuiltinToolExecutor', () => {
     expect(searchPaths).not.toContain('src/vendor/dep.ts')
 
     // filesystem.find — vendor should be excluded
-    const found = await executor.execute(tool('filesystem.find'), { pattern: '.*\.ts$' }, {
+    const found = await executor.execute(tool('filesystem.find'), { pattern: '.*\\.ts$' }, {
       runId: 'run-1',
       sessionId: 'session-1',
       workspacePath: root,
@@ -1534,7 +1534,7 @@ describe('createBuiltinToolExecutor', () => {
     expect(findPaths).not.toContain('src/vendor/dep.ts')
 
     // includeIgnored: true — vendor files should appear
-    const foundAll = await executor.execute(tool('filesystem.find'), { pattern: '.*\.ts$', includeIgnored: true }, {
+    const foundAll = await executor.execute(tool('filesystem.find'), { pattern: '.*\\.ts$', includeIgnored: true }, {
       runId: 'run-1',
       sessionId: 'session-1',
       workspacePath: root,
