@@ -754,8 +754,8 @@ class GitIgnoreFilter {
     try {
       const target = rootRelative && rootRelative !== '.' ? rootRelative : '.'
       const { stdout } = await execFileAsync('git', ['-C', workspacePath, 'ls-files', '--cached', '--others', '--exclude-standard', '-z', '--', target], {
-        timeout: 5000,
-        maxBuffer: 1024 * 1024
+        timeout: 10_000,
+        maxBuffer: 16 * 1024 * 1024
       })
       const trackedAndUntracked = stdout ? stdout.split('\0').filter(Boolean) : []
       this.visibleFiles = new Set(trackedAndUntracked.map((f) => f.replace(/\\/g, '/')))
@@ -768,9 +768,20 @@ class GitIgnoreFilter {
         }
       }
       this.visibleDirPrefixes = dirs
-    } catch {
-      // Not a git repo or git unavailable — fall through to .gitignore parsing
-      await this.initFromGitIgnore(workspacePath)
+    } catch (error: unknown) {
+      // Only ENOTDIR/ENOENT (git not installed) or 'not a git repository'
+      // errors should trigger the fallback to simplified .gitignore parsing.
+      // Timeout or buffer overflow means git IS available but the repo is
+      // very large — silently falling back would miss many ignored paths
+      // and produce incorrect results, so we rethrow those.
+      if (error && typeof error === 'object') {
+        const err = error as { code?: string; stderr?: string }
+        if (err.code === 'ENOENT' || (err.stderr && err.stderr.includes('not a git repository'))) {
+          await this.initFromGitIgnore(workspacePath)
+          return
+        }
+      }
+      throw error
     }
   }
 
@@ -785,6 +796,22 @@ class GitIgnoreFilter {
     }
   }
 
+  /**
+   * Parse .gitignore content into match patterns.
+   *
+   * NOTE: This is a SIMPLIFIED fallback implementation, only used when git is
+   * unavailable or the directory is not a git repository. It supports the most
+   * common workspace-root .gitignore patterns:
+   * - Empty lines and # comments
+   * - Trailing / for directory matching (e.g. `build/`)
+   * - ! prefix for negation
+   * - *.ext for extension matching
+   * - * and ? glob wildcards (non-/ matching)
+   * - Plain path fragment matching at any depth
+   *
+   * NOT supported: ** glob, anchoring with leading /, per-directory .gitignore,
+   * character classes [...]. When git ls-files succeeds it is used instead.
+   */
   private parsePatterns(content: string): void {
     for (const line of content.split(/\r?\n/)) {
       const trimmed = line.trim()
@@ -883,10 +910,20 @@ async function walkWorkspaceDirectory(
       // Compute workspace-relative path for filtering
       const workspaceRel = toWorkspaceRelativePath(workspacePath, fullPath)
 
-      // Skip default-ignored directories unless includeIgnored is explicitly true
+      // Skip entries inside default-ignored directories (e.g. node_modules, dist, .git)
+      // unless includeIgnored is explicitly true.
+      // Check every path segment — a file like 'dist.ts' should NOT match, only directory
+      // segments that exactly equal a default ignored dir name.
       if (!options.includeIgnored) {
-        const firstSegment = workspaceRel.split('/')[0]!
-        if (defaultIgnoredDirs.has(firstSegment)) {
+        const segments = workspaceRel.split('/')
+        // Check all but the last segment (the entry's own name) for directory matches.
+        // For files, segments.length === segments length; the entry name is last.
+        // For directory entries passed to the walker, the entry itself could be a default
+        // ignored dir (e.g. 'node_modules') so check all segments including the last.
+        // But we must avoid matching file names like 'dist.ts' — only exact segment match.
+        const checkSegments = type === 'directory' ? segments : segments.slice(0, -1)
+        const isDefaultIgnored = checkSegments.some((seg) => defaultIgnoredDirs.has(seg))
+        if (isDefaultIgnored) {
           skippedIgnoredEntries++
           continue
         }

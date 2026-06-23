@@ -1139,4 +1139,60 @@ describe('createBuiltinToolExecutor', () => {
     expect(result.truncatedReason).toBe('maxScannedEntries')
     expect(result.scannedEntries).toBe(2)
   })
+
+  it('skips default-ignored dirs inside subdirectories like src/node_modules', async () => {
+    const root = await workspace()
+    await mkdir(join(root, 'src', 'node_modules'), { recursive: true })
+    await mkdir(join(root, 'src', 'lib'), { recursive: true })
+    await writeFile(join(root, 'src', 'lib', 'util.ts'), 'export const util = "needle"\n', 'utf8')
+    await writeFile(join(root, 'src', 'node_modules', 'pkg.ts'), 'export const pkg = "needle"\n', 'utf8')
+    // Also create a file named 'dist.ts' at root — should NOT be ignored
+    await writeFile(join(root, 'dist.ts'), 'export const distFile = "needle"\n', 'utf8')
+    const executor = createBuiltinToolExecutor()
+
+    // Search from workspace root — src/node_modules should be skipped
+    const found = await executor.execute(tool('filesystem.search'), { condition: { contentContains: 'needle' } }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.search']
+    })
+    const results = JSON.parse(found.content).results as Array<{ path: string }>
+    expect(results).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: 'src/lib/util.ts' }),
+        expect.objectContaining({ path: 'dist.ts' })
+      ])
+    )
+    // pkg.ts inside node_modules should NOT appear
+    expect(JSON.stringify(results)).not.toContain('pkg.ts')
+    // dist.ts is a file, not a directory — should NOT be ignored
+    expect(JSON.stringify(results)).toContain('dist.ts')
+
+    // Search from 'src' subdirectory — src/node_modules should still be skipped
+    const foundSrc = await executor.execute(tool('filesystem.search'), { path: 'src', condition: { contentContains: 'needle' } }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.search']
+    })
+    const srcResults = JSON.parse(foundSrc.content).results as Array<{ path: string }>
+    expect(srcResults).toEqual([expect.objectContaining({ path: 'src/lib/util.ts' })])
+    expect(JSON.stringify(srcResults)).not.toContain('pkg.ts')
+
+    // includeIgnored: true — should include src/node_modules/pkg.ts
+    const foundAll = await executor.execute(tool('filesystem.search'), {
+      path: 'src',
+      condition: { contentContains: 'needle' },
+      includeIgnored: true
+    }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.search']
+    })
+    const allResults = JSON.parse(foundAll.content).results as Array<{ path: string }>
+    expect(allResults.length).toBeGreaterThanOrEqual(2)
+    expect(JSON.stringify(allResults)).toContain('pkg.ts')
+  })
 })
