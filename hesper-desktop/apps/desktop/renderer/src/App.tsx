@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react'
-import { createId, defaultAppThemeId, nowIso, type Message, type RunStep, type Session, type WorkerAgentInvocation } from '@hesper/shared'
+import { createId, defaultAppThemeId, nowIso, type AgentRun, type Message, type RunStep, type Session, type WorkerAgentInvocation } from '@hesper/shared'
 import { AppShell, ConversationView, resolveThemeVariant, themeTokens, type AppSection, type ComposerSendOptions, type ComposerSkillMention, type ConversationShortcutCommand, type SkillOption } from '@hesper/ui'
 import { AppStoreProvider, useAppStore } from './app-store'
 import { hesperApi } from './ipc-client'
@@ -1434,11 +1434,11 @@ function AppContent() {
               })
             }}
             onRetryRun={(message, run) => {
-              pendingTitlePromptsBySessionRef.current[activeSession.id] = message.content
-              void sendMessage({
+              retryFailedRun({
                 session: activeSession,
-                modelId: run.modelId,
-                content: message.content,
+                message,
+                run,
+                pendingTitlePromptsBySessionRef,
                 dispatch,
                 setSendErrorsBySession
               })
@@ -1730,6 +1730,31 @@ async function stopActiveRun({
       [sessionId]: `停止失败：${error instanceof Error ? error.message : 'unknown stop error'}`
     }))
   }
+}
+
+function retryFailedRun({
+  session,
+  message,
+  run,
+  pendingTitlePromptsBySessionRef,
+  dispatch,
+  setSendErrorsBySession
+}: {
+  session: Pick<Session, 'id' | 'workspacePath' | 'updatedAt'>
+  message: Message
+  run: AgentRun
+  pendingTitlePromptsBySessionRef: { current: Record<string, string> }
+  dispatch: ReturnType<typeof useAppStore>['dispatch']
+  setSendErrorsBySession: Dispatch<SetStateAction<Record<string, string>>>
+}) {
+  pendingTitlePromptsBySessionRef.current[session.id] = message.content
+  void sendMessage({
+    session,
+    modelId: run.modelId,
+    content: message.content,
+    dispatch,
+    setSendErrorsBySession
+  })
 }
 
 async function sendMessage({

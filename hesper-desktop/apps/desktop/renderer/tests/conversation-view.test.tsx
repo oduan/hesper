@@ -674,6 +674,10 @@ describe('ConversationView', () => {
       />
     )
 
+    expect(screen.getByText('运行失败：stream_interrupted')).toBeInTheDocument()
+    expect(screen.getByText('stream disconnected')).toBeInTheDocument()
+    expect(screen.getByText('已自动重试 2/2 次')).toBeInTheDocument()
+
     const retryButton = screen.getByRole('button', { name: '重试失败运行' })
     expect(retryButton).toBeDisabled()
     expect(screen.queryAllByRole('button', { name: '重试失败运行' })).toHaveLength(1)
@@ -734,7 +738,7 @@ describe('ConversationView', () => {
     render(<App />)
 
     expect(await screen.findByText('retry this prompt')).toBeInTheDocument()
-    expect(await screen.findByText('运行失败：stream_interrupted')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getAllByText('运行失败：stream_interrupted').length).toBeGreaterThan(0))
 
     await user.click(screen.getByRole('button', { name: '重试失败运行' }))
 
@@ -744,7 +748,7 @@ describe('ConversationView', () => {
       modelId: 'mock/hesper-fast'
     })))
     expect(screen.getAllByText('retry this prompt')).toHaveLength(2)
-    expect(screen.getByText('运行失败：stream_interrupted')).toBeInTheDocument()
+    expect(screen.getAllByText('运行失败：stream_interrupted').length).toBeGreaterThan(0)
     expect(enqueue.mock.calls[0]?.[0]).toEqual(expect.objectContaining({
       messageId: expect.any(String),
       messageCreatedAt: expect.any(String)
