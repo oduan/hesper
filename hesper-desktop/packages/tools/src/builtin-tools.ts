@@ -170,9 +170,9 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
           maxResults: { type: 'number', description: 'Maximum result files to return. Defaults to 50, maximum 500.' },
           maxFileBytes: { type: 'number', description: 'Maximum bytes read per file for content search. Defaults to 262144, maximum 1048576.' },
           maxScannedEntries: { type: 'number', description: 'Maximum directory entries to scan before returning a truncated result. Defaults to 25000, maximum 25000.' },
-          maxMatchesPerFile: { type: 'number', description: 'Maximum matches per file. Defaults to 50, maximum 200.' },
-          maxTotalLineMatches: { type: 'number', description: 'Maximum total matching lines across all result files. Defaults to 500, maximum 2000.' },
-          contextLines: { type: 'number', description: 'Number of surrounding context lines per match. Defaults to 2, maximum 10.' }
+          maxMatchesPerFile: { type: 'number', description: 'Maximum matches per file. Defaults to 20, maximum 200.' },
+          maxTotalLineMatches: { type: 'number', description: 'Maximum total matching lines across all result files. Defaults to 200, maximum 2000.' },
+          contextLines: { type: 'number', description: 'Number of surrounding context lines per match. Defaults to 2, maximum 5.' }
         }
       }
     },

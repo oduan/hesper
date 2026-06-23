@@ -211,6 +211,14 @@ describe('builtin tools', () => {
       maxTotalLineMatches: expect.objectContaining({ type: 'number' }),
       contextLines: expect.objectContaining({ type: 'number' })
     })
+
+    // Verify default and max values in descriptions match executor
+    expect(searchSchema.properties.maxMatchesPerFile.description).toContain('Defaults to 20')
+    expect(searchSchema.properties.maxMatchesPerFile.description).toContain('maximum 200')
+    expect(searchSchema.properties.maxTotalLineMatches.description).toContain('Defaults to 200')
+    expect(searchSchema.properties.maxTotalLineMatches.description).toContain('maximum 2000')
+    expect(searchSchema.properties.contextLines.description).toContain('Defaults to 2')
+    expect(searchSchema.properties.contextLines.description).toContain('maximum 5')
     expect(search.description).toContain('pathGlob')
     expect(search.description).toContain('pathRegex')
     expect(JSON.stringify(searchSchema)).toContain('pathGlob')
