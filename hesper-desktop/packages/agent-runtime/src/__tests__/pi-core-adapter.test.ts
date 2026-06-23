@@ -182,6 +182,44 @@ describe('PiCoreAgentAdapter', () => {
     }))
   })
 
+  it('uses requested ultra-high thinking when the resolved model supports xhigh', async () => {
+    const adapter = new PiCoreAgentAdapter({ modelResolver: resolverFor({ reasoning: true, thinkingLevelMap: { xhigh: 'xhigh' } }) })
+
+    await adapter.run({
+      runId: 'run-thinking-xhigh',
+      sessionId: 'session-1',
+      prompt: 'hello',
+      modelId: 'gpt-4o',
+      thinkingLevel: 'xhigh',
+      signal: new AbortController().signal
+    }, vi.fn())
+
+    expect(Agent).toHaveBeenCalledWith(expect.objectContaining({
+      initialState: expect.objectContaining({
+        thinkingLevel: 'xhigh'
+      })
+    }))
+  })
+
+  it('falls ultra-high thinking back to high when the resolved model lacks xhigh support', async () => {
+    const adapter = new PiCoreAgentAdapter({ modelResolver: resolverFor({ reasoning: true }) })
+
+    await adapter.run({
+      runId: 'run-thinking-xhigh-fallback',
+      sessionId: 'session-1',
+      prompt: 'hello',
+      modelId: 'gpt-4o',
+      thinkingLevel: 'xhigh',
+      signal: new AbortController().signal
+    }, vi.fn())
+
+    expect(Agent).toHaveBeenCalledWith(expect.objectContaining({
+      initialState: expect.objectContaining({
+        thinkingLevel: 'high'
+      })
+    }))
+  })
+
   it('does not resolve a model or start pi core when the signal is already aborted', async () => {
     const resolver: ModelResolver = {
       resolve: vi.fn(async () => ({

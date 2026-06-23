@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent } from 'react'
+import type { ModelThinkingLevel } from '@hesper/shared'
 import { themeTokens } from '../theme'
 import { ThemedSelect, type ThemedSelectOptionGroup } from './ThemedSelect'
 
@@ -10,9 +11,12 @@ export type SkillOption = {
   description?: string
 }
 
+export type ComposerThinkingLevel = ModelThinkingLevel
+
 export type ComposerSendOptions = {
-  prompt: string
+  prompt?: string
   displayPrompt?: string
+  thinkingLevel?: ComposerThinkingLevel
 }
 
 export type ComposerSkillMention = {
@@ -52,6 +56,14 @@ type ComposerSegment =
   | { kind: 'skill'; text: string; skill: SkillOption }
 
 const defaultModelOptions = ['mock/hesper-fast', 'openai/gpt-4o', 'anthropic/claude-sonnet-4-20250514']
+const composerThinkingLevelStorageKey = 'hesper.composer.thinkingLevel'
+const defaultComposerThinkingLevel: ComposerThinkingLevel = 'high'
+const composerThinkingLevelOptions = [
+  { value: 'low', label: '低' },
+  { value: 'medium', label: '中' },
+  { value: 'high', label: '高' },
+  { value: 'xhigh', label: '超高' }
+] satisfies Array<{ value: ComposerThinkingLevel; label: string }>
 
 export function Composer({
   workspacePath,
@@ -76,6 +88,7 @@ export function Composer({
   const [dismissedMentionStart, setDismissedMentionStart] = useState<number>()
   const [textareaScrollTop, setTextareaScrollTop] = useState(0)
   const [internalSkillMentions, setInternalSkillMentions] = useState<SkillMentionRange[]>([])
+  const [thinkingLevel, setThinkingLevel] = useState<ComposerThinkingLevel>(() => readStoredComposerThinkingLevel())
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const skillOptionRefs = useRef<Array<HTMLButtonElement | null>>([])
   const value = controlledValue ?? internalValue
@@ -92,6 +105,7 @@ export function Composer({
     return skillOptions.filter((skill) => skill.name.toLocaleLowerCase().includes(query))
   }, [mentionToken, skillOptions])
   const showSkillMenu = Boolean(mentionToken && mentionToken.start !== dismissedMentionStart && filteredSkills.length > 0)
+  const selectedThinkingLevelLabel = composerThinkingLevelOptions.find((option) => option.value === thinkingLevel)?.label ?? '高'
 
   const setComposerValue = useCallback((nextValue: string, nextSkillMentions?: SkillMentionRange[]) => {
     if (controlledValue === undefined) {
@@ -120,6 +134,14 @@ export function Composer({
         setSelectionStart(cursor)
       }
     }, 0)
+  }, [])
+
+  const handleThinkingLevelChange = useCallback((nextValue: string) => {
+    if (!isComposerThinkingLevel(nextValue)) {
+      return
+    }
+    setThinkingLevel(nextValue)
+    writeStoredComposerThinkingLevel(nextValue)
   }, [])
 
   const confirmSkill = useCallback((skill: SkillOption) => {
@@ -167,14 +189,15 @@ export function Composer({
     }
 
     const injectedPrompt = createInjectedPrompt(content, skillOptions)
+    const baseSendOptions = { thinkingLevel } satisfies ComposerSendOptions
     if (injectedPrompt && injectedPrompt !== content) {
-      onSend(content, { prompt: injectedPrompt, displayPrompt: content })
+      onSend(content, { ...baseSendOptions, prompt: injectedPrompt, displayPrompt: content })
     } else {
-      onSend(content)
+      onSend(content, baseSendOptions)
     }
     setComposerValue('', [])
     setActiveSkillIndex(0)
-  }, [onSend, onStop, running, setComposerValue, skillOptions, value])
+  }, [onSend, onStop, running, setComposerValue, skillOptions, thinkingLevel, value])
 
   useEffect(() => {
     if (sendSignal <= 0 || sendSignal === lastHandledSendSignalRef.current) {
@@ -325,6 +348,14 @@ export function Composer({
               value={modelId}
               options={modelOptions}
               {...(modelOptionGroups ? { optionGroups: modelOptionGroups } : {})}
+              auxiliaryMenu={{
+                label: '思考强度',
+                ariaLabel: '思考强度选项',
+                value: thinkingLevel,
+                valueLabel: selectedThinkingLevelLabel,
+                options: composerThinkingLevelOptions,
+                onChange: handleThinkingLevelChange
+              }}
               {...(onModelChange ? { onChange: onModelChange } : {})}
               minWidth={0}
               maxWidth={240}
@@ -358,6 +389,33 @@ export function Composer({
       </div>
     </section>
   )
+}
+
+function isComposerThinkingLevel(value: string): value is ComposerThinkingLevel {
+  return composerThinkingLevelOptions.some((option) => option.value === value)
+}
+
+function readStoredComposerThinkingLevel(): ComposerThinkingLevel {
+  if (typeof window === 'undefined') {
+    return defaultComposerThinkingLevel
+  }
+  try {
+    const stored = window.localStorage.getItem(composerThinkingLevelStorageKey)
+    return stored && isComposerThinkingLevel(stored) ? stored : defaultComposerThinkingLevel
+  } catch {
+    return defaultComposerThinkingLevel
+  }
+}
+
+function writeStoredComposerThinkingLevel(value: ComposerThinkingLevel): void {
+  if (typeof window === 'undefined') {
+    return
+  }
+  try {
+    window.localStorage.setItem(composerThinkingLevelStorageKey, value)
+  } catch {
+    // Ignore storage failures so the composer remains usable in restricted environments.
+  }
 }
 
 function findMentionToken(value: string, caret: number): MentionToken | undefined {

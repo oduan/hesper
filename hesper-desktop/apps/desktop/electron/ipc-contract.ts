@@ -1,4 +1,4 @@
-import { agentRunSchema, agentRuntimeEventSchema, appThemeIds, localFilePreviewSchema, messageSchema, modelConfigSchema, modelProviderConfigSchema, modelRefSchema, runStepSchema, sessionSchema, skillSchema, sshKeySchema, sshServerSchema, themeModeValues, toolDefinitionBaseSchema, workerAgentInvocationSchema } from '@hesper/shared'
+import { agentRunSchema, agentRuntimeEventSchema, appThemeIds, localFilePreviewSchema, messageSchema, modelConfigSchema, modelProviderConfigSchema, modelRefSchema, modelThinkingLevelSchema, runStepSchema, sessionSchema, skillSchema, sshKeySchema, sshServerSchema, themeModeValues, toolDefinitionBaseSchema, workerAgentInvocationSchema } from '@hesper/shared'
 import { z } from 'zod'
 
 export const ipcChannels = {
@@ -129,6 +129,7 @@ export const agentEnqueueInputSchema = z.object({
   prompt: nonEmptyStringSchema,
   displayPrompt: nonEmptyStringSchema.optional(),
   modelId: nonEmptyStringSchema,
+  thinkingLevel: modelThinkingLevelSchema.optional(),
   workspacePath: z.string().optional(),
   enabledToolIds: z.array(nonEmptyStringSchema).optional(),
   parentRunId: nonEmptyStringSchema.optional(),

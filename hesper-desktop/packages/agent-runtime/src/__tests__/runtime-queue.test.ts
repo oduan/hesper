@@ -401,6 +401,20 @@ describe('AgentRuntime queue', () => {
     expect(adapter.inputs.map((input) => input.enabledToolIds)).toEqual([['filesystem.read-file'], ['git.status']])
   })
 
+  it('passes thinking levels to immediate and queued adapter runs', async () => {
+    const persistence = await createInMemoryPersistence()
+    await persistence.sessions.save({ ...session, id: 'session-thinking-levels' })
+
+    const adapter = new RecordingAdapter()
+    const runtime = new AgentRuntime({ persistence, adapter })
+
+    await runtime.enqueue({ sessionId: 'session-thinking-levels', prompt: 'first', modelId: 'mock/hesper-fast', thinkingLevel: 'low' })
+    await runtime.enqueue({ sessionId: 'session-thinking-levels', prompt: 'second', modelId: 'mock/hesper-fast', thinkingLevel: 'xhigh' })
+    await runtime.waitForIdle('session-thinking-levels')
+
+    expect(adapter.inputs.map((input) => input.thinkingLevel)).toEqual(['low', 'xhigh'])
+  })
+
   it('keeps the same assembled system prompt across retry attempts', async () => {
     const persistence = await createInMemoryPersistence()
     await persistence.sessions.save({ ...session, id: 'session-system-prompt-retry' })

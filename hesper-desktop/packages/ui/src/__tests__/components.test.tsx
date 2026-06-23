@@ -60,6 +60,7 @@ function renderConversationWithAssistant(content: string, loadLocalFilePreview?:
 
 afterEach(() => {
   cleanup()
+  window.localStorage.clear()
   vi.useRealTimers()
   vi.restoreAllMocks()
 })
@@ -835,6 +836,53 @@ describe('ui components', () => {
     expect(onModelChange).toHaveBeenCalledWith('gpt-4o')
   })
 
+  it('places thinking intensity below model choices and expands levels on hover', async () => {
+    const user = userEvent.setup()
+    const onSend = vi.fn()
+
+    render(<Composer workspacePath="C:/dev/hesper" modelId="mock/hesper-fast" onSend={onSend} />)
+
+    await user.click(screen.getByRole('button', { name: '选择模型' }))
+    const modelListbox = screen.getByRole('listbox', { name: '选择模型选项' })
+    const separator = within(modelListbox).getByRole('separator', { name: '模型和思考强度分割线' })
+    const thinkingButton = within(modelListbox).getByRole('button', { name: '思考强度：高' })
+    expect(separator).toHaveStyle({ marginLeft: '6px', marginRight: '6px' })
+    expect(separator.compareDocumentPosition(thinkingButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+    await user.hover(thinkingButton)
+    const thinkingMenu = await screen.findByLabelText('思考强度选项')
+    expect(thinkingMenu).toHaveStyle({
+      position: 'absolute',
+      right: 'calc(100% + 6px)',
+      top: '0px'
+    })
+    expect(within(thinkingMenu).getAllByRole('option').map((option) => option.textContent)).toEqual(['低', '中', '高', '超高'])
+
+    await user.click(within(thinkingMenu).getByRole('option', { name: '超高' }))
+    expect(window.localStorage.getItem('hesper.composer.thinkingLevel')).toBe('xhigh')
+
+    await user.type(screen.getByLabelText('消息输入框'), 'hello')
+    await user.click(screen.getByRole('button', { name: '发送' }))
+
+    expect(onSend).toHaveBeenCalledWith('hello', expect.objectContaining({ thinkingLevel: 'xhigh' }))
+  })
+
+  it('restores the previous thinking intensity selection for new composers', async () => {
+    const user = userEvent.setup()
+    const onSend = vi.fn()
+    window.localStorage.setItem('hesper.composer.thinkingLevel', 'medium')
+
+    render(<Composer workspacePath="C:/dev/hesper" modelId="mock/hesper-fast" onSend={onSend} />)
+
+    await user.click(screen.getByRole('button', { name: '选择模型' }))
+    expect(screen.getByRole('button', { name: '思考强度：中' })).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('消息输入框'), 'remembered')
+    await user.click(screen.getByRole('button', { name: '发送' }))
+
+    expect(onSend).toHaveBeenCalledWith('remembered', expect.objectContaining({ thinkingLevel: 'medium' }))
+  })
+
   it('filters and inserts skill mentions from an independent @ token', async () => {
     const user = userEvent.setup()
     const onSend = vi.fn()
@@ -1061,7 +1109,7 @@ describe('ui components', () => {
     expect(screen.queryByRole('listbox', { name: '技能提及建议' })).not.toBeInTheDocument()
 
     await user.keyboard('{Control>}{Enter}{/Control}')
-    expect(onSend).toHaveBeenCalledWith('email@example.com @missing')
+    expect(onSend).toHaveBeenCalledWith('email@example.com @missing', expect.objectContaining({ thinkingLevel: 'high' }))
   })
 
   it('renders a stop button instead of send while the session is running', async () => {
@@ -1108,7 +1156,7 @@ describe('ui components', () => {
     await user.type(textarea, 'first')
     rerender(renderComposer(1))
 
-    await waitFor(() => expect(onSend).toHaveBeenCalledWith('first'))
+    await waitFor(() => expect(onSend).toHaveBeenCalledWith('first', expect.objectContaining({ thinkingLevel: 'high' })))
     expect(onSend).toHaveBeenCalledTimes(1)
     expect(textarea).toHaveValue('')
 

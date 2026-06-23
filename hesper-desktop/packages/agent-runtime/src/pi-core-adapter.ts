@@ -1,9 +1,9 @@
 import { Agent, type AgentEvent, type AgentTool } from '@earendil-works/pi-agent-core'
-import type { Api, Message as PiMessage, Model, Usage } from '@earendil-works/pi-ai'
+import { clampThinkingLevel, getSupportedThinkingLevels, type Api, type Message as PiMessage, type Model, type ModelThinkingLevel as PiModelThinkingLevel, type Usage } from '@earendil-works/pi-ai'
 import type { AgentRuntimeEvent, Message as HesperMessage } from '@hesper/shared'
 import type { AgentAdapter, AgentPromptInput } from './adapters'
 import { mapPiEventToHesperEvents } from './map-pi-event'
-import { createStaticModelResolver, type ModelResolver } from './model-resolver'
+import { createStaticModelResolver, type ModelResolver, type ResolvedModel } from './model-resolver'
 
 const DEFAULT_SYSTEM_PROMPT = 'You are hesper, a desktop coding assistant. Be concise, stable, and explicit about tool actions.'
 
@@ -55,6 +55,23 @@ function toPiHistoryMessages(messages: HesperMessage[] | undefined, model: Model
   })
 }
 
+function resolveThinkingLevel(input: AgentPromptInput, resolved: ResolvedModel): PiModelThinkingLevel {
+  const reasoningCapable = resolved.model.reasoning || resolved.modelConfig.capabilities.includes('reasoning')
+  if (!reasoningCapable) {
+    return 'off'
+  }
+
+  const reasoningModel = resolved.model.reasoning ? resolved.model : { ...resolved.model, reasoning: true }
+  const requested = input.thinkingLevel ?? 'medium'
+  if (requested === 'xhigh') {
+    return getSupportedThinkingLevels(reasoningModel).includes('xhigh')
+      ? 'xhigh'
+      : clampThinkingLevel(reasoningModel, 'high')
+  }
+
+  return clampThinkingLevel(reasoningModel, requested)
+}
+
 export type PiCoreAgentAdapterOptions = {
   tools?: AgentTool<any>[]
   createTools?: (input: AgentPromptInput) => AgentTool<any>[]
@@ -91,7 +108,7 @@ export class PiCoreAgentAdapter implements AgentAdapter {
       initialState: {
         systemPrompt: input.systemPrompt ?? this.options.systemPrompt ?? DEFAULT_SYSTEM_PROMPT,
         model: resolved.model,
-        thinkingLevel: resolved.model.reasoning || resolved.modelConfig.capabilities.includes('reasoning') ? 'medium' : 'off',
+        thinkingLevel: resolveThinkingLevel(input, resolved),
         tools,
         messages: historyMessages
       },

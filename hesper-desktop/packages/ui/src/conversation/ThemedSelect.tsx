@@ -12,11 +12,21 @@ export type ThemedSelectOptionGroup = {
   options: readonly ThemedSelectOption[]
 }
 
+export type ThemedSelectAuxiliaryMenu = {
+  label: string
+  ariaLabel: string
+  value: string
+  valueLabel?: string
+  options: readonly ThemedSelectOption[]
+  onChange: (value: string) => void
+}
+
 export type ThemedSelectProps = {
   ariaLabel: string
   value: string
   options: readonly string[]
   optionGroups?: readonly ThemedSelectOptionGroup[]
+  auxiliaryMenu?: ThemedSelectAuxiliaryMenu
   onChange?: (value: string) => void
   minWidth?: number
   maxWidth?: number
@@ -28,6 +38,7 @@ export function ThemedSelect({
   value,
   options,
   optionGroups,
+  auxiliaryMenu,
   onChange,
   minWidth = 108,
   maxWidth = 240,
@@ -35,6 +46,7 @@ export function ThemedSelect({
 }: ThemedSelectProps) {
   const [open, setOpen] = useState(false)
   const [expandedGroupId, setExpandedGroupId] = useState<string>()
+  const [auxiliaryMenuExpanded, setAuxiliaryMenuExpanded] = useState(false)
   const listboxId = useId()
   const groupedValues = useMemo(() => new Set((optionGroups ?? []).flatMap((group) => group.options.map((option) => option.value))), [optionGroups])
   const flatOptions = useMemo(() => options.filter((option) => !groupedValues.has(option)), [groupedValues, options])
@@ -46,19 +58,31 @@ export function ThemedSelect({
     [flatOptions, optionGroups]
   )
   const selectedLabel = labeledOptions.find((option) => option.value === value)?.label ?? value
+  const auxiliarySelectedLabel = auxiliaryMenu?.valueLabel ?? auxiliaryMenu?.options.find((option) => option.value === auxiliaryMenu.value)?.label ?? auxiliaryMenu?.value
   const hasGroups = (optionGroups?.length ?? 0) > 0
 
   const handleBlur = (event: FocusEvent<HTMLDivElement>) => {
     if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
       setOpen(false)
       setExpandedGroupId(undefined)
+      setAuxiliaryMenuExpanded(false)
     }
+  }
+
+  const closeMenu = () => {
+    setOpen(false)
+    setExpandedGroupId(undefined)
+    setAuxiliaryMenuExpanded(false)
   }
 
   const handleSelect = (nextValue: string) => {
     onChange?.(nextValue)
-    setOpen(false)
-    setExpandedGroupId(undefined)
+    closeMenu()
+  }
+
+  const handleAuxiliarySelect = (nextValue: string) => {
+    auxiliaryMenu?.onChange(nextValue)
+    closeMenu()
   }
 
   const handleOpenChange = () => {
@@ -66,6 +90,7 @@ export function ThemedSelect({
       const nextOpen = !current
       if (!nextOpen) {
         setExpandedGroupId(undefined)
+        setAuxiliaryMenuExpanded(false)
       }
       return nextOpen
     })
@@ -106,8 +131,14 @@ export function ThemedSelect({
                   type="button"
                   className="hesper-themed-select-group-button"
                   aria-label={`连接 ${group.label}`}
-                  onMouseEnter={() => setExpandedGroupId(group.id)}
-                  onFocus={() => setExpandedGroupId(group.id)}
+                  onMouseEnter={() => {
+                    setExpandedGroupId(group.id)
+                    setAuxiliaryMenuExpanded(false)
+                  }}
+                  onFocus={() => {
+                    setExpandedGroupId(group.id)
+                    setAuxiliaryMenuExpanded(false)
+                  }}
                   style={selectGroupButtonStyle}
                 >
                   <span style={selectValueStyle}>{group.label}</span>
@@ -143,6 +174,8 @@ export function ThemedSelect({
               role="option"
               className="hesper-themed-select-option"
               aria-selected={option === value}
+              onMouseEnter={() => setAuxiliaryMenuExpanded(false)}
+              onFocus={() => setAuxiliaryMenuExpanded(false)}
               onClick={() => handleSelect(option)}
               style={{
                 ...selectOptionStyle,
@@ -152,6 +185,51 @@ export function ThemedSelect({
               {option}
             </button>
           ))}
+          {auxiliaryMenu ? (
+            <>
+              <div role="separator" aria-label={`${ariaLabel.replace(/^选择/, '')}和${auxiliaryMenu.label}分割线`} style={selectMenuSeparatorStyle} />
+              <div role="group" aria-label={auxiliaryMenu.label} style={selectGroupStyle}>
+                <button
+                  type="button"
+                  className="hesper-themed-select-group-button"
+                  aria-label={`${auxiliaryMenu.label}：${auxiliarySelectedLabel}`}
+                  onMouseEnter={() => {
+                    setExpandedGroupId(undefined)
+                    setAuxiliaryMenuExpanded(true)
+                  }}
+                  onFocus={() => {
+                    setExpandedGroupId(undefined)
+                    setAuxiliaryMenuExpanded(true)
+                  }}
+                  style={selectGroupButtonStyle}
+                >
+                  <span style={selectValueStyle}>{auxiliaryMenu.label}</span>
+                  <span style={selectAuxiliaryValueStyle}>{auxiliarySelectedLabel}</span>
+                  <span aria-hidden="true" style={selectGroupArrowStyle}>‹</span>
+                </button>
+                {auxiliaryMenuExpanded ? (
+                  <div role="group" aria-label={auxiliaryMenu.ariaLabel} style={selectGroupOptionsStyle}>
+                    {auxiliaryMenu.options.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        role="option"
+                        className="hesper-themed-select-option"
+                        aria-selected={option.value === auxiliaryMenu.value}
+                        onClick={() => handleAuxiliarySelect(option.value)}
+                        style={{
+                          ...selectOptionStyle,
+                          ...(option.value === auxiliaryMenu.value ? activeSelectOptionStyle : {})
+                        }}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -232,6 +310,13 @@ const selectGroupStyle: CSSProperties = {
   gap: 2
 }
 
+const selectMenuSeparatorStyle: CSSProperties = {
+  height: 1,
+  margin: '2px 6px',
+  borderRadius: 999,
+  background: themeTokens.color.borderSubtle
+}
+
 const selectGroupButtonStyle: CSSProperties = {
   width: '100%',
   border: 0,
@@ -252,6 +337,12 @@ const selectGroupButtonStyle: CSSProperties = {
 }
 
 const selectGroupArrowStyle: CSSProperties = {
+  flex: '0 0 auto',
+  color: themeTokens.color.textMuted,
+  fontSize: themeTokens.typography.body
+}
+
+const selectAuxiliaryValueStyle: CSSProperties = {
   flex: '0 0 auto',
   color: themeTokens.color.textMuted,
   fontSize: themeTokens.typography.body

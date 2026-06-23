@@ -28,6 +28,7 @@ export type ModelProviderKind = 'mock' | 'openai' | 'deepseek' | 'openai-compati
 export type ModelProviderAuthType = 'api_key' | 'oauth' | 'none'
 export type PiAuthProvider = 'openai-codex'
 export type ModelCapability = 'streaming' | 'toolCalls' | 'jsonOutput' | 'reasoning'
+export type ModelThinkingLevel = 'low' | 'medium' | 'high' | 'xhigh'
 export type ToolPermissionMode = 'allow' | 'deny' | 'ask'
 export type ToolPermissionScope = 'global' | 'session' | 'role' | 'worker-agent'
 export type ToolRiskLevel = 'low' | 'medium' | 'high' | 'critical'

@@ -273,6 +273,7 @@ describe('renderer App', () => {
 
   afterEach(() => {
     cleanup()
+    window.localStorage.clear()
     vi.restoreAllMocks()
   })
 
@@ -1968,6 +1969,39 @@ describe('renderer App', () => {
     await waitFor(() => {
       expect(screen.getAllByText('hello world')).toHaveLength(1)
     })
+  })
+
+  it('passes the selected thinking intensity when enqueueing a run', async () => {
+    const user = userEvent.setup()
+
+    listSessions.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        title: 'Thinking intensity',
+        status: 'active',
+        workspacePath: 'C:/workspace',
+        defaultModelId: 'mock/hesper-fast',
+        outputMode: 'markdown',
+        createdAt: '2026-06-10T03:00:00.000Z',
+        updatedAt: '2026-06-10T03:00:00.000Z'
+      }
+    ] as any)
+
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: '选择模型' }))
+    const thinkingButton = await screen.findByRole('button', { name: '思考强度：高' })
+    await user.hover(thinkingButton)
+    await user.click(await screen.findByRole('option', { name: '低' }))
+
+    await user.type(screen.getByLabelText('消息输入框'), 'use low thinking')
+    await user.click(screen.getByRole('button', { name: '发送' }))
+
+    expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: 'session-1',
+      prompt: 'use low thinking',
+      thinkingLevel: 'low'
+    }))
   })
 
   it('uses a configured provider model instead of the mock fallback when sending from an existing mock session', async () => {

@@ -19,6 +19,7 @@ let scrollToMock: ReturnType<typeof vi.fn>
 
 afterEach(() => {
   cleanup()
+  window.localStorage.clear()
 })
 
 beforeEach(() => {
@@ -94,7 +95,7 @@ describe('ConversationView', () => {
     await user.type(screen.getByPlaceholderText(/输入消息/), 'hello')
     await user.click(screen.getByRole('button', { name: '发送' }))
 
-    expect(onSend).toHaveBeenCalledWith('hello')
+    expect(onSend).toHaveBeenCalledWith('hello', expect.objectContaining({ thinkingLevel: 'high' }))
     expect(screen.getByPlaceholderText(/输入消息/)).toHaveValue('')
   })
 

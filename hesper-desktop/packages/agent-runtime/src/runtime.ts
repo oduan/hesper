@@ -1,5 +1,5 @@
 import type { Persistence } from '@hesper/persistence'
-import { createId, nowIso, type AgentRun, type AgentRuntimeEvent, type Message, type RunError, type RunStep } from '@hesper/shared'
+import { createId, nowIso, type AgentRun, type AgentRuntimeEvent, type Message, type ModelThinkingLevel, type RunError, type RunStep } from '@hesper/shared'
 import type { AgentAdapter } from './adapters'
 import { normalizeUnknownError } from './adapters'
 import { clearPiEventRunState } from './map-pi-event'
@@ -10,6 +10,7 @@ export type EnqueueRunInput = {
   sessionId: string
   prompt: string
   modelId: string
+  thinkingLevel?: ModelThinkingLevel
   systemPrompt?: string
   enabledToolIds?: string[]
   workspacePath?: string
@@ -25,7 +26,7 @@ export type AgentRuntimeOptions = {
 type RuntimeListener = (event: AgentRuntimeEvent) => void | Promise<void>
 type SessionState = {
   running: boolean
-  queue: Array<{ run: AgentRun; prompt: string; systemPrompt?: string; enabledToolIds?: string[] }>
+  queue: Array<{ run: AgentRun; prompt: string; thinkingLevel?: ModelThinkingLevel; systemPrompt?: string; enabledToolIds?: string[] }>
   active: Promise<void> | undefined
   activeRunId: string | undefined
   waiters: Array<() => void>
@@ -112,13 +113,14 @@ export class AgentRuntime {
         state.queue.push({
           run,
           prompt: input.prompt,
+          ...(input.thinkingLevel !== undefined ? { thinkingLevel: input.thinkingLevel } : {}),
           ...(input.systemPrompt !== undefined ? { systemPrompt: input.systemPrompt } : {}),
           ...(input.enabledToolIds !== undefined ? { enabledToolIds: input.enabledToolIds } : {})
         })
         return run
       }
 
-      this.startSessionRun(input.sessionId, run, input.prompt, input.systemPrompt, input.enabledToolIds)
+      this.startSessionRun(input.sessionId, run, input.prompt, input.thinkingLevel, input.systemPrompt, input.enabledToolIds)
       return run
     })
   }
@@ -213,11 +215,11 @@ export class AgentRuntime {
     }
   }
 
-  private startSessionRun(sessionId: string, run: AgentRun, prompt: string, systemPrompt?: string, enabledToolIds?: string[]): void {
+  private startSessionRun(sessionId: string, run: AgentRun, prompt: string, thinkingLevel?: ModelThinkingLevel, systemPrompt?: string, enabledToolIds?: string[]): void {
     const state = this.getSessionState(sessionId)
     state.running = true
     state.activeRunId = run.id
-    state.active = this.executeRun(run, prompt, systemPrompt, enabledToolIds)
+    state.active = this.executeRun(run, prompt, thinkingLevel, systemPrompt, enabledToolIds)
       .then(() => this.finishRun(sessionId))
       .catch(() => this.finishRun(sessionId))
   }
@@ -233,7 +235,7 @@ export class AgentRuntime {
         status: 'running',
         startedAt
       }
-      this.startSessionRun(sessionId, runningRun, next.prompt, next.systemPrompt, next.enabledToolIds)
+      this.startSessionRun(sessionId, runningRun, next.prompt, next.thinkingLevel, next.systemPrompt, next.enabledToolIds)
       return
     }
 
@@ -249,7 +251,7 @@ export class AgentRuntime {
         status: 'running',
         startedAt
       }
-      this.startSessionRun(sessionId, runningRun, lateQueued.prompt, lateQueued.systemPrompt, lateQueued.enabledToolIds)
+      this.startSessionRun(sessionId, runningRun, lateQueued.prompt, lateQueued.thinkingLevel, lateQueued.systemPrompt, lateQueued.enabledToolIds)
       return
     }
 
@@ -308,7 +310,7 @@ export class AgentRuntime {
     return true
   }
 
-  private async executeRun(run: AgentRun, prompt: string, systemPrompt?: string, enabledToolIds?: string[]): Promise<void> {
+  private async executeRun(run: AgentRun, prompt: string, thinkingLevel?: ModelThinkingLevel, systemPrompt?: string, enabledToolIds?: string[]): Promise<void> {
     try {
       if (await this.applyCancellationIfNeeded(run.id) || await this.applyTerminationIfNeeded(run.id)) {
         return
@@ -338,6 +340,7 @@ export class AgentRuntime {
               sessionId: latestRun.sessionId,
               prompt,
               modelId: latestRun.modelId,
+              ...(thinkingLevel !== undefined ? { thinkingLevel } : {}),
               ...(systemPrompt !== undefined ? { systemPrompt } : {}),
               ...(enabledToolIds !== undefined ? { enabledToolIds } : {}),
               ...(latestRun.workspacePath !== undefined ? { workspacePath: latestRun.workspacePath } : {}),

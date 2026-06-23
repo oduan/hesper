@@ -1746,6 +1746,7 @@ async function sendMessage({
       prompt: sendOptions?.prompt ?? content,
       ...(sendOptions?.displayPrompt ? { displayPrompt: sendOptions.displayPrompt } : {}),
       modelId,
+      ...(sendOptions?.thinkingLevel ? { thinkingLevel: sendOptions.thinkingLevel } : {}),
       messageId: message.id,
       messageCreatedAt: message.createdAt,
       ...(session.workspacePath ? { workspacePath: session.workspacePath } : {})

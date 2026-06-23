@@ -877,7 +877,7 @@ describe('registerIpcHandlers', () => {
     const session = await container.sessionService.createSession({ title: 'Prompt assembly IPC', workspacePath: 'C:/workspace' })
     await container.roleManagementService.createRole({ name: 'Custom Worker', defaultToolIds: ['filesystem.read-file'] })
 
-    await expect(handles.get(ipcChannels.agentEnqueue)?.({ sender: { id: 1 } }, { sessionId: session.id, prompt: 'Use assembled prompt\n\n<skill>Injected instructions</skill>', displayPrompt: 'Use assembled prompt', modelId: 'mock/hesper-fast', messageId: 'message-client-1', messageCreatedAt: '2026-06-10T03:00:02.000Z' })).resolves.toEqual({ runId: 'run-assembled' })
+    await expect(handles.get(ipcChannels.agentEnqueue)?.({ sender: { id: 1 } }, { sessionId: session.id, prompt: 'Use assembled prompt\n\n<skill>Injected instructions</skill>', displayPrompt: 'Use assembled prompt', modelId: 'mock/hesper-fast', thinkingLevel: 'xhigh', messageId: 'message-client-1', messageCreatedAt: '2026-06-10T03:00:02.000Z' })).resolves.toEqual({ runId: 'run-assembled' })
 
     const expectedDefaultEnabledTools = ['filesystem.read-file', 'filesystem.write-file', 'filesystem.edit-file', 'filesystem.delete-file', 'filesystem.delete-directory', 'filesystem.list-directory', 'filesystem.find', 'filesystem.search', 'git.status', 'git.run', 'roles.list', 'roles.find', 'roles.create', 'roles.update', 'skills.list', 'skills.get', 'models.list-available', 'soul.get', 'soul.update', 'agent.spawn-worker-agent', 'agent.list-worker-agents', 'agent.get-worker-agent', 'agent.wait-worker-agent', 'agent.cancel-worker-agent', 'ssh.list-servers', 'ssh.run-commands', 'ssh.list-executions', 'ssh.get-execution-output', 'time.current', 'time.sleep', 'time.wait-until', 'system.execute-command', 'system.show-notification']
     expect(promptSpy).toHaveBeenCalledWith(expect.objectContaining({
@@ -900,6 +900,7 @@ describe('registerIpcHandlers', () => {
       modelId: 'mock/hesper-fast',
       systemPrompt: 'assembled system prompt',
       enabledToolIds: expectedDefaultEnabledTools,
+      thinkingLevel: 'xhigh',
       workspacePath: 'C:/workspace'
     }))
     expect(createUserMessageSpy).toHaveBeenCalledWith(expect.objectContaining({

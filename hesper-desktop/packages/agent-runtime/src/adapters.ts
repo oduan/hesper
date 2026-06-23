@@ -1,4 +1,4 @@
-import type { AgentRuntimeEvent, Message, ModelRef, RunError } from '@hesper/shared'
+import type { AgentRuntimeEvent, Message, ModelRef, ModelThinkingLevel, RunError } from '@hesper/shared'
 
 export type AgentPromptInput = {
   runId: string
@@ -6,6 +6,7 @@ export type AgentPromptInput = {
   prompt: string
   modelId: string
   modelRef?: ModelRef
+  thinkingLevel?: ModelThinkingLevel
   systemPrompt?: string
   enabledToolIds?: string[]
   workspacePath?: string

@@ -113,6 +113,8 @@ const modelConfigBaseSchema = z.object({
 
 export const modelConfigSchema = modelConfigBaseSchema.transform(stripUndefined)
 
+export const modelThinkingLevelSchema = z.enum(['low', 'medium', 'high', 'xhigh'])
+
 const sessionBaseSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
