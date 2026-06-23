@@ -7,6 +7,7 @@ import { createBeforeQuitHandler } from './before-quit'
 import { createElectronSafeStorageCredentialCodec } from './credential-codec'
 import { registerIpcHandlers } from './ipc-handlers'
 import { createPersistenceSaveQueue } from './persistence-save-queue'
+import { createPersistenceSaveScheduler } from './persistence-save-scheduler'
 import { installNavigationGuards, resolveRendererLoadTarget } from './renderer-security'
 import { resolveAgentMode } from './agent-mode'
 import { createServiceContainer, type ServiceContainer } from './service-container'
@@ -36,7 +37,6 @@ let mainWindow: BrowserWindow | null = null
 let container: ServiceContainer | null = null
 let disposeIpcHandlers: (() => void) | undefined
 let persistencePath = ''
-let persistenceFlushTimer: NodeJS.Timeout | undefined
 
 function stopSkillAutoScan(): void {
   (container?.skillService as { stopAutoScan?: () => void } | undefined)?.stopAutoScan?.()
@@ -57,22 +57,20 @@ async function savePersistence(): Promise<void> {
   await persistenceSaveQueue.save(persistencePath)
 }
 
+const persistenceSaveScheduler = createPersistenceSaveScheduler({
+  savePersistence,
+  flushPersistenceQueue: () => persistenceSaveQueue.flush(),
+  logError: (message, error) => {
+    console.error(message, error)
+  }
+})
+
 function schedulePersistenceSave(delayMs = 50): void {
-  if (persistenceFlushTimer) clearTimeout(persistenceFlushTimer)
-  persistenceFlushTimer = setTimeout(() => {
-    persistenceFlushTimer = undefined
-    void savePersistence()
-  }, delayMs)
+  persistenceSaveScheduler.schedule(delayMs)
 }
 
 async function flushScheduledPersistence(): Promise<void> {
-  if (persistenceFlushTimer) {
-    clearTimeout(persistenceFlushTimer)
-    persistenceFlushTimer = undefined
-    await savePersistence()
-    return
-  }
-  await persistenceSaveQueue.flush()
+  await persistenceSaveScheduler.flushScheduled()
 }
 
 function createMainWindow(): BrowserWindow {
