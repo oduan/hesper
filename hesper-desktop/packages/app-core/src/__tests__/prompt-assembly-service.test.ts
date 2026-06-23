@@ -142,7 +142,7 @@ describe('PromptAssemblyService', () => {
     expect(output.systemPrompt).toContain('Coding workflow rules:')
     expect(output.systemPrompt).toContain('Project context rules:')
     expect(output.systemPrompt).toContain('use time.current if that tool appears in the available tool manifest')
-    expect(output.systemPrompt).toContain('Every tool call must include a clear purpose and a localized _displayName')
+    expect(output.systemPrompt).toContain('Every tool call must include a clear purpose and a localized _displayName.')
     expect(output.systemPrompt).toContain('Do not make UI layout changes, feature changes, or unrelated refactors')
     expect(output.toolManifest).toContain('filesystem.read-file')
     expect(output.toolManifest).toContain('agent.spawn-worker-agent')

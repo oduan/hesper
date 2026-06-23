@@ -912,6 +912,78 @@ describe('registerIpcHandlers', () => {
     expect(enqueueSpy.mock.invocationCallOrder[0]!).toBeLessThan(createUserMessageSpy.mock.invocationCallOrder[0]!)
   })
 
+  it('passes discovered project context files into prompt assembly before enqueueing', async () => {
+    await withTempWorkspace(async (workspacePath) => {
+      await fs.writeFile(path.join(workspacePath, 'AGENTS.md'), '# root agents')
+      await fs.mkdir(path.join(workspacePath, 'apps', 'web'), { recursive: true })
+      await fs.writeFile(path.join(workspacePath, 'apps', 'web', 'CLAUDE.md'), '# web context')
+
+      const persistence = await createInMemoryPersistence()
+      const container = createServiceContainer({ persistence, agentMode: 'mock' })
+      const handles = new Map<string, (event: any, ...args: any[]) => Promise<unknown> | unknown>()
+      const ipcMain = {
+        handle: vi.fn((channel: string, handler: (event: any, ...args: any[]) => Promise<unknown> | unknown) => {
+          handles.set(channel, handler)
+        }),
+        removeHandler: vi.fn()
+      }
+      const dialog = {
+        showOpenDialog: vi.fn(async () => ({ canceled: false, filePaths: [workspacePath] }))
+      }
+      const promptSpy = vi.spyOn(container.promptAssemblyService, 'assembleMainPrompt')
+      const enqueueSpy = vi.spyOn(container.agentRuntime, 'enqueue').mockResolvedValueOnce({ id: 'run-project-context' } as Awaited<ReturnType<typeof container.agentRuntime.enqueue>>)
+
+      registerIpcHandlers({ ipcMain, dialog, container })
+      const session = await container.sessionService.createSession({ title: 'Project context IPC', workspacePath })
+
+      await expect(handles.get(ipcChannels.agentEnqueue)?.(
+        { sender: { id: 1 } },
+        { sessionId: session.id, prompt: 'Use project context', modelId: 'mock/hesper-fast' }
+      )).resolves.toEqual({ runId: 'run-project-context' })
+
+      expect(promptSpy).toHaveBeenCalledWith(expect.objectContaining({
+        projectContextFiles: ['AGENTS.md', 'apps/web/CLAUDE.md']
+      }))
+      expect(enqueueSpy).toHaveBeenCalledWith(expect.objectContaining({
+        sessionId: session.id,
+        workspacePath
+      }))
+    })
+  })
+
+  it('continues enqueueing without project context files when discovery fails', async () => {
+    const missingWorkspacePath = path.join(os.tmpdir(), `hesper-missing-context-${Date.now()}`)
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock' })
+    const handles = new Map<string, (event: any, ...args: any[]) => Promise<unknown> | unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (event: any, ...args: any[]) => Promise<unknown> | unknown) => {
+        handles.set(channel, handler)
+      }),
+      removeHandler: vi.fn()
+    }
+    const dialog = {
+      showOpenDialog: vi.fn(async () => ({ canceled: false, filePaths: [missingWorkspacePath] }))
+    }
+    const promptSpy = vi.spyOn(container.promptAssemblyService, 'assembleMainPrompt')
+    const enqueueSpy = vi.spyOn(container.agentRuntime, 'enqueue').mockResolvedValueOnce({ id: 'run-context-fallback' } as Awaited<ReturnType<typeof container.agentRuntime.enqueue>>)
+
+    registerIpcHandlers({ ipcMain, dialog, container })
+    const session = await container.sessionService.createSession({ title: 'Project context fallback', workspacePath: missingWorkspacePath })
+
+    await expect(handles.get(ipcChannels.agentEnqueue)?.(
+      { sender: { id: 1 } },
+      { sessionId: session.id, prompt: 'Discovery should not fail enqueue', modelId: 'mock/hesper-fast' }
+    )).resolves.toEqual({ runId: 'run-context-fallback' })
+
+    const promptInput = promptSpy.mock.calls[0]![0]
+    expect(promptInput).not.toHaveProperty('projectContextFiles')
+    expect(enqueueSpy).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: session.id,
+      workspacePath: missingWorkspacePath
+    }))
+  })
+
   it('narrows per-run enabled tools without expanding beyond the configured allowlist', async () => {
     const persistence = await createInMemoryPersistence()
     const container = createServiceContainer({ persistence, agentMode: 'mock' })
