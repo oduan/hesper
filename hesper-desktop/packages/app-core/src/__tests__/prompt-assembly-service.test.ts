@@ -732,4 +732,33 @@ describe('PromptAssemblyService', () => {
     expect(first.roleManifest).toBe(second.roleManifest)
     expect(first.workerAgentRules).toBe(second.workerAgentRules)
   })
+
+  it('instructs the main agent to narrow filesystem searches and delegate broad discovery', () => {
+    const service = createPromptAssemblyService()
+
+    const output = service.assembleMainPrompt({
+      session: {
+        ...session,
+        enabledToolIds: ['filesystem.list-directory', 'filesystem.find', 'filesystem.search', 'filesystem.read-file', 'models.list-available', 'agent.spawn-worker-agent']
+      },
+      role: mainRole,
+      skills,
+      tools: [
+        ...tools,
+        { id: 'filesystem.list-directory', name: 'List Directory', description: 'List direct child entries', category: 'filesystem', inputSchema: { type: 'object', properties: {} } },
+        { id: 'filesystem.find', name: 'Find Files', description: 'Find files', category: 'filesystem', inputSchema: { type: 'object', properties: {} } },
+        { id: 'filesystem.search', name: 'Search Files', description: 'Search files', category: 'filesystem', inputSchema: { type: 'object', properties: {} } },
+        { id: 'models.list-available', name: 'List Available Models', description: 'List available models', category: 'agent', inputSchema: { type: 'object', properties: {} } }
+      ]
+    })
+
+    expect(output.systemPrompt).toContain('Search discipline rules:')
+    expect(output.systemPrompt).toContain('Do not start with broad recursive searches from the workspace root')
+    expect(output.systemPrompt).toContain('For content searches, use path, pathGlob, nameGlob, or a package-specific directory')
+    expect(output.systemPrompt).toContain('If a search result is truncated, narrow the query before retrying')
+    expect(output.systemPrompt).toContain('delegate independent broad discovery')
+    expect(output.workerAgentRules).toContain('For broad codebase discovery')
+    expect(output.workerAgentRules).toContain('Never hard-code provider or model names')
+    expect(output.workerAgentRules).toContain('models.list-available')
+  })
 })
