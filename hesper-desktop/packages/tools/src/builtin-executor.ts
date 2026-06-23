@@ -1046,20 +1046,33 @@ function escapeRegExp(value: string): string {
 }
 
 function globToRegExp(glob: string, caseSensitive: boolean): RegExp {
-  // Split on '**' first, handle each segment, then join with '.*' (cross-directory)
+  // Split on '**' to handle cross-directory matching separately
+  // '**' matches zero or more path segments (e.g. 'a/**/b' matches a/b and a/x/y/b)
+  // Within each non-** part, '*' matches any chars except '/', '?' matches single non-'/'
   const parts = glob.split(/(\*\*)/g)
-  const source = parts.map((part) => {
-    if (part === '**') return '.*'
-    // For non-** parts, * and ? must NOT cross /
-    let segment = ''
-    for (const char of part) {
-      if (char === '*') segment += '[^/]*'
-      else if (char === '?') segment += '[^/]'
-      else segment += escapeRegExp(char)
+  const source = []
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i]
+    if (part === '**') {
+      // If '**' is followed by '/' in the original glob, the '/' ends up as
+      // the start of the next part. We skip it because '(.+/)?' already handles
+      // the optional slash-separator between segments.
+      const next: string | undefined = parts[i + 1]
+      if (next && next.startsWith('/')) {
+        parts[i + 1] = next.slice(1)
+      }
+      source.push('(.+/)?')
+    } else {
+      let segment = ''
+      for (const char of part!) {
+        if (char === '*') segment += '[^/]*'
+        else if (char === '?') segment += '[^/]'
+        else segment += escapeRegExp(char)
+      }
+      source.push(segment)
     }
-    return segment
-  }).join('')
-  return new RegExp(`^${source}$`, caseSensitive ? '' : 'i')
+  }
+  return new RegExp(`^${source.join('')}$`, caseSensitive ? '' : 'i')
 }
 
 function normalizeForCase(value: string, caseSensitive: boolean): string {
@@ -1186,8 +1199,14 @@ async function searchFiles(tool: ToolDefinition, args: unknown, context: ToolExe
     // Collect all matches for this file, then apply per-file budget
     const allFileMatches = collectPositiveContentMatches(condition, fileContext, contextLines)
     const remainingBudget = maxTotalLineMatches - totalLineMatches
+    if (remainingBudget <= 0) {
+      // Global budget already exhausted — stop scanning entirely
+      if (!truncatedReason) truncatedReason = 'maxTotalLineMatches'
+      break
+    }
     const fileBudget = Math.min(maxMatchesPerFile, remainingBudget)
     const fileMatches = allFileMatches.slice(0, fileBudget)
+    if (fileMatches.length === 0) continue // skip files with no matches after capping
     totalLineMatches += fileMatches.length
     if (allFileMatches.length > fileMatches.length) {
       truncated = true

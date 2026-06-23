@@ -1316,4 +1316,103 @@ describe('createBuiltinToolExecutor', () => {
     expect(parsed.results[0].matches).toHaveLength(3)
     expect(parsed.results[0].truncated).toBe(true)
   })
+
+  it('pathGlob **/*.ts matches root and nested .ts files', async () => {
+    const root = await workspace()
+    await writeFile(join(root, 'a.ts'), 'const x: number = 1\n', 'utf8')
+    await mkdir(join(root, 'src'), { recursive: true })
+    await writeFile(join(root, 'src', 'a.ts'), 'const x: number = 2\n', 'utf8')
+    // Non-matching files
+    await writeFile(join(root, 'a.js'), 'const x = 3\n', 'utf8')
+    const executor = createBuiltinToolExecutor()
+
+    const searched = await executor.execute(tool('filesystem.search'), {
+      condition: { all: [{ pathGlob: '**/*.ts' }, { contentContains: 'const x' }] }
+    }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.search']
+    })
+
+    const parsed = JSON.parse(searched.content)
+    expect(parsed.results).toHaveLength(2)
+    const paths = parsed.results.map((r: { path: string }) => r.path).sort()
+    expect(paths).toEqual(['a.ts', 'src/a.ts'])
+  })
+
+  it('pathGlob foo/**/bar.ts matches foo/bar.ts and foo/a/b/bar.ts', async () => {
+    const root = await workspace()
+    await mkdir(join(root, 'foo'), { recursive: true })
+    await writeFile(join(root, 'foo', 'bar.ts'), 'const y: number = 1\n', 'utf8')
+    await mkdir(join(root, 'foo', 'a', 'b'), { recursive: true })
+    await writeFile(join(root, 'foo', 'a', 'b', 'bar.ts'), 'const y: number = 2\n', 'utf8')
+    // Non-matching file
+    await writeFile(join(root, 'foo', 'other.ts'), 'const y: number = 3\n', 'utf8')
+    const executor = createBuiltinToolExecutor()
+
+    const searched = await executor.execute(tool('filesystem.search'), {
+      condition: { all: [{ pathGlob: 'foo/**/bar.ts' }, { contentContains: 'const y' }] }
+    }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.search']
+    })
+
+    const parsed = JSON.parse(searched.content)
+    expect(parsed.results).toHaveLength(2)
+    const paths = parsed.results.map((r: { path: string }) => r.path)
+    expect(paths).toEqual(expect.arrayContaining(['foo/bar.ts', 'foo/a/b/bar.ts']))
+  })
+
+  it('pathGlob *.ts only matches root-level ts files (no slash in path)', async () => {
+    const root = await workspace()
+    await mkdir(join(root, 'src'), { recursive: true })
+    await writeFile(join(root, 'a.ts'), 'const z: number = 1\n', 'utf8')
+    await writeFile(join(root, 'src', 'a.ts'), 'const z: number = 2\n', 'utf8')
+    const executor = createBuiltinToolExecutor()
+
+    const searched = await executor.execute(tool('filesystem.search'), {
+      condition: { all: [{ pathGlob: '*.ts' }, { contentContains: 'const z' }] }
+    }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.search']
+    })
+
+    const parsed = JSON.parse(searched.content)
+    expect(parsed.results).toHaveLength(1)
+    expect(parsed.results[0].path).toBe('a.ts')
+  })
+
+  it('avoids empty matches when total budget is very small', async () => {
+    const root = await workspace()
+    await mkdir(join(root, 'src'), { recursive: true })
+    await writeFile(join(root, 'src', 'a.ts'), 'needle one\nneedle two\n', 'utf8')
+    await writeFile(join(root, 'src', 'b.ts'), 'needle three\nneedle four\n', 'utf8')
+    const executor = createBuiltinToolExecutor()
+
+    const searched = await executor.execute(tool('filesystem.search'), {
+      condition: { contentContains: 'needle' },
+      maxTotalLineMatches: 1
+    }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.search']
+    })
+
+    const parsed = JSON.parse(searched.content)
+    expect(parsed.truncated).toBe(true)
+    expect(parsed.truncatedReason).toBe('maxTotalLineMatches')
+    // Only one file should appear, with exactly 1 match
+    expect(parsed.results).toHaveLength(1)
+    expect(parsed.results[0].matches).toHaveLength(1)
+    // No result should have empty matches array
+    for (const result of parsed.results) {
+      expect(result.matches.length).toBeGreaterThan(0)
+    }
+  })
 })
