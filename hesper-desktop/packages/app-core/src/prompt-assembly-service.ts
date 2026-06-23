@@ -77,37 +77,8 @@ function redactText(value: unknown, maxLength = 2000): string {
     .slice(0, maxLength)
 }
 
-function redactSchemaKey(value: unknown, maxLength = 500): string {
-  return redactTokenPatterns(String(value ?? '')).slice(0, maxLength)
-}
-
 function sanitizeText(value: unknown, maxLength = 2000): string {
   return JSON.stringify(redactText(value, maxLength))
-}
-
-function canonicalize(value: unknown): unknown {
-  if (typeof value === 'string') {
-    return redactText(value)
-  }
-
-  if (Array.isArray(value)) {
-    const items = value.map(canonicalize)
-    return [...items].sort((left, right) => stableCompare(JSON.stringify(left), JSON.stringify(right)))
-  }
-
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value)
-        .sort(([left], [right]) => stableCompare(left, right))
-        .map(([key, entry]) => [redactSchemaKey(key), canonicalize(entry)])
-    )
-  }
-
-  return value
-}
-
-function renderJson(value: unknown): string {
-  return JSON.stringify(canonicalize(value))
 }
 
 function filterIdList(values: string[] | undefined, allowedIds: Set<string> | undefined): string[] {
@@ -206,8 +177,7 @@ function renderToolManifest(tools: ToolDefinition[]): string {
   return tools.map((tool) => [
     `- ${sanitizeText(tool.id)} (${sanitizeText(tool.category)})`,
     `  name: ${sanitizeText(tool.name)}`,
-    `  description: ${sanitizeText(tool.description)}`,
-    `  inputSchema: ${renderJson(tool.inputSchema)}`
+    `  description: ${sanitizeText(tool.description)}`
   ].join('\n')).join('\n')
 }
 
