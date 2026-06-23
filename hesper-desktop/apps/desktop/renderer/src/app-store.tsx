@@ -230,7 +230,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     }
     case 'sessions.deleted': {
       const deletedSessionIds = new Set(action.sessionIds)
-      const sessions = sortSessions(state.sessions.filter((session) => !deletedSessionIds.has(session.id)))
+      const sessions = state.sessions.filter((session) => !deletedSessionIds.has(session.id))
       if (!state.activeSessionId || !deletedSessionIds.has(state.activeSessionId)) {
         return {
           ...state,

@@ -135,6 +135,45 @@ describe('app-store reducer', () => {
     expect(preservedActive.sessions.map((session) => session.id)).toEqual(['session-active-next', 'session-active-current'])
   })
 
+  it('preserves the remaining session order after deleting multiple sessions', () => {
+    const nextState = appReducer({
+      ...initialAppState,
+      sessions: [
+        {
+          id: 'session-1',
+          title: 'One',
+          status: 'active',
+          outputMode: 'markdown',
+          createdAt: now,
+          updatedAt: '2026-06-10T03:00:01.000Z'
+        },
+        {
+          id: 'session-2',
+          title: 'Two',
+          status: 'active',
+          outputMode: 'markdown',
+          createdAt: now,
+          updatedAt: '2026-06-10T03:00:02.000Z'
+        },
+        {
+          id: 'session-3',
+          title: 'Three',
+          status: 'active',
+          outputMode: 'markdown',
+          createdAt: now,
+          updatedAt: '2026-06-10T03:00:03.000Z'
+        }
+      ],
+      activeSessionId: 'session-1'
+    }, {
+      type: 'sessions.deleted',
+      sessionIds: ['session-1', 'session-3']
+    })
+
+    expect(nextState.sessions.map((session) => session.id)).toEqual(['session-2'])
+    expect(nextState.activeSessionId).toBe('session-2')
+  })
+
   it('stores optimistic user messages locally', () => {
     const sessionLoadedState = appReducer(initialAppState, {
       type: 'sessions.loaded',
