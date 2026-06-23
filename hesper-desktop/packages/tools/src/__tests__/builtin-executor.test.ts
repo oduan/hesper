@@ -934,4 +934,41 @@ describe('createBuiltinToolExecutor', () => {
       isError: true
     })
   })
+
+  it('excludes gitignored files from find and search by default', async () => {
+    const root = await workspace()
+    await writeFile(join(root, '.gitignore'), 'ignored-dir/\n*.generated.ts\n', 'utf8')
+    await mkdir(join(root, 'src'), { recursive: true })
+    await mkdir(join(root, 'ignored-dir'), { recursive: true })
+    await writeFile(join(root, 'src', 'visible.ts'), 'export const visible = "needle"\n', 'utf8')
+    await writeFile(join(root, 'src', 'hidden.generated.ts'), 'export const hidden = "needle"\n', 'utf8')
+    await writeFile(join(root, 'ignored-dir', 'ignored.ts'), 'export const ignored = "needle"\n', 'utf8')
+    const executor = createBuiltinToolExecutor()
+
+    const found = await executor.execute(tool('filesystem.find'), { pattern: '.*\\.ts$' }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.find']
+    })
+    expect(JSON.parse(found.content)).toMatchObject({
+      matches: [expect.objectContaining({ path: 'src/visible.ts' })],
+      skippedIgnoredEntries: expect.any(Number)
+    })
+    expect(found.content).not.toContain('hidden.generated.ts')
+    expect(found.content).not.toContain('ignored-dir')
+
+    const searched = await executor.execute(tool('filesystem.search'), { condition: { contentContains: 'needle' } }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.search']
+    })
+    expect(JSON.parse(searched.content)).toMatchObject({
+      results: [expect.objectContaining({ path: 'src/visible.ts' })],
+      skippedIgnoredEntries: expect.any(Number)
+    })
+    expect(searched.content).not.toContain('hidden.generated.ts')
+    expect(searched.content).not.toContain('ignored.ts')
+  })
 })

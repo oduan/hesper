@@ -1,6 +1,6 @@
 import type { ModelRef, Skill, ToolDefinition } from '@hesper/shared'
 import { execFile } from 'node:child_process'
-import { lstat, mkdir, open, readFile, readdir, realpath, rm, stat, unlink, writeFile } from 'node:fs/promises'
+import { access, lstat, mkdir, open, readFile, readdir, realpath, rm, stat, unlink, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import { promisify } from 'node:util'
 import type { ToolExecutionContext, ToolExecutionResult, ToolExecutor } from './tool-runner'
@@ -623,7 +623,17 @@ async function editTextFile(tool: ToolDefinition, args: unknown, context: ToolEx
   }
 }
 
+const defaultIgnoredDirs = new Set(['.git', 'node_modules', 'dist', 'out', 'build', 'coverage', '.cache'])
+
 type DirectoryEntryType = 'file' | 'directory'
+
+type WalkResult = {
+  entries: { path: string; info: Awaited<ReturnType<typeof lstat>>; type: DirectoryEntryType }[]
+  scannedEntries: number
+  skippedIgnoredEntries: number
+  truncated: boolean
+  truncatedReason?: 'maxScannedEntries'
+}
 
 type MetadataOptions = {
   includeSize: boolean
@@ -723,24 +733,159 @@ async function listDirectory(tool: ToolDefinition, args: unknown, context: ToolE
   }
 }
 
-async function walkWorkspaceDirectory(rootPath: string, options: { maxEntries?: number } = {}): Promise<{ path: string; info: Awaited<ReturnType<typeof lstat>>; type: DirectoryEntryType }[]> {
+class GitIgnoreFilter {
+  private patterns: Array<{ raw: string; regex: RegExp; negate: boolean }> = []
+  private gitRoot: string | null = null
+
+  async init(workspacePath: string): Promise<void> {
+    try {
+      const { stdout } = await execFileAsync('git', ['-C', workspacePath, 'ls-files', '--cached', '--others', '--exclude-standard', '-z', '--', '.'], {
+        timeout: 5000,
+        maxBuffer: 1024 * 1024
+      })
+      const trackedAndUntracked = stdout ? stdout.split('\0').filter(Boolean) : []
+      const visibleSet = new Set(trackedAndUntracked.map((f) => f.replace(/\\/g, '/')))
+      this.gitRoot = workspacePath
+      // Store the visible set as a special pattern cache
+      this.visibleFiles = visibleSet
+    } catch {
+      // Not a git repo or git unavailable — fall through to .gitignore parsing
+      await this.initFromGitIgnore(workspacePath)
+    }
+  }
+
+  private visibleFiles: Set<string> | null = null
+
+  private async initFromGitIgnore(workspacePath: string): Promise<void> {
+    const gitignorePath = resolve(workspacePath, '.gitignore')
+    try {
+      await access(gitignorePath)
+      const content = await readFile(gitignorePath, 'utf8')
+      this.parsePatterns(content)
+    } catch {
+      // No .gitignore file
+    }
+  }
+
+  private parsePatterns(content: string): void {
+    for (const line of content.split(/\r?\n/)) {
+      const trimmed = line.trim()
+      if (!trimmed || trimmed.startsWith('#')) continue
+      let pattern = trimmed
+      let negate = false
+      if (pattern.startsWith('!')) {
+        negate = true
+        pattern = pattern.slice(1)
+      }
+      // Convert gitignore pattern to RegExp
+      let regexStr = ''
+      if (pattern.endsWith('/')) {
+        // Directory pattern: dir/ → matches dir and anything inside
+        const dirName = pattern.slice(0, -1)
+        regexStr = `(^|/)${escapeRegex(dirName)}(/|$)`
+      } else if (pattern.startsWith('*.')) {
+        // *.ext pattern — * matches any characters except /
+        const ext = pattern.slice(1) // .ext (with dot)
+        regexStr = `(^|/)[^/]*${escapeRegex(ext)}$`
+      } else if (pattern.includes('*') || pattern.includes('?')) {
+        regexStr = `(^|/)${escapeRegexGlob(pattern)}$`
+      } else {
+        // Plain path — match at any level or exact
+        regexStr = `(^|/)${escapeRegex(pattern)}(/|$)`
+      }
+      this.patterns.push({ raw: trimmed, regex: new RegExp(regexStr), negate })
+    }
+  }
+
+  isEntryVisible(relativePath: string): boolean {
+    // Always ignore default dirs
+    const firstSegment = relativePath.split('/')[0]!
+    if (defaultIgnoredDirs.has(firstSegment)) return false
+
+    // If we have git ls-files data, use it
+    if (this.visibleFiles !== null) {
+      if (this.visibleFiles.has(relativePath)) return true
+      // Check if any visible file is inside this directory
+      if (relativePath.endsWith('/')) {
+        const prefix = relativePath
+        for (const f of this.visibleFiles) {
+          if (f.startsWith(prefix)) return true
+        }
+      }
+      return false
+    }
+
+    // Fallback: use .gitignore patterns
+    // Normal pattern (negate=false) → entry is ignored → visible=false
+    // Negated pattern (negate=true, prefixed with !) → entry is NOT ignored → visible=true
+    let visible = true
+    for (const p of this.patterns) {
+      if (p.regex.test(relativePath)) {
+        visible = p.negate
+      }
+    }
+    return visible
+  }
+
+  isEntryVisibleByName(dirRelPath: string, name: string): boolean {
+    const combined = dirRelPath ? `${dirRelPath}/${name}` : name
+    return this.isEntryVisible(combined)
+  }
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[|\\{}()\[\]^$+*?.]/g, '\\$&')
+}
+
+function escapeRegexGlob(value: string): string {
+  return value.split('').map((char) => {
+    if (char === '*') return '[^/]*'
+    if (char === '?') return '[^/]'
+    return escapeRegex(char)
+  }).join('')
+}
+
+async function walkWorkspaceDirectory(
+  rootPath: string,
+  options: { maxEntries?: number; filter?: GitIgnoreFilter | undefined; includeIgnored?: boolean } = {}
+): Promise<WalkResult> {
   const maxEntries = options.maxEntries ?? 10_000
-  const results: { path: string; info: Awaited<ReturnType<typeof lstat>>; type: DirectoryEntryType }[] = []
+  const entries: { path: string; info: Awaited<ReturnType<typeof lstat>>; type: DirectoryEntryType }[] = []
   const stack = [rootPath]
-  while (stack.length > 0 && results.length < maxEntries) {
+  let scannedEntries = 0
+  let skippedIgnoredEntries = 0
+  let truncated = false
+
+  while (stack.length > 0 && scannedEntries < maxEntries) {
     const directory = stack.pop()!
-    const entries = await readdir(directory, { withFileTypes: true })
-    for (const entry of entries.sort((left, right) => right.name.localeCompare(left.name))) {
-      if (results.length >= maxEntries) break
+    const dirEntries = await readdir(directory, { withFileTypes: true })
+    for (const entry of dirEntries.sort((left, right) => right.name.localeCompare(left.name))) {
+      if (scannedEntries >= maxEntries) break
+      scannedEntries++
       const fullPath = resolve(directory, entry.name)
       const info = await lstat(fullPath)
       const type = entryTypeFromStats(info)
       if (!type) continue
-      results.push({ path: fullPath, info, type })
+
+      // Check gitignore filter
+      if (options.filter && !options.includeIgnored) {
+        const dirRelPath = directory === rootPath ? '' : relative(rootPath, directory).replace(/\\/g, '/')
+        if (!options.filter.isEntryVisibleByName(dirRelPath, entry.name)) {
+          skippedIgnoredEntries++
+          continue
+        }
+      }
+
+      entries.push({ path: fullPath, info, type })
       if (type === 'directory') stack.push(fullPath)
     }
   }
-  return results
+
+  if (scannedEntries >= maxEntries) {
+    truncated = true
+  }
+
+  return { entries, scannedEntries, skippedIgnoredEntries, truncated, ...(truncated ? { truncatedReason: 'maxScannedEntries' as const } : {}) }
 }
 
 async function findFileSystemEntries(tool: ToolDefinition, args: unknown, context: ToolExecutionContext): Promise<ToolExecutionResult> {
@@ -752,17 +897,36 @@ async function findFileSystemEntries(tool: ToolDefinition, args: unknown, contex
     throw new Error(`Path is not a directory: ${rootPath}`)
   }
 
+  const includeIgnored = booleanArg(args, 'includeIgnored')
+  const respectGitIgnore = booleanArg(args, 'respectGitIgnore', true)
   const flags = booleanArg(args, 'caseSensitive') ? '' : 'i'
   const pattern = new RegExp(stringArg(args, 'pattern'), flags)
   const options = metadataOptions(args)
   const maxResults = numberArg(args, 'maxResults', 200, { min: 1, max: 1000, integer: true })
-  const walked = await walkWorkspaceDirectory(rootPath, { maxEntries: 25_000 })
-  const matches = walked.flatMap((entry) => {
+
+  let filter: GitIgnoreFilter | undefined
+  if (respectGitIgnore && !includeIgnored) {
+    filter = new GitIgnoreFilter()
+    await filter.init(workspacePath)
+  }
+
+  const walked = await walkWorkspaceDirectory(rootPath, { maxEntries: 25_000, filter, includeIgnored })
+  const matches = walked.entries.flatMap((entry) => {
     const name = basename(entry.path)
     if (!pattern.test(name)) return []
     return [createEntryInfo(name, entry.type, entry.info, options, toWorkspaceRelativePath(workspacePath, entry.path))]
   }).slice(0, maxResults)
-  const result = { path: toWorkspaceRelativePath(workspacePath, rootPath), pattern: stringArg(args, 'pattern'), matches, truncated: matches.length >= maxResults }
+  const result: Record<string, unknown> = {
+    path: toWorkspaceRelativePath(workspacePath, rootPath),
+    pattern: stringArg(args, 'pattern'),
+    matches,
+    truncated: matches.length >= maxResults,
+    scannedEntries: walked.scannedEntries,
+    skippedIgnoredEntries: walked.skippedIgnoredEntries
+  }
+  if (walked.truncated && walked.truncatedReason) {
+    result.truncatedReason = walked.truncatedReason
+  }
   return {
     content: jsonContent(result),
     details: { toolId: tool.id, ...result }
@@ -910,9 +1074,18 @@ async function searchFiles(tool: ToolDefinition, args: unknown, context: ToolExe
   const caseSensitive = booleanArg(args, 'caseSensitive')
   const maxResults = numberArg(args, 'maxResults', 50, { min: 1, max: 500, integer: true })
   const maxFileBytes = numberArg(args, 'maxFileBytes', defaultSearchMaxFileBytes, { min: 1, max: 1024 * 1024, integer: true })
-  const walked = await walkWorkspaceDirectory(rootPath, { maxEntries: 25_000 })
+  const includeIgnored = booleanArg(args, 'includeIgnored')
+  const respectGitIgnore = booleanArg(args, 'respectGitIgnore', true)
+
+  let filter: GitIgnoreFilter | undefined
+  if (respectGitIgnore && !includeIgnored) {
+    filter = new GitIgnoreFilter()
+    await filter.init(workspacePath)
+  }
+
+  const walked = await walkWorkspaceDirectory(rootPath, { maxEntries: 25_000, filter, includeIgnored })
   const results: Array<{ path: string; name: string; type: 'file'; matches: SearchLineMatch[]; truncated?: boolean }> = []
-  for (const entry of walked) {
+  for (const entry of walked.entries) {
     if (results.length >= maxResults) break
     if (entry.type !== 'file') continue
     const relativePath = toWorkspaceRelativePath(workspacePath, entry.path)
@@ -932,7 +1105,16 @@ async function searchFiles(tool: ToolDefinition, args: unknown, context: ToolExe
       ...(truncated ? { truncated } : {})
     })
   }
-  const result = { path: toWorkspaceRelativePath(workspacePath, rootPath), results, truncated: results.length >= maxResults }
+  const result: Record<string, unknown> = {
+    path: toWorkspaceRelativePath(workspacePath, rootPath),
+    results,
+    truncated: results.length >= maxResults,
+    scannedEntries: walked.scannedEntries,
+    skippedIgnoredEntries: walked.skippedIgnoredEntries
+  }
+  if (walked.truncated && walked.truncatedReason) {
+    result.truncatedReason = walked.truncatedReason
+  }
   return {
     content: jsonContent(result),
     details: { toolId: tool.id, ...result }
