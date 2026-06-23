@@ -723,7 +723,7 @@ export function ConversationView({
                 {shouldShowRetryRun(message) ? (() => {
                   const run = getMessageRun(message)
                   return run ? (
-                    <div style={retryRunPanelStyle}>
+                    <div role="alert" aria-label="失败运行摘要" style={retryRunPanelStyle}>
                       <div style={retryRunSummaryStyle}>
                         <strong style={retryRunTitleStyle}>运行失败：{run.error?.code ?? 'unknown'}</strong>
                         <span>{run.error?.message ?? '未知错误'}</span>
