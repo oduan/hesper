@@ -1415,4 +1415,80 @@ describe('createBuiltinToolExecutor', () => {
       expect(result.matches.length).toBeGreaterThan(0)
     }
   })
+
+  it('nameGlob without content condition returns matching files with empty matches', async () => {
+    const root = await workspace()
+    await writeFile(join(root, 'a.ts'), 'const x = 1\n', 'utf8')
+    await writeFile(join(root, 'b.js'), 'const y = 2\n', 'utf8')
+    await mkdir(join(root, 'src'), { recursive: true })
+    await writeFile(join(root, 'src', 'c.ts'), 'const z = 3\n', 'utf8')
+    const executor = createBuiltinToolExecutor()
+
+    const searched = await executor.execute(tool('filesystem.search'), {
+      condition: { nameGlob: '*.ts' }
+    }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.search']
+    })
+
+    const parsed = JSON.parse(searched.content)
+    // nameGlob matches basename, so both a.ts and src/c.ts match
+    expect(parsed.results).toHaveLength(2)
+    for (const result of parsed.results) {
+      expect(result.matches).toEqual([])
+    }
+    // Non-content search should not set totalLineMatches or budget truncatedReason
+    expect(parsed.totalLineMatches).toBeUndefined()
+    expect(parsed.truncatedReason).toBeUndefined()
+  })
+
+  it('pathGlob without content condition returns matching files with empty matches', async () => {
+    const root = await workspace()
+    await writeFile(join(root, 'a.ts'), 'const x = 1\n', 'utf8')
+    await mkdir(join(root, 'src'), { recursive: true })
+    await writeFile(join(root, 'src', 'b.ts'), 'const y = 2\n', 'utf8')
+    const executor = createBuiltinToolExecutor()
+
+    const searched = await executor.execute(tool('filesystem.search'), {
+      condition: { pathGlob: '**/*.ts' }
+    }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.search']
+    })
+
+    const parsed = JSON.parse(searched.content)
+    expect(parsed.results).toHaveLength(2)
+    for (const result of parsed.results) {
+      expect(result.matches).toEqual([])
+    }
+    expect(parsed.totalLineMatches).toBeUndefined()
+  })
+
+  it('pathRegex without content condition returns matching files with empty matches', async () => {
+    const root = await workspace()
+    await mkdir(join(root, 'src'), { recursive: true })
+    await mkdir(join(root, 'lib'), { recursive: true })
+    await writeFile(join(root, 'src', 'a.ts'), 'const x = 1\n', 'utf8')
+    await writeFile(join(root, 'lib', 'b.ts'), 'const y = 2\n', 'utf8')
+    const executor = createBuiltinToolExecutor()
+
+    const searched = await executor.execute(tool('filesystem.search'), {
+      condition: { pathRegex: '^src/' }
+    }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.search']
+    })
+
+    const parsed = JSON.parse(searched.content)
+    expect(parsed.results).toHaveLength(1)
+    expect(parsed.results[0].path).toBe('src/a.ts')
+    expect(parsed.results[0].matches).toEqual([])
+    expect(parsed.totalLineMatches).toBeUndefined()
+  })
 })

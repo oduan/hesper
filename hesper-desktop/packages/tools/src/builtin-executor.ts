@@ -1196,35 +1196,45 @@ async function searchFiles(tool: ToolDefinition, args: unknown, context: ToolExe
     }
     if (!evaluateSearchCondition(condition, fileContext)) continue
 
-    // Collect all matches for this file, then apply per-file budget
-    const allFileMatches = collectPositiveContentMatches(condition, fileContext, contextLines)
-    const remainingBudget = maxTotalLineMatches - totalLineMatches
-    if (remainingBudget <= 0) {
-      // Global budget already exhausted — stop scanning entirely
-      if (!truncatedReason) truncatedReason = 'maxTotalLineMatches'
-      break
-    }
-    const fileBudget = Math.min(maxMatchesPerFile, remainingBudget)
-    const fileMatches = allFileMatches.slice(0, fileBudget)
-    if (fileMatches.length === 0) continue // skip files with no matches after capping
-    totalLineMatches += fileMatches.length
-    if (allFileMatches.length > fileMatches.length) {
-      truncated = true
-      truncatedReason = fileMatches.length >= maxMatchesPerFile ? 'maxMatchesPerFile' : 'maxTotalLineMatches'
-    }
+    if (needsContent) {
+      // Content search: apply per-file and global match budgets
+      const allFileMatches = collectPositiveContentMatches(condition, fileContext, contextLines)
+      const remainingBudget = maxTotalLineMatches - totalLineMatches
+      if (remainingBudget <= 0) {
+        // Global budget already exhausted — stop scanning entirely
+        if (!truncatedReason) truncatedReason = 'maxTotalLineMatches'
+        break
+      }
+      const fileBudget = Math.min(maxMatchesPerFile, remainingBudget)
+      const fileMatches = allFileMatches.slice(0, fileBudget)
+      if (fileMatches.length === 0) continue // skip files with no matches after capping
+      totalLineMatches += fileMatches.length
+      if (allFileMatches.length > fileMatches.length) {
+        truncated = true
+        truncatedReason = fileMatches.length >= maxMatchesPerFile ? 'maxMatchesPerFile' : 'maxTotalLineMatches'
+      }
 
-    results.push({
-      path: relativePath,
-      name: basename(entry.path),
-      type: 'file',
-      matches: fileMatches,
-      ...(truncated ? { truncated } : {})
-    })
+      results.push({
+        path: relativePath,
+        name: basename(entry.path),
+        type: 'file',
+        matches: fileMatches,
+        ...(truncated ? { truncated } : {})
+      })
 
-    // If global budget exhausted, stop scanning further files
-    if (totalLineMatches >= maxTotalLineMatches) {
-      if (!truncatedReason) truncatedReason = 'maxTotalLineMatches'
-      break
+      // If global budget exhausted, stop scanning further files
+      if (totalLineMatches >= maxTotalLineMatches) {
+        if (!truncatedReason) truncatedReason = 'maxTotalLineMatches'
+        break
+      }
+    } else {
+      // Path/name-only search: push result without match budget capping
+      results.push({
+        path: relativePath,
+        name: basename(entry.path),
+        type: 'file',
+        matches: []
+      })
     }
   }
 
