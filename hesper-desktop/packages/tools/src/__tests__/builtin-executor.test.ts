@@ -934,4 +934,614 @@ describe('createBuiltinToolExecutor', () => {
       isError: true
     })
   })
+
+  it('excludes gitignored files from find and search by default', async () => {
+    const root = await workspace()
+    await writeFile(join(root, '.gitignore'), 'ignored-dir/\n*.generated.ts\n', 'utf8')
+    await mkdir(join(root, 'src'), { recursive: true })
+    await mkdir(join(root, 'ignored-dir'), { recursive: true })
+    await writeFile(join(root, 'src', 'visible.ts'), 'export const visible = "needle"\n', 'utf8')
+    await writeFile(join(root, 'src', 'hidden.generated.ts'), 'export const hidden = "needle"\n', 'utf8')
+    await writeFile(join(root, 'ignored-dir', 'ignored.ts'), 'export const ignored = "needle"\n', 'utf8')
+    const executor = createBuiltinToolExecutor()
+
+    const found = await executor.execute(tool('filesystem.find'), { pattern: '.*\\.ts$' }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.find']
+    })
+    expect(JSON.parse(found.content)).toMatchObject({
+      matches: [expect.objectContaining({ path: 'src/visible.ts' })],
+      skippedIgnoredEntries: expect.any(Number)
+    })
+    expect(found.content).not.toContain('hidden.generated.ts')
+    expect(found.content).not.toContain('ignored-dir')
+
+    const searched = await executor.execute(tool('filesystem.search'), { condition: { contentContains: 'needle' } }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.search']
+    })
+    expect(JSON.parse(searched.content)).toMatchObject({
+      results: [expect.objectContaining({ path: 'src/visible.ts' })],
+      skippedIgnoredEntries: expect.any(Number)
+    })
+    expect(searched.content).not.toContain('hidden.generated.ts')
+    expect(searched.content).not.toContain('ignored.ts')
+  })
+
+  it('respects .gitignore in a real git repo with nested directories', async () => {
+    const root = await workspace()
+    // Init a git repo so GitIgnoreFilter uses git ls-files
+    const { execFile } = await import('node:child_process')
+    const { promisify } = await import('node:util')
+    const execFileAsync = promisify(execFile)
+
+    await execFileAsync('git', ['init'], { cwd: root })
+    await execFileAsync('git', ['config', 'user.email', 'test@test.com'], { cwd: root })
+    await execFileAsync('git', ['config', 'user.name', 'Test'], { cwd: root })
+
+    await mkdir(join(root, 'src', 'nested'), { recursive: true })
+    await mkdir(join(root, 'ignored-dir'), { recursive: true })
+    await writeFile(join(root, '.gitignore'), 'ignored-dir/\n', 'utf8')
+    await writeFile(join(root, 'src', 'visible.ts'), 'export const v = "needle"\n', 'utf8')
+    await writeFile(join(root, 'src', 'nested', 'visible.ts'), 'export const v = "needle"\n', 'utf8')
+    await writeFile(join(root, 'ignored-dir', 'ignored.ts'), 'export const v = "needle"\n', 'utf8')
+
+    await execFileAsync('git', ['add', '-A'], { cwd: root })
+    await execFileAsync('git', ['commit', '-m', 'initial'], { cwd: root })
+
+    const executor = createBuiltinToolExecutor()
+
+    // Search from workspace root — should find files in nested dir
+    const searchedRoot = await executor.execute(tool('filesystem.search'), { condition: { contentContains: 'needle' } }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.search']
+    })
+    const rootResults = JSON.parse(searchedRoot.content).results as Array<{ path: string }>
+    expect(rootResults).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: 'src/visible.ts' }),
+        expect.objectContaining({ path: 'src/nested/visible.ts' })
+      ])
+    )
+    expect(searchedRoot.content).not.toContain('ignored.ts')
+
+    // Search from 'src' subdirectory — should still find nested files
+    const searchedSrc = await executor.execute(tool('filesystem.search'), { path: 'src', condition: { contentContains: 'needle' } }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.search']
+    })
+    const srcResults = JSON.parse(searchedSrc.content).results as Array<{ path: string }>
+    expect(srcResults).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: 'src/visible.ts' }),
+        expect.objectContaining({ path: 'src/nested/visible.ts' })
+      ])
+    )
+
+    // Find from workspace root
+    const found = await executor.execute(tool('filesystem.find'), { pattern: '.*\\.ts$' }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.find']
+    })
+    const foundPaths = JSON.parse(found.content).matches.map((m: { path: string }) => m.path)
+    expect(foundPaths).toContain('src/visible.ts')
+    expect(foundPaths).toContain('src/nested/visible.ts')
+    expect(foundPaths).not.toContain('ignored-dir/ignored.ts')
+
+    // Find from 'src' subdirectory
+    const foundSrc = await executor.execute(tool('filesystem.find'), { path: 'src', pattern: '.*\\.ts$' }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.find']
+    })
+    const foundSrcPaths = JSON.parse(foundSrc.content).matches.map((m: { path: string }) => m.path)
+    expect(foundSrcPaths).toContain('src/visible.ts')
+    expect(foundSrcPaths).toContain('src/nested/visible.ts')
+  })
+
+  it('includeIgnored: true bypasses gitignore filtering and default-ignored dirs', async () => {
+    const root = await workspace()
+    await writeFile(join(root, '.gitignore'), 'ignored-dir/\n*.generated.ts\n', 'utf8')
+    await mkdir(join(root, 'ignored-dir'), { recursive: true })
+    await writeFile(join(root, 'ignored-dir', 'ignored.ts'), 'export const ignored = "needle"\n', 'utf8')
+    await writeFile(join(root, 'visible.ts'), 'export const visible = "needle"\n', 'utf8')
+    await writeFile(join(root, 'hidden.generated.ts'), 'export const hidden = "needle"\n', 'utf8')
+    await mkdir(join(root, 'node_modules'), { recursive: true })
+    await writeFile(join(root, 'node_modules', 'pkg.ts'), 'export const pkg = "needle"\n', 'utf8')
+    const executor = createBuiltinToolExecutor()
+
+    // find with includeIgnored: true
+    const found = await executor.execute(tool('filesystem.find'), { pattern: '.*\\.ts$', includeIgnored: true }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.find']
+    })
+    const foundMatch = JSON.parse(found.content)
+    // includeIgnored should include ignored and default-ignored paths
+    expect(foundMatch.matches.length).toBeGreaterThanOrEqual(4)
+    expect(foundMatch.skippedIgnoredEntries).toBe(0)
+
+    // find without includeIgnored (default false) — should exclude
+    const foundDefault = await executor.execute(tool('filesystem.find'), { pattern: '.*\\.ts$' }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.find']
+    })
+    const defaultMatch = JSON.parse(foundDefault.content)
+    expect(defaultMatch.matches.length).toBeLessThanOrEqual(1) // only visible.ts (no .gitignore, no default ignored)
+    expect(defaultMatch.skippedIgnoredEntries).toBeGreaterThan(0)
+  })
+
+  it('respectGitIgnore: false still skips default-ignored dirs unless includeIgnored: true', async () => {
+    const root = await workspace()
+    await writeFile(join(root, '.gitignore'), '*.log\n', 'utf8')
+    await writeFile(join(root, 'visible.ts'), 'export const v = "needle"\n', 'utf8')
+    await mkdir(join(root, 'node_modules'), { recursive: true })
+    await writeFile(join(root, 'node_modules', 'pkg.ts'), 'export const pkg = "needle"\n', 'utf8')
+    const executor = createBuiltinToolExecutor()
+
+    // respectGitIgnore: false — should NOT ignore *.log, but SHOULD still skip node_modules
+    const found = await executor.execute(tool('filesystem.find'), { pattern: '.*\\.ts$', respectGitIgnore: false }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.find']
+    })
+    const match = JSON.parse(found.content)
+    expect(match.matches).toEqual([expect.objectContaining({ path: 'visible.ts' })])
+    expect(JSON.stringify(match.matches)).not.toContain('pkg.ts')
+    expect(match.skippedIgnoredEntries).toBeGreaterThan(0)
+
+    // includeIgnored: true — should include node_modules
+    const foundAll = await executor.execute(tool('filesystem.find'), { pattern: '.*\\.ts$', includeIgnored: true }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.find']
+    })
+    const matchAll = JSON.parse(foundAll.content)
+    expect(matchAll.matches.length).toBeGreaterThanOrEqual(2)
+    expect(matchAll.skippedIgnoredEntries).toBe(0)
+  })
+
+  it('reports walker truncation via maxScannedEntries parameter', async () => {
+    const root = await workspace()
+    // Create 5 directories each with 2 files = 15 entries (5 dirs + 10 files)
+    for (let i = 0; i < 5; i++) {
+      await mkdir(join(root, `dir${i}`), { recursive: true })
+      await writeFile(join(root, `dir${i}`, `f.ts`), 'const x = 1\n', 'utf8')
+      await writeFile(join(root, `dir${i}`, `g.ts`), 'const x = 2\n', 'utf8')
+    }
+    const executor = createBuiltinToolExecutor()
+
+    // Set maxScannedEntries=2 — walker will truncate after scanning only 2 entries
+    const found = await executor.execute(tool('filesystem.find'), { pattern: '.*', maxScannedEntries: 2, maxResults: 1000 }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.find']
+    })
+    const result = JSON.parse(found.content)
+    expect(result.truncated).toBe(true)
+    expect(result.truncatedReason).toBe('maxScannedEntries')
+    expect(result.scannedEntries).toBe(2)
+  })
+
+  it('skips default-ignored dirs inside subdirectories like src/node_modules', async () => {
+    const root = await workspace()
+    await mkdir(join(root, 'src', 'node_modules'), { recursive: true })
+    await mkdir(join(root, 'src', 'lib'), { recursive: true })
+    await writeFile(join(root, 'src', 'lib', 'util.ts'), 'export const util = "needle"\n', 'utf8')
+    await writeFile(join(root, 'src', 'node_modules', 'pkg.ts'), 'export const pkg = "needle"\n', 'utf8')
+    // Also create a file named 'dist.ts' at root — should NOT be ignored
+    await writeFile(join(root, 'dist.ts'), 'export const distFile = "needle"\n', 'utf8')
+    const executor = createBuiltinToolExecutor()
+
+    // Search from workspace root — src/node_modules should be skipped
+    const found = await executor.execute(tool('filesystem.search'), { condition: { contentContains: 'needle' } }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.search']
+    })
+    const results = JSON.parse(found.content).results as Array<{ path: string }>
+    expect(results).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: 'src/lib/util.ts' }),
+        expect.objectContaining({ path: 'dist.ts' })
+      ])
+    )
+    // pkg.ts inside node_modules should NOT appear
+    expect(JSON.stringify(results)).not.toContain('pkg.ts')
+    // dist.ts is a file, not a directory — should NOT be ignored
+    expect(JSON.stringify(results)).toContain('dist.ts')
+
+    // Search from 'src' subdirectory — src/node_modules should still be skipped
+    const foundSrc = await executor.execute(tool('filesystem.search'), { path: 'src', condition: { contentContains: 'needle' } }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.search']
+    })
+    const srcResults = JSON.parse(foundSrc.content).results as Array<{ path: string }>
+    expect(srcResults).toEqual([expect.objectContaining({ path: 'src/lib/util.ts' })])
+    expect(JSON.stringify(srcResults)).not.toContain('pkg.ts')
+
+    // includeIgnored: true — should include src/node_modules/pkg.ts
+    const foundAll = await executor.execute(tool('filesystem.search'), {
+      path: 'src',
+      condition: { contentContains: 'needle' },
+      includeIgnored: true
+    }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.search']
+    })
+    const allResults = JSON.parse(foundAll.content).results as Array<{ path: string }>
+    expect(allResults.length).toBeGreaterThanOrEqual(2)
+    expect(JSON.stringify(allResults)).toContain('pkg.ts')
+  })
+
+  it('limits content search line matches per file and overall', async () => {
+    const root = await workspace()
+    await mkdir(join(root, 'src'), { recursive: true })
+    await writeFile(join(root, 'src', 'many-a.ts'), Array.from({ length: 40 }, (_, index) => `needle a ${index + 1}`).join('\n'), 'utf8')
+    await writeFile(join(root, 'src', 'many-b.ts'), Array.from({ length: 40 }, (_, index) => `needle b ${index + 1}`).join('\n'), 'utf8')
+    const executor = createBuiltinToolExecutor()
+
+    const searched = await executor.execute(tool('filesystem.search'), {
+      condition: { contentContains: 'needle' },
+      maxMatchesPerFile: 5,
+      maxTotalLineMatches: 8,
+      maxResults: 10
+    }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.search']
+    })
+
+    const parsed = JSON.parse(searched.content)
+    expect(parsed.truncated).toBe(true)
+    expect(parsed.truncatedReason).toBe('maxTotalLineMatches')
+    expect(parsed.totalLineMatches).toBe(8)
+    expect(parsed.results[0].matches).toHaveLength(5)
+    expect(parsed.results.some((result: { truncated?: boolean }) => result.truncated)).toBe(true)
+    expect(parsed.suggestion).toContain('Narrow path')
+  })
+
+  it('supports pathGlob to narrow search scope', async () => {
+    const root = await workspace()
+    await mkdir(join(root, 'packages', 'tools', 'src'), { recursive: true })
+    await mkdir(join(root, 'packages', 'ui', 'src'), { recursive: true })
+    await writeFile(join(root, 'packages', 'tools', 'src', 'tool.ts'), 'const marker = "needle"\n', 'utf8')
+    await writeFile(join(root, 'packages', 'ui', 'src', 'view.ts'), 'const marker = "needle"\n', 'utf8')
+    const executor = createBuiltinToolExecutor()
+
+    const searched = await executor.execute(tool('filesystem.search'), {
+      condition: { all: [{ pathGlob: 'packages/tools/**/*.ts' }, { contentContains: 'needle' }] }
+    }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.search']
+    })
+
+    const parsed = JSON.parse(searched.content)
+    expect(parsed.results).toHaveLength(1)
+    expect(parsed.results[0].path).toBe('packages/tools/src/tool.ts')
+  })
+
+  it('supports pathRegex filter in search condition', async () => {
+    const root = await workspace()
+    await mkdir(join(root, 'packages', 'tools', 'src'), { recursive: true })
+    await mkdir(join(root, 'packages', 'ui', 'src'), { recursive: true })
+    await writeFile(join(root, 'packages', 'tools', 'src', 'tool.ts'), 'const marker = "needle"\n', 'utf8')
+    await writeFile(join(root, 'packages', 'ui', 'src', 'view.ts'), 'const marker = "needle"\n', 'utf8')
+    const executor = createBuiltinToolExecutor()
+
+    const searched = await executor.execute(tool('filesystem.search'), {
+      condition: { all: [{ pathRegex: '^packages/tools/' }, { contentContains: 'needle' }] }
+    }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.search']
+    })
+
+    const parsed = JSON.parse(searched.content)
+    expect(parsed.results).toHaveLength(1)
+    expect(parsed.results[0].path).toBe('packages/tools/src/tool.ts')
+  })
+
+  it('contextLines: 0 returns no before/after context', async () => {
+    const root = await workspace()
+    await mkdir(join(root, 'src'), { recursive: true })
+    await writeFile(join(root, 'src', 'app.ts'), 'one\ntwo needle\nthree\nfour needle\nfive\n', 'utf8')
+    const executor = createBuiltinToolExecutor()
+
+    const searched = await executor.execute(tool('filesystem.search'), {
+      condition: { contentContains: 'needle' },
+      contextLines: 0
+    }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.search']
+    })
+
+    const parsed = JSON.parse(searched.content)
+    expect(parsed.results).toHaveLength(1)
+    for (const file of parsed.results) {
+      for (const match of file.matches) {
+        expect(match.before).toHaveLength(0)
+        expect(match.after).toHaveLength(0)
+      }
+    }
+  })
+
+  it('maxMatchesPerFile stops collecting matches per file', async () => {
+    const root = await workspace()
+    await mkdir(join(root, 'src'), { recursive: true })
+    await writeFile(join(root, 'src', 'many.ts'), Array.from({ length: 30 }, (_, index) => `needle line ${index + 1}`).join('\n'), 'utf8')
+    const executor = createBuiltinToolExecutor()
+
+    const searched = await executor.execute(tool('filesystem.search'), {
+      condition: { contentContains: 'needle' },
+      maxMatchesPerFile: 3,
+      maxTotalLineMatches: 200,
+      maxResults: 10
+    }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.search']
+    })
+
+    const parsed = JSON.parse(searched.content)
+    expect(parsed.results[0].matches).toHaveLength(3)
+    expect(parsed.results[0].truncated).toBe(true)
+  })
+
+  it('pathGlob **/*.ts matches root and nested .ts files', async () => {
+    const root = await workspace()
+    await writeFile(join(root, 'a.ts'), 'const x: number = 1\n', 'utf8')
+    await mkdir(join(root, 'src'), { recursive: true })
+    await writeFile(join(root, 'src', 'a.ts'), 'const x: number = 2\n', 'utf8')
+    // Non-matching files
+    await writeFile(join(root, 'a.js'), 'const x = 3\n', 'utf8')
+    const executor = createBuiltinToolExecutor()
+
+    const searched = await executor.execute(tool('filesystem.search'), {
+      condition: { all: [{ pathGlob: '**/*.ts' }, { contentContains: 'const x' }] }
+    }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.search']
+    })
+
+    const parsed = JSON.parse(searched.content)
+    expect(parsed.results).toHaveLength(2)
+    const paths = parsed.results.map((r: { path: string }) => r.path).sort()
+    expect(paths).toEqual(['a.ts', 'src/a.ts'])
+  })
+
+  it('pathGlob foo/**/bar.ts matches foo/bar.ts and foo/a/b/bar.ts', async () => {
+    const root = await workspace()
+    await mkdir(join(root, 'foo'), { recursive: true })
+    await writeFile(join(root, 'foo', 'bar.ts'), 'const y: number = 1\n', 'utf8')
+    await mkdir(join(root, 'foo', 'a', 'b'), { recursive: true })
+    await writeFile(join(root, 'foo', 'a', 'b', 'bar.ts'), 'const y: number = 2\n', 'utf8')
+    // Non-matching file
+    await writeFile(join(root, 'foo', 'other.ts'), 'const y: number = 3\n', 'utf8')
+    const executor = createBuiltinToolExecutor()
+
+    const searched = await executor.execute(tool('filesystem.search'), {
+      condition: { all: [{ pathGlob: 'foo/**/bar.ts' }, { contentContains: 'const y' }] }
+    }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.search']
+    })
+
+    const parsed = JSON.parse(searched.content)
+    expect(parsed.results).toHaveLength(2)
+    const paths = parsed.results.map((r: { path: string }) => r.path)
+    expect(paths).toEqual(expect.arrayContaining(['foo/bar.ts', 'foo/a/b/bar.ts']))
+  })
+
+  it('pathGlob *.ts only matches root-level ts files (no slash in path)', async () => {
+    const root = await workspace()
+    await mkdir(join(root, 'src'), { recursive: true })
+    await writeFile(join(root, 'a.ts'), 'const z: number = 1\n', 'utf8')
+    await writeFile(join(root, 'src', 'a.ts'), 'const z: number = 2\n', 'utf8')
+    const executor = createBuiltinToolExecutor()
+
+    const searched = await executor.execute(tool('filesystem.search'), {
+      condition: { all: [{ pathGlob: '*.ts' }, { contentContains: 'const z' }] }
+    }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.search']
+    })
+
+    const parsed = JSON.parse(searched.content)
+    expect(parsed.results).toHaveLength(1)
+    expect(parsed.results[0].path).toBe('a.ts')
+  })
+
+  it('avoids empty matches when total budget is very small', async () => {
+    const root = await workspace()
+    await mkdir(join(root, 'src'), { recursive: true })
+    await writeFile(join(root, 'src', 'a.ts'), 'needle one\nneedle two\n', 'utf8')
+    await writeFile(join(root, 'src', 'b.ts'), 'needle three\nneedle four\n', 'utf8')
+    const executor = createBuiltinToolExecutor()
+
+    const searched = await executor.execute(tool('filesystem.search'), {
+      condition: { contentContains: 'needle' },
+      maxTotalLineMatches: 1
+    }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.search']
+    })
+
+    const parsed = JSON.parse(searched.content)
+    expect(parsed.truncated).toBe(true)
+    expect(parsed.truncatedReason).toBe('maxTotalLineMatches')
+    // Only one file should appear, with exactly 1 match
+    expect(parsed.results).toHaveLength(1)
+    expect(parsed.results[0].matches).toHaveLength(1)
+    // No result should have empty matches array
+    for (const result of parsed.results) {
+      expect(result.matches.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('nameGlob without content condition returns matching files with empty matches', async () => {
+    const root = await workspace()
+    await writeFile(join(root, 'a.ts'), 'const x = 1\n', 'utf8')
+    await writeFile(join(root, 'b.js'), 'const y = 2\n', 'utf8')
+    await mkdir(join(root, 'src'), { recursive: true })
+    await writeFile(join(root, 'src', 'c.ts'), 'const z = 3\n', 'utf8')
+    const executor = createBuiltinToolExecutor()
+
+    const searched = await executor.execute(tool('filesystem.search'), {
+      condition: { nameGlob: '*.ts' }
+    }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.search']
+    })
+
+    const parsed = JSON.parse(searched.content)
+    // nameGlob matches basename, so both a.ts and src/c.ts match
+    expect(parsed.results).toHaveLength(2)
+    for (const result of parsed.results) {
+      expect(result.matches).toEqual([])
+    }
+    // Non-content search should not set totalLineMatches or budget truncatedReason
+    expect(parsed.totalLineMatches).toBeUndefined()
+    expect(parsed.truncatedReason).toBeUndefined()
+  })
+
+  it('pathGlob without content condition returns matching files with empty matches', async () => {
+    const root = await workspace()
+    await writeFile(join(root, 'a.ts'), 'const x = 1\n', 'utf8')
+    await mkdir(join(root, 'src'), { recursive: true })
+    await writeFile(join(root, 'src', 'b.ts'), 'const y = 2\n', 'utf8')
+    const executor = createBuiltinToolExecutor()
+
+    const searched = await executor.execute(tool('filesystem.search'), {
+      condition: { pathGlob: '**/*.ts' }
+    }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.search']
+    })
+
+    const parsed = JSON.parse(searched.content)
+    expect(parsed.results).toHaveLength(2)
+    for (const result of parsed.results) {
+      expect(result.matches).toEqual([])
+    }
+    expect(parsed.totalLineMatches).toBeUndefined()
+  })
+
+  it('pathRegex without content condition returns matching files with empty matches', async () => {
+    const root = await workspace()
+    await mkdir(join(root, 'src'), { recursive: true })
+    await mkdir(join(root, 'lib'), { recursive: true })
+    await writeFile(join(root, 'src', 'a.ts'), 'const x = 1\n', 'utf8')
+    await writeFile(join(root, 'lib', 'b.ts'), 'const y = 2\n', 'utf8')
+    const executor = createBuiltinToolExecutor()
+
+    const searched = await executor.execute(tool('filesystem.search'), {
+      condition: { pathRegex: '^src/' }
+    }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.search']
+    })
+
+    const parsed = JSON.parse(searched.content)
+    expect(parsed.results).toHaveLength(1)
+    expect(parsed.results[0].path).toBe('src/a.ts')
+    expect(parsed.results[0].matches).toEqual([])
+    expect(parsed.totalLineMatches).toBeUndefined()
+  })
+
+  it('skips vendor directories by default', async () => {
+    const root = await workspace()
+    // Root-level vendor
+    await mkdir(join(root, 'vendor'), { recursive: true })
+    await writeFile(join(root, 'vendor', 'pkg.ts'), 'export const v = "needle"\n', 'utf8')
+    // Nested vendor
+    await mkdir(join(root, 'src', 'vendor'), { recursive: true })
+    await writeFile(join(root, 'src', 'vendor', 'dep.ts'), 'export const d = "needle"\n', 'utf8')
+    // Visible files
+    await writeFile(join(root, 'visible.ts'), 'export const v = "needle"\n', 'utf8')
+    await mkdir(join(root, 'src', 'lib'), { recursive: true })
+    await writeFile(join(root, 'src', 'lib', 'util.ts'), 'export const u = "needle"\n', 'utf8')
+    const executor = createBuiltinToolExecutor()
+
+    // filesystem.search — vendor should be excluded
+    const searched = await executor.execute(tool('filesystem.search'), { condition: { contentContains: 'needle' } }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.search']
+    })
+    const searchResults = JSON.parse(searched.content).results as Array<{ path: string }>
+    const searchPaths = searchResults.map((r) => r.path)
+    expect(searchPaths).toContain('visible.ts')
+    expect(searchPaths).toContain('src/lib/util.ts')
+    expect(searchPaths).not.toContain('vendor/pkg.ts')
+    expect(searchPaths).not.toContain('src/vendor/dep.ts')
+
+    // filesystem.find — vendor should be excluded
+    const found = await executor.execute(tool('filesystem.find'), { pattern: '.*\\.ts$' }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.find']
+    })
+    const findPaths = JSON.parse(found.content).matches.map((m: { path: string }) => m.path)
+    expect(findPaths).toContain('visible.ts')
+    expect(findPaths).toContain('src/lib/util.ts')
+    expect(findPaths).not.toContain('vendor/pkg.ts')
+    expect(findPaths).not.toContain('src/vendor/dep.ts')
+
+    // includeIgnored: true — vendor files should appear
+    const foundAll = await executor.execute(tool('filesystem.find'), { pattern: '.*\\.ts$', includeIgnored: true }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.find']
+    })
+    const allPaths = JSON.parse(foundAll.content).matches.map((m: { path: string }) => m.path)
+    expect(allPaths).toContain('vendor/pkg.ts')
+    expect(allPaths).toContain('src/vendor/dep.ts')
+  })
 })

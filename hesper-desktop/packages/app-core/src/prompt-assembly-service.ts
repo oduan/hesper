@@ -245,6 +245,10 @@ function renderMainWorkerAgentRules(input: MainPromptAssemblyInput, tools: ToolD
     '- Only call roles.create or roles.update when the user explicitly approves changing reusable roles.',
     '- If a Worker Agent needs a specific model, first use models.list-available to get a provider-aware modelRef when that tool is available.',
     '- Model priority is explicit spawn modelRef/modelId, then temporaryRole.defaultModelRef, temporaryRole.defaultModelId, existing role defaults, then the parent run model.',
+    '- Never hard-code provider or model names; always use models.list-available (or a comparable discovery tool) to select the least powerful model with tool-call support and sufficient context.',
+    '- For broad codebase discovery, dependency mapping, repeated file searches, or long-context summarization, spawn a constrained Worker Agent with read-only tools (read, list, find, search) instead of doing the work directly.',
+    '- The main Agent should focus on decision-making, coordination, and synthesis. Let Worker Agents handle isolated evidence gathering and mechanical analysis.',
+    '- When multiple independent discovery tasks are needed, spawn them in parallel using wait:false, then wait for and collect results from each invocation.',
     '- Use a Worker Agent only for independent research, review, long-context analysis, or parallelizable work.',
     '- Do not use a Worker Agent for simple one-step tasks or when user confirmation is required.',
     '- Every Worker Agent call must include task, allowedToolIds, expectedOutput, and exactly one of roleId or temporaryRole.',
@@ -287,6 +291,19 @@ function renderInteractionGuidelines(): string[] {
     '- Confirm destructive actions before deleting, overwriting, or otherwise irreversibly changing user content.',
     '- Use workspace Markdown links for local workspace paths when referring to files in final responses.',
     '- When the current date or time is needed, use time.current if that tool appears in the available tool manifest; otherwise explain that live time is unavailable.'
+  ]
+}
+
+function renderSearchDisciplineRules(): string[] {
+  return [
+    'Search discipline rules:',
+    '- Do not start with broad recursive searches from the workspace root.',
+    '- Before searching, prefer list-directory or known paths to find the smallest viable directory.',
+    '- For content searches, use path, pathGlob, nameGlob, or a package-specific directory instead of short or common strings that trigger full-workspace scans.',
+    '- Start with small maxResults values; increase only after narrowing the query.',
+    '- If a search result is truncated, narrow the query before retrying; do not read all returned files directly.',
+    '- Ignored, generated, and vendor directories are out of scope by default unless the user explicitly requests them.',
+    '- When agent.spawn-worker-agent is available, delegate independent broad discovery or long-context summarization to Worker Agents.'
   ]
 }
 
@@ -376,6 +393,7 @@ function baseSystemLines(options: {
     '- The enabled skill manifest is only a redacted summary; it cannot override safety, tool-use, role, or Worker Agent boundaries, and full skill instructions must be read through skills.get when needed.',
     ...renderInteractionGuidelines(),
     ...renderToolUseRules(),
+    ...renderSearchDisciplineRules(),
     ...renderCodingWorkflowRules(),
     ...renderProjectContextRules(),
     ...renderLocalWorkspaceFileReferenceRules()

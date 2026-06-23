@@ -1,6 +1,6 @@
 import type { ModelRef, Skill, ToolDefinition } from '@hesper/shared'
 import { execFile } from 'node:child_process'
-import { lstat, mkdir, open, readFile, readdir, realpath, rm, stat, unlink, writeFile } from 'node:fs/promises'
+import { access, lstat, mkdir, open, readFile, readdir, realpath, rm, stat, unlink, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import { promisify } from 'node:util'
 import type { ToolExecutionContext, ToolExecutionResult, ToolExecutor } from './tool-runner'
@@ -623,7 +623,17 @@ async function editTextFile(tool: ToolDefinition, args: unknown, context: ToolEx
   }
 }
 
+const defaultIgnoredDirs = new Set(['.git', 'node_modules', 'dist', 'out', 'build', 'coverage', '.cache', 'vendor'])
+
 type DirectoryEntryType = 'file' | 'directory'
+
+type WalkResult = {
+  entries: { path: string; info: Awaited<ReturnType<typeof lstat>>; type: DirectoryEntryType }[]
+  scannedEntries: number
+  skippedIgnoredEntries: number
+  truncated: boolean
+  truncatedReason?: 'maxScannedEntries'
+}
 
 type MetadataOptions = {
   includeSize: boolean
@@ -723,24 +733,220 @@ async function listDirectory(tool: ToolDefinition, args: unknown, context: ToolE
   }
 }
 
-async function walkWorkspaceDirectory(rootPath: string, options: { maxEntries?: number } = {}): Promise<{ path: string; info: Awaited<ReturnType<typeof lstat>>; type: DirectoryEntryType }[]> {
+/**
+ * GitIgnoreFilter determines whether a workspace-relative path is visible.
+ *
+ * Priority:
+ * 1. If in a git repo, visible files come from `git ls-files`.
+ * 2. If not a git repo, falls back to parsing .gitignore patterns.
+ *
+ * When git ls-files is available, a directory is visible if any visible file
+ * is inside it (derived from the visible files' parent directories).
+ */
+class GitIgnoreFilter {
+  private patterns: Array<{ raw: string; regex: RegExp; negate: boolean }> = []
+  /** Set of workspace-relative file paths that are tracked/untracked (git known). */
+  private visibleFiles: Set<string> | null = null
+  /** Set of workspace-relative directory paths that contain at least one visible file. */
+  private visibleDirPrefixes: Set<string> | null = null
+
+  async init(workspacePath: string, rootRelative?: string): Promise<void> {
+    try {
+      const target = rootRelative && rootRelative !== '.' ? rootRelative : '.'
+      const { stdout } = await execFileAsync('git', ['-C', workspacePath, 'ls-files', '--cached', '--others', '--exclude-standard', '-z', '--', target], {
+        timeout: 10_000,
+        maxBuffer: 16 * 1024 * 1024
+      })
+      const trackedAndUntracked = stdout ? stdout.split('\0').filter(Boolean) : []
+      this.visibleFiles = new Set(trackedAndUntracked.map((f) => f.replace(/\\/g, '/')))
+      // Build set of all parent directories of visible files
+      const dirs = new Set<string>()
+      for (const f of this.visibleFiles) {
+        const parts = f.split('/')
+        for (let i = 1; i < parts.length; i++) {
+          dirs.add(parts.slice(0, i).join('/'))
+        }
+      }
+      this.visibleDirPrefixes = dirs
+    } catch (error: unknown) {
+      // Only ENOTDIR/ENOENT (git not installed) or 'not a git repository'
+      // errors should trigger the fallback to simplified .gitignore parsing.
+      // Timeout or buffer overflow means git IS available but the repo is
+      // very large — silently falling back would miss many ignored paths
+      // and produce incorrect results, so we rethrow those.
+      if (error && typeof error === 'object') {
+        const err = error as { code?: string; stderr?: string }
+        if (err.code === 'ENOENT' || (err.stderr && err.stderr.includes('not a git repository'))) {
+          await this.initFromGitIgnore(workspacePath)
+          return
+        }
+      }
+      throw error
+    }
+  }
+
+  private async initFromGitIgnore(workspacePath: string): Promise<void> {
+    const gitignorePath = resolve(workspacePath, '.gitignore')
+    try {
+      await access(gitignorePath)
+      const content = await readFile(gitignorePath, 'utf8')
+      this.parsePatterns(content)
+    } catch {
+      // No .gitignore file
+    }
+  }
+
+  /**
+   * Parse .gitignore content into match patterns.
+   *
+   * NOTE: This is a SIMPLIFIED fallback implementation, only used when git is
+   * unavailable or the directory is not a git repository. It supports the most
+   * common workspace-root .gitignore patterns:
+   * - Empty lines and # comments
+   * - Trailing / for directory matching (e.g. `build/`)
+   * - ! prefix for negation
+   * - *.ext for extension matching
+   * - * and ? glob wildcards (non-/ matching)
+   * - Plain path fragment matching at any depth
+   *
+   * NOT supported: ** glob, anchoring with leading /, per-directory .gitignore,
+   * character classes [...]. When git ls-files succeeds it is used instead.
+   */
+  private parsePatterns(content: string): void {
+    for (const line of content.split(/\r?\n/)) {
+      const trimmed = line.trim()
+      if (!trimmed || trimmed.startsWith('#')) continue
+      let pattern = trimmed
+      let negate = false
+      if (pattern.startsWith('!')) {
+        negate = true
+        pattern = pattern.slice(1)
+      }
+      // Convert gitignore pattern to RegExp
+      let regexStr = ''
+      if (pattern.endsWith('/')) {
+        // Directory pattern: dir/ → matches dir and anything inside
+        const dirName = pattern.slice(0, -1)
+        regexStr = `(^|/)${escapeRegex(dirName)}(/|$)`
+      } else if (pattern.startsWith('*.')) {
+        // *.ext pattern — * matches any characters except /
+        const ext = pattern.slice(1) // .ext (with dot)
+        regexStr = `(^|/)[^/]*${escapeRegex(ext)}$`
+      } else if (pattern.includes('*') || pattern.includes('?')) {
+        regexStr = `(^|/)${escapeRegexGlob(pattern)}$`
+      } else {
+        // Plain path — match at any level or exact
+        regexStr = `(^|/)${escapeRegex(pattern)}(/|$)`
+      }
+      this.patterns.push({ raw: trimmed, regex: new RegExp(regexStr), negate })
+    }
+  }
+
+  /**
+   * Check if a workspace-relative path is visible.
+   * @param workspaceRelPath - path relative to workspace root, e.g. 'src/visible.ts' or 'src/nested'
+   * @param isDir - whether the path is a directory
+   */
+  isVisible(workspaceRelPath: string, isDir: boolean): boolean {
+    // If we have git ls-files data, use it
+    if (this.visibleFiles !== null) {
+      if (isDir) {
+        // A directory is visible if any visible file has this directory as prefix
+        if (this.visibleDirPrefixes!.has(workspaceRelPath)) return true
+        // Also check exact match (e.g. an empty directory with a .gitkeep tracked)
+        return this.visibleFiles.has(workspaceRelPath)
+      }
+      return this.visibleFiles.has(workspaceRelPath)
+    }
+
+    // Fallback: use .gitignore patterns
+    // Normal pattern (negate=false) → entry is ignored → visible=false
+    // Negated pattern (negate=true, prefixed with !) → entry is NOT ignored → visible=true
+    let visible = true
+    for (const p of this.patterns) {
+      if (p.regex.test(workspaceRelPath)) {
+        visible = p.negate
+      }
+    }
+    return visible
+  }
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[|\\{}()\[\]^$+*?.]/g, '\\$&')
+}
+
+function escapeRegexGlob(value: string): string {
+  return value.split('').map((char) => {
+    if (char === '*') return '[^/]*'
+    if (char === '?') return '[^/]'
+    return escapeRegex(char)
+  }).join('')
+}
+
+async function walkWorkspaceDirectory(
+  rootPath: string,
+  workspacePath: string,
+  options: { maxEntries?: number; filter?: GitIgnoreFilter | undefined; includeIgnored?: boolean } = {}
+): Promise<WalkResult> {
   const maxEntries = options.maxEntries ?? 10_000
-  const results: { path: string; info: Awaited<ReturnType<typeof lstat>>; type: DirectoryEntryType }[] = []
+  const entries: { path: string; info: Awaited<ReturnType<typeof lstat>>; type: DirectoryEntryType }[] = []
   const stack = [rootPath]
-  while (stack.length > 0 && results.length < maxEntries) {
+  let scannedEntries = 0
+  let skippedIgnoredEntries = 0
+  let truncated = false
+
+  while (stack.length > 0 && scannedEntries < maxEntries) {
     const directory = stack.pop()!
-    const entries = await readdir(directory, { withFileTypes: true })
-    for (const entry of entries.sort((left, right) => right.name.localeCompare(left.name))) {
-      if (results.length >= maxEntries) break
+    const dirEntries = await readdir(directory, { withFileTypes: true })
+    for (const entry of dirEntries.sort((left, right) => right.name.localeCompare(left.name))) {
+      if (scannedEntries >= maxEntries) break
+      scannedEntries++
       const fullPath = resolve(directory, entry.name)
       const info = await lstat(fullPath)
       const type = entryTypeFromStats(info)
       if (!type) continue
-      results.push({ path: fullPath, info, type })
+
+      // Compute workspace-relative path for filtering
+      const workspaceRel = toWorkspaceRelativePath(workspacePath, fullPath)
+
+      // Skip entries inside default-ignored directories (e.g. node_modules, dist, .git)
+      // unless includeIgnored is explicitly true.
+      // Check every path segment — a file like 'dist.ts' should NOT match, only directory
+      // segments that exactly equal a default ignored dir name.
+      if (!options.includeIgnored) {
+        const segments = workspaceRel.split('/')
+        // Check all but the last segment (the entry's own name) for directory matches.
+        // For files, segments.length === segments length; the entry name is last.
+        // For directory entries passed to the walker, the entry itself could be a default
+        // ignored dir (e.g. 'node_modules') so check all segments including the last.
+        // But we must avoid matching file names like 'dist.ts' — only exact segment match.
+        const checkSegments = type === 'directory' ? segments : segments.slice(0, -1)
+        const isDefaultIgnored = checkSegments.some((seg) => defaultIgnoredDirs.has(seg))
+        if (isDefaultIgnored) {
+          skippedIgnoredEntries++
+          continue
+        }
+      }
+
+      // Check gitignore-based filter (only when not including ignored)
+      if (options.filter && !options.includeIgnored) {
+        if (!options.filter.isVisible(workspaceRel, type === 'directory')) {
+          skippedIgnoredEntries++
+          continue
+        }
+      }
+
+      entries.push({ path: fullPath, info, type })
       if (type === 'directory') stack.push(fullPath)
     }
   }
-  return results
+
+  if (scannedEntries >= maxEntries) {
+    truncated = true
+  }
+
+  return { entries, scannedEntries, skippedIgnoredEntries, truncated, ...(truncated ? { truncatedReason: 'maxScannedEntries' as const } : {}) }
 }
 
 async function findFileSystemEntries(tool: ToolDefinition, args: unknown, context: ToolExecutionContext): Promise<ToolExecutionResult> {
@@ -752,17 +958,39 @@ async function findFileSystemEntries(tool: ToolDefinition, args: unknown, contex
     throw new Error(`Path is not a directory: ${rootPath}`)
   }
 
+  const includeIgnored = booleanArg(args, 'includeIgnored')
+  const respectGitIgnore = booleanArg(args, 'respectGitIgnore', true)
   const flags = booleanArg(args, 'caseSensitive') ? '' : 'i'
   const pattern = new RegExp(stringArg(args, 'pattern'), flags)
   const options = metadataOptions(args)
   const maxResults = numberArg(args, 'maxResults', 200, { min: 1, max: 1000, integer: true })
-  const walked = await walkWorkspaceDirectory(rootPath, { maxEntries: 25_000 })
-  const matches = walked.flatMap((entry) => {
+  const maxScannedEntries = numberArg(args, 'maxScannedEntries', 25_000, { min: 1, max: 25_000, integer: true })
+
+  const rootRelative = toWorkspaceRelativePath(workspacePath, rootPath)
+  let filter: GitIgnoreFilter | undefined
+  if (respectGitIgnore && !includeIgnored) {
+    filter = new GitIgnoreFilter()
+    await filter.init(workspacePath, rootRelative)
+  }
+
+  const walked = await walkWorkspaceDirectory(rootPath, workspacePath, { maxEntries: maxScannedEntries, filter, includeIgnored })
+  const matches = walked.entries.flatMap((entry) => {
     const name = basename(entry.path)
     if (!pattern.test(name)) return []
     return [createEntryInfo(name, entry.type, entry.info, options, toWorkspaceRelativePath(workspacePath, entry.path))]
   }).slice(0, maxResults)
-  const result = { path: toWorkspaceRelativePath(workspacePath, rootPath), pattern: stringArg(args, 'pattern'), matches, truncated: matches.length >= maxResults }
+  const resultTruncated = matches.length >= maxResults || walked.truncated
+  const result: Record<string, unknown> = {
+    path: toWorkspaceRelativePath(workspacePath, rootPath),
+    pattern: stringArg(args, 'pattern'),
+    matches,
+    truncated: resultTruncated,
+    scannedEntries: walked.scannedEntries,
+    skippedIgnoredEntries: walked.skippedIgnoredEntries
+  }
+  if (walked.truncated && walked.truncatedReason) {
+    result.truncatedReason = walked.truncatedReason
+  }
   return {
     content: jsonContent(result),
     details: { toolId: tool.id, ...result }
@@ -775,6 +1003,8 @@ type SearchCondition =
   | { not: SearchCondition }
   | { nameGlob: string }
   | { nameRegex: string }
+  | { pathGlob: string }
+  | { pathRegex: string }
   | { contentContains: string }
   | { contentRegex: string }
 
@@ -798,7 +1028,9 @@ function isSearchCondition(value: unknown): value is SearchCondition {
   if (Array.isArray(record.all)) return record.all.every(isSearchCondition)
   if (Array.isArray(record.any)) return record.any.every(isSearchCondition)
   if (record.not !== undefined) return isSearchCondition(record.not)
-  return typeof record.nameGlob === 'string' || typeof record.nameRegex === 'string' || typeof record.contentContains === 'string' || typeof record.contentRegex === 'string'
+  return typeof record.nameGlob === 'string' || typeof record.nameRegex === 'string'
+    || typeof record.pathGlob === 'string' || typeof record.pathRegex === 'string'
+    || typeof record.contentContains === 'string' || typeof record.contentRegex === 'string'
 }
 
 function parseSearchCondition(args: unknown): SearchCondition {
@@ -814,12 +1046,33 @@ function escapeRegExp(value: string): string {
 }
 
 function globToRegExp(glob: string, caseSensitive: boolean): RegExp {
-  const source = glob.split('').map((char) => {
-    if (char === '*') return '.*'
-    if (char === '?') return '.'
-    return escapeRegExp(char)
-  }).join('')
-  return new RegExp(`^${source}$`, caseSensitive ? '' : 'i')
+  // Split on '**' to handle cross-directory matching separately
+  // '**' matches zero or more path segments (e.g. 'a/**/b' matches a/b and a/x/y/b)
+  // Within each non-** part, '*' matches any chars except '/', '?' matches single non-'/'
+  const parts = glob.split(/(\*\*)/g)
+  const source = []
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i]
+    if (part === '**') {
+      // If '**' is followed by '/' in the original glob, the '/' ends up as
+      // the start of the next part. We skip it because '(.+/)?' already handles
+      // the optional slash-separator between segments.
+      const next: string | undefined = parts[i + 1]
+      if (next && next.startsWith('/')) {
+        parts[i + 1] = next.slice(1)
+      }
+      source.push('(.+/)?')
+    } else {
+      let segment = ''
+      for (const char of part!) {
+        if (char === '*') segment += '[^/]*'
+        else if (char === '?') segment += '[^/]'
+        else segment += escapeRegExp(char)
+      }
+      source.push(segment)
+    }
+  }
+  return new RegExp(`^${source.join('')}$`, caseSensitive ? '' : 'i')
 }
 
 function normalizeForCase(value: string, caseSensitive: boolean): string {
@@ -834,12 +1087,12 @@ function conditionNeedsContent(condition: SearchCondition): boolean {
   return false
 }
 
-function findLineMatches(lines: string[], matcher: (line: string) => boolean): SearchLineMatch[] {
+function findLineMatches(lines: string[], matcher: (line: string) => boolean, contextLines = 2): SearchLineMatch[] {
   const matches: SearchLineMatch[] = []
   for (const [index, line] of lines.entries()) {
     if (!matcher(line)) continue
-    const start = Math.max(0, index - 2)
-    const end = Math.min(lines.length - 1, index + 2)
+    const start = Math.max(0, index - contextLines)
+    const end = Math.min(lines.length - 1, index + contextLines)
     matches.push({
       lineNumber: index + 1,
       line,
@@ -856,6 +1109,8 @@ function evaluateSearchCondition(condition: SearchCondition, file: SearchFileCon
   if ('not' in condition) return !evaluateSearchCondition(condition.not, file)
   if ('nameGlob' in condition) return globToRegExp(condition.nameGlob, file.caseSensitive).test(file.name)
   if ('nameRegex' in condition) return new RegExp(condition.nameRegex, file.caseSensitive ? '' : 'i').test(file.name)
+  if ('pathGlob' in condition) return globToRegExp(condition.pathGlob, file.caseSensitive).test(file.relativePath)
+  if ('pathRegex' in condition) return new RegExp(condition.pathRegex, file.caseSensitive ? '' : 'i').test(file.relativePath)
   const lines = file.lines ?? []
   if ('contentContains' in condition) {
     const needle = normalizeForCase(condition.contentContains, file.caseSensitive)
@@ -864,18 +1119,18 @@ function evaluateSearchCondition(condition: SearchCondition, file: SearchFileCon
   return findLineMatches(lines, (line) => new RegExp(condition.contentRegex, file.caseSensitive ? '' : 'i').test(line)).length > 0
 }
 
-function collectPositiveContentMatches(condition: SearchCondition, file: SearchFileContext): SearchLineMatch[] {
-  if ('all' in condition) return condition.all.flatMap((child) => collectPositiveContentMatches(child, file))
-  if ('any' in condition) return condition.any.flatMap((child) => evaluateSearchCondition(child, file) ? collectPositiveContentMatches(child, file) : [])
+function collectPositiveContentMatches(condition: SearchCondition, file: SearchFileContext, contextLines = 2): SearchLineMatch[] {
+  if ('all' in condition) return condition.all.flatMap((child) => collectPositiveContentMatches(child, file, contextLines))
+  if ('any' in condition) return condition.any.flatMap((child) => evaluateSearchCondition(child, file) ? collectPositiveContentMatches(child, file, contextLines) : [])
   if ('not' in condition) return []
   const lines = file.lines ?? []
   if ('contentContains' in condition) {
     const needle = normalizeForCase(condition.contentContains, file.caseSensitive)
-    return findLineMatches(lines, (line) => normalizeForCase(line, file.caseSensitive).includes(needle))
+    return findLineMatches(lines, (line) => normalizeForCase(line, file.caseSensitive).includes(needle), contextLines)
   }
   if ('contentRegex' in condition) {
     const regex = new RegExp(condition.contentRegex, file.caseSensitive ? '' : 'i')
-    return findLineMatches(lines, (line) => regex.test(line))
+    return findLineMatches(lines, (line) => regex.test(line), contextLines)
   }
   return []
 }
@@ -910,9 +1165,25 @@ async function searchFiles(tool: ToolDefinition, args: unknown, context: ToolExe
   const caseSensitive = booleanArg(args, 'caseSensitive')
   const maxResults = numberArg(args, 'maxResults', 50, { min: 1, max: 500, integer: true })
   const maxFileBytes = numberArg(args, 'maxFileBytes', defaultSearchMaxFileBytes, { min: 1, max: 1024 * 1024, integer: true })
-  const walked = await walkWorkspaceDirectory(rootPath, { maxEntries: 25_000 })
+  const maxScannedEntries = numberArg(args, 'maxScannedEntries', 25_000, { min: 1, max: 25_000, integer: true })
+  const maxMatchesPerFile = numberArg(args, 'maxMatchesPerFile', 20, { min: 1, max: 200, integer: true })
+  const maxTotalLineMatches = numberArg(args, 'maxTotalLineMatches', 200, { min: 1, max: 2000, integer: true })
+  const contextLines = numberArg(args, 'contextLines', 2, { min: 0, max: 5, integer: true })
+  const includeIgnored = booleanArg(args, 'includeIgnored')
+  const respectGitIgnore = booleanArg(args, 'respectGitIgnore', true)
+
+  const rootRelative = toWorkspaceRelativePath(workspacePath, rootPath)
+  let filter: GitIgnoreFilter | undefined
+  if (respectGitIgnore && !includeIgnored) {
+    filter = new GitIgnoreFilter()
+    await filter.init(workspacePath, rootRelative)
+  }
+
+  const walked = await walkWorkspaceDirectory(rootPath, workspacePath, { maxEntries: maxScannedEntries, filter, includeIgnored })
   const results: Array<{ path: string; name: string; type: 'file'; matches: SearchLineMatch[]; truncated?: boolean }> = []
-  for (const entry of walked) {
+  let totalLineMatches = 0
+  let truncatedReason: 'maxTotalLineMatches' | 'maxMatchesPerFile' | 'maxScannedEntries' | undefined
+  for (const entry of walked.entries) {
     if (results.length >= maxResults) break
     if (entry.type !== 'file') continue
     const relativePath = toWorkspaceRelativePath(workspacePath, entry.path)
@@ -924,15 +1195,75 @@ async function searchFiles(tool: ToolDefinition, args: unknown, context: ToolExe
       truncated = content.truncated
     }
     if (!evaluateSearchCondition(condition, fileContext)) continue
-    results.push({
-      path: relativePath,
-      name: basename(entry.path),
-      type: 'file',
-      matches: collectPositiveContentMatches(condition, fileContext),
-      ...(truncated ? { truncated } : {})
-    })
+
+    if (needsContent) {
+      // Content search: apply per-file and global match budgets
+      const allFileMatches = collectPositiveContentMatches(condition, fileContext, contextLines)
+      const remainingBudget = maxTotalLineMatches - totalLineMatches
+      if (remainingBudget <= 0) {
+        // Global budget already exhausted — stop scanning entirely
+        if (!truncatedReason) truncatedReason = 'maxTotalLineMatches'
+        break
+      }
+      const fileBudget = Math.min(maxMatchesPerFile, remainingBudget)
+      const fileMatches = allFileMatches.slice(0, fileBudget)
+      if (fileMatches.length === 0) continue // skip files with no matches after capping
+      totalLineMatches += fileMatches.length
+      if (allFileMatches.length > fileMatches.length) {
+        truncated = true
+        truncatedReason = fileMatches.length >= maxMatchesPerFile ? 'maxMatchesPerFile' : 'maxTotalLineMatches'
+      }
+
+      results.push({
+        path: relativePath,
+        name: basename(entry.path),
+        type: 'file',
+        matches: fileMatches,
+        ...(truncated ? { truncated } : {})
+      })
+
+      // If global budget exhausted, stop scanning further files
+      if (totalLineMatches >= maxTotalLineMatches) {
+        if (!truncatedReason) truncatedReason = 'maxTotalLineMatches'
+        break
+      }
+    } else {
+      // Path/name-only search: push result without match budget capping
+      results.push({
+        path: relativePath,
+        name: basename(entry.path),
+        type: 'file',
+        matches: []
+      })
+    }
   }
-  const result = { path: toWorkspaceRelativePath(workspacePath, rootPath), results, truncated: results.length >= maxResults }
+
+  // Determine overall truncation
+  const budgetTruncated = totalLineMatches >= maxTotalLineMatches || results.some((r) => r.truncated)
+  const resultTruncated = results.length >= maxResults || walked.truncated || budgetTruncated
+  if (!truncatedReason && walked.truncated) {
+    truncatedReason = 'maxScannedEntries'
+  } else if (!truncatedReason && budgetTruncated) {
+    truncatedReason = 'maxTotalLineMatches'
+  }
+
+  const result: Record<string, unknown> = {
+    path: toWorkspaceRelativePath(workspacePath, rootPath),
+    results,
+    truncated: resultTruncated,
+    scannedEntries: walked.scannedEntries,
+    skippedIgnoredEntries: walked.skippedIgnoredEntries
+  }
+  if (truncatedReason) {
+    result.truncatedReason = truncatedReason
+  }
+  if (totalLineMatches > 0) {
+    result.totalLineMatches = totalLineMatches
+  }
+  // Only add suggestion when truncation is due to match budgets (not walker truncation)
+  if (truncatedReason && truncatedReason !== 'maxScannedEntries') {
+    result.suggestion = 'Narrow path, add pathGlob/nameGlob, or use a more specific content query before retrying.'
+  }
   return {
     content: jsonContent(result),
     details: { toolId: tool.id, ...result }

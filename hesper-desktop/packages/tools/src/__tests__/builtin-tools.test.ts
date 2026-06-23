@@ -186,6 +186,44 @@ describe('builtin tools', () => {
     expect(createRole?.description).toContain('user explicitly approves')
   })
 
+  it('documents ignored-file filtering and search budget controls', () => {
+    const definitions = createBuiltinToolDefinitions()
+    const find = definitions.find((tool) => tool.id === 'filesystem.find')!
+    const search = definitions.find((tool) => tool.id === 'filesystem.search')!
+    const findSchema = find.inputSchema as Record<string, any>
+    const searchSchema = search.inputSchema as Record<string, any>
+
+    expect(find.description).toContain('.gitignore')
+    expect(find.description).toContain('includeIgnored=true')
+    expect(findSchema.properties).toMatchObject({
+      respectGitIgnore: expect.objectContaining({ type: 'boolean' }),
+      includeIgnored: expect.objectContaining({ type: 'boolean' }),
+      maxScannedEntries: expect.objectContaining({ type: 'number' })
+    })
+
+    expect(search.description).toContain('Narrow')
+    expect(search.description).toContain('.gitignore')
+    expect(searchSchema.properties).toMatchObject({
+      respectGitIgnore: expect.objectContaining({ type: 'boolean' }),
+      includeIgnored: expect.objectContaining({ type: 'boolean' }),
+      maxScannedEntries: expect.objectContaining({ type: 'number' }),
+      maxMatchesPerFile: expect.objectContaining({ type: 'number' }),
+      maxTotalLineMatches: expect.objectContaining({ type: 'number' }),
+      contextLines: expect.objectContaining({ type: 'number' })
+    })
+
+    // Verify default and max values in descriptions match executor
+    expect(searchSchema.properties.maxMatchesPerFile.description).toContain('Defaults to 20')
+    expect(searchSchema.properties.maxMatchesPerFile.description).toContain('maximum 200')
+    expect(searchSchema.properties.maxTotalLineMatches.description).toContain('Defaults to 200')
+    expect(searchSchema.properties.maxTotalLineMatches.description).toContain('maximum 2000')
+    expect(searchSchema.properties.contextLines.description).toContain('Defaults to 2')
+    expect(searchSchema.properties.contextLines.description).toContain('maximum 5')
+    expect(search.description).toContain('pathGlob')
+    expect(search.description).toContain('pathRegex')
+    expect(JSON.stringify(searchSchema)).toContain('pathGlob')
+  })
+
   it('defines filesystem tools with required schema fields', () => {
     const tools = createBuiltinToolDefinitions()
     const readFile = tools.find((tool) => tool.id === 'filesystem.read-file')
