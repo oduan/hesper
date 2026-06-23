@@ -1491,4 +1491,57 @@ describe('createBuiltinToolExecutor', () => {
     expect(parsed.results[0].matches).toEqual([])
     expect(parsed.totalLineMatches).toBeUndefined()
   })
+
+  it('skips vendor directories by default', async () => {
+    const root = await workspace()
+    // Root-level vendor
+    await mkdir(join(root, 'vendor'), { recursive: true })
+    await writeFile(join(root, 'vendor', 'pkg.ts'), 'export const v = "needle"\n', 'utf8')
+    // Nested vendor
+    await mkdir(join(root, 'src', 'vendor'), { recursive: true })
+    await writeFile(join(root, 'src', 'vendor', 'dep.ts'), 'export const d = "needle"\n', 'utf8')
+    // Visible files
+    await writeFile(join(root, 'visible.ts'), 'export const v = "needle"\n', 'utf8')
+    await mkdir(join(root, 'src', 'lib'), { recursive: true })
+    await writeFile(join(root, 'src', 'lib', 'util.ts'), 'export const u = "needle"\n', 'utf8')
+    const executor = createBuiltinToolExecutor()
+
+    // filesystem.search — vendor should be excluded
+    const searched = await executor.execute(tool('filesystem.search'), { condition: { contentContains: 'needle' } }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.search']
+    })
+    const searchResults = JSON.parse(searched.content).results as Array<{ path: string }>
+    const searchPaths = searchResults.map((r) => r.path)
+    expect(searchPaths).toContain('visible.ts')
+    expect(searchPaths).toContain('src/lib/util.ts')
+    expect(searchPaths).not.toContain('vendor/pkg.ts')
+    expect(searchPaths).not.toContain('src/vendor/dep.ts')
+
+    // filesystem.find — vendor should be excluded
+    const found = await executor.execute(tool('filesystem.find'), { pattern: '.*\.ts$' }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.find']
+    })
+    const findPaths = JSON.parse(found.content).matches.map((m: { path: string }) => m.path)
+    expect(findPaths).toContain('visible.ts')
+    expect(findPaths).toContain('src/lib/util.ts')
+    expect(findPaths).not.toContain('vendor/pkg.ts')
+    expect(findPaths).not.toContain('src/vendor/dep.ts')
+
+    // includeIgnored: true — vendor files should appear
+    const foundAll = await executor.execute(tool('filesystem.find'), { pattern: '.*\.ts$', includeIgnored: true }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['filesystem.find']
+    })
+    const allPaths = JSON.parse(foundAll.content).matches.map((m: { path: string }) => m.path)
+    expect(allPaths).toContain('vendor/pkg.ts')
+    expect(allPaths).toContain('src/vendor/dep.ts')
+  })
 })

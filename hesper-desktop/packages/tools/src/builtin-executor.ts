@@ -623,7 +623,7 @@ async function editTextFile(tool: ToolDefinition, args: unknown, context: ToolEx
   }
 }
 
-const defaultIgnoredDirs = new Set(['.git', 'node_modules', 'dist', 'out', 'build', 'coverage', '.cache'])
+const defaultIgnoredDirs = new Set(['.git', 'node_modules', 'dist', 'out', 'build', 'coverage', '.cache', 'vendor'])
 
 type DirectoryEntryType = 'file' | 'directory'
 
