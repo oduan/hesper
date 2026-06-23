@@ -733,9 +733,22 @@ async function listDirectory(tool: ToolDefinition, args: unknown, context: ToolE
   }
 }
 
+/**
+ * GitIgnoreFilter determines whether a workspace-relative path is visible.
+ *
+ * Priority:
+ * 1. If in a git repo, visible files come from `git ls-files`.
+ * 2. If not a git repo, falls back to parsing .gitignore patterns.
+ *
+ * When git ls-files is available, a directory is visible if any visible file
+ * is inside it (derived from the visible files' parent directories).
+ */
 class GitIgnoreFilter {
   private patterns: Array<{ raw: string; regex: RegExp; negate: boolean }> = []
-  private gitRoot: string | null = null
+  /** Set of workspace-relative file paths that are tracked/untracked (git known). */
+  private visibleFiles: Set<string> | null = null
+  /** Set of workspace-relative directory paths that contain at least one visible file. */
+  private visibleDirPrefixes: Set<string> | null = null
 
   async init(workspacePath: string): Promise<void> {
     try {
@@ -744,17 +757,21 @@ class GitIgnoreFilter {
         maxBuffer: 1024 * 1024
       })
       const trackedAndUntracked = stdout ? stdout.split('\0').filter(Boolean) : []
-      const visibleSet = new Set(trackedAndUntracked.map((f) => f.replace(/\\/g, '/')))
-      this.gitRoot = workspacePath
-      // Store the visible set as a special pattern cache
-      this.visibleFiles = visibleSet
+      this.visibleFiles = new Set(trackedAndUntracked.map((f) => f.replace(/\\/g, '/')))
+      // Build set of all parent directories of visible files
+      const dirs = new Set<string>()
+      for (const f of this.visibleFiles) {
+        const parts = f.split('/')
+        for (let i = 1; i < parts.length; i++) {
+          dirs.add(parts.slice(0, i).join('/'))
+        }
+      }
+      this.visibleDirPrefixes = dirs
     } catch {
       // Not a git repo or git unavailable — fall through to .gitignore parsing
       await this.initFromGitIgnore(workspacePath)
     }
   }
-
-  private visibleFiles: Set<string> | null = null
 
   private async initFromGitIgnore(workspacePath: string): Promise<void> {
     const gitignorePath = resolve(workspacePath, '.gitignore')
@@ -797,22 +814,21 @@ class GitIgnoreFilter {
     }
   }
 
-  isEntryVisible(relativePath: string): boolean {
-    // Always ignore default dirs
-    const firstSegment = relativePath.split('/')[0]!
-    if (defaultIgnoredDirs.has(firstSegment)) return false
-
+  /**
+   * Check if a workspace-relative path is visible.
+   * @param workspaceRelPath - path relative to workspace root, e.g. 'src/visible.ts' or 'src/nested'
+   * @param isDir - whether the path is a directory
+   */
+  isVisible(workspaceRelPath: string, isDir: boolean): boolean {
     // If we have git ls-files data, use it
     if (this.visibleFiles !== null) {
-      if (this.visibleFiles.has(relativePath)) return true
-      // Check if any visible file is inside this directory
-      if (relativePath.endsWith('/')) {
-        const prefix = relativePath
-        for (const f of this.visibleFiles) {
-          if (f.startsWith(prefix)) return true
-        }
+      if (isDir) {
+        // A directory is visible if any visible file has this directory as prefix
+        if (this.visibleDirPrefixes!.has(workspaceRelPath)) return true
+        // Also check exact match (e.g. an empty directory with a .gitkeep tracked)
+        return this.visibleFiles.has(workspaceRelPath)
       }
-      return false
+      return this.visibleFiles.has(workspaceRelPath)
     }
 
     // Fallback: use .gitignore patterns
@@ -820,16 +836,11 @@ class GitIgnoreFilter {
     // Negated pattern (negate=true, prefixed with !) → entry is NOT ignored → visible=true
     let visible = true
     for (const p of this.patterns) {
-      if (p.regex.test(relativePath)) {
+      if (p.regex.test(workspaceRelPath)) {
         visible = p.negate
       }
     }
     return visible
-  }
-
-  isEntryVisibleByName(dirRelPath: string, name: string): boolean {
-    const combined = dirRelPath ? `${dirRelPath}/${name}` : name
-    return this.isEntryVisible(combined)
   }
 }
 
@@ -847,6 +858,7 @@ function escapeRegexGlob(value: string): string {
 
 async function walkWorkspaceDirectory(
   rootPath: string,
+  workspacePath: string,
   options: { maxEntries?: number; filter?: GitIgnoreFilter | undefined; includeIgnored?: boolean } = {}
 ): Promise<WalkResult> {
   const maxEntries = options.maxEntries ?? 10_000
@@ -867,10 +879,21 @@ async function walkWorkspaceDirectory(
       const type = entryTypeFromStats(info)
       if (!type) continue
 
-      // Check gitignore filter
+      // Compute workspace-relative path for filtering
+      const workspaceRel = toWorkspaceRelativePath(workspacePath, fullPath)
+
+      // Skip default-ignored directories unless includeIgnored is explicitly true
+      if (!options.includeIgnored) {
+        const firstSegment = workspaceRel.split('/')[0]!
+        if (defaultIgnoredDirs.has(firstSegment)) {
+          skippedIgnoredEntries++
+          continue
+        }
+      }
+
+      // Check gitignore-based filter (only when not including ignored)
       if (options.filter && !options.includeIgnored) {
-        const dirRelPath = directory === rootPath ? '' : relative(rootPath, directory).replace(/\\/g, '/')
-        if (!options.filter.isEntryVisibleByName(dirRelPath, entry.name)) {
+        if (!options.filter.isVisible(workspaceRel, type === 'directory')) {
           skippedIgnoredEntries++
           continue
         }
@@ -910,17 +933,18 @@ async function findFileSystemEntries(tool: ToolDefinition, args: unknown, contex
     await filter.init(workspacePath)
   }
 
-  const walked = await walkWorkspaceDirectory(rootPath, { maxEntries: 25_000, filter, includeIgnored })
+  const walked = await walkWorkspaceDirectory(rootPath, workspacePath, { maxEntries: 25_000, filter, includeIgnored })
   const matches = walked.entries.flatMap((entry) => {
     const name = basename(entry.path)
     if (!pattern.test(name)) return []
     return [createEntryInfo(name, entry.type, entry.info, options, toWorkspaceRelativePath(workspacePath, entry.path))]
   }).slice(0, maxResults)
+  const resultTruncated = matches.length >= maxResults || walked.truncated
   const result: Record<string, unknown> = {
     path: toWorkspaceRelativePath(workspacePath, rootPath),
     pattern: stringArg(args, 'pattern'),
     matches,
-    truncated: matches.length >= maxResults,
+    truncated: resultTruncated,
     scannedEntries: walked.scannedEntries,
     skippedIgnoredEntries: walked.skippedIgnoredEntries
   }
@@ -1083,7 +1107,7 @@ async function searchFiles(tool: ToolDefinition, args: unknown, context: ToolExe
     await filter.init(workspacePath)
   }
 
-  const walked = await walkWorkspaceDirectory(rootPath, { maxEntries: 25_000, filter, includeIgnored })
+  const walked = await walkWorkspaceDirectory(rootPath, workspacePath, { maxEntries: 25_000, filter, includeIgnored })
   const results: Array<{ path: string; name: string; type: 'file'; matches: SearchLineMatch[]; truncated?: boolean }> = []
   for (const entry of walked.entries) {
     if (results.length >= maxResults) break
@@ -1105,10 +1129,11 @@ async function searchFiles(tool: ToolDefinition, args: unknown, context: ToolExe
       ...(truncated ? { truncated } : {})
     })
   }
+  const resultTruncated = results.length >= maxResults || walked.truncated
   const result: Record<string, unknown> = {
     path: toWorkspaceRelativePath(workspacePath, rootPath),
     results,
-    truncated: results.length >= maxResults,
+    truncated: resultTruncated,
     scannedEntries: walked.scannedEntries,
     skippedIgnoredEntries: walked.skippedIgnoredEntries
   }
