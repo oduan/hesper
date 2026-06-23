@@ -89,9 +89,18 @@ function parseJsonTitle(value: string): string | undefined {
   return undefined
 }
 
+function containsJsonObject(value: string): boolean {
+  const trimmed = value.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim()
+  return /\{[\s\S]*\}/.test(trimmed)
+}
+
 function validGeneratedTitle(candidate: string): string | undefined {
   const parsedTitle = parseJsonTitle(candidate)
-  const stripped = parsedTitle ? stripTitleNoise(parsedTitle) : undefined
+  if (parsedTitle === undefined && containsJsonObject(candidate)) {
+    return undefined
+  }
+
+  const stripped = stripTitleNoise(parsedTitle ?? candidate)
   if (!stripped || isGenericTitle(stripped)) {
     return undefined
   }
@@ -203,12 +212,16 @@ export function createSessionTitleGenerator(options: SessionTitleGeneratorOption
         },
         {
           maxTokens: 512,
-          temperature: 0,
+          ...(resolved.model.api === 'openai-codex-responses' ? {} : { temperature: 0 }),
           onPayload: (payload, model) => withJsonOutput(payload, model),
           ...(apiKey ? { apiKey } : {}),
           ...(input.signal ? { signal: input.signal } : {})
         }
       )
+      if (message.stopReason === 'error') {
+        throw new Error(message.errorMessage ?? 'Title generation failed')
+      }
+
       const text = extractAssistantText(message)
       if (!text) return undefined
 

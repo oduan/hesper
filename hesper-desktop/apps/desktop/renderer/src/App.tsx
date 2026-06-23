@@ -662,6 +662,7 @@ function AppContent() {
           const modelId = runModelIdsRef.current[event.message.runId] ?? session?.defaultModelId ?? defaultFallbackModelId
 
           if (session && source?.userPrompt && !titleGeneratedRunIdsRef.current.has(event.message.runId)) {
+            setTitleGenerationError(undefined)
             titleGeneratedRunIdsRef.current.add(event.message.runId)
             void hesperApi.sessions.generateTitle({
               id: session.id,
@@ -673,6 +674,7 @@ function AppContent() {
             }).catch((error) => {
               titleGeneratedRunIdsRef.current.delete(event.message.runId!)
               console.warn('Failed to generate session title', error)
+              setTitleGenerationError(`标题生成失败：${error instanceof Error ? error.message : '未知错误'}`)
             }).finally(() => {
               delete pendingTitlePromptsBySessionRef.current[event.message.sessionId]
             })

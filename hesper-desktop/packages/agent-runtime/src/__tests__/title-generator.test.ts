@@ -134,6 +134,71 @@ describe('session title generator', () => {
     expect(result).toEqual({ title: '视频脚本规划', modelId: 'deepseek-reasoner' })
   })
 
+  it('avoids structured response controls for Codex OAuth models and accepts plain text titles', async () => {
+    const complete = vi.fn(async () => assistantMessage('修复 ChatGPT 标题生成'))
+    const codexProvider: ModelProviderConfig = {
+      id: 'chatgpt-codex',
+      name: 'ChatGPT Codex',
+      kind: 'pi',
+      authType: 'oauth',
+      piAuthProvider: 'openai-codex',
+      enabled: true,
+      defaultModelId: 'pi/gpt-5.5',
+      createdAt: now,
+      updatedAt: now
+    }
+    const codexModel: ModelConfig = {
+      id: 'pi/gpt-5.5',
+      providerId: 'chatgpt-codex',
+      modelName: 'gpt-5.5',
+      displayName: 'GPT-5.5',
+      capabilities: ['streaming', 'toolCalls', 'reasoning'],
+      enabled: true,
+      createdAt: now,
+      updatedAt: now
+    }
+    const resolve = vi.fn(async () => ({
+      model: {
+        id: 'gpt-5.5',
+        name: 'GPT-5.5',
+        api: 'openai-codex-responses' as const,
+        provider: 'chatgpt-codex',
+        baseUrl: 'https://chatgpt.com/backend-api',
+        reasoning: true,
+        input: ['text' as const],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 272000,
+        maxTokens: 8192
+      },
+      provider: codexProvider,
+      modelConfig: codexModel,
+      getApiKey: vi.fn(async () => 'codex-oauth-access-token')
+    }))
+    const generator = createSessionTitleGenerator({
+      registry: {
+        ensureReady: vi.fn(async () => undefined),
+        getProvider: vi.fn(async () => codexProvider),
+        listModels: vi.fn(async (providerId?: string) => providerId === 'chatgpt-codex' ? [codexModel] : [codexModel])
+      },
+      modelResolver: { resolve },
+      complete
+    })
+
+    const result = await generator.generateTitle({
+      usedModelId: 'pi/gpt-5.5',
+      userPrompt: '使用 ChatGPT 账户授权模型时无法生成会话标题',
+      assistantOutput: '已定位为 Codex Responses 请求带了 ChatGPT 后端不稳定支持的结构化响应控制。'
+    })
+
+    const options = (complete.mock.calls[0] as unknown[] | undefined)?.[2] as { temperature?: number; onPayload?: (payload: unknown, model: unknown) => unknown | Promise<unknown> } | undefined
+    expect(options).not.toHaveProperty('temperature')
+    await expect(Promise.resolve(options?.onPayload?.({ input: [], text: { verbosity: 'low' } }, { api: 'openai-codex-responses' }))).resolves.toEqual({
+      input: [],
+      text: { verbosity: 'low' }
+    })
+    expect(result).toEqual({ title: '修复 ChatGPT 标题生成', modelId: 'pi/gpt-5.5' })
+  })
+
   it('does not retry when the model returns an invalid structured title', async () => {
     const complete = vi.fn(async () => assistantMessage('{"title":"新对话"}'))
     const resolve = vi.fn(async () => ({
@@ -157,6 +222,56 @@ describe('session title generator', () => {
     })).rejects.toThrow('Title generation returned invalid title')
 
     expect(complete).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects structured JSON without a title field instead of using the raw object as a title', async () => {
+    const complete = vi.fn(async () => assistantMessage('{"summary":"修复 ChatGPT 标题生成"}'))
+    const resolve = vi.fn(async () => ({
+      model: resolvedModel('deepseek-title'),
+      provider,
+      modelConfig: titleModel
+    }))
+    const generator = createSessionTitleGenerator({
+      registry: {
+        ensureReady: vi.fn(async () => undefined),
+        getProvider: vi.fn(async () => provider),
+        listModels: vi.fn(async (providerId?: string) => providerId === 'deepseek' ? [titleModel, chatModel] : [titleModel, chatModel])
+      },
+      modelResolver: { resolve },
+      complete
+    })
+
+    await expect(generator.generateTitle({
+      usedModelId: 'deepseek-chat',
+      userPrompt: '帮我修复标题生成失败的问题'
+    })).rejects.toThrow('Title generation returned invalid title')
+  })
+
+  it('throws provider errors instead of silently keeping the old title', async () => {
+    const complete = vi.fn(async () => ({
+      ...assistantMessageWithContent([]),
+      stopReason: 'error' as const,
+      errorMessage: 'Unsupported parameter: temperature'
+    }))
+    const resolve = vi.fn(async () => ({
+      model: resolvedModel('deepseek-title'),
+      provider,
+      modelConfig: titleModel
+    }))
+    const generator = createSessionTitleGenerator({
+      registry: {
+        ensureReady: vi.fn(async () => undefined),
+        getProvider: vi.fn(async () => provider),
+        listModels: vi.fn(async (providerId?: string) => providerId === 'deepseek' ? [titleModel, chatModel] : [titleModel, chatModel])
+      },
+      modelResolver: { resolve },
+      complete
+    })
+
+    await expect(generator.generateTitle({
+      usedModelId: 'deepseek-chat',
+      userPrompt: '帮我修复标题生成失败的问题'
+    })).rejects.toThrow('Unsupported parameter: temperature')
   })
 
   it('accepts long titles returned as complete JSON', async () => {

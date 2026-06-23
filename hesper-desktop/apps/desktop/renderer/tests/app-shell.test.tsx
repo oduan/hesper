@@ -1807,6 +1807,67 @@ describe('renderer App', () => {
     expect(await screen.findAllByText('模型生成标题')).not.toHaveLength(0)
   })
 
+  it('shows a visible error when automatic title generation fails', async () => {
+    const user = userEvent.setup()
+    let runtimeListener: ((event: { type: string; [key: string]: unknown }) => void) | undefined
+
+    listProviders.mockResolvedValueOnce([
+      { id: 'chatgpt-codex', name: 'ChatGPT Codex', kind: 'pi', authType: 'oauth', piAuthProvider: 'openai-codex', enabled: true, hasApiKey: true, defaultModelId: 'pi/gpt-5.5', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+    ] as any)
+    listModels.mockResolvedValueOnce([
+      { id: 'pi/gpt-5.5', providerId: 'chatgpt-codex', modelName: 'gpt-5.5', displayName: 'GPT-5.5', capabilities: ['streaming', 'toolCalls', 'reasoning'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+    ] as any)
+    listSessions.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        title: 'New chat',
+        status: 'active',
+        defaultModelId: 'pi/gpt-5.5',
+        outputMode: 'markdown',
+        createdAt: '2026-06-10T03:00:00.000Z',
+        updatedAt: '2026-06-10T03:00:00.000Z'
+      }
+    ] as any)
+    generateTitle.mockRejectedValueOnce(new Error('Unsupported parameter: temperature'))
+    onEvent.mockImplementation(((listener: (event: { type: string; [key: string]: unknown }) => void) => {
+      runtimeListener = listener
+      return () => {
+        runtimeListener = undefined
+      }
+    }) as any)
+
+    render(<App />)
+
+    await user.type(await screen.findByPlaceholderText(/输入消息/), '你好')
+    await user.click(screen.getByRole('button', { name: '发送' }))
+
+    runtimeListener?.({
+      type: 'run.created',
+      run: {
+        id: 'run-1',
+        sessionId: 'session-1',
+        status: 'running',
+        modelId: 'pi/gpt-5.5',
+        retryCount: 0,
+        maxRetries: 5
+      }
+    })
+    runtimeListener?.({
+      type: 'message.completed',
+      message: {
+        id: 'message-assistant-1',
+        sessionId: 'session-1',
+        role: 'assistant',
+        content: '你好，请说。',
+        contentType: 'markdown',
+        runId: 'run-1',
+        createdAt: '2026-06-10T03:00:10.000Z'
+      }
+    })
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('标题生成失败：Unsupported parameter: temperature')
+  })
+
   it('preserves separate composer drafts for each session', async () => {
     const user = userEvent.setup()
 
