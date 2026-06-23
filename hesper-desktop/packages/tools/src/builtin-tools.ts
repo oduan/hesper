@@ -126,7 +126,7 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
     {
       id: 'filesystem.find',
       name: 'Find Files',
-      description: 'Recursively find file or directory names under a workspace-relative directory using a regular expression.',
+      description: 'Recursively find file or directory names under a workspace-relative directory using a regular expression. By default respects .gitignore/Git exclude rules and skips common generated/vendor directories. Use includeIgnored=true only when the user explicitly asks to see ignored or generated content.',
       category: 'filesystem',
       icon: '🔎',
       display: { name: 'Find Files', names: { 'zh-CN': '查找文件' }, resourceFields: ['pattern'] },
@@ -137,18 +137,21 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
           path: { type: 'string', description: 'Directory path relative to the selected workspace. Defaults to workspace root.' },
           pattern: { type: 'string', description: 'Regular expression matched against file and directory names.' },
           caseSensitive: { type: 'boolean', description: 'Use case-sensitive regular expression matching. Defaults to false.' },
+          respectGitIgnore: { type: 'boolean', description: 'Respect .gitignore/Git exclude rules. Defaults to true.' },
+          includeIgnored: { type: 'boolean', description: 'Include ignored/generated paths. Defaults to false; use only when explicitly requested.' },
           includeSize: { type: 'boolean', description: 'Include file size in bytes. Directory size is always 0.' },
           includeCreatedAt: { type: 'boolean', description: 'Include creation timestamp.' },
           includeModifiedAt: { type: 'boolean', description: 'Include last modified timestamp.' },
           includeOwner: { type: 'boolean', description: 'Include numeric owner uid/gid when available.' },
-          maxResults: { type: 'number', description: 'Maximum number of matches to return. Defaults to 200, maximum 1000.' }
+          maxResults: { type: 'number', description: 'Maximum number of matches to return. Defaults to 200, maximum 1000.' },
+          maxScannedEntries: { type: 'number', description: 'Maximum directory entries to scan before returning a truncated result. Defaults to 25000, maximum 25000.' }
         }
       }
     },
     {
       id: 'filesystem.search',
       name: 'Search Files',
-      description: 'Search files under a workspace-relative path using composable conditions. Supports name globs, content contains, content regex, and all/any/not condition groups. Content matches return the matching line plus two surrounding lines.',
+      description: 'Search files under a workspace-relative path using composable conditions. Supports name globs, pathGlob/pathRegex filters, content contains, content regex, and all/any/not condition groups. Narrow search with path or pathGlob/nameGlob first to reduce scope. By default respects .gitignore/Git exclude rules and skips common generated/vendor directories. Content matches return the matching line plus context lines and are subject to budget limits (maxMatchesPerFile, maxTotalLineMatches) to protect agent context.',
       category: 'filesystem',
       icon: '🔍',
       display: { name: 'Search Files', names: { 'zh-CN': '搜索文件' }, resourceFields: ['condition'] },
@@ -159,11 +162,17 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
           path: { type: 'string', description: 'Directory path relative to the selected workspace. Defaults to workspace root.' },
           condition: {
             type: 'object',
-            description: 'Search condition. Examples: {"nameGlob":"*.ts"}, {"contentContains":"hello"}, {"all":[{"nameGlob":"*.ts"},{"contentRegex":"create.*Tool"}]}, {"any":[...]} or {"not":{...}}.'
+            description: 'Search condition. Examples: {"nameGlob":"*.ts"}, {"pathGlob":"packages/tools/**/*.ts"}, {"all":[{"pathGlob":"packages/tools/**/*.ts"},{"contentRegex":"create.*Tool"}]}, {"contentContains":"hello"}, {"any":[...]} or {"not":{...}}.'
           },
           caseSensitive: { type: 'boolean', description: 'Use case-sensitive name/content matching. Defaults to false.' },
+          respectGitIgnore: { type: 'boolean', description: 'Respect .gitignore/Git exclude rules. Defaults to true.' },
+          includeIgnored: { type: 'boolean', description: 'Include ignored/generated paths. Defaults to false; use only when explicitly requested.' },
           maxResults: { type: 'number', description: 'Maximum result files to return. Defaults to 50, maximum 500.' },
-          maxFileBytes: { type: 'number', description: 'Maximum bytes read per file for content search. Defaults to 262144, maximum 1048576.' }
+          maxFileBytes: { type: 'number', description: 'Maximum bytes read per file for content search. Defaults to 262144, maximum 1048576.' },
+          maxScannedEntries: { type: 'number', description: 'Maximum directory entries to scan before returning a truncated result. Defaults to 25000, maximum 25000.' },
+          maxMatchesPerFile: { type: 'number', description: 'Maximum matches per file. Defaults to 50, maximum 200.' },
+          maxTotalLineMatches: { type: 'number', description: 'Maximum total matching lines across all result files. Defaults to 500, maximum 2000.' },
+          contextLines: { type: 'number', description: 'Number of surrounding context lines per match. Defaults to 2, maximum 10.' }
         }
       }
     },
