@@ -2374,6 +2374,64 @@ describe('ui components', () => {
     expect(outputBlock).toHaveTextContent('"status": 200')
   })
 
+  it('opens Worker Agent execution details for worker tool steps and renders empty states before child output exists', async () => {
+    const user = userEvent.setup()
+    const workerInvocation = {
+      id: 'worker-invocation-empty',
+      parentRunId: 'run-parent',
+      parentStepId: 'step-worker-empty',
+      task: 'Summarise the implementation status.',
+      roleId: 'worker-reviewer',
+      allowedToolIds: ['filesystem.read-file', 'git.status'],
+      status: 'queued',
+      createdAt: now
+    } satisfies WorkerAgentInvocation
+
+    render(
+      <RunSteps
+        steps={[
+          {
+            id: 'step-worker-empty',
+            runId: 'run-parent',
+            type: 'tool_call',
+            status: 'running',
+            title: 'Spawn Worker Agent',
+            summary: 'Spawn worker before child run exists',
+            detail: JSON.stringify({ kind: 'tool_call', toolId: 'agent.spawn-worker-agent', input: { task: workerInvocation.task }, output: 'accepted' }),
+            createdAt: now
+          }
+        ]}
+        workerAgentView={{
+          invocationsByParentStepId: { 'step-worker-empty': workerInvocation },
+          runsById: {},
+          stepsByRun: {},
+          messagesByRun: {},
+          streamingByRun: {}
+        } as any}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { expanded: false }))
+    const item = screen.getByRole('listitem')
+    await user.click(within(item).getByRole('button', { name: /查看步骤详情/ }))
+
+    const dialog = screen.getByRole('dialog', { name: 'Worker Agent 执行详情' })
+    const inputRegion = within(dialog).getByLabelText('Worker Agent 输入')
+    const stepsRegion = within(dialog).getByLabelText('Worker Agent 执行步骤')
+    const streamingRegion = within(dialog).getByLabelText('Worker Agent 实时输出')
+    const finalRegion = within(dialog).getByLabelText('Worker Agent 最终输出')
+    const userMessage = within(inputRegion).getByLabelText('用户消息')
+
+    expect(userMessage).toHaveTextContent('Summarise the implementation status.')
+    expect(userMessage).toHaveTextContent('worker-reviewer')
+    expect(userMessage).toHaveTextContent('filesystem.read-file')
+    expect(userMessage).toHaveTextContent('git.status')
+    expect(dialog).toHaveTextContent('子运行尚未创建')
+    expect(stepsRegion).toHaveTextContent('暂无执行步骤')
+    expect(streamingRegion).toHaveTextContent('暂无实时输出')
+    expect(finalRegion).toHaveTextContent('暂无最终输出')
+  })
+
   it('opens Worker Agent execution details for worker tool steps and renders worker history', async () => {
     const user = userEvent.setup()
     const workerInvocation = {
@@ -2449,18 +2507,34 @@ describe('ui components', () => {
     await user.click(within(item).getByRole('button', { name: /查看步骤详情/ }))
 
     const dialog = screen.getByRole('dialog', { name: 'Worker Agent 执行详情' })
-    expect(within(dialog).getByText('Review the diff and explain the risk.')).toBeInTheDocument()
-    expect(within(dialog).getByText('Inspect README before summarising the worker result.')).toBeInTheDocument()
-    expect(within(dialog).getByText('A concise risk summary with action items.')).toBeInTheDocument()
-    expect(within(dialog).getByRole('button', { name: '查看步骤详情：Read File' })).toHaveTextContent('Inspect README')
-    expect(within(dialog).getByText('worker-reviewer')).toBeInTheDocument()
-    expect(within(dialog).getByText('filesystem.read-file')).toBeInTheDocument()
-    expect(within(dialog).getByText('git.status')).toBeInTheDocument()
-    expect(within(dialog).getByText('streaming child output')).toBeInTheDocument()
-    expect(within(dialog).getByText('final worker answer')).toBeInTheDocument()
+    const inputRegion = within(dialog).getByLabelText('Worker Agent 输入')
+    const stepsRegion = within(dialog).getByLabelText('Worker Agent 执行步骤')
+    const streamingRegion = within(dialog).getByLabelText('Worker Agent 实时输出')
+    const finalRegion = within(dialog).getByLabelText('Worker Agent 最终输出')
+    const userMessage = within(inputRegion).getByLabelText('用户消息')
+
+    expect(userMessage).toHaveTextContent('Review the diff and explain the risk.')
+    expect(userMessage).toHaveTextContent('Inspect README before summarising the worker result.')
+    expect(userMessage).toHaveTextContent('A concise risk summary with action items.')
+    expect(userMessage).toHaveTextContent('worker-reviewer')
+    expect(userMessage).toHaveTextContent('filesystem.read-file')
+    expect(userMessage).toHaveTextContent('git.status')
+    expect(userMessage.parentElement?.parentElement).toHaveStyle({ justifyContent: 'flex-end' })
+    expect(stepsRegion.compareDocumentPosition(inputRegion) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy()
+    expect(streamingRegion.compareDocumentPosition(stepsRegion) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy()
+    expect(finalRegion.compareDocumentPosition(stepsRegion) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy()
+    expect(within(stepsRegion).getByRole('button', { name: '查看步骤详情：Read File' })).toHaveTextContent('Inspect README')
+    expect(streamingRegion).toHaveTextContent('streaming child output')
+    expect(finalRegion).toHaveTextContent('final worker answer')
     expect(within(dialog).queryByText('Input')).not.toBeInTheDocument()
 
-    await user.click(within(dialog).getByRole('button', { name: '查看步骤详情：Read File' }))
+    await user.click(within(streamingRegion).getByRole('button', { name: '全屏查看输出' }))
+    const outputDialog = screen.getByRole('dialog', { name: '输出全屏查看' })
+    fireEvent.keyDown(outputDialog, { key: 'Escape', bubbles: true, cancelable: true })
+    expect(screen.queryByRole('dialog', { name: '输出全屏查看' })).not.toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Worker Agent 执行详情' })).toBeInTheDocument()
+
+    await user.click(within(stepsRegion).getByRole('button', { name: '查看步骤详情：Read File' }))
     const innerDialog = screen.getByRole('dialog', { name: '步骤全屏查看' })
     fireEvent.keyDown(innerDialog, { key: 'Escape', bubbles: true, cancelable: true })
     expect(screen.queryByRole('dialog', { name: '步骤全屏查看' })).not.toBeInTheDocument()
@@ -2469,5 +2543,76 @@ describe('ui components', () => {
     const outerDialog = screen.getByRole('dialog', { name: 'Worker Agent 执行详情' })
     fireEvent.keyDown(outerDialog, { key: 'Escape', bubbles: true, cancelable: true })
     expect(screen.queryByRole('dialog', { name: 'Worker Agent 执行详情' })).not.toBeInTheDocument()
+  })
+
+  it('renders Worker Agent streaming output as markdown when final output is html', async () => {
+    const user = userEvent.setup()
+    const workerInvocation = {
+      id: 'worker-invocation-html-output',
+      parentRunId: 'run-parent',
+      parentStepId: 'step-worker-html-output',
+      childRunId: 'run-child-html-output',
+      task: 'Render html final output.',
+      roleId: 'worker-renderer',
+      allowedToolIds: [],
+      status: 'running',
+      createdAt: now
+    } satisfies WorkerAgentInvocation
+    const childRun = {
+      id: 'run-child-html-output',
+      sessionId: 'session-1',
+      parentRunId: 'run-parent',
+      workerAgentInvocationId: 'worker-invocation-html-output',
+      status: 'running',
+      modelId: 'mock/hesper-fast',
+      retryCount: 0,
+      maxRetries: 2,
+      startedAt: now
+    }
+    const htmlFinalMessage = {
+      id: 'message-child-html-final',
+      sessionId: 'session-1',
+      role: 'assistant',
+      content: '<main><h1>Final HTML output</h1></main>',
+      contentType: 'html',
+      runId: 'run-child-html-output',
+      createdAt: '2026-06-10T03:00:03.000Z'
+    } satisfies Message
+
+    render(
+      <RunSteps
+        steps={[
+          {
+            id: 'step-worker-html-output',
+            runId: 'run-parent',
+            type: 'tool_call',
+            status: 'running',
+            title: 'Spawn Worker Agent',
+            summary: 'Spawn worker to render html output',
+            detail: JSON.stringify({ kind: 'tool_call', toolId: 'agent.spawn-worker-agent', input: { task: workerInvocation.task }, output: 'accepted' }),
+            createdAt: now
+          }
+        ]}
+        workerAgentView={{
+          invocationsByParentStepId: { 'step-worker-html-output': workerInvocation },
+          runsById: { 'run-child-html-output': childRun },
+          stepsByRun: {},
+          messagesByRun: { 'run-child-html-output': [htmlFinalMessage] },
+          streamingByRun: { 'run-child-html-output': '<h1>Streaming HTML should stay text</h1>' }
+        } as any}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { expanded: false }))
+    const item = screen.getByRole('listitem')
+    await user.click(within(item).getByRole('button', { name: /查看步骤详情/ }))
+
+    const dialog = screen.getByRole('dialog', { name: 'Worker Agent 执行详情' })
+    const streamingRegion = within(dialog).getByLabelText('Worker Agent 实时输出')
+    const finalRegion = within(dialog).getByLabelText('Worker Agent 最终输出')
+
+    expect(streamingRegion).toHaveTextContent('<h1>Streaming HTML should stay text</h1>')
+    expect(within(streamingRegion).queryByTitle('HTML 输出预览')).not.toBeInTheDocument()
+    expect(within(finalRegion).getByTitle('HTML 输出预览')).toHaveAttribute('srcdoc', expect.stringContaining('Final HTML output'))
   })
 })

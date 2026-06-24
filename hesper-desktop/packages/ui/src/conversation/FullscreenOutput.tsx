@@ -1,6 +1,7 @@
-import { useEffect, useMemo, type CSSProperties } from 'react'
+import { useEffect, useId, useMemo, type CSSProperties } from 'react'
 import type { MessageContentType } from '@hesper/shared'
 import { themeTokens } from '../theme'
+import { isTopFullscreenDialog, pushFullscreenDialog, removeFullscreenDialog } from './fullscreen-dialog-stack'
 import { createSandboxedHtmlDocument } from './html-document'
 import { MarkdownOutput } from './MarkdownOutput'
 
@@ -13,6 +14,7 @@ export type FullscreenOutputProps = {
 }
 
 export function FullscreenOutput({ open, content, contentType, onClose, onLocalFileClick }: FullscreenOutputProps) {
+  const dialogId = useId()
   const sandboxedDocument = useMemo(
     () => (contentType === 'html' ? createSandboxedHtmlDocument(content) : undefined),
     [content, contentType]
@@ -23,15 +25,27 @@ export function FullscreenOutput({ open, content, contentType, onClose, onLocalF
       return undefined
     }
 
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose()
-      }
+    pushFullscreenDialog(dialogId)
+    return () => removeFullscreenDialog(dialogId)
+  }, [dialogId, open])
+
+  useEffect(() => {
+    if (!open) {
+      return undefined
     }
 
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [onClose, open])
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || !isTopFullscreenDialog(dialogId)) return
+
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+      onClose()
+    }
+
+    window.addEventListener('keydown', handleKeyDown, { capture: true })
+    return () => window.removeEventListener('keydown', handleKeyDown, { capture: true })
+  }, [dialogId, onClose, open])
 
   if (!open) {
     return null
