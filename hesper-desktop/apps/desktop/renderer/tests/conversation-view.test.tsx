@@ -33,6 +33,7 @@ beforeEach(() => {
   })
   HTMLElement.prototype.scrollIntoView = scrollIntoViewMock as unknown as typeof HTMLElement.prototype.scrollIntoView
   HTMLElement.prototype.scrollTo = scrollToMock as unknown as typeof HTMLElement.prototype.scrollTo
+
 })
 
 function renderConversation(shortcutCommand?: ConversationShortcutCommand) {
@@ -522,4 +523,105 @@ describe('ConversationView', () => {
 
     expect(screen.queryByRole('dialog', { name: '输出全屏查看' })).not.toBeInTheDocument()
   })
+
+  it('shows retry only for failed user-message runs and disables it while a run is active', async () => {
+    const user = userEvent.setup()
+    const onRetryRun = vi.fn()
+
+    render(
+      <ConversationView
+        session={session}
+        messages={[
+          {
+            id: 'failed-user',
+            sessionId: 'session-1',
+            role: 'user',
+            content: 'failed prompt',
+            contentType: 'plain',
+            runId: 'run-failed',
+            createdAt: '2026-06-10T03:00:00.000Z'
+          },
+          {
+            id: 'running-user',
+            sessionId: 'session-1',
+            role: 'user',
+            content: 'running prompt',
+            contentType: 'plain',
+            runId: 'run-running',
+            createdAt: '2026-06-10T03:00:02.000Z'
+          },
+          {
+            id: 'succeeded-user',
+            sessionId: 'session-1',
+            role: 'user',
+            content: 'succeeded prompt',
+            contentType: 'plain',
+            runId: 'run-succeeded',
+            createdAt: '2026-06-10T03:00:04.000Z'
+          },
+          {
+            id: 'succeeded-assistant',
+            sessionId: 'session-1',
+            role: 'assistant',
+            content: 'done',
+            contentType: 'markdown',
+            runId: 'run-succeeded',
+            createdAt: '2026-06-10T03:00:05.000Z'
+          }
+        ]}
+        steps={[]}
+        stepsByRun={{}}
+        runsById={{
+          'run-failed': {
+            id: 'run-failed',
+            sessionId: 'session-1',
+            status: 'failed',
+            modelId: 'mock/hesper-fast',
+            retryCount: 2,
+            maxRetries: 2,
+            startedAt: '2026-06-10T03:00:00.000Z',
+            endedAt: '2026-06-10T03:00:01.000Z',
+            error: { code: 'stream_interrupted', message: 'stream disconnected', retryable: true }
+          },
+          'run-running': {
+            id: 'run-running',
+            sessionId: 'session-1',
+            status: 'running',
+            modelId: 'mock/hesper-fast',
+            retryCount: 0,
+            maxRetries: 2,
+            startedAt: '2026-06-10T03:00:02.000Z'
+          },
+          'run-succeeded': {
+            id: 'run-succeeded',
+            sessionId: 'session-1',
+            status: 'succeeded',
+            modelId: 'mock/hesper-fast',
+            retryCount: 0,
+            maxRetries: 2,
+            startedAt: '2026-06-10T03:00:04.000Z',
+            endedAt: '2026-06-10T03:00:05.000Z'
+          }
+        }}
+        streamingText=""
+        modelId="mock/hesper-fast"
+        running
+        onSend={() => undefined}
+        onRetryRun={onRetryRun}
+      />
+    )
+
+    const failureAlert = screen.getByRole('alert', { name: '失败运行摘要' })
+    expect(within(failureAlert).getByText('运行失败：stream_interrupted')).toBeInTheDocument()
+    expect(within(failureAlert).getByText('stream disconnected')).toBeInTheDocument()
+    expect(within(failureAlert).getByText('已自动重试 2/2 次')).toBeInTheDocument()
+
+    const retryButton = screen.getByRole('button', { name: '重试失败运行' })
+    expect(retryButton).toBeDisabled()
+    expect(screen.queryAllByRole('button', { name: '重试失败运行' })).toHaveLength(1)
+
+    await user.click(retryButton)
+    expect(onRetryRun).not.toHaveBeenCalled()
+  })
+
 })

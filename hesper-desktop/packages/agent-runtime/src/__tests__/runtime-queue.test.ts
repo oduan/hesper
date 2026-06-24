@@ -40,6 +40,15 @@ class FailsOnceRecordingAdapter implements AgentAdapter {
   }
 }
 
+class AlwaysFailsRetryableAdapter implements AgentAdapter {
+  readonly inputs: AgentPromptInput[] = []
+
+  async run(input: AgentPromptInput): Promise<void> {
+    this.inputs.push(input)
+    throw { code: 'stream_interrupted', message: 'stream disconnected', retryable: true }
+  }
+}
+
 class RecordingAdapter implements AgentAdapter {
   readonly starts: string[] = []
   readonly finishes: string[] = []
@@ -528,5 +537,51 @@ describe('AgentRuntime queue', () => {
     expect(storedRun?.status).toBe('succeeded')
     expect(storedRun?.retryCount).toBe(2)
     expect(events.filter((event) => event === 'run.retrying')).toHaveLength(2)
+  })
+
+  it('marks a retryable stream interruption failed after retry budget is exhausted', async () => {
+    const persistence = await createInMemoryPersistence()
+    await persistence.sessions.save({ ...session, id: 'session-retry-exhausted' })
+
+    const adapter = new AlwaysFailsRetryableAdapter()
+    const runtime = new AgentRuntime({
+      persistence,
+      adapter,
+      retryPolicy: {
+        ...defaultRetryPolicy,
+        maxRetries: 2,
+        initialDelayMs: 1,
+        backoffMultiplier: 1
+      }
+    })
+    const events: AgentRuntimeEvent[] = []
+    runtime.subscribe((event) => {
+      events.push(event)
+    })
+
+    const run = await runtime.enqueue({ sessionId: 'session-retry-exhausted', prompt: 'will exhaust retries', modelId: 'mock/hesper-fast' })
+    await runtime.waitForIdle('session-retry-exhausted')
+
+    const storedRun = await persistence.runs.get(run.id)
+    const runtimeEvents = await persistence.events.listByRun(run.id)
+    expect(adapter.inputs).toHaveLength(3)
+    expect(storedRun).toMatchObject({
+      id: run.id,
+      status: 'failed',
+      retryCount: 2,
+      maxRetries: 2,
+      error: { code: 'stream_interrupted', message: 'stream disconnected', retryable: true }
+    })
+    expect(events.filter((event) => event.type === 'run.retrying')).toHaveLength(2)
+    expect(events.filter((event) => event.type === 'run.failed')).toHaveLength(1)
+    expect(runtimeEvents.map((event) => event.type)).toEqual([
+      'run.created',
+      'run.started',
+      'run.retrying',
+      'run.retrying',
+      'run.failed'
+    ])
+    expect(runtimeEvents.map((event) => event.type)).not.toContain('run.succeeded')
+    expect(await persistence.messages.listBySession('session-retry-exhausted')).toEqual([])
   })
 })
