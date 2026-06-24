@@ -279,7 +279,7 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
     [ipcChannels.sessionsList]: async () => options.container.sessionService.listSessions(),
     [ipcChannels.sessionsCreate]: async (_event, payload) => {
       const session = await options.container.sessionService.createSession(omitUndefined(createSessionInputSchema.parse(payload ?? {})))
-      await savePersistence()
+      schedulePersistenceSave()
       return session
     },
     [ipcChannels.sessionsUpdateTitle]: async (_event, payload) => {
@@ -310,7 +310,7 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
     },
     [ipcChannels.sessionsDelete]: async (_event, payload) => {
       const session = await options.container.sessionService.deleteSession(sessionIdInputSchema.parse(payload))
-      await savePersistence()
+      schedulePersistenceSave()
       return session
     },
     [ipcChannels.sessionsSetWorkspace]: async (_event, payload) => {
@@ -435,7 +435,7 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
     },
     [ipcChannels.rolesDelete]: async (_event, payload) => {
       const result = await options.container.roleManagementService.deleteRole(sessionIdInputSchema.parse(payload))
-      await savePersistence()
+      schedulePersistenceSave()
       return result
     },
     [ipcChannels.toolsList]: async () => z.array(toolDtoSchema).parse(await options.container.toolSettingsService.listTools()),

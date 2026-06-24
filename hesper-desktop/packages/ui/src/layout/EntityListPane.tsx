@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import type { Session, ToolDefinition } from '@hesper/shared'
 import { RunningStatusIcon } from '../conversation/RunningStatusIcon'
 import { themeTokens } from '../theme'
@@ -148,8 +148,6 @@ export function EntityListPane({
   onDeleteRole
 }: EntityListPaneProps) {
   const heading = title ?? (activeSection === 'sessions' ? '所有会话' : activeSection === 'settings' ? '设置' : activeSection === 'tools' ? '工具' : activeSection === 'roles' ? '角色' : activeSection === 'skills' ? '技能' : '列表')
-  const runningSessionIdSet = new Set(runningSessionIds)
-  const pendingToolIdSet = new Set(pendingToolIds)
   const [sessionMenu, setSessionMenu] = useState<SessionMenuState>()
   const [roleMenu, setRoleMenu] = useState<RoleMenuState>()
   const [editingSession, setEditingSession] = useState<EditingSessionState>()
@@ -158,6 +156,10 @@ export function EntityListPane({
   const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([])
   const [selectionAnchorRoleId, setSelectionAnchorRoleId] = useState<string>()
   const [relativeNowMs, setRelativeNowMs] = useState(() => Date.now())
+  const runningSessionIdSet = useMemo(() => new Set(runningSessionIds), [runningSessionIds])
+  const pendingToolIdSet = useMemo(() => new Set(pendingToolIds), [pendingToolIds])
+  const selectedSessionIdSet = useMemo(() => new Set(selectedSessionIds), [selectedSessionIds])
+  const selectedRoleIdSet = useMemo(() => new Set(selectedRoleIds), [selectedRoleIds])
   const renameInputRef = useRef<HTMLInputElement>(null)
   const roleMenuFirstItemRef = useRef<HTMLButtonElement>(null)
 
@@ -280,7 +282,7 @@ export function EntityListPane({
   const openSessionMenu = (sessionId: string, x: number, y: number) => {
     const sessionIdSet = new Set(sessions.map((session) => session.id))
     const selectedTargets = selectedSessionIds.filter((selectedSessionId) => sessionIdSet.has(selectedSessionId))
-    const isSelectedTarget = selectedTargets.includes(sessionId)
+    const isSelectedTarget = selectedSessionIdSet.has(sessionId)
     const sessionIds = isSelectedTarget ? selectedTargets : [sessionId]
 
     setRoleMenu(undefined)
@@ -292,7 +294,7 @@ export function EntityListPane({
 
     const roleIdSet = new Set(roles.map((role) => role.id))
     const selectedTargets = selectedRoleIds.filter((selectedRoleId) => roleIdSet.has(selectedRoleId))
-    const isSelectedTarget = selectedTargets.includes(roleId)
+    const isSelectedTarget = selectedRoleIdSet.has(roleId)
     const roleIds = isSelectedTarget ? selectedTargets : [roleId]
 
     if (!isSelectedTarget) {
@@ -378,7 +380,7 @@ export function EntityListPane({
           <ul aria-label="会话列表" className="hesper-theme-scrollbar" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 2, overflow: 'auto', minHeight: 0 }}>
             {sessions.map((session) => {
               const isActive = session.id === activeSessionId
-              const isSelected = selectedSessionIds.includes(session.id)
+              const isSelected = selectedSessionIdSet.has(session.id)
               const isRunning = runningSessionIdSet.has(session.id)
               const hasUnreadCompletion = Boolean(session.unreadCompletedAt)
               const relativeUpdatedAt = formatRelativeSessionTime(session.updatedAt, relativeNowMs)
@@ -450,7 +452,7 @@ export function EntityListPane({
             <ul aria-label="角色列表" className="hesper-theme-scrollbar" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 4, overflow: 'auto', minHeight: 0 }}>
               {roles.map((role) => {
                 const isActive = role.id === activeRoleId
-                const isSelected = selectedRoleIds.includes(role.id)
+                const isSelected = selectedRoleIdSet.has(role.id)
                 const roleDescription = role.description || '暂无简介'
                 return (
                   <li key={role.id}>

@@ -1591,6 +1591,51 @@ describe('renderer App', () => {
     expect(deleteSession).not.toHaveBeenCalledWith('session-4')
   })
 
+  it('keeps failed bulk-delete sessions visible and only removes successful ones', async () => {
+    const user = userEvent.setup()
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+
+    listSessions.mockResolvedValueOnce([
+      { id: 'session-1', title: 'Chat one', status: 'active', outputMode: 'markdown', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:04.000Z' },
+      { id: 'session-2', title: 'Chat two', status: 'active', outputMode: 'markdown', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:03.000Z' },
+      { id: 'session-3', title: 'Chat three', status: 'active', outputMode: 'markdown', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:02.000Z' },
+      { id: 'session-4', title: 'Chat four', status: 'active', outputMode: 'markdown', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:01.000Z' }
+    ] as any)
+    deleteSession.mockImplementation(async (id: string) => {
+      if (id === 'session-2') {
+        throw new Error('delete session-2 failed')
+      }
+      return {
+        id,
+        title: 'Deleted chat',
+        status: 'deleted',
+        outputMode: 'markdown',
+        createdAt: '2026-06-10T03:00:00.000Z',
+        updatedAt: '2026-06-10T03:00:12.000Z'
+      }
+    })
+
+    render(<App />)
+
+    const firstRow = await screen.findByRole('button', { name: 'Chat one' })
+    const secondRow = await screen.findByRole('button', { name: 'Chat two' })
+    const thirdRow = await screen.findByRole('button', { name: 'Chat three' })
+    await user.click(firstRow)
+    fireEvent.click(thirdRow, { shiftKey: true })
+    fireEvent.contextMenu(secondRow)
+    await user.click(await screen.findByRole('menuitem', { name: '删除' }))
+
+    await waitFor(() => expect(deleteSession).toHaveBeenCalledTimes(3))
+    expect(deleteSession).toHaveBeenNthCalledWith(1, 'session-1')
+    expect(deleteSession).toHaveBeenNthCalledWith(2, 'session-2')
+    expect(deleteSession).toHaveBeenNthCalledWith(3, 'session-3')
+    expect(warnSpy).toHaveBeenCalledWith('Failed to delete session', 'session-2', expect.any(Error))
+    expect(await screen.findByRole('button', { name: 'Chat two' })).toHaveAttribute('aria-current', 'true')
+    expect(screen.queryByRole('button', { name: 'Chat one' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Chat three' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Chat four' })).toBeInTheDocument()
+  })
+
   it('regenerates titles for shift-selected sessions from the context menu', async () => {
     const user = userEvent.setup()
 
