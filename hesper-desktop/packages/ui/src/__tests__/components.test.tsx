@@ -2119,6 +2119,65 @@ describe('ui components', () => {
     expect(screen.queryByRole('dialog', { name: '步骤全屏查看' })).not.toBeInTheDocument()
   })
 
+  it('decodes unicode escape sequences in tool output details for readable command results', async () => {
+    const user = userEvent.setup()
+    render(
+      <RunSteps
+        autoExpanded
+        steps={[
+          {
+            id: 'step-tool-unicode-output',
+            runId: 'run-unicode-output',
+            type: 'tool_call',
+            status: 'succeeded',
+            title: '执行命令',
+            detail: JSON.stringify({
+              kind: 'tool_call',
+              input: { command: 'mock-command' },
+              output: 'stdout: \\u4e2d\\u6587\\u8f93\\u51fa\\nkeep-ascii'
+            }),
+            createdAt: now
+          }
+        ]}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: '查看步骤详情：执行命令' }))
+    const stepDialog = screen.getByRole('dialog', { name: '步骤全屏查看' })
+    expect(within(stepDialog).getByText(/stdout: 中文输出/)).toBeInTheDocument()
+    expect(within(stepDialog).queryByText(/\\u4e2d\\u6587/)).not.toBeInTheDocument()
+    expect(within(stepDialog).getByText(/keep-ascii/)).toBeInTheDocument()
+  })
+
+  it('keeps non-unicode backslash sequences unchanged in tool output details', async () => {
+    const user = userEvent.setup()
+    render(
+      <RunSteps
+        autoExpanded
+        steps={[
+          {
+            id: 'step-tool-backslash-output',
+            runId: 'run-backslash-output',
+            type: 'tool_call',
+            status: 'succeeded',
+            title: '执行命令',
+            detail: JSON.stringify({
+              kind: 'tool_call',
+              input: { command: 'mock-command' },
+              output: 'path: C:\\Users\\oisin\\dev\\hesper\nregex: \\d+'
+            }),
+            createdAt: now
+          }
+        ]}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: '查看步骤详情：执行命令' }))
+    const stepDialog = screen.getByRole('dialog', { name: '步骤全屏查看' })
+    expect(within(stepDialog).getByText(/path: C:\\Users\\oisin\\dev\\hesper/)).toBeInTheDocument()
+    expect(within(stepDialog).getByText(/regex: \\d\+/)).toBeInTheDocument()
+  })
+
   it('uses tool icons for successful tool-call steps while preserving failure fallback', () => {
     render(
       <RunSteps

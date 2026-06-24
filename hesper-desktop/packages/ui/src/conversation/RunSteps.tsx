@@ -158,8 +158,13 @@ function formatJsonValue(value: unknown): string {
   return JSON.stringify(value ?? {}, null, 2)
 }
 
+function decodeUnicodeEscapeSequences(value: string): string {
+  if (!/\\u[0-9a-fA-F]{4}/.test(value)) return value
+  return value.replace(/\\u([0-9a-fA-F]{4})/g, (_match, codePoint: string) => String.fromCharCode(Number.parseInt(codePoint, 16)))
+}
+
 function formatOutputValue(value: unknown): string {
-  if (typeof value === 'string') return value
+  if (typeof value === 'string') return decodeUnicodeEscapeSequences(value)
   return formatJsonValue(value)
 }
 
