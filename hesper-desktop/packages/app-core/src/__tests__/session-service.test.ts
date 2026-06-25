@@ -5,6 +5,21 @@ import { createSessionService } from '../session-service'
 const now = '2026-06-10T05:00:00.000Z'
 
 describe('createSessionService', () => {
+  it('creates and moves sessions between categories', async () => {
+    const persistence = await createInMemoryPersistence()
+    await persistence.sessionCategories.save({ id: 'category-product', name: '产品图', createdAt: now, updatedAt: now })
+    await persistence.sessionCategories.save({ id: 'category-avatar', name: '头像', createdAt: now, updatedAt: now })
+    const sessions = createSessionService(persistence)
+
+    const created = await sessions.createSession({ title: '分类会话', categoryId: 'category-product', now })
+    expect(created.categoryId).toBe('category-product')
+
+    await expect(sessions.setCategory(created.id, 'category-avatar')).resolves.toMatchObject({ categoryId: 'category-avatar' })
+    await expect(sessions.setCategoryForSessions([created.id], undefined)).resolves.toEqual([
+      expect.objectContaining({ id: created.id, categoryId: undefined })
+    ])
+  })
+
   it('preserves session config fields across title, workspace, model, output mode and archive updates', async () => {
     const persistence = await createInMemoryPersistence()
     const service = createSessionService(persistence)
