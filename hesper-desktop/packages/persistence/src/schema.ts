@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS messages (
   content TEXT NOT NULL,
   content_type TEXT NOT NULL,
   run_id TEXT,
+  attachments_json TEXT,
   created_at TEXT NOT NULL,
   sort_seq INTEGER NOT NULL
 );
@@ -266,6 +267,9 @@ const migrationColumns: Record<string, string[]> = {
     'max_worker_agent_depth INTEGER',
     'max_worker_agents_per_run INTEGER',
     'unread_completed_at TEXT'
+  ],
+  messages: [
+    'attachments_json TEXT'
   ],
   agent_runs: [
     'worker_agent_invocation_id TEXT',

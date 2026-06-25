@@ -238,6 +238,31 @@ describe('persistence repositories', () => {
     expect(await db.events.listByRun('run-1')).toHaveLength(4)
   })
 
+  it('persists message attachment metadata without file contents', async () => {
+    const persistence = await createInMemoryPersistence()
+    await persistence.sessions.save({
+      id: 'session-attachments',
+      title: 'Attachments',
+      status: 'active',
+      outputMode: 'markdown',
+      createdAt: '2026-06-26T00:00:00.000Z',
+      updatedAt: '2026-06-26T00:00:00.000Z'
+    })
+
+    await persistence.messages.save({
+      id: 'message-attachments',
+      sessionId: 'session-attachments',
+      role: 'user',
+      content: 'see attachment',
+      contentType: 'plain',
+      createdAt: '2026-06-26T00:00:01.000Z',
+      attachments: [{ id: 'attachment-image-1', kind: 'image', name: 'image.png', mimeType: 'image/png', bytes: 12, relativePath: 'attachments/session-attachments/message-attachments/attachment-image-1.png' }]
+    })
+
+    const messages = await persistence.messages.listBySession('session-attachments')
+    expect(messages[0]?.attachments).toEqual([{ id: 'attachment-image-1', kind: 'image', name: 'image.png', mimeType: 'image/png', bytes: 12, relativePath: 'attachments/session-attachments/message-attachments/attachment-image-1.png' }])
+  })
+
   it('persists Worker Agent invocation runtime events under the child run when available', async () => {
     const db = await createInMemoryPersistence()
     const now = '2026-06-20T05:31:00.000Z'

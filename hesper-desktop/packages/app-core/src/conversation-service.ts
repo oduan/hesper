@@ -6,6 +6,7 @@ export type CreateUserMessageInput = {
   sessionId: string
   content: string
   runId?: string
+  attachments?: Message['attachments']
   now?: string
 }
 
@@ -59,6 +60,7 @@ export function createConversationService(persistence: Persistence): Conversatio
         content: input.content,
         contentType: 'plain',
         ...(input.runId ? { runId: input.runId } : {}),
+        ...(input.attachments?.length ? { attachments: input.attachments } : {}),
         createdAt: input.now ?? nowIso()
       }
       await persistence.messages.save(message)

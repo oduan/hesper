@@ -3,6 +3,7 @@ import {
   agentRuntimeEventSchema,
   defaultAppThemeId,
   isAppThemeId,
+  messageAttachmentSchema,
   modelRefSchema,
   roleSnapshotSchema,
   runErrorSchema,
@@ -219,7 +220,7 @@ function parseStringArrayJson(value: unknown, field: string): string[] {
   return parsed
 }
 
-const modelCapabilities = new Set<ModelCapability>(['streaming', 'toolCalls', 'jsonOutput', 'reasoning'])
+const modelCapabilities = new Set<ModelCapability>(['streaming', 'toolCalls', 'jsonOutput', 'reasoning', 'imageInput'])
 
 function parseModelCapabilities(value: unknown): ModelCapability[] {
   const parsed = parseStringArrayJson(value, 'models.capabilities_json')
@@ -239,6 +240,13 @@ function parseOptionalModelRef(value: unknown, field: string): ModelRef | undefi
 function parseOptionalRoleSnapshot(value: unknown, field: string) {
   const parsed = parseOptionalJson(value, field)
   return parsed === undefined ? undefined : roleSnapshotSchema.parse(parsed)
+}
+
+function parseOptionalMessageAttachments(value: unknown, field: string) {
+  const parsed = parseOptionalJson(value, field)
+  if (parsed === undefined) return undefined
+  if (!Array.isArray(parsed)) throw new Error(`Invalid message attachments JSON in ${field}`)
+  return parsed.map((item) => messageAttachmentSchema.parse(item))
 }
 
 function optionalString(value: unknown): string | undefined {
@@ -283,15 +291,16 @@ function toSession(row: any): Session {
 }
 
 function toMessage(row: any): Message {
-  return {
+  return stripUndefined({
     id: row.id,
     sessionId: row.session_id,
     role: row.role,
     content: row.content,
     contentType: row.content_type,
     runId: row.run_id ?? undefined,
+    attachments: parseOptionalMessageAttachments(row.attachments_json, 'messages.attachments_json'),
     createdAt: row.created_at
-  }
+  }) as Message
 }
 
 function toRun(row: any): AgentRun {
@@ -714,13 +723,14 @@ export function createRepositories(db: Database): Persistence {
     },
     messages: {
       async save(message) {
-        upsert('messages', ['id', 'session_id', 'role', 'content', 'content_type', 'run_id', 'created_at', 'sort_seq'], [
+        upsert('messages', ['id', 'session_id', 'role', 'content', 'content_type', 'run_id', 'attachments_json', 'created_at', 'sort_seq'], [
           message.id,
           message.sessionId,
           message.role,
           message.content,
           message.contentType,
           message.runId,
+          json(message.attachments),
           message.createdAt,
           nextSeq()
         ], message.id)
