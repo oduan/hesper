@@ -569,7 +569,7 @@ function createInjectedPrompt(content: string, skills: SkillOption[]): string | 
     `- 技能：${skill.name}`,
     ...(skill.description ? [`  简介：${skill.description}`] : [])
   ])
-  return `以下是用户通过 @ 提及的技能。请参考技能名称和简介理解用户意图，不要假设已注入完整 SKILL.md 正文。\n${lines.join('\n')}\n\n用户消息：\n${content}`
+  return `以下是用户通过 @ 提及的技能。请先用可调用工具 \`skills_get\`（registry id: \`skills.get\`）按技能名称读取完整 SKILL.md；请参考技能名称和简介理解用户意图，不要假设已注入完整 SKILL.md 正文。\n${lines.join('\n')}\n\n用户消息：\n${content}`
 }
 
 function findReferencedSkills(content: string, skills: SkillOption[]): SkillOption[] {

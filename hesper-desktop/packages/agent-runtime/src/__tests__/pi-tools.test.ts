@@ -13,6 +13,16 @@ const readTool: ToolDefinition = {
   inputSchema: { type: 'object', required: ['path'], properties: { path: { type: 'string' } } }
 }
 
+const skillGetTool: ToolDefinition = {
+  id: 'skills.get',
+  name: 'Get Skill',
+  description: 'Get detailed information for one available skill by skill name/id',
+  category: 'agent',
+  icon: '🧩',
+  display: { name: 'Get Skill', names: { 'zh-CN': '查看技能' }, resourceFields: ['id'] },
+  inputSchema: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } }
+}
+
 const workerTool: ToolDefinition = {
   id: 'agent.spawn-worker-agent',
   name: 'Spawn Worker Agent',
@@ -60,6 +70,35 @@ describe('createPiAgentTools', () => {
       }
     })
     expect(tool!.name).toMatch(/^[a-zA-Z0-9_-]+$/)
+  })
+
+  it('uses pi-safe callable names for dotted skill tools while preserving registry tool ids', async () => {
+    const run = vi.fn(async () => ({ content: 'skill content' }))
+    const [tool] = createPiAgentTools({
+      tools: [skillGetTool],
+      runner: { run },
+      context: { runId: 'run-1', sessionId: 'session-1', allowedToolIds: ['skills.get'] }
+    })
+
+    expect(tool!.name).toBe('skills_get')
+    expect(tool!.name).toMatch(/^[a-zA-Z0-9_-]+$/)
+
+    const result = await tool!.execute('skill-call-1', { id: 'Install Skills', purpose: '读取技能', _displayName: '查看技能' }, new AbortController().signal)
+
+    expect(run).toHaveBeenCalledWith(skillGetTool, { id: 'Install Skills' }, expect.objectContaining({
+      toolCallId: 'skill-call-1',
+      parentStepId: 'step-run-1-tool-skill-call-1'
+    }))
+    expect(result).toMatchObject({
+      content: [{ type: 'text', text: 'skill content' }],
+      details: {
+        toolId: 'skills.get',
+        toolCallId: 'skill-call-1',
+        toolIcon: '🧩',
+        displayName: '查看技能',
+        display: skillGetTool.display
+      }
+    })
   })
 
   it('executes through ToolRunner with run context and returns text content', async () => {

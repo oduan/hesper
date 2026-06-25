@@ -941,6 +941,10 @@ describe('ui components', () => {
       prompt: expect.stringContaining('技能：中文写作'),
       displayPrompt: '请用 @中文写作 完成'
     }))
+    const sendOptions = onSend.mock.calls[0]![1]
+    expect(sendOptions.prompt).toContain('skills_get')
+    expect(sendOptions.prompt).toContain('完整 SKILL.md')
+    expect(sendOptions.prompt).not.toContain('call skills.get')
   })
 
   it('keeps selected skill mention metadata when the composer remounts', async () => {
