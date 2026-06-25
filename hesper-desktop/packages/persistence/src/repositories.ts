@@ -23,6 +23,7 @@ import {
   type RunContextItem,
   type RunStep,
   type Session,
+  type SessionCategory,
   type Skill,
   type SshCommandResult,
   type SshExecution,
@@ -60,6 +61,13 @@ export type SessionRepository = {
   save(session: Session): Promise<void>
   get(id: string): Promise<Session | undefined>
   listVisible(): Promise<Session[]>
+}
+
+export type SessionCategoryRepository = {
+  save(category: SessionCategory): Promise<void>
+  get(id: string): Promise<SessionCategory | undefined>
+  list(): Promise<SessionCategory[]>
+  delete(id: string): Promise<void>
 }
 
 export type MessageRepository = {
@@ -174,6 +182,7 @@ export type AppSettingsRepository = {
 export type Persistence = {
   settings: AppSettingsRepository
   sessions: SessionRepository
+  sessionCategories: SessionCategoryRepository
   messages: MessageRepository
   runs: RunRepository
   steps: RunStepRepository
@@ -265,6 +274,7 @@ function toSession(row: any): Session {
     id: row.id,
     title: row.title,
     status: row.status,
+    categoryId: optionalString(row.category_id),
     workspacePath: row.workspace_path ?? undefined,
     defaultModelId: row.default_model_id ?? undefined,
     providerId: optionalString(row.provider_id),
@@ -280,6 +290,15 @@ function toSession(row: any): Session {
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }) as Session
+}
+
+function toSessionCategory(row: any): SessionCategory {
+  return {
+    id: row.id,
+    name: row.name,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
 }
 
 function toMessage(row: any): Message {
@@ -574,6 +593,7 @@ function parseRuntimeEvent(value: unknown): RuntimeEventRecord {
 export function createRepositories(db: Database): Persistence {
   const sequencedTables = [
     'sessions',
+    'session_categories',
     'messages',
     'agent_runs',
     'run_steps',
@@ -668,6 +688,7 @@ export function createRepositories(db: Database): Persistence {
           'id',
           'title',
           'status',
+          'category_id',
           'workspace_path',
           'default_model_id',
           'provider_id',
@@ -687,6 +708,7 @@ export function createRepositories(db: Database): Persistence {
           session.id,
           session.title,
           session.status,
+          session.categoryId,
           session.workspacePath,
           session.defaultModelId,
           session.providerId,
@@ -710,6 +732,33 @@ export function createRepositories(db: Database): Persistence {
       },
       async listVisible() {
         return fetchAll("SELECT * FROM sessions WHERE status != 'deleted' ORDER BY updated_at DESC, sort_seq ASC, id ASC").map(toSession)
+      }
+    },
+    sessionCategories: {
+      async save(category) {
+        upsert('session_categories', [
+          'id',
+          'name',
+          'created_at',
+          'updated_at',
+          'sort_seq'
+        ], [
+          category.id,
+          category.name,
+          category.createdAt,
+          category.updatedAt,
+          nextSeq()
+        ], category.id)
+      },
+      async get(id) {
+        const row = fetchAll('SELECT * FROM session_categories WHERE id = ?', [id])[0]
+        return row ? toSessionCategory(row) : undefined
+      },
+      async list() {
+        return fetchAll('SELECT * FROM session_categories ORDER BY sort_seq ASC, name ASC, id ASC').map(toSessionCategory)
+      },
+      async delete(id) {
+        exec('DELETE FROM session_categories WHERE id = ?', [id])
       }
     },
     messages: {

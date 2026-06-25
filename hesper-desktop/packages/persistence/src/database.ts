@@ -14,8 +14,8 @@ async function createDatabase(data?: Uint8Array): Promise<Persistence> {
   return createRepositories(db)
 }
 
-export async function createInMemoryPersistence(): Promise<Persistence> {
-  return createDatabase()
+export async function createInMemoryPersistence(data?: Uint8Array): Promise<Persistence> {
+  return createDatabase(data)
 }
 
 export async function createFilePersistence(path: string): Promise<Persistence> {
