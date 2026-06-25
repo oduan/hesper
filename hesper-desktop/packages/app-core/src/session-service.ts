@@ -15,6 +15,11 @@ export function normalizeSessionTitle(title: string | undefined, fallback: strin
   return normalized ? normalized : fallback
 }
 
+function normalizeCategoryId(categoryId: string | undefined): string | undefined {
+  const normalized = categoryId?.trim()
+  return normalized ? normalized : undefined
+}
+
 export type SessionService = {
   createSession(input: CreateSessionInput): Promise<Session>
   getSession(id: string): Promise<Session>
@@ -64,7 +69,8 @@ async function saveSession(persistence: Persistence, session: Session, status: S
 export function createSessionService(persistence: Persistence): SessionService {
   return {
     async createSession(input) {
-      await assertCategoryExists(persistence, input.categoryId)
+      const normalizedCategoryId = normalizeCategoryId(input.categoryId)
+      await assertCategoryExists(persistence, normalizedCategoryId)
       const timestamp = input.now ?? nowIso()
       const session: Session = {
         id: createId('session'),
@@ -73,7 +79,7 @@ export function createSessionService(persistence: Persistence): SessionService {
         outputMode: input.outputMode ?? 'markdown',
         createdAt: timestamp,
         updatedAt: timestamp,
-        ...(input.categoryId !== undefined ? { categoryId: input.categoryId } : {}),
+        ...(normalizedCategoryId !== undefined ? { categoryId: normalizedCategoryId } : {}),
         ...(input.workspacePath !== undefined ? { workspacePath: input.workspacePath } : {}),
         ...(input.defaultModelId !== undefined ? { defaultModelId: input.defaultModelId } : {})
       }
@@ -110,22 +116,27 @@ export function createSessionService(persistence: Persistence): SessionService {
       return updated
     },
     async setCategory(id, categoryId) {
-      await assertCategoryExists(persistence, categoryId)
+      const normalizedCategoryId = normalizeCategoryId(categoryId)
+      await assertCategoryExists(persistence, normalizedCategoryId)
       const session = await loadSession(persistence, id)
-      const candidate = { ...session, categoryId, updatedAt: nowIso() }
+      const candidate = { ...session, categoryId: normalizedCategoryId, updatedAt: nowIso() }
       const updated = stripUndefined(candidate) as Session
       await persistence.sessions.save(updated)
       return updated
     },
     async setCategoryForSessions(ids, categoryId) {
-      await assertCategoryExists(persistence, categoryId)
-      const updated: Session[] = []
+      const normalizedCategoryId = normalizeCategoryId(categoryId)
+      await assertCategoryExists(persistence, normalizedCategoryId)
+      const loadedSessions: Session[] = []
       for (const id of ids) {
-        const session = await loadSession(persistence, id)
-        const candidate = { ...session, categoryId, updatedAt: nowIso() }
-        const next = stripUndefined(candidate) as Session
-        await persistence.sessions.save(next)
-        updated.push(next)
+        loadedSessions.push(await loadSession(persistence, id))
+      }
+      const updated = loadedSessions.map((session) => {
+        const candidate = { ...session, categoryId: normalizedCategoryId, updatedAt: nowIso() }
+        return stripUndefined(candidate) as Session
+      })
+      for (const session of updated) {
+        await persistence.sessions.save(session)
       }
       return updated
     },

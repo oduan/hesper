@@ -19,10 +19,14 @@ describe('session category service', () => {
 
     const kept = await sessions.createSession({ title: '未分类', now })
     const deleted = await sessions.createSession({ title: '分类内', categoryId: category.id, now })
+    const alreadyDeleted = await sessions.createSession({ title: '已删除', categoryId: category.id, now })
+    await sessions.deleteSession(alreadyDeleted.id)
 
     const result = await categories.deleteCategory(category.id)
     expect(result).toEqual({ category: renamed, deletedSessionIds: [deleted.id] })
+    expect(result.deletedSessionIds).not.toContain(alreadyDeleted.id)
     await expect(persistence.sessions.get(deleted.id)).resolves.toMatchObject({ status: 'deleted' })
+    await expect(persistence.sessions.get(alreadyDeleted.id)).resolves.toMatchObject({ status: 'deleted' })
     await expect(persistence.sessions.get(kept.id)).resolves.toMatchObject({ status: 'active' })
     await expect(persistence.sessionCategories.get(category.id)).resolves.toBeUndefined()
   })
@@ -43,8 +47,10 @@ describe('session category service', () => {
     const categories = createSessionCategoryService(persistence)
 
     const category = await categories.createCategory({ name: '   ', now })
+    const renamed = await categories.updateCategory({ id: category.id, name: '   ' })
 
     expect(category.name).toBe('新分类')
+    expect(renamed.name).toBe('新分类')
   })
 
   it('rejects updates and deletes for missing categories', async () => {

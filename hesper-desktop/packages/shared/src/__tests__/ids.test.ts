@@ -9,5 +9,6 @@ describe('ID helpers', () => {
     expect(a.startsWith('session-')).toBe(true)
     expect(b.startsWith('session-')).toBe(true)
     expect(a).not.toBe(b)
+    expect(createId('session-category').startsWith('session-category-')).toBe(true)
   })
 })

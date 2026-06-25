@@ -1,4 +1,4 @@
-import { createId as sharedCreateId, nowIso, type Session, type SessionCategory } from '@hesper/shared'
+import { createId, nowIso, type Session, type SessionCategory } from '@hesper/shared'
 import type { Persistence } from '@hesper/persistence'
 import { normalizeSessionTitle } from './session-service'
 
@@ -22,10 +22,6 @@ export type SessionCategoryService = {
   createCategory(input: CreateSessionCategoryInput): Promise<SessionCategory>
   updateCategory(input: UpdateSessionCategoryInput): Promise<SessionCategory>
   deleteCategory(id: string): Promise<DeleteSessionCategoryResult>
-}
-
-function createId(prefix: string): string {
-  return sharedCreateId(prefix as Parameters<typeof sharedCreateId>[0])
 }
 
 function normalizeCategoryName(name: string): string {
@@ -63,14 +59,14 @@ export function createSessionCategoryService(persistence: Persistence): SessionC
       const category = await persistence.sessionCategories.get(id)
       if (!category) throw missingCategoryError(id)
       const visibleSessions = await persistence.sessions.listVisible()
-      const deletedSessionIds: string[] = []
-      for (const session of visibleSessions.filter((candidate) => candidate.categoryId === id)) {
-        const deleted: Session = { ...session, status: 'deleted', updatedAt: nowIso() }
-        await persistence.sessions.save(deleted)
-        deletedSessionIds.push(session.id)
+      const deletedSessions: Session[] = visibleSessions
+        .filter((candidate) => candidate.status !== 'deleted' && candidate.categoryId === id)
+        .map((session) => ({ ...session, status: 'deleted', updatedAt: nowIso() }))
+      for (const session of deletedSessions) {
+        await persistence.sessions.save(session)
       }
       await persistence.sessionCategories.delete(id)
-      return { category, deletedSessionIds }
+      return { category, deletedSessionIds: deletedSessions.map((session) => session.id) }
     }
   }
 }
