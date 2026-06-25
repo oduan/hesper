@@ -289,7 +289,7 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
     [ipcChannels.sessionsCreate]: async (_event, payload) => {
       const session = await options.container.sessionService.createSession(omitUndefined(createSessionInputSchema.parse(payload ?? {})))
       schedulePersistenceSave()
-      return session
+      return sessionSchema.parse(session)
     },
     [ipcChannels.sessionsUpdateTitle]: async (_event, payload) => {
       const input = updateSessionTitleInputSchema.parse(payload)

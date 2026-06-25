@@ -99,8 +99,12 @@ describe('desktop service container', () => {
       expect.objectContaining({ id: createdCategory.id, name: '产品图' })
     ])
 
+    await expect(handles.get(ipcChannels.sessionsCreate)?.({ sender: { id: 1 } }, { title: 'Missing', categoryId: 'missing-category' })).rejects.toThrow('Session category not found')
+
     const session = await handles.get(ipcChannels.sessionsCreate)?.({ sender: { id: 1 } }, { title: 'Prompt', categoryId: createdCategory.id }) as { id: string; categoryId?: string }
     expect(session.categoryId).toBe(createdCategory.id)
+
+    await expect(handles.get(ipcChannels.sessionsSetCategory)?.({ sender: { id: 1 } }, { ids: [session.id], categoryId: 'missing-category' })).rejects.toThrow('Session category not found')
 
     const moved = await handles.get(ipcChannels.sessionsSetCategory)?.({ sender: { id: 1 } }, { ids: [session.id], categoryId: undefined }) as Array<{ id: string; categoryId?: string }>
     expect(moved).toHaveLength(1)

@@ -99,10 +99,21 @@ function updateMockSession(session: SessionDto, overrides: Partial<SessionDto> =
   }) as SessionDto
 }
 
+function clearMockSessionCategory(session: SessionDto): SessionDto {
+  const { categoryId: _categoryId, ...uncategorized } = session
+  return updateMockSession(uncategorized)
+}
+
 export function createFallbackHesperApi(): HesperDesktopApi {
   let nextRunNumber = 1
   let sessions: SessionDto[] = []
   let sessionCategories: SessionCategoryDto[] = []
+  const assertMockSessionCategoryExists = (categoryId: string | undefined) => {
+    if (!categoryId) return
+    if (!sessionCategories.some((category) => category.id === categoryId)) {
+      throw new Error(`Session category not found: ${categoryId}`)
+    }
+  }
   let tools: ToolDto[] = fallbackBuiltinTools.map((tool) => ({ ...tool }))
   const skills: SkillDto[] = [
     { id: 'Install Skills', name: 'Install Skills', description: 'Install reusable skills into the user skill directory.', source: 'builtin' },
@@ -170,6 +181,7 @@ export function createFallbackHesperApi(): HesperDesktopApi {
     sessions: {
       list: async () => sessions.filter((session) => session.status !== 'deleted'),
       create: async (input) => {
+        assertMockSessionCategoryExists(input.categoryId)
         const session = createMockSession(input)
         sessions = [session, ...sessions]
         messagesBySession[session.id] = []
@@ -192,7 +204,10 @@ export function createFallbackHesperApi(): HesperDesktopApi {
         const { unreadCompletedAt: _unreadCompletedAt, ...viewed } = session
         return viewed
       }),
-      setCategory: async (input: SetSessionCategoryInput) => input.ids.map((id) => replaceSession(id, (session) => updateMockSession(session, input.categoryId ? { categoryId: input.categoryId } : { categoryId: undefined })))
+      setCategory: async (input: SetSessionCategoryInput) => {
+        assertMockSessionCategoryExists(input.categoryId)
+        return input.ids.map((id) => replaceSession(id, (session) => input.categoryId ? updateMockSession(session, { categoryId: input.categoryId }) : clearMockSessionCategory(session)))
+      }
     },
     sessionCategories: {
       list: async () => sessionCategories,
