@@ -49,6 +49,40 @@ class AlwaysFailsRetryableAdapter implements AgentAdapter {
   }
 }
 
+class FailsAfterContextAdapter implements AgentAdapter {
+  readonly inputs: AgentPromptInput[] = []
+
+  async run(input: AgentPromptInput, emit: (event: AgentRuntimeEvent) => void | Promise<void>): Promise<void> {
+    this.inputs.push(input)
+    await emit({
+      type: 'step.created',
+      step: {
+        id: `step-${input.runId}`,
+        runId: input.runId,
+        type: 'tool_call',
+        status: 'succeeded',
+        title: 'Read File',
+        detail: JSON.stringify({ kind: 'tool_call', toolId: 'filesystem.read-file', output: 'failed run context' }),
+        createdAt: '2026-06-25T03:30:00.000Z',
+        completedAt: '2026-06-25T03:30:01.000Z'
+      }
+    })
+    await emit({
+      type: 'message.completed',
+      message: {
+        id: `message-${input.runId}`,
+        sessionId: input.sessionId,
+        role: 'assistant',
+        content: 'partial failed answer',
+        contentType: 'markdown',
+        runId: input.runId,
+        createdAt: '2026-06-25T03:30:02.000Z'
+      }
+    })
+    throw { code: 'tool_error', message: 'terminal tool failure', retryable: false }
+  }
+}
+
 class RecordingAdapter implements AgentAdapter {
   readonly starts: string[] = []
   readonly finishes: string[] = []
@@ -483,10 +517,14 @@ describe('AgentRuntime queue', () => {
 
     expect(adapter.inputs).toHaveLength(2)
     expect(adapter.inputs[1]!.prompt).toBe('second question')
-    expect(adapter.inputs[1]!.historyMessages?.map((message) => [message.role, message.content, message.runId])).toEqual([
+    const secondHistory = adapter.inputs[1]!.historyMessages ?? []
+    expect(secondHistory.map((message) => [message.role, message.content, message.runId]).slice(0, 2)).toEqual([
       ['user', 'first question', first.id],
       ['assistant', 'done:first question', first.id]
     ])
+    expect(secondHistory.map((message) => message.id)).toContain(`context-summary-${first.id}`)
+    expect(secondHistory.map((message) => message.content).join('\n')).toContain('latest_assistant_result:')
+    expect(secondHistory.map((message) => message.content).join('\n')).not.toContain('second question')
   })
 
   it('passes previous run tool context summaries to adapter history', async () => {
@@ -538,6 +576,126 @@ describe('AgentRuntime queue', () => {
     expect(secondHistory.map((message) => message.content).join('\n')).toContain('filesystem.read-file')
     expect(secondHistory.map((message) => message.content).join('\n')).toContain('hello from readme')
     expect(secondHistory.map((message) => message.content).join('\n')).not.toContain('continue')
+  })
+
+  it('persists a run context item after a successful parent run', async () => {
+    const persistence = await createInMemoryPersistence()
+    await persistence.sessions.save({ ...session, id: 'session-context-item-success' })
+
+    const adapter = new ControllableAdapter()
+    const runtime = new AgentRuntime({ persistence, adapter })
+
+    const run = await runtime.enqueue({ sessionId: 'session-context-item-success', prompt: 'inspect file', modelId: 'mock/hesper-fast' })
+    await persistence.messages.save({
+      id: 'message-user-context-item-success',
+      sessionId: 'session-context-item-success',
+      role: 'user',
+      content: 'inspect file',
+      contentType: 'plain',
+      runId: run.id,
+      createdAt: '2026-06-25T03:10:00.000Z'
+    })
+    await persistence.steps.save({
+      id: 'step-context-item-success',
+      runId: run.id,
+      type: 'tool_call',
+      status: 'succeeded',
+      title: 'Read File',
+      summary: 'read README',
+      detail: JSON.stringify({ kind: 'tool_call', toolId: 'filesystem.read-file', input: { path: 'README.md' }, output: 'persist me' }),
+      createdAt: '2026-06-25T03:10:01.000Z',
+      completedAt: '2026-06-25T03:10:02.000Z'
+    })
+
+    adapter.finish()
+    await runtime.waitForIdle('session-context-item-success')
+
+    await expect(persistence.contextItems.listByRun(run.id)).resolves.toEqual([
+      expect.objectContaining({
+        id: `context-item-${run.id}-run-summary-v1`,
+        sessionId: 'session-context-item-success',
+        runId: run.id,
+        kind: 'run_summary',
+        version: 1,
+        sourceHash: expect.stringMatching(/^[a-f0-9]{64}$/)
+      })
+    ])
+    const [item] = await persistence.contextItems.listByRun(run.id)
+    expect(item?.content).toContain('persist me')
+    expect(item?.content).toContain('done:inspect file')
+    expect(item?.tokenEstimate).toBe(Math.ceil((item?.content.length ?? 0) / 4))
+  })
+
+  it('persists a run context item after a failed parent run with useful context', async () => {
+    const persistence = await createInMemoryPersistence()
+    await persistence.sessions.save({ ...session, id: 'session-context-item-failed' })
+
+    const adapter = new FailsAfterContextAdapter()
+    const runtime = new AgentRuntime({ persistence, adapter })
+
+    const run = await runtime.enqueue({ sessionId: 'session-context-item-failed', prompt: 'fail with context', modelId: 'mock/hesper-fast' })
+    await runtime.waitForIdle('session-context-item-failed')
+
+    await expect(persistence.runs.get(run.id)).resolves.toMatchObject({ status: 'failed' })
+    const items = await persistence.contextItems.listByRun(run.id)
+    expect(items).toEqual([
+      expect.objectContaining({
+        id: `context-item-${run.id}-run-summary-v1`,
+        sessionId: 'session-context-item-failed',
+        runId: run.id,
+        kind: 'run_summary'
+      })
+    ])
+    expect(items[0]?.content).toContain('failed run context')
+    expect(items[0]?.content).toContain('partial failed answer')
+  })
+
+  it('uses persisted run context items for history without reloading steps for those runs', async () => {
+    const persistence = await createInMemoryPersistence()
+    await persistence.sessions.save({ ...session, id: 'session-persisted-context-history' })
+    await persistence.runs.save({ id: 'run-with-persisted-context', sessionId: 'session-persisted-context-history', status: 'succeeded', modelId: 'mock/hesper-fast', retryCount: 0, maxRetries: 3, startedAt: '2026-06-25T03:20:00.000Z', endedAt: '2026-06-25T03:20:02.000Z' })
+    await persistence.messages.save({
+      id: 'message-user-persisted-context',
+      sessionId: 'session-persisted-context-history',
+      role: 'user',
+      content: 'old prompt',
+      contentType: 'plain',
+      runId: 'run-with-persisted-context',
+      createdAt: '2026-06-25T03:20:00.000Z'
+    })
+    await persistence.steps.save({
+      id: 'step-persisted-context-should-not-load',
+      runId: 'run-with-persisted-context',
+      type: 'tool_call',
+      status: 'succeeded',
+      title: 'Should Not Load',
+      detail: JSON.stringify({ output: 'dynamic should not appear' }),
+      createdAt: '2026-06-25T03:20:01.000Z'
+    })
+    await persistence.contextItems.save({
+      id: 'context-item-run-with-persisted-context-run-summary-v1',
+      sessionId: 'session-persisted-context-history',
+      runId: 'run-with-persisted-context',
+      kind: 'run_summary',
+      version: 1,
+      content: '<hesper_run_context run_id="run-with-persisted-context">\npersisted context wins\n</hesper_run_context>',
+      tokenEstimate: 24,
+      sourceHash: 'hash-persisted-context',
+      createdAt: '2026-06-25T03:20:03.000Z'
+    })
+
+    const listByRun = vi.spyOn(persistence.steps, 'listByRun')
+    const adapter = new RecordingAdapter()
+    const runtime = new AgentRuntime({ persistence, adapter })
+
+    await runtime.enqueue({ sessionId: 'session-persisted-context-history', prompt: 'new prompt', modelId: 'mock/hesper-fast' })
+    await runtime.waitForIdle('session-persisted-context-history')
+
+    const history = adapter.inputs[0]?.historyMessages ?? []
+    expect(history.map((message) => message.id)).toContain('context-summary-run-with-persisted-context')
+    expect(history.map((message) => message.content).join('\n')).toContain('persisted context wins')
+    expect(history.map((message) => message.content).join('\n')).not.toContain('dynamic should not appear')
+    expect(listByRun).not.toHaveBeenCalledWith('run-with-persisted-context')
   })
 
   it('persists assistant messages when adapter emits message.completed', async () => {

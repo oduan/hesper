@@ -1,7 +1,8 @@
 import type { Persistence } from '@hesper/persistence'
-import { createId, nowIso, type AgentRun, type AgentRuntimeEvent, type Message, type ModelThinkingLevel, type RunError, type RunStep } from '@hesper/shared'
+import { createId, nowIso, type AgentRun, type AgentRuntimeEvent, type Message, type ModelThinkingLevel, type RunContextItem, type RunError, type RunStep } from '@hesper/shared'
 import type { AgentAdapter } from './adapters'
 import { assembleHistoryMessages } from './context-assembler'
+import { buildRunContextItem } from './context-item'
 import { normalizeUnknownError } from './adapters'
 import { clearPiEventRunState } from './map-pi-event'
 import { clearPiToolRunState } from './pi-tools'
@@ -51,6 +52,20 @@ function runIdFromEvent(event: AgentRuntimeEvent): string | undefined {
   if (event.type === 'message.completed') return event.message.runId
   if ('runId' in event && typeof event.runId === 'string') return event.runId
   return undefined
+}
+
+function groupContextItemsByRunId(items: RunContextItem[]): Map<string, RunContextItem[]> {
+  const byRunId = new Map<string, RunContextItem[]>()
+  for (const item of items) {
+    const runItems = byRunId.get(item.runId) ?? []
+    runItems.push(item)
+    byRunId.set(item.runId, runItems)
+  }
+  return byRunId
+}
+
+function hasPersistedRunSummary(items: RunContextItem[] | undefined): boolean {
+  return Boolean(items?.some((item) => item.kind === 'run_summary' && item.content.trim()))
 }
 
 export class AgentRuntime {
@@ -306,6 +321,23 @@ export class AgentRuntime {
     return true
   }
 
+  private async persistRunContextItem(run: AgentRun): Promise<void> {
+    if (run.parentRunId !== undefined) return
+    try {
+      const messages = await this.persistence.messages.listByRun(run.id)
+      const steps = await this.persistence.steps.listByRun(run.id)
+      const item = buildRunContextItem({
+        run,
+        messages,
+        steps,
+        createdAt: run.endedAt ?? nowIso()
+      })
+      if (item) await this.persistence.contextItems.save(item)
+    } catch (error) {
+      console.error('AgentRuntime context item persistence failed', error)
+    }
+  }
+
   private async executeRun(run: AgentRun, prompt: string, thinkingLevel?: ModelThinkingLevel, systemPrompt?: string, enabledToolIds?: string[]): Promise<void> {
     try {
       if (await this.applyCancellationIfNeeded(run.id) || await this.applyTerminationIfNeeded(run.id)) {
@@ -320,16 +352,19 @@ export class AgentRuntime {
       let attempt = latestRun.retryCount
       const sessionMessages = await this.persistence.messages.listBySession(current.sessionId)
       const sessionRuns = await this.persistence.runs.listBySession(current.sessionId)
+      const contextItemsByRunId = groupContextItemsByRunId(await this.persistence.contextItems.listBySession(current.sessionId))
       const previousParentRuns = sessionRuns.filter((candidate) => candidate.id !== current.id && candidate.parentRunId === undefined)
       const stepsByRunId = new Map<string, RunStep[]>()
       for (const previousRun of previousParentRuns) {
+        if (hasPersistedRunSummary(contextItemsByRunId.get(previousRun.id))) continue
         stepsByRunId.set(previousRun.id, await this.persistence.steps.listByRun(previousRun.id))
       }
       const historyMessages = assembleHistoryMessages({
         currentRunId: current.id,
         runs: sessionRuns,
         messages: sessionMessages,
-        stepsByRunId
+        stepsByRunId,
+        contextItemsByRunId
       })
 
       while (true) {
@@ -369,6 +404,7 @@ export class AgentRuntime {
           if (await this.applyCancellationIfNeeded(latestRun.id) || await this.applyTerminationIfNeeded(latestRun.id)) {
             return
           }
+          await this.persistRunContextItem(latestRun)
           clearPiEventRunState(latestRun.id)
           clearPiToolRunState(latestRun.id)
           await this.emitAndPersist({ type: 'run.succeeded', runId: latestRun.id, ...(latestRun.endedAt ? { endedAt: latestRun.endedAt } : {}) })
@@ -407,6 +443,7 @@ export class AgentRuntime {
             error: normalized
           } satisfies AgentRun
           await this.persistence.runs.save(latestRun)
+          await this.persistRunContextItem(latestRun)
           clearPiEventRunState(latestRun.id)
           clearPiToolRunState(latestRun.id)
           await this.emitAndPersist({ type: 'run.failed', runId: latestRun.id, error: normalized, ...(latestRun.endedAt ? { endedAt: latestRun.endedAt } : {}) })
