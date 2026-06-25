@@ -1,5 +1,5 @@
 import type { Persistence } from '@hesper/persistence'
-import { createId, nowIso, type AgentRun, type AgentRuntimeEvent, type ModelThinkingLevel, type RunError, type RunStep } from '@hesper/shared'
+import { createId, nowIso, type AgentRun, type AgentRuntimeEvent, type Message, type ModelThinkingLevel, type RunError, type RunStep } from '@hesper/shared'
 import type { AgentAdapter } from './adapters'
 import { assembleHistoryMessages } from './context-assembler'
 import { normalizeUnknownError } from './adapters'
