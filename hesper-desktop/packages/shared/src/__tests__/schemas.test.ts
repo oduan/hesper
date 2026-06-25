@@ -6,6 +6,7 @@ import {
   modelProviderConfigSchema,
   roleSchema,
   runStepSchema,
+  sessionCategorySchema,
   sessionSchema,
   skillSchema,
   sshCommandResultSchema,
@@ -130,6 +131,34 @@ describe('shared schemas', () => {
     })
 
     expect(parsed.unreadCompletedAt).toBe(now)
+  })
+
+  it('parses session categories and session category ids', () => {
+    const parsedCategory = sessionCategorySchema.parse({
+      id: 'category-product',
+      name: '产品图',
+      createdAt: '2026-06-26T00:00:00.000Z',
+      updatedAt: '2026-06-26T00:00:00.000Z'
+    })
+
+    expect(parsedCategory).toEqual({
+      id: 'category-product',
+      name: '产品图',
+      createdAt: '2026-06-26T00:00:00.000Z',
+      updatedAt: '2026-06-26T00:00:00.000Z'
+    })
+
+    const parsedSession = sessionSchema.parse({
+      id: 'session-product',
+      title: '产品图会话',
+      status: 'active',
+      categoryId: 'category-product',
+      outputMode: 'markdown',
+      createdAt: '2026-06-26T00:00:00.000Z',
+      updatedAt: '2026-06-26T00:00:00.000Z'
+    })
+
+    expect(parsedSession.categoryId).toBe('category-product')
   })
 
   it('validates model providers without exposing raw API keys', () => {

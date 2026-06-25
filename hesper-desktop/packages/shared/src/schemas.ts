@@ -10,6 +10,7 @@ import type {
   RunError,
   RunStep,
   Session,
+  SessionCategory,
   Skill,
   SshCommandResult,
   SshExecution,
@@ -115,10 +116,20 @@ export const modelConfigSchema = modelConfigBaseSchema.transform(stripUndefined)
 
 export const modelThinkingLevelSchema = z.enum(['low', 'medium', 'high', 'xhigh'])
 
+const sessionCategoryBaseSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+})
+
+export const sessionCategorySchema = sessionCategoryBaseSchema.transform(stripUndefined)
+
 const sessionBaseSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
   status: z.enum(['active', 'archived', 'deleted']),
+  categoryId: z.string().min(1).optional(),
   workspacePath: z.string().optional(),
   defaultModelId: z.string().optional(),
   providerId: z.string().min(1).optional(),
@@ -433,6 +444,7 @@ export const agentRuntimeEventSchema = z.union([
 
 // Compile-time contract checks
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _SessionCategoryCheck = Expect<Equal<z.output<typeof sessionCategorySchema>, NormalizeOptional<SessionCategory>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type _SessionCheck = Expect<Equal<z.output<typeof sessionSchema>, NormalizeOptional<Session>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type _MessageCheck = Expect<Equal<z.output<typeof messageSchema>, NormalizeOptional<Message>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type _AgentRunCheck = Expect<Equal<z.output<typeof agentRunSchema>, NormalizeOptional<AgentRun>>>// eslint-disable-next-line @typescript-eslint/no-unused-vars
