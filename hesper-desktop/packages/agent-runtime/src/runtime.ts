@@ -1,6 +1,6 @@
 import type { Persistence } from '@hesper/persistence'
-import { createId, nowIso, type AgentRun, type AgentRuntimeEvent, type Message, type ModelThinkingLevel, type RunContextItem, type RunError, type RunStep } from '@hesper/shared'
-import type { AgentAdapter } from './adapters'
+import { createId, nowIso, type AgentRun, type AgentRuntimeEvent, type Message, type MessageAttachment, type ModelThinkingLevel, type RunContextItem, type RunError, type RunStep } from '@hesper/shared'
+import type { AgentAdapter, AttachmentReader } from './adapters'
 import { assembleHistoryMessages } from './context-assembler'
 import { buildRunContextItem } from './context-item'
 import { normalizeUnknownError } from './adapters'
@@ -17,6 +17,8 @@ export type EnqueueRunInput = {
   enabledToolIds?: string[]
   workspacePath?: string
   parentRunId?: string
+  attachments?: MessageAttachment[]
+  attachmentReader?: AttachmentReader
 }
 
 export type AgentRuntimeOptions = {
@@ -26,9 +28,18 @@ export type AgentRuntimeOptions = {
 }
 
 type RuntimeListener = (event: AgentRuntimeEvent) => void | Promise<void>
+type QueuedRunEntry = {
+  run: AgentRun
+  prompt: string
+  thinkingLevel?: ModelThinkingLevel
+  systemPrompt?: string
+  enabledToolIds?: string[]
+  attachments?: MessageAttachment[]
+  attachmentReader?: AttachmentReader
+}
 type SessionState = {
   running: boolean
-  queue: Array<{ run: AgentRun; prompt: string; thinkingLevel?: ModelThinkingLevel; systemPrompt?: string; enabledToolIds?: string[] }>
+  queue: QueuedRunEntry[]
   active: Promise<void> | undefined
   activeRunId: string | undefined
   waiters: Array<() => void>
@@ -126,12 +137,14 @@ export class AgentRuntime {
           prompt: input.prompt,
           ...(input.thinkingLevel !== undefined ? { thinkingLevel: input.thinkingLevel } : {}),
           ...(input.systemPrompt !== undefined ? { systemPrompt: input.systemPrompt } : {}),
-          ...(input.enabledToolIds !== undefined ? { enabledToolIds: input.enabledToolIds } : {})
+          ...(input.enabledToolIds !== undefined ? { enabledToolIds: input.enabledToolIds } : {}),
+          ...(input.attachments !== undefined ? { attachments: input.attachments } : {}),
+          ...(input.attachmentReader !== undefined ? { attachmentReader: input.attachmentReader } : {})
         })
         return run
       }
 
-      this.startSessionRun(input.sessionId, run, input.prompt, input.thinkingLevel, input.systemPrompt, input.enabledToolIds)
+      this.startSessionRun(input.sessionId, run, input.prompt, input.thinkingLevel, input.systemPrompt, input.enabledToolIds, input.attachments, input.attachmentReader)
       return run
     })
   }
@@ -227,11 +240,11 @@ export class AgentRuntime {
     }
   }
 
-  private startSessionRun(sessionId: string, run: AgentRun, prompt: string, thinkingLevel?: ModelThinkingLevel, systemPrompt?: string, enabledToolIds?: string[]): void {
+  private startSessionRun(sessionId: string, run: AgentRun, prompt: string, thinkingLevel?: ModelThinkingLevel, systemPrompt?: string, enabledToolIds?: string[], attachments?: MessageAttachment[], attachmentReader?: AttachmentReader): void {
     const state = this.getSessionState(sessionId)
     state.running = true
     state.activeRunId = run.id
-    state.active = this.executeRun(run, prompt, thinkingLevel, systemPrompt, enabledToolIds)
+    state.active = this.executeRun(run, prompt, thinkingLevel, systemPrompt, enabledToolIds, attachments, attachmentReader)
       .then(() => this.finishRun(sessionId))
       .catch(() => this.finishRun(sessionId))
   }
@@ -247,7 +260,7 @@ export class AgentRuntime {
         status: 'running',
         startedAt
       }
-      this.startSessionRun(sessionId, runningRun, next.prompt, next.thinkingLevel, next.systemPrompt, next.enabledToolIds)
+      this.startSessionRun(sessionId, runningRun, next.prompt, next.thinkingLevel, next.systemPrompt, next.enabledToolIds, next.attachments, next.attachmentReader)
       return
     }
 
@@ -263,7 +276,7 @@ export class AgentRuntime {
         status: 'running',
         startedAt
       }
-      this.startSessionRun(sessionId, runningRun, lateQueued.prompt, lateQueued.thinkingLevel, lateQueued.systemPrompt, lateQueued.enabledToolIds)
+      this.startSessionRun(sessionId, runningRun, lateQueued.prompt, lateQueued.thinkingLevel, lateQueued.systemPrompt, lateQueued.enabledToolIds, lateQueued.attachments, lateQueued.attachmentReader)
       return
     }
 
@@ -340,7 +353,7 @@ export class AgentRuntime {
     }
   }
 
-  private async executeRun(run: AgentRun, prompt: string, thinkingLevel?: ModelThinkingLevel, systemPrompt?: string, enabledToolIds?: string[]): Promise<void> {
+  private async executeRun(run: AgentRun, prompt: string, thinkingLevel?: ModelThinkingLevel, systemPrompt?: string, enabledToolIds?: string[], attachments?: MessageAttachment[], attachmentReader?: AttachmentReader): Promise<void> {
     try {
       if (await this.applyCancellationIfNeeded(run.id) || await this.applyTerminationIfNeeded(run.id)) {
         return
@@ -386,6 +399,8 @@ export class AgentRuntime {
               ...(thinkingLevel !== undefined ? { thinkingLevel } : {}),
               ...(systemPrompt !== undefined ? { systemPrompt } : {}),
               ...(enabledToolIds !== undefined ? { enabledToolIds } : {}),
+              ...(attachments !== undefined ? { attachments } : {}),
+              ...(attachmentReader !== undefined ? { attachmentReader } : {}),
               ...(latestRun.workspacePath !== undefined ? { workspacePath: latestRun.workspacePath } : {}),
               historyMessages,
               signal: controller.signal

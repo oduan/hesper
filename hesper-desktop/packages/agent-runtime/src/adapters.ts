@@ -1,4 +1,9 @@
-import type { AgentRuntimeEvent, Message, ModelRef, ModelThinkingLevel, RunError } from '@hesper/shared'
+import type { AgentRuntimeEvent, Message, MessageAttachment, ModelRef, ModelThinkingLevel, RunError } from '@hesper/shared'
+
+export type AttachmentReader = {
+  readImageAttachment(relativePath: string): Promise<Buffer>
+  readTextAttachment(relativePath: string): Promise<string>
+}
 
 export type AgentPromptInput = {
   runId: string
@@ -11,6 +16,8 @@ export type AgentPromptInput = {
   enabledToolIds?: string[]
   workspacePath?: string
   historyMessages?: Message[]
+  attachments?: MessageAttachment[]
+  attachmentReader?: AttachmentReader
   signal: AbortSignal
 }
 

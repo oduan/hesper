@@ -1,13 +1,18 @@
 import type { Api, Model } from '@earendil-works/pi-ai'
 import { Agent } from '@earendil-works/pi-agent-core'
+import type { MessageAttachment, ModelCapability } from '@hesper/shared'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { PiCoreAgentAdapter } from '../pi-core-adapter'
+
+const agentPromptCalls = vi.hoisted(() => [] as Array<{ input: unknown; images: unknown }>)
 
 vi.mock('@earendil-works/pi-agent-core', () => {
   const AgentMock = vi.fn(function AgentMock() {
     return {
       subscribe: vi.fn(() => () => undefined),
-      prompt: vi.fn(async () => undefined),
+      prompt: vi.fn(async (input: unknown, images: unknown) => {
+        agentPromptCalls.push({ input, images })
+      }),
       waitForIdle: vi.fn(async () => undefined),
       abort: vi.fn()
     }
@@ -31,7 +36,7 @@ function piModel(): Model<Api> {
   }
 }
 
-function resolverFor(modelOverrides: Partial<Model<Api>> = {}): ModelResolver {
+function resolverFor(modelOverrides: Partial<Model<Api>> = {}, capabilities: ModelCapability[] = ['streaming']): ModelResolver {
   return {
     resolve: vi.fn(async () => ({
       model: { ...piModel(), ...modelOverrides },
@@ -48,7 +53,7 @@ function resolverFor(modelOverrides: Partial<Model<Api>> = {}): ModelResolver {
         providerId: 'openai',
         modelName: 'gpt-4o',
         displayName: 'GPT-4o',
-        capabilities: ['streaming' as const],
+        capabilities,
         enabled: true,
         createdAt: '2026-06-11T00:00:00.000Z',
         updatedAt: '2026-06-11T00:00:00.000Z'
@@ -60,6 +65,170 @@ function resolverFor(modelOverrides: Partial<Model<Api>> = {}): ModelResolver {
 describe('PiCoreAgentAdapter', () => {
   beforeEach(() => {
     vi.mocked(Agent).mockClear()
+    agentPromptCalls.length = 0
+  })
+
+  it('sends image attachments to image-capable models', async () => {
+    const imageBuffer = Buffer.from('fake-png')
+    const attachment: MessageAttachment = {
+      id: 'attachment-image-1',
+      kind: 'image',
+      name: 'screenshot.png',
+      mimeType: 'image/png',
+      bytes: imageBuffer.length,
+      relativePath: 'attachments/screenshot.png'
+    }
+    const attachmentReader = {
+      readImageAttachment: vi.fn(async () => imageBuffer),
+      readTextAttachment: vi.fn(async () => 'unused')
+    }
+    const adapter = new PiCoreAgentAdapter({ modelResolver: resolverFor({ input: ['text', 'image'] }) })
+
+    await adapter.run({
+      runId: 'run-image-attachment',
+      sessionId: 'session-1',
+      prompt: 'describe this',
+      modelId: 'gpt-4o',
+      attachments: [attachment],
+      attachmentReader,
+      signal: new AbortController().signal
+    }, vi.fn())
+
+    expect(attachmentReader.readImageAttachment).toHaveBeenCalledWith('attachments/screenshot.png')
+    expect(agentPromptCalls).toEqual([
+      {
+        input: 'describe this',
+        images: [{ type: 'image', data: imageBuffer.toString('base64'), mimeType: 'image/png' }]
+      }
+    ])
+  })
+
+  it('sends image attachments when registry capabilities include imageInput', async () => {
+    const imageBuffer = Buffer.from('fake-png')
+    const attachment: MessageAttachment = {
+      id: 'attachment-image-capability',
+      kind: 'image',
+      name: 'screenshot.png',
+      mimeType: 'image/png',
+      bytes: imageBuffer.length,
+      relativePath: 'attachments/screenshot.png'
+    }
+    const attachmentReader = {
+      readImageAttachment: vi.fn(async () => imageBuffer),
+      readTextAttachment: vi.fn(async () => 'unused')
+    }
+    const adapter = new PiCoreAgentAdapter({ modelResolver: resolverFor({ input: ['text'] }, ['streaming', 'imageInput']) })
+
+    await adapter.run({
+      runId: 'run-image-capability-attachment',
+      sessionId: 'session-1',
+      prompt: 'describe this',
+      modelId: 'gpt-4o',
+      attachments: [attachment],
+      attachmentReader,
+      signal: new AbortController().signal
+    }, vi.fn())
+
+    expect(attachmentReader.readImageAttachment).toHaveBeenCalledWith('attachments/screenshot.png')
+    expect(agentPromptCalls).toEqual([
+      {
+        input: 'describe this',
+        images: [{ type: 'image', data: imageBuffer.toString('base64'), mimeType: 'image/png' }]
+      }
+    ])
+  })
+
+  it('does not read or send image attachments to text-only models', async () => {
+    const attachment: MessageAttachment = {
+      id: 'attachment-image-1',
+      kind: 'image',
+      name: 'screenshot.png',
+      mimeType: 'image/png',
+      bytes: 8,
+      relativePath: 'attachments/screenshot.png'
+    }
+    const attachmentReader = {
+      readImageAttachment: vi.fn(async () => Buffer.from('fake-png')),
+      readTextAttachment: vi.fn(async () => 'unused')
+    }
+    const adapter = new PiCoreAgentAdapter({ modelResolver: resolverFor({ input: ['text'] }) })
+
+    await adapter.run({
+      runId: 'run-text-only-image-attachment',
+      sessionId: 'session-1',
+      prompt: 'describe this',
+      modelId: 'gpt-4o',
+      attachments: [attachment],
+      attachmentReader,
+      signal: new AbortController().signal
+    }, vi.fn())
+
+    expect(attachmentReader.readImageAttachment).not.toHaveBeenCalled()
+    expect(agentPromptCalls).toEqual([{ input: 'describe this', images: undefined }])
+  })
+
+  it('appends text attachments to the prompt', async () => {
+    const attachment: MessageAttachment = {
+      id: 'attachment-text-1',
+      kind: 'text',
+      name: 'notes.md',
+      mimeType: 'text/markdown',
+      bytes: 7,
+      relativePath: 'attachments/notes.md'
+    }
+    const attachmentReader = {
+      readImageAttachment: vi.fn(async () => Buffer.from('unused')),
+      readTextAttachment: vi.fn(async () => '# Hello')
+    }
+    const adapter = new PiCoreAgentAdapter({ modelResolver: resolverFor() })
+
+    await adapter.run({
+      runId: 'run-text-attachment',
+      sessionId: 'session-1',
+      prompt: 'summarize',
+      modelId: 'gpt-4o',
+      attachments: [attachment],
+      attachmentReader,
+      signal: new AbortController().signal
+    }, vi.fn())
+
+    expect(attachmentReader.readTextAttachment).toHaveBeenCalledWith('attachments/notes.md')
+    expect(agentPromptCalls[0]?.input).toContain('<attachment name="notes.md" mimeType="text/markdown">\n# Hello\n</attachment>')
+    expect(agentPromptCalls[0]?.images).toBeUndefined()
+  })
+
+  it('does not start pi core when the signal aborts while reading attachments', async () => {
+    const controller = new AbortController()
+    const attachment: MessageAttachment = {
+      id: 'attachment-text-abort',
+      kind: 'text',
+      name: 'notes.md',
+      mimeType: 'text/markdown',
+      bytes: 7,
+      relativePath: 'attachments/notes.md'
+    }
+    const attachmentReader = {
+      readImageAttachment: vi.fn(async () => Buffer.from('unused')),
+      readTextAttachment: vi.fn(async () => {
+        controller.abort()
+        await Promise.resolve()
+        return '# Hello'
+      })
+    }
+    const adapter = new PiCoreAgentAdapter({ modelResolver: resolverFor() })
+
+    await expect(adapter.run({
+      runId: 'run-abort-attachment-read',
+      sessionId: 'session-1',
+      prompt: 'summarize',
+      modelId: 'gpt-4o',
+      attachments: [attachment],
+      attachmentReader,
+      signal: controller.signal
+    }, vi.fn())).rejects.toMatchObject({ retryable: false })
+
+    expect(Agent).not.toHaveBeenCalled()
+    expect(agentPromptCalls).toEqual([])
   })
 
   it('removes the abort listener after a pi core run completes', async () => {

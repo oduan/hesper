@@ -1,7 +1,7 @@
-import type { AgentRuntimeEvent, Session } from '@hesper/shared'
+import type { AgentRuntimeEvent, MessageAttachment, Session } from '@hesper/shared'
 import { createInMemoryPersistence } from '@hesper/persistence'
 import { describe, expect, it, vi } from 'vitest'
-import type { AgentAdapter, AgentPromptInput } from '../adapters'
+import type { AgentAdapter, AgentPromptInput, AttachmentReader } from '../adapters'
 import { MockAgentAdapter } from '../mock-adapter'
 import { defaultRetryPolicy } from '../retry-policy'
 import { AgentRuntime } from '../runtime'
@@ -485,6 +485,43 @@ describe('AgentRuntime queue', () => {
 
     expect(adapter.inputs.map((input) => input.systemPrompt)).toEqual(['system:first', 'system:second'])
     expect(adapter.inputs.map((input) => input.enabledToolIds)).toEqual([['filesystem.read-file'], ['git.status']])
+  })
+
+  it('preserves attachments and attachmentReader for a queued second run', async () => {
+    const persistence = await createInMemoryPersistence()
+    await persistence.sessions.save({ ...session, id: 'session-queued-attachments' })
+
+    const adapter = new ControllableAdapter()
+    const runtime = new AgentRuntime({ persistence, adapter })
+    const attachment: MessageAttachment = {
+      id: 'attachment-text-queued',
+      kind: 'text',
+      name: 'notes.md',
+      mimeType: 'text/markdown',
+      bytes: 7,
+      relativePath: 'attachments/notes.md'
+    }
+    const attachmentReader: AttachmentReader = {
+      readImageAttachment: vi.fn(async () => Buffer.from('unused')),
+      readTextAttachment: vi.fn(async () => '# Hello')
+    }
+
+    await runtime.enqueue({ sessionId: 'session-queued-attachments', prompt: 'first', modelId: 'mock/hesper-fast' })
+    await adapter.running
+    await runtime.enqueue({
+      sessionId: 'session-queued-attachments',
+      prompt: 'second',
+      modelId: 'mock/hesper-fast',
+      attachments: [attachment],
+      attachmentReader
+    })
+
+    adapter.finish()
+    await runtime.waitForIdle('session-queued-attachments')
+
+    expect(adapter.inputs).toHaveLength(2)
+    expect(adapter.inputs[1]?.attachments?.[0]?.name).toBe('notes.md')
+    expect(adapter.inputs[1]?.attachmentReader).toBe(attachmentReader)
   })
 
   it('passes thinking levels to immediate and queued adapter runs', async () => {
