@@ -26,4 +26,34 @@ describe('session category service', () => {
     await expect(persistence.sessions.get(kept.id)).resolves.toMatchObject({ status: 'active' })
     await expect(persistence.sessionCategories.get(category.id)).resolves.toBeUndefined()
   })
+
+  it('lists categories from persistence', async () => {
+    const persistence = await createInMemoryPersistence()
+    const categories = createSessionCategoryService(persistence)
+    const product = { id: 'category-product', name: '产品图', createdAt: now, updatedAt: now }
+    const avatar = { id: 'category-avatar', name: '头像', createdAt: now, updatedAt: now }
+    await persistence.sessionCategories.save(product)
+    await persistence.sessionCategories.save(avatar)
+
+    await expect(categories.listCategories()).resolves.toEqual([product, avatar])
+  })
+
+  it('defaults blank category names to 新分类', async () => {
+    const persistence = await createInMemoryPersistence()
+    const categories = createSessionCategoryService(persistence)
+
+    const category = await categories.createCategory({ name: '   ', now })
+
+    expect(category.name).toBe('新分类')
+  })
+
+  it('rejects updates and deletes for missing categories', async () => {
+    const persistence = await createInMemoryPersistence()
+    const categories = createSessionCategoryService(persistence)
+
+    await expect(categories.updateCategory({ id: 'missing', name: 'x' })).rejects.toThrow(
+      'Session category not found: missing'
+    )
+    await expect(categories.deleteCategory('missing')).rejects.toThrow('Session category not found: missing')
+  })
 })

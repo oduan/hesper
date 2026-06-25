@@ -112,8 +112,9 @@ export function createSessionService(persistence: Persistence): SessionService {
     async setCategory(id, categoryId) {
       await assertCategoryExists(persistence, categoryId)
       const session = await loadSession(persistence, id)
-      const updated = { ...session, categoryId, updatedAt: nowIso() } as Session
-      await persistence.sessions.save(stripUndefined({ ...updated }) as Session)
+      const candidate = { ...session, categoryId, updatedAt: nowIso() }
+      const updated = stripUndefined(candidate) as Session
+      await persistence.sessions.save(updated)
       return updated
     },
     async setCategoryForSessions(ids, categoryId) {
@@ -121,8 +122,9 @@ export function createSessionService(persistence: Persistence): SessionService {
       const updated: Session[] = []
       for (const id of ids) {
         const session = await loadSession(persistence, id)
-        const next = { ...session, categoryId, updatedAt: nowIso() } as Session
-        await persistence.sessions.save(stripUndefined({ ...next }) as Session)
+        const candidate = { ...session, categoryId, updatedAt: nowIso() }
+        const next = stripUndefined(candidate) as Session
+        await persistence.sessions.save(next)
         updated.push(next)
       }
       return updated

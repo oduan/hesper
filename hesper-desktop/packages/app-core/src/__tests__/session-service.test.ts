@@ -15,9 +15,29 @@ describe('createSessionService', () => {
     expect(created.categoryId).toBe('category-product')
 
     await expect(sessions.setCategory(created.id, 'category-avatar')).resolves.toMatchObject({ categoryId: 'category-avatar' })
-    await expect(sessions.setCategoryForSessions([created.id], undefined)).resolves.toEqual([
-      expect.objectContaining({ id: created.id, categoryId: undefined })
-    ])
+
+    const uncategorized = await sessions.setCategory(created.id, undefined)
+    expect(uncategorized).not.toHaveProperty('categoryId')
+    await expect(persistence.sessions.get(created.id)).resolves.not.toHaveProperty('categoryId')
+
+    await sessions.setCategory(created.id, 'category-product')
+    const batch = await sessions.setCategoryForSessions([created.id], undefined)
+    expect(batch[0]).not.toHaveProperty('categoryId')
+    await expect(persistence.sessions.get(created.id)).resolves.not.toHaveProperty('categoryId')
+  })
+
+  it('rejects missing session categories', async () => {
+    const persistence = await createInMemoryPersistence()
+    const sessions = createSessionService(persistence)
+
+    await expect(sessions.createSession({ title: 'Missing', categoryId: 'missing-category', now })).rejects.toThrow(
+      'Session category not found: missing-category'
+    )
+
+    const created = await sessions.createSession({ title: '分类会话', now })
+    await expect(sessions.setCategory(created.id, 'missing-category')).rejects.toThrow(
+      'Session category not found: missing-category'
+    )
   })
 
   it('preserves session config fields across title, workspace, model, output mode and archive updates', async () => {
