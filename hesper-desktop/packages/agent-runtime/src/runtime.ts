@@ -1,6 +1,7 @@
 import type { Persistence } from '@hesper/persistence'
-import { createId, nowIso, type AgentRun, type AgentRuntimeEvent, type Message, type ModelThinkingLevel, type RunError, type RunStep } from '@hesper/shared'
+import { createId, nowIso, type AgentRun, type AgentRuntimeEvent, type ModelThinkingLevel, type RunError, type RunStep } from '@hesper/shared'
 import type { AgentAdapter } from './adapters'
+import { assembleHistoryMessages } from './context-assembler'
 import { normalizeUnknownError } from './adapters'
 import { clearPiEventRunState } from './map-pi-event'
 import { clearPiToolRunState } from './pi-tools'
@@ -50,11 +51,6 @@ function runIdFromEvent(event: AgentRuntimeEvent): string | undefined {
   if (event.type === 'message.completed') return event.message.runId
   if ('runId' in event && typeof event.runId === 'string') return event.runId
   return undefined
-}
-
-function compareMessages(left: Message, right: Message): number {
-  const byCreatedAt = left.createdAt.localeCompare(right.createdAt)
-  return byCreatedAt === 0 ? left.id.localeCompare(right.id) : byCreatedAt
 }
 
 export class AgentRuntime {
@@ -322,9 +318,19 @@ export class AgentRuntime {
 
       let latestRun = current
       let attempt = latestRun.retryCount
-      const historyMessages = (await this.persistence.messages.listBySession(current.sessionId))
-        .filter((message) => message.runId !== current.id)
-        .sort(compareMessages)
+      const sessionMessages = await this.persistence.messages.listBySession(current.sessionId)
+      const sessionRuns = await this.persistence.runs.listBySession(current.sessionId)
+      const previousParentRuns = sessionRuns.filter((candidate) => candidate.id !== current.id && candidate.parentRunId === undefined)
+      const stepsByRunId = new Map<string, RunStep[]>()
+      for (const previousRun of previousParentRuns) {
+        stepsByRunId.set(previousRun.id, await this.persistence.steps.listByRun(previousRun.id))
+      }
+      const historyMessages = assembleHistoryMessages({
+        currentRunId: current.id,
+        runs: sessionRuns,
+        messages: sessionMessages,
+        stepsByRunId
+      })
 
       while (true) {
         if (await this.applyCancellationIfNeeded(latestRun.id) || await this.applyTerminationIfNeeded(latestRun.id)) {

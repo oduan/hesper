@@ -48,10 +48,10 @@ describe('buildRunContextSummary', () => {
       maxChars: 4000,
       messages: [
         createMessage({
-          id: 'msg-old-assistant',
+          id: 'msg-latest-assistant',
           role: 'assistant',
-          content: '旧结果：Bearer old-secret-token',
-          createdAt: '2026-06-25T03:00:00.000Z'
+          content: '最新结果：已经完成整理，输出包含 github_pat_zzzzzzzzzzzzzzzzzzzz 和 xoxb-1234567890-abcdefghi',
+          createdAt: '2026-06-25T03:03:00.000Z'
         }),
         createMessage({
           id: 'msg-old-user',
@@ -83,10 +83,10 @@ describe('buildRunContextSummary', () => {
           createdAt: '2026-06-25T03:02:00.000Z'
         }),
         createMessage({
-          id: 'msg-latest-assistant',
+          id: 'msg-old-assistant',
           role: 'assistant',
-          content: '最新结果：已经完成整理，输出包含 github_pat_zzzzzzzzzzzzzzzzzzzz 和 xoxb-1234567890-abcdefghi',
-          createdAt: '2026-06-25T03:03:00.000Z'
+          content: '旧结果：Bearer old-secret-token',
+          createdAt: '2026-06-25T03:00:00.000Z'
         })
       ],
       steps: [
@@ -121,6 +121,8 @@ describe('buildRunContextSummary', () => {
     expect(summary).toContain('{"detail":"[redacted-sensitive-value]","status":"running","summary":"[redacted-sensitive-value]","title":"Search repo","type":"tool_call"}')
     expect(summary).toContain('{"detail":"[redacted-sensitive-value]","status":"succeeded","summary":"[redacted-sensitive-value]","title":"Write file","type":"tool_result"}')
     expect(summary).toContain('[redacted-sensitive-value]')
+    expect(summary).toContain('Search repo')
+    expect(summary).toContain('Write file')
     expect(summary).not.toContain('旧请求')
     expect(summary).not.toContain('旧结果')
     expect(summary).not.toContain('msg-old-assistant')
@@ -131,30 +133,40 @@ describe('buildRunContextSummary', () => {
     expect(summary).not.toContain('step-tool-call')
     expect(summary).not.toContain('2026-06-25')
     expect(summary).not.toContain('11:48')
+    expect((summary?.indexOf('"title":"Search repo"') ?? -1)).toBeLessThan(summary?.indexOf('"title":"Write file"') ?? -1)
     for (const token of ['Bearer abcdefghijklmnop', 'eyJabcdefghij.klmnopqrst.uvwxyzABCDE', 'github_pat_1234567890abcdefghijkl', 'xoxb-1234567890-abcdefghi', 'npm_1234567890abcdef1234', 'hf_1234567890abcdef1234', 'AKIAABCDEFGHIJKLMNOP', 'AIza1234567890abcdef123456', 'sk-live-12345678', 'pk-test-12345678', 'rk-prod-12345678', 'api-key: supersecretvalue', 'secret=topsecretvalue', 'token: tokensecretvalue', 'password=password123']) {
       expect(summary).not.toContain(token)
     }
     expect(summary?.endsWith('</hesper_run_context>')).toBe(true)
   })
 
-  it('excludes failed non-tool steps from model-visible tool activity', () => {
+  it('serializes structured tool details with stable key order and redaction', () => {
     const summary = buildRunContextSummary({
-      run,
-      maxChars: 1000,
-      messages: [],
+      run: { id: 'run-ctx-3' },
+      maxChars: 4000,
+      messages: [
+        createMessage({
+          id: 'msg-json-user',
+          role: 'user',
+          content: '请检查工具详情',
+          createdAt: '2026-06-25T05:00:00.000Z'
+        })
+      ],
       steps: [
         createStep({
-          id: 'step-thought-failed',
-          type: 'thought',
-          status: 'failed',
-          title: 'Internal thought failed',
-          detail: 'internal detail should not be model visible',
-          createdAt: '2026-06-25T03:05:00.000Z'
+          id: 'step-json',
+          type: 'tool_call',
+          status: 'succeeded',
+          title: 'Inspect detail',
+          detail: '{"z":3,"apiKey":"should-not-leak","a":{"d":4,"b":2}}',
+          createdAt: '2026-06-25T05:01:00.000Z'
         })
       ]
     })
 
-    expect(summary).toBeUndefined()
+    expect(summary).toContain('tool_activity:')
+    expect(summary).toContain('{"detail":{"a":{"b":2,"d":4},"apiKey":"[redacted-sensitive-value]","z":3},"status":"succeeded","title":"Inspect detail","type":"tool_call"}')
+    expect(summary).not.toContain('should-not-leak')
   })
 
   it('truncates deterministically and keeps the wrapper stable', () => {

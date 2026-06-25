@@ -489,6 +489,57 @@ describe('AgentRuntime queue', () => {
     ])
   })
 
+  it('passes previous run tool context summaries to adapter history', async () => {
+    const persistence = await createInMemoryPersistence()
+    await persistence.sessions.save({ ...session, id: 'session-tool-context' })
+
+    const adapter = new ControllableAdapter()
+    const runtime = new AgentRuntime({ persistence, adapter })
+
+    const first = await runtime.enqueue({ sessionId: 'session-tool-context', prompt: 'inspect file', modelId: 'mock/hesper-fast' })
+    await persistence.messages.save({
+      id: 'message-user-first-tool-context',
+      sessionId: 'session-tool-context',
+      role: 'user',
+      content: 'inspect file',
+      contentType: 'plain',
+      runId: first.id,
+      createdAt: '2026-06-25T03:00:00.000Z'
+    })
+    await persistence.steps.save({
+      id: 'step-first-tool-context',
+      runId: first.id,
+      type: 'tool_call',
+      status: 'succeeded',
+      title: 'Read File',
+      summary: 'read README',
+      detail: JSON.stringify({ kind: 'tool_call', toolId: 'filesystem.read-file', input: { path: 'README.md' }, output: 'hello from readme' }),
+      createdAt: '2026-06-25T03:00:01.000Z',
+      completedAt: '2026-06-25T03:00:02.000Z'
+    })
+
+    const second = await runtime.enqueue({ sessionId: 'session-tool-context', prompt: 'continue', modelId: 'mock/hesper-fast' })
+    await persistence.messages.save({
+      id: 'message-user-second-tool-context',
+      sessionId: 'session-tool-context',
+      role: 'user',
+      content: 'continue',
+      contentType: 'plain',
+      runId: second.id,
+      createdAt: '2026-06-25T03:00:03.000Z'
+    })
+
+    adapter.finish()
+    await runtime.waitForIdle('session-tool-context')
+
+    expect(adapter.inputs).toHaveLength(2)
+    const secondHistory = adapter.inputs[1]!.historyMessages ?? []
+    expect(secondHistory.map((message) => message.id)).toContain(`context-summary-${first.id}`)
+    expect(secondHistory.map((message) => message.content).join('\n')).toContain('filesystem.read-file')
+    expect(secondHistory.map((message) => message.content).join('\n')).toContain('hello from readme')
+    expect(secondHistory.map((message) => message.content).join('\n')).not.toContain('continue')
+  })
+
   it('persists assistant messages when adapter emits message.completed', async () => {
     const persistence = await createInMemoryPersistence()
     await persistence.sessions.save({ ...session, id: 'session-message-completed' })

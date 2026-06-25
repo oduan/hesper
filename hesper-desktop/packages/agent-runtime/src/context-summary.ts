@@ -13,6 +13,16 @@ const CONTEXT_CLOSE = '\n</hesper_run_context>'
 
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue }
 
+function isSensitiveKey(key: string): boolean {
+  const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, '')
+  return normalized === 'apikey'
+    || normalized === 'secret'
+    || normalized === 'token'
+    || normalized === 'password'
+    || normalized === 'accesstoken'
+    || normalized === 'refreshtoken'
+}
+
 function redactSensitiveText(value: string): string {
   return value
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/gi, '[redacted-sensitive-value]')
@@ -45,17 +55,17 @@ function compareCreatedThenId<T extends { createdAt: string; id: string }>(left:
   return byCreatedAt === 0 ? stableCompare(left.id, right.id) : byCreatedAt
 }
 
-function stableJsonStringify(value: unknown): string {
+function stableJsonStringify(value: unknown, keyHint?: string): string {
+  if (keyHint && isSensitiveKey(keyHint)) return JSON.stringify('[redacted-sensitive-value]')
   if (value === undefined) return JSON.stringify(null)
-  if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-    return JSON.stringify(value)
-  }
-  if (Array.isArray(value)) return `[${value.map(stableJsonStringify).join(',')}]`
+  if (value === null || typeof value === 'number' || typeof value === 'boolean') return JSON.stringify(value)
+  if (typeof value === 'string') return JSON.stringify(redactSensitiveText(value))
+  if (Array.isArray(value)) return `[${value.map((item) => stableJsonStringify(item)).join(',')}]`
   if (typeof value === 'object') {
     const record = value as Record<string, unknown>
-    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableJsonStringify(record[key])}`).join(',')}}`
+    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableJsonStringify(record[key], key)}`).join(',')}}`
   }
-  return JSON.stringify(String(value))
+  return JSON.stringify(redactSensitiveText(String(value)))
 }
 
 function stringifyBounded(value: unknown, maxChars = FIELD_MAX_CHARS): string {
@@ -75,15 +85,29 @@ function latestContent(messages: Message[], role: Message['role']): string | und
   return message ? stringifyBounded(message.content, 1200) : undefined
 }
 
+function parseStructuredDetail(detail: string): unknown {
+  try {
+    return JSON.parse(detail) as unknown
+  } catch {
+    return detail
+  }
+}
+
+function boundedJsonValue(value: unknown, maxChars: number): unknown {
+  const rendered = stableJsonStringify(value)
+  if (rendered.length <= maxChars) return value
+  return stringifyBounded(rendered, maxChars)
+}
+
 function renderStep(step: RunStep): string | undefined {
   if (step.type !== 'tool_call' && step.type !== 'tool_result') return undefined
-  const payload: Record<string, string> = {
+  const payload: Record<string, unknown> = {
     type: step.type,
     status: step.status,
     title: stringifyBounded(step.title, 240)
   }
   if (step.summary) payload.summary = stringifyBounded(step.summary, 500)
-  if (step.detail) payload.detail = stringifyBounded(step.detail, 1400)
+  if (step.detail) payload.detail = boundedJsonValue(parseStructuredDetail(step.detail), 1400)
   return stableJsonStringify(payload)
 }
 
