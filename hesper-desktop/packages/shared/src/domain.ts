@@ -130,6 +130,20 @@ export type RunStep = {
   completedAt?: string
 }
 
+export type RunContextItemKind = 'run_summary' | 'tool_summary' | 'child_handoff'
+
+export type RunContextItem = {
+  id: string
+  sessionId: string
+  runId: string
+  kind: RunContextItemKind
+  version: number
+  content: string
+  tokenEstimate: number
+  sourceHash: string
+  createdAt: string
+}
+
 export type Skill = {
   id: string
   name: string

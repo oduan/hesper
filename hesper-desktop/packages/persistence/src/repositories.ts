@@ -20,6 +20,7 @@ import {
   type ModelProviderConfig,
   type ModelRef,
   type Role,
+  type RunContextItem,
   type RunStep,
   type Session,
   type Skill,
@@ -76,6 +77,13 @@ export type RunRepository = {
 export type RunStepRepository = {
   save(step: RunStep): Promise<void>
   listByRun(runId: string): Promise<RunStep[]>
+}
+
+export type RunContextItemRepository = {
+  save(item: RunContextItem): Promise<void>
+  get(id: string): Promise<RunContextItem | undefined>
+  listByRun(runId: string): Promise<RunContextItem[]>
+  listBySession(sessionId: string): Promise<RunContextItem[]>
 }
 
 export type RuntimeEventRepository = {
@@ -169,6 +177,7 @@ export type Persistence = {
   messages: MessageRepository
   runs: RunRepository
   steps: RunStepRepository
+  contextItems: RunContextItemRepository
   events: RuntimeEventRepository
   modelProviders: ModelProviderRepository
   models: ModelRepository
@@ -315,6 +324,20 @@ function toStep(row: any): RunStep {
     detail: row.detail ?? undefined,
     createdAt: row.created_at,
     completedAt: row.completed_at ?? undefined
+  }
+}
+
+function toRunContextItem(row: any): RunContextItem {
+  return {
+    id: row.id,
+    sessionId: row.session_id,
+    runId: row.run_id,
+    kind: row.kind,
+    version: row.version,
+    content: row.content,
+    tokenEstimate: row.token_estimate,
+    sourceHash: row.source_hash,
+    createdAt: row.created_at
   }
 }
 
@@ -554,6 +577,7 @@ export function createRepositories(db: Database): Persistence {
     'messages',
     'agent_runs',
     'run_steps',
+    'run_context_items',
     'model_providers',
     'models',
     'skills',
@@ -764,6 +788,32 @@ export function createRepositories(db: Database): Persistence {
       },
       async listByRun(runId) {
         return fetchAll('SELECT * FROM run_steps WHERE run_id = ? ORDER BY sort_seq ASC, id ASC', [runId]).map(toStep)
+      }
+    },
+    contextItems: {
+      async save(item) {
+        upsert('run_context_items', ['id', 'session_id', 'run_id', 'kind', 'version', 'content', 'token_estimate', 'source_hash', 'created_at', 'sort_seq'], [
+          item.id,
+          item.sessionId,
+          item.runId,
+          item.kind,
+          item.version,
+          item.content,
+          item.tokenEstimate,
+          item.sourceHash,
+          item.createdAt,
+          nextSeq()
+        ], item.id)
+      },
+      async get(id) {
+        const row = fetchAll('SELECT * FROM run_context_items WHERE id = ?', [id])[0]
+        return row ? toRunContextItem(row) : undefined
+      },
+      async listByRun(runId) {
+        return fetchAll('SELECT * FROM run_context_items WHERE run_id = ? ORDER BY sort_seq ASC, id ASC', [runId]).map(toRunContextItem)
+      },
+      async listBySession(sessionId) {
+        return fetchAll('SELECT * FROM run_context_items WHERE session_id = ? ORDER BY sort_seq ASC, id ASC', [sessionId]).map(toRunContextItem)
       }
     },
     events: {

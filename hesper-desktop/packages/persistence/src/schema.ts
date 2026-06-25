@@ -71,6 +71,19 @@ CREATE TABLE IF NOT EXISTS runtime_events (
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS run_context_items (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  run_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  content TEXT NOT NULL,
+  token_estimate INTEGER NOT NULL,
+  source_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  sort_seq INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS model_providers (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,

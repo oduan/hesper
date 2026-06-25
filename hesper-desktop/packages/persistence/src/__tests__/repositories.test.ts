@@ -356,6 +356,86 @@ describe('persistence repositories', () => {
     expect((await db.runs.listBySession('session-1')).map((run) => run.id)).toEqual(['run-1', 'run-2'])
   })
 
+  it('persists run context items with stable session and run ordering', async () => {
+    const db = await createInMemoryPersistence()
+
+    await db.contextItems.save({
+      id: 'context-item-run-2-run-summary-v1',
+      sessionId: 'session-1',
+      runId: 'run-2',
+      kind: 'run_summary',
+      version: 1,
+      content: '<hesper_run_context run_id="run-2">second</hesper_run_context>',
+      tokenEstimate: 13,
+      sourceHash: 'hash-run-2',
+      createdAt: '2026-06-25T04:00:02.000Z'
+    })
+    await db.contextItems.save({
+      id: 'context-item-run-1-run-summary-v1',
+      sessionId: 'session-1',
+      runId: 'run-1',
+      kind: 'run_summary',
+      version: 1,
+      content: '<hesper_run_context run_id="run-1">first</hesper_run_context>',
+      tokenEstimate: 12,
+      sourceHash: 'hash-run-1',
+      createdAt: '2026-06-25T04:00:01.000Z'
+    })
+    await db.contextItems.save({
+      id: 'context-item-run-3-run-summary-v1',
+      sessionId: 'session-2',
+      runId: 'run-3',
+      kind: 'run_summary',
+      version: 1,
+      content: '<hesper_run_context run_id="run-3">third</hesper_run_context>',
+      tokenEstimate: 12,
+      sourceHash: 'hash-run-3',
+      createdAt: '2026-06-25T04:00:03.000Z'
+    })
+
+    await db.contextItems.save({
+      id: 'context-item-run-2-run-summary-v1',
+      sessionId: 'session-1',
+      runId: 'run-2',
+      kind: 'run_summary',
+      version: 1,
+      content: '<hesper_run_context run_id="run-2">second updated</hesper_run_context>',
+      tokenEstimate: 15,
+      sourceHash: 'hash-run-2-updated',
+      createdAt: '2026-06-25T04:00:04.000Z'
+    })
+
+    await expect(db.contextItems.get('context-item-run-2-run-summary-v1')).resolves.toMatchObject({
+      id: 'context-item-run-2-run-summary-v1',
+      content: '<hesper_run_context run_id="run-2">second updated</hesper_run_context>',
+      tokenEstimate: 15,
+      sourceHash: 'hash-run-2-updated'
+    })
+    await expect(db.contextItems.listByRun('run-2')).resolves.toEqual([
+      expect.objectContaining({ id: 'context-item-run-2-run-summary-v1' })
+    ])
+    expect((await db.contextItems.listBySession('session-1')).map((item) => item.id)).toEqual([
+      'context-item-run-2-run-summary-v1',
+      'context-item-run-1-run-summary-v1'
+    ])
+  })
+
+  it('creates the run context item table in fresh databases', async () => {
+    const SQL = await initSqlJs()
+    const db = new SQL.Database()
+    db.run(schemaSql)
+    const rows: Array<{ name?: unknown }> = []
+    const stmt = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'run_context_items'")
+    try {
+      while (stmt.step()) rows.push(stmt.getAsObject())
+    } finally {
+      stmt.free()
+      db.close()
+    }
+
+    expect(rows).toEqual([{ name: 'run_context_items' }])
+  })
+
   it('round-trips model providers and models without raw API keys', async () => {
     const db = await createInMemoryPersistence()
     await db.modelProviders.save({
