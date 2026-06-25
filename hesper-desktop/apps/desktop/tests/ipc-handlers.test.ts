@@ -1311,13 +1311,28 @@ describe('registerIpcHandlers', () => {
         ]
       })).resolves.toEqual({ runId: run.id })
 
+      expect(enqueueSpy).toHaveBeenCalledWith(expect.objectContaining({
+        attachments: [
+          expect.objectContaining({ kind: 'image', name: 'pixel.png', mimeType: 'image/png', bytes: 3, relativePath: expect.stringContaining('attachments/') }),
+          expect.objectContaining({ kind: 'text', name: 'notes.txt', mimeType: 'text/plain', bytes: 5, relativePath: expect.stringContaining('attachments/') })
+        ],
+        attachmentReader: expect.objectContaining({
+          readImageAttachment: expect.any(Function),
+          readTextAttachment: expect.any(Function)
+        })
+      }))
       expect(enqueueSpy).toHaveBeenCalledWith(expect.not.objectContaining({ draftAttachments: expect.anything() }))
+
+      const enqueueInput = enqueueSpy.mock.calls[0]![0]
+      expect(JSON.stringify(enqueueInput.attachments)).not.toContain('dataUrl')
+      expect(JSON.stringify(enqueueInput.attachments)).not.toContain('content')
       const [message] = await persistence.messages.listBySession(session.id)
       const expectedRelativePathPrefix = new RegExp(`^attachments/${session.id}/message-attachments-1/`)
       expect(message?.attachments).toEqual([
         expect.objectContaining({ kind: 'image', name: 'pixel.png', mimeType: 'image/png', bytes: 3, relativePath: expect.stringMatching(expectedRelativePathPrefix) }),
         expect.objectContaining({ kind: 'text', name: 'notes.txt', mimeType: 'text/plain', bytes: 5, relativePath: expect.stringMatching(expectedRelativePathPrefix) })
       ])
+      expect(message?.attachments).toEqual(enqueueInput.attachments)
       expect(JSON.stringify(message?.attachments)).not.toContain('dataUrl')
       expect(JSON.stringify(message?.attachments)).not.toContain('content')
 
@@ -1325,6 +1340,12 @@ describe('registerIpcHandlers', () => {
       const textAttachment = message!.attachments!.find((attachment) => attachment.kind === 'text')!
       await expect(fs.readFile(path.join(userDataPath, ...imageAttachment.relativePath.split('/')), 'utf8')).resolves.toBe('img')
       await expect(fs.readFile(path.join(userDataPath, ...textAttachment.relativePath.split('/')), 'utf8')).resolves.toBe('hello')
+      const reader = enqueueInput.attachmentReader!
+      expect(reader).not.toHaveProperty('saveDraftAttachments')
+      expect(reader).not.toHaveProperty('readAttachmentDataUrl')
+      expect(reader).not.toHaveProperty('deleteMessageAttachments')
+      await expect(reader.readImageAttachment(imageAttachment.relativePath)).resolves.toEqual(Buffer.from('img'))
+      await expect(reader.readTextAttachment(textAttachment.relativePath)).resolves.toBe('hello')
     } finally {
       await fs.rm(userDataPath, { recursive: true, force: true })
     }

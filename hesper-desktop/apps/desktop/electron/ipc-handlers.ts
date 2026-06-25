@@ -410,7 +410,15 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       let run
       try {
         const runContext = await assembleRunContext(input.sessionId, input.workspacePath, input.enabledToolIds)
-        run = await options.container.agentRuntime.enqueue(omitUndefined({ ...runtimeInput, ...runContext }))
+        const runtimeAttachments = persistedAttachments.length > 0 ? persistedAttachments : undefined
+        const attachmentStorage = runtimeAttachments ? options.attachmentStorage : undefined
+        const attachmentReader = attachmentStorage
+          ? {
+              readImageAttachment: (relativePath: string) => attachmentStorage.readImageAttachment(relativePath),
+              readTextAttachment: (relativePath: string) => attachmentStorage.readTextAttachment(relativePath)
+            }
+          : undefined
+        run = await options.container.agentRuntime.enqueue(omitUndefined({ ...runtimeInput, ...runContext, attachments: runtimeAttachments, attachmentReader }))
       } catch (error) {
         await deletePersistedAttachments()
         throw error
