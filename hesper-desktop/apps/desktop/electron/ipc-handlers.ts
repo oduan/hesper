@@ -1,11 +1,13 @@
 import { discoverProjectContextFiles } from '@hesper/app-core'
-import { agentRuntimeEventSchema, modelConfigSchema, modelProviderConfigSchema, sshKeySchema, sshServerSchema, type Role } from '@hesper/shared'
+import { agentRuntimeEventSchema, createId, modelConfigSchema, modelProviderConfigSchema, sshKeySchema, sshServerSchema, type Role } from '@hesper/shared'
 import { BrowserWindow, type Dialog, type IpcMain, type IpcMainInvokeEvent } from 'electron'
 import { z } from 'zod'
 import {
   agentEnqueueInputSchema,
   agentStopResultSchema,
   appSettingsSchema,
+  attachmentDataUrlResultSchema,
+  attachmentReadDataUrlInputSchema,
   conversationMessagesByRunInputSchema,
   conversationMessagesByRunResultSchema,
   conversationMessagesResultSchema,
@@ -61,6 +63,7 @@ import {
   updateSshServerInputSchema,
   updateSettingsInputSchema
 } from './ipc-contract'
+import type { AttachmentStorage } from './attachment-storage'
 import { readLocalFilePreview } from './local-file-preview'
 import type { ServiceContainer } from './service-container'
 
@@ -74,6 +77,7 @@ export type RegisterIpcHandlersOptions = {
   schedulePersistenceSave?: () => void
   openExternal?: (url: string) => Promise<void>
   getWindowForEvent?: (event: IpcMainInvokeEvent) => WindowControlTarget | undefined
+  attachmentStorage?: AttachmentStorage
 }
 
 const mutatingChannels = [
@@ -364,6 +368,13 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       const { sessionId, parentRunId } = workerInvocationsListByParentRunInputSchema.parse(payload)
       return workerInvocationsResultSchema.parse(await options.container.workerAgentService.list({ parentRunId }, { runId: parentRunId, sessionId, allowedToolIds: [] }))
     },
+    [ipcChannels.attachmentsReadDataUrl]: async (_event, payload) => {
+      if (!options.attachmentStorage) {
+        throw new Error('Attachment storage is not configured')
+      }
+      const input = attachmentReadDataUrlInputSchema.parse(payload)
+      return attachmentDataUrlResultSchema.parse(await options.attachmentStorage.readAttachmentDataUrl(input))
+    },
     [ipcChannels.filesPreview]: async (_event, payload) => {
       const input = localFilePreviewInputSchema.parse(payload)
       const session = await options.container.sessionService.getSession(input.sessionId)
@@ -381,19 +392,42 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
     },
     [ipcChannels.agentEnqueue]: async (_event, payload) => {
       const input = agentEnqueueInputSchema.parse(payload)
-      const { messageId, messageCreatedAt, displayPrompt, ...runtimeInput } = input
-      const runContext = await assembleRunContext(input.sessionId, input.workspacePath, input.enabledToolIds)
-      const run = await options.container.agentRuntime.enqueue(omitUndefined({ ...runtimeInput, ...runContext }))
+      const { messageId, messageCreatedAt, displayPrompt, draftAttachments, ...runtimeInput } = input
+      const resolvedMessageId = messageId ?? createId('message')
+      const hasDraftAttachments = draftAttachments !== undefined && draftAttachments.length > 0
+      if (hasDraftAttachments && !options.attachmentStorage) {
+        throw new Error('Attachment storage is required to enqueue draft attachments')
+      }
+      const persistedAttachments = hasDraftAttachments
+        ? await options.attachmentStorage!.saveDraftAttachments({ sessionId: input.sessionId, messageId: resolvedMessageId, draftAttachments })
+        : []
+      const deletePersistedAttachments = async () => {
+        if (persistedAttachments.length > 0) {
+          await options.attachmentStorage!.deleteMessageAttachments({ sessionId: input.sessionId, messageId: resolvedMessageId })
+        }
+      }
+
+      let run
+      try {
+        const runContext = await assembleRunContext(input.sessionId, input.workspacePath, input.enabledToolIds)
+        run = await options.container.agentRuntime.enqueue(omitUndefined({ ...runtimeInput, ...runContext }))
+      } catch (error) {
+        await deletePersistedAttachments()
+        throw error
+      }
+
       try {
         await options.container.conversationService.createUserMessage({
           sessionId: input.sessionId,
           content: displayPrompt ?? input.prompt,
           runId: run.id,
-          ...(messageId ? { id: messageId } : {}),
-          ...(messageCreatedAt ? { now: messageCreatedAt } : {})
+          id: resolvedMessageId,
+          ...(messageCreatedAt ? { now: messageCreatedAt } : {}),
+          ...(persistedAttachments.length ? { attachments: persistedAttachments } : {})
         })
       } catch (error) {
         const normalizedError = toError(error)
+        await deletePersistedAttachments()
         await options.container.agentRuntime.failRun(run.id, normalizedError)
         throw normalizedError
       }

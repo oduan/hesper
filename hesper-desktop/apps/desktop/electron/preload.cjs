@@ -16,6 +16,7 @@ const ipcChannels = {
   conversationListRuns: 'conversation:listRuns',
   conversationListSteps: 'conversation:listSteps',
   workerInvocationsListByParentRun: 'workerInvocations:listByParentRun',
+  attachmentsReadDataUrl: 'attachments:readDataUrl',
   filesPreview: 'files:preview',
   dialogSelectDirectory: 'dialog:selectDirectory',
   agentEnqueue: 'agent:enqueue',
@@ -110,6 +111,9 @@ const hesperApi = {
   },
   files: {
     preview: (input) => ipcRenderer.invoke(ipcChannels.filesPreview, input)
+  },
+  attachments: {
+    readDataUrl: (input) => ipcRenderer.invoke(ipcChannels.attachmentsReadDataUrl, input)
   },
   agent: {
     enqueue: (input) => ipcRenderer.invoke(ipcChannels.agentEnqueue, input),

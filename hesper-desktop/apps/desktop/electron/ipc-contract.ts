@@ -17,6 +17,7 @@ export const ipcChannels = {
   conversationListRuns: 'conversation:listRuns',
   conversationListSteps: 'conversation:listSteps',
   workerInvocationsListByParentRun: 'workerInvocations:listByParentRun',
+  attachmentsReadDataUrl: 'attachments:readDataUrl',
   filesPreview: 'files:preview',
   dialogSelectDirectory: 'dialog:selectDirectory',
   agentEnqueue: 'agent:enqueue',
@@ -124,6 +125,23 @@ export const setSessionOutputModeInputSchema = z.object({
   outputMode: z.enum(['markdown', 'html'])
 })
 
+export const draftAttachmentSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('image'),
+    name: nonEmptyStringSchema,
+    mimeType: nonEmptyStringSchema.refine((mimeType) => mimeType.toLowerCase().startsWith('image/'), { message: 'Image attachments require an image MIME type' }),
+    bytes: z.number().int().nonnegative(),
+    dataUrl: nonEmptyStringSchema
+  }).strict(),
+  z.object({
+    kind: z.literal('text'),
+    name: nonEmptyStringSchema,
+    mimeType: nonEmptyStringSchema,
+    bytes: z.number().int().nonnegative(),
+    content: z.string()
+  }).strict()
+])
+
 export const agentEnqueueInputSchema = z.object({
   sessionId: nonEmptyStringSchema,
   prompt: nonEmptyStringSchema,
@@ -134,8 +152,18 @@ export const agentEnqueueInputSchema = z.object({
   enabledToolIds: z.array(nonEmptyStringSchema).optional(),
   parentRunId: nonEmptyStringSchema.optional(),
   messageId: nonEmptyStringSchema.optional(),
-  messageCreatedAt: z.string().datetime().optional()
+  messageCreatedAt: z.string().datetime().optional(),
+  draftAttachments: z.array(draftAttachmentSchema).optional()
 })
+
+export const attachmentReadDataUrlInputSchema = z.object({
+  relativePath: nonEmptyStringSchema,
+  mimeType: nonEmptyStringSchema
+}).strict()
+
+export const attachmentDataUrlResultSchema = z.object({
+  dataUrl: nonEmptyStringSchema
+}).strict()
 
 export const appFontSizeSchema = z.number().int().min(12).max(18)
 
@@ -294,7 +322,7 @@ export const saveModelInputSchema = z.object({
   providerId: nonEmptyStringSchema,
   modelName: nonEmptyStringSchema,
   displayName: nonEmptyStringSchema,
-  capabilities: z.array(z.enum(['streaming', 'toolCalls', 'jsonOutput', 'reasoning'])).optional(),
+  capabilities: z.array(z.enum(['streaming', 'toolCalls', 'jsonOutput', 'reasoning', 'imageInput'])).optional(),
   contextWindow: z.number().int().positive().optional(),
   enabled: z.boolean().optional()
 }).strict()
@@ -393,7 +421,10 @@ export type GenerateSessionTitleInput = z.infer<typeof generateSessionTitleInput
 export type SetSessionWorkspaceInput = z.infer<typeof setSessionWorkspaceInputSchema>
 export type SetSessionModelInput = z.infer<typeof setSessionModelInputSchema>
 export type SetSessionOutputModeInput = z.infer<typeof setSessionOutputModeInputSchema>
+export type DraftAttachment = z.infer<typeof draftAttachmentSchema>
 export type AgentEnqueueInput = z.infer<typeof agentEnqueueInputSchema>
+export type AttachmentReadDataUrlInput = z.infer<typeof attachmentReadDataUrlInputSchema>
+export type AttachmentDataUrlResult = z.infer<typeof attachmentDataUrlResultSchema>
 export type AgentStopResult = z.infer<typeof agentStopResultSchema>
 export type AppSettings = z.infer<typeof appSettingsSchema>
 export type UpdateSettingsInput = z.infer<typeof updateSettingsInputSchema>
@@ -467,6 +498,9 @@ export type HesperDesktopApi = {
   }
   files: {
     preview(input: LocalFilePreviewInput): Promise<LocalFilePreviewDto>
+  }
+  attachments?: {
+    readDataUrl(input: AttachmentReadDataUrlInput): Promise<AttachmentDataUrlResult>
   }
   agent: {
     enqueue(input: AgentEnqueueInput): Promise<{ runId: string }>

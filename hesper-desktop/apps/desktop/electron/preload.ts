@@ -46,6 +46,9 @@ const hesperApi: HesperDesktopApi = {
   files: {
     preview: (input) => ipcRenderer.invoke(ipcChannels.filesPreview, input)
   },
+  attachments: {
+    readDataUrl: (input) => ipcRenderer.invoke(ipcChannels.attachmentsReadDataUrl, input)
+  },
   agent: {
     enqueue: (input) => ipcRenderer.invoke(ipcChannels.agentEnqueue, input),
     stop: (runId) => ipcRenderer.invoke(ipcChannels.agentStop, runId),

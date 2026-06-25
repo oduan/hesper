@@ -3,6 +3,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from 'electron'
 import { createFilePersistence, exportDatabaseBytes } from '@hesper/persistence'
+import { createAttachmentStorage } from './attachment-storage'
 import { createBeforeQuitHandler } from './before-quit'
 import { createElectronSafeStorageCredentialCodec } from './credential-codec'
 import { registerIpcHandlers } from './ipc-handlers'
@@ -115,7 +116,8 @@ async function bootstrap(): Promise<void> {
   const skillService = createElectronSkillService()
   await startSkillService(skillService)
   container = createServiceContainer({ persistence, agentMode: resolveAgentMode(), credentialCodec: createElectronSafeStorageCredentialCodec(safeStorage), skillService })
-  disposeIpcHandlers = registerIpcHandlers({ ipcMain, dialog, container, savePersistence, schedulePersistenceSave, openExternal: (url) => shell.openExternal(url) })
+  const attachmentStorage = createAttachmentStorage(app.getPath('userData'))
+  disposeIpcHandlers = registerIpcHandlers({ ipcMain, dialog, container, savePersistence, schedulePersistenceSave, openExternal: (url) => shell.openExternal(url), attachmentStorage })
   await savePersistence()
 
   mainWindow = createMainWindow()

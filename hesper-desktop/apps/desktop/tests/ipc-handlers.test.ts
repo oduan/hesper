@@ -4,9 +4,10 @@ import path from 'node:path'
 import type { CredentialVaultCodec, SkillService } from '@hesper/app-core'
 import { createInMemoryPersistence } from '@hesper/persistence'
 import { describe, expect, it, vi } from 'vitest'
-import { registerIpcHandlers } from '../electron/ipc-handlers'
+import { registerIpcHandlers, type RegisterIpcHandlersOptions } from '../electron/ipc-handlers'
 import { ipcChannels, ipcEvents } from '../electron/ipc-contract'
 import { createServiceContainer } from '../electron/service-container'
+import { createAttachmentStorage } from '../electron/attachment-storage'
 
 function createMockCredentialCodec(): CredentialVaultCodec {
   return {
@@ -53,7 +54,7 @@ async function withTempWorkspace<T>(run: (workspacePath: string) => Promise<T>):
   }
 }
 
-function registerTestIpcHandlers(container: ReturnType<typeof createServiceContainer>) {
+function registerTestIpcHandlers(container: ReturnType<typeof createServiceContainer>, options: Partial<Omit<RegisterIpcHandlersOptions, 'ipcMain' | 'dialog' | 'container'>> = {}) {
   const handles = new Map<string, (event: any, ...args: any[]) => Promise<unknown> | unknown>()
   const ipcMain = {
     handle: vi.fn((channel: string, handler: (event: any, ...args: any[]) => Promise<unknown> | unknown) => {
@@ -65,7 +66,7 @@ function registerTestIpcHandlers(container: ReturnType<typeof createServiceConta
     showOpenDialog: vi.fn(async () => ({ canceled: true, filePaths: [] }))
   }
 
-  registerIpcHandlers({ ipcMain, dialog, container })
+  registerIpcHandlers({ ipcMain, dialog, container, ...options })
   return { handles, ipcMain }
 }
 
@@ -1277,6 +1278,189 @@ describe('registerIpcHandlers', () => {
     expect(storedRun?.status).not.toBe('running')
     expect(storedRun?.status).not.toBe('succeeded')
     expect((await persistence.events.listByRun(run.id)).map((event) => event.type)).toContain('run.failed')
+  })
+
+  it('stores draft image and text attachments as file-backed message metadata', async () => {
+    const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), 'hesper-ipc-attachments-'))
+    try {
+      const persistence = await createInMemoryPersistence()
+      const container = createServiceContainer({ persistence, agentMode: 'mock' })
+      const storage = createAttachmentStorage(userDataPath)
+      const session = await container.sessionService.createSession({ title: 'Attachment IPC' })
+      const run = {
+        id: 'run-attachments-1',
+        sessionId: session.id,
+        status: 'running',
+        modelId: 'mock/hesper-fast',
+        retryCount: 0,
+        maxRetries: 2,
+        startedAt: '2026-06-26T00:00:00.000Z'
+      } as const
+      await persistence.runs.save(run)
+      const enqueueSpy = vi.spyOn(container.agentRuntime, 'enqueue').mockResolvedValueOnce(run as Awaited<ReturnType<typeof container.agentRuntime.enqueue>>)
+      const { handles } = registerTestIpcHandlers(container, { attachmentStorage: storage })
+
+      await expect(handles.get(ipcChannels.agentEnqueue)?.({ sender: { id: 1 } }, {
+        sessionId: session.id,
+        prompt: 'See attachments',
+        modelId: 'mock/hesper-fast',
+        messageId: 'message-attachments-1',
+        draftAttachments: [
+          { kind: 'image', name: 'pixel.png', mimeType: 'image/png', bytes: 5, dataUrl: 'data:image/png;base64,aW1n' },
+          { kind: 'text', name: 'notes.txt', mimeType: 'text/plain', bytes: 5, content: 'hello' }
+        ]
+      })).resolves.toEqual({ runId: run.id })
+
+      expect(enqueueSpy).toHaveBeenCalledWith(expect.not.objectContaining({ draftAttachments: expect.anything() }))
+      const [message] = await persistence.messages.listBySession(session.id)
+      const expectedRelativePathPrefix = new RegExp(`^attachments/${session.id}/message-attachments-1/`)
+      expect(message?.attachments).toEqual([
+        expect.objectContaining({ kind: 'image', name: 'pixel.png', mimeType: 'image/png', bytes: 3, relativePath: expect.stringMatching(expectedRelativePathPrefix) }),
+        expect.objectContaining({ kind: 'text', name: 'notes.txt', mimeType: 'text/plain', bytes: 5, relativePath: expect.stringMatching(expectedRelativePathPrefix) })
+      ])
+      expect(JSON.stringify(message?.attachments)).not.toContain('dataUrl')
+      expect(JSON.stringify(message?.attachments)).not.toContain('content')
+
+      const imageAttachment = message!.attachments!.find((attachment) => attachment.kind === 'image')!
+      const textAttachment = message!.attachments!.find((attachment) => attachment.kind === 'text')!
+      await expect(fs.readFile(path.join(userDataPath, ...imageAttachment.relativePath.split('/')), 'utf8')).resolves.toBe('img')
+      await expect(fs.readFile(path.join(userDataPath, ...textAttachment.relativePath.split('/')), 'utf8')).resolves.toBe('hello')
+    } finally {
+      await fs.rm(userDataPath, { recursive: true, force: true })
+    }
+  })
+
+  it('deletes stored draft attachments when runtime enqueue fails', async () => {
+    const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), 'hesper-ipc-attachments-'))
+    try {
+      const persistence = await createInMemoryPersistence()
+      const container = createServiceContainer({ persistence, agentMode: 'mock' })
+      const storage = createAttachmentStorage(userDataPath)
+      const session = await container.sessionService.createSession({ title: 'Attachment failure' })
+      vi.spyOn(container.agentRuntime, 'enqueue').mockRejectedValueOnce(new Error('runtime failed'))
+      const { handles } = registerTestIpcHandlers(container, { attachmentStorage: storage })
+
+      await expect(handles.get(ipcChannels.agentEnqueue)?.({ sender: { id: 1 } }, {
+        sessionId: session.id,
+        prompt: 'Will fail',
+        modelId: 'mock/hesper-fast',
+        messageId: 'message-attachments-failure',
+        draftAttachments: [
+          { kind: 'text', name: 'notes.txt', mimeType: 'text/plain', bytes: 5, content: 'hello' }
+        ]
+      })).rejects.toThrow('runtime failed')
+
+      await expect(fs.access(path.join(userDataPath, 'attachments', session.id, 'message-attachments-failure'))).rejects.toThrow()
+      expect(await persistence.messages.listBySession(session.id)).toEqual([])
+    } finally {
+      await fs.rm(userDataPath, { recursive: true, force: true })
+    }
+  })
+
+  it('deletes stored draft attachments when run context assembly fails after attachment save', async () => {
+    const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), 'hesper-ipc-attachments-'))
+    try {
+      const persistence = await createInMemoryPersistence()
+      const container = createServiceContainer({ persistence, agentMode: 'mock' })
+      const storage = createAttachmentStorage(userDataPath)
+      const session = await container.sessionService.createSession({ title: 'Attachment context failure' })
+      const enqueueSpy = vi.spyOn(container.agentRuntime, 'enqueue')
+      vi.spyOn(container.sessionService, 'getSession').mockRejectedValueOnce(new Error('context assembly failed'))
+      const { handles } = registerTestIpcHandlers(container, { attachmentStorage: storage })
+
+      await expect(handles.get(ipcChannels.agentEnqueue)?.({ sender: { id: 1 } }, {
+        sessionId: session.id,
+        prompt: 'Will fail before enqueue',
+        modelId: 'mock/hesper-fast',
+        messageId: 'message-attachments-context-failure',
+        draftAttachments: [
+          { kind: 'text', name: 'notes.txt', mimeType: 'text/plain', bytes: 5, content: 'hello' }
+        ]
+      })).rejects.toThrow('context assembly failed')
+
+      await expect(fs.access(path.join(userDataPath, 'attachments', session.id, 'message-attachments-context-failure'))).rejects.toThrow()
+      expect(enqueueSpy).not.toHaveBeenCalled()
+      expect(await persistence.messages.listBySession(session.id)).toEqual([])
+    } finally {
+      await fs.rm(userDataPath, { recursive: true, force: true })
+    }
+  })
+
+  it('deletes stored draft attachments and fails the run when user message persistence fails', async () => {
+    const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), 'hesper-ipc-attachments-'))
+    try {
+      const persistence = await createInMemoryPersistence()
+      const container = createServiceContainer({ persistence, agentMode: 'mock' })
+      const storage = createAttachmentStorage(userDataPath)
+      const session = await container.sessionService.createSession({ title: 'Attachment message failure' })
+      const run = {
+        id: 'run-attachment-message-failure',
+        sessionId: session.id,
+        status: 'running',
+        modelId: 'mock/hesper-fast',
+        retryCount: 0,
+        maxRetries: 2,
+        startedAt: '2026-06-26T00:00:00.000Z'
+      } as const
+      await persistence.runs.save(run)
+      vi.spyOn(container.agentRuntime, 'enqueue').mockResolvedValueOnce(run as Awaited<ReturnType<typeof container.agentRuntime.enqueue>>)
+      vi.spyOn(container.conversationService, 'createUserMessage').mockRejectedValueOnce(new Error('message write failed'))
+      const failRunSpy = vi.spyOn(container.agentRuntime, 'failRun')
+      const { handles } = registerTestIpcHandlers(container, { attachmentStorage: storage })
+
+      await expect(handles.get(ipcChannels.agentEnqueue)?.({ sender: { id: 1 } }, {
+        sessionId: session.id,
+        prompt: 'Will fail after storing attachment',
+        modelId: 'mock/hesper-fast',
+        messageId: 'message-attachments-message-failure',
+        draftAttachments: [
+          { kind: 'text', name: 'notes.txt', mimeType: 'text/plain', bytes: 5, content: 'hello' }
+        ]
+      })).rejects.toThrow('message write failed')
+
+      await expect(fs.access(path.join(userDataPath, 'attachments', session.id, 'message-attachments-message-failure'))).rejects.toThrow()
+      expect(failRunSpy).toHaveBeenCalledWith(run.id, expect.any(Error))
+      expect(await persistence.messages.listBySession(session.id)).toEqual([])
+    } finally {
+      await fs.rm(userDataPath, { recursive: true, force: true })
+    }
+  })
+
+  it('requires attachment storage when enqueueing draft attachments', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock' })
+    const session = await container.sessionService.createSession({ title: 'Missing attachment storage' })
+    const enqueueSpy = vi.spyOn(container.agentRuntime, 'enqueue')
+    const { handles } = registerTestIpcHandlers(container)
+
+    await expect(handles.get(ipcChannels.agentEnqueue)?.({ sender: { id: 1 } }, {
+      sessionId: session.id,
+      prompt: 'Needs storage',
+      modelId: 'mock/hesper-fast',
+      messageId: 'message-missing-storage',
+      draftAttachments: [
+        { kind: 'text', name: 'notes.txt', mimeType: 'text/plain', bytes: 5, content: 'hello' }
+      ]
+    })).rejects.toThrow('Attachment storage is required to enqueue draft attachments')
+
+    expect(enqueueSpy).not.toHaveBeenCalled()
+    expect(await persistence.messages.listBySession(session.id)).toEqual([])
+  })
+
+  it('rejects path traversal for attachment data URL reads', async () => {
+    const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), 'hesper-ipc-attachments-'))
+    try {
+      const persistence = await createInMemoryPersistence()
+      const container = createServiceContainer({ persistence, agentMode: 'mock' })
+      const { handles } = registerTestIpcHandlers(container, { attachmentStorage: createAttachmentStorage(userDataPath) })
+
+      await expect(handles.get(ipcChannels.attachmentsReadDataUrl)?.({ sender: { id: 1 } }, {
+        relativePath: '../secret.png',
+        mimeType: 'image/png'
+      })).rejects.toThrow(/attachments|path|traversal|relative/i)
+    } finally {
+      await fs.rm(userDataPath, { recursive: true, force: true })
+    }
   })
 
   it('registers conversation history handlers and returns persisted messages, runs, and steps', async () => {
