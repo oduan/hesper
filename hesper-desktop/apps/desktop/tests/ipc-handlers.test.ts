@@ -87,6 +87,31 @@ describe('desktop service container', () => {
     }).systemPrompt).toContain('Hesper Agent')
   })
 
+  it('manages session categories and moves sessions through ipc', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock' })
+    const { handles, ipcMain } = registerTestIpcHandlers(container)
+
+    const createdCategory = await handles.get(ipcChannels.sessionCategoriesCreate)?.({ sender: { id: 1 } }, { name: '产品图' }) as { id: string; name: string }
+    expect(createdCategory.name).toBe('产品图')
+
+    await expect(handles.get(ipcChannels.sessionCategoriesList)?.({ sender: { id: 1 } })).resolves.toEqual([
+      expect.objectContaining({ id: createdCategory.id, name: '产品图' })
+    ])
+
+    const session = await handles.get(ipcChannels.sessionsCreate)?.({ sender: { id: 1 } }, { title: 'Prompt', categoryId: createdCategory.id }) as { id: string; categoryId?: string }
+    expect(session.categoryId).toBe(createdCategory.id)
+
+    const moved = await handles.get(ipcChannels.sessionsSetCategory)?.({ sender: { id: 1 } }, { ids: [session.id], categoryId: undefined }) as Array<{ id: string; categoryId?: string }>
+    expect(moved).toHaveLength(1)
+    expect(moved[0]).toMatchObject({ id: session.id })
+    expect(moved[0]).not.toHaveProperty('categoryId')
+
+    const deleted = await handles.get(ipcChannels.sessionCategoriesDelete)?.({ sender: { id: 1 } }, createdCategory.id) as { deletedSessionIds: string[] }
+    expect(deleted.deletedSessionIds).toEqual([])
+    expect(ipcMain.handle).toHaveBeenCalledWith(ipcChannels.sessionCategoriesList, expect.any(Function))
+  })
+
   it('supports injecting a skill service for desktop runtime and tools', async () => {
     const persistence = await createInMemoryPersistence()
     const researchSkill = { id: 'Research', name: 'Research', description: 'Find references', source: 'user' as const, prompt: 'Research carefully.' }

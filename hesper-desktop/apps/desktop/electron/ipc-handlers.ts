@@ -1,5 +1,5 @@
 import { discoverProjectContextFiles } from '@hesper/app-core'
-import { agentRuntimeEventSchema, modelConfigSchema, modelProviderConfigSchema, sshKeySchema, sshServerSchema, type Role } from '@hesper/shared'
+import { agentRuntimeEventSchema, modelConfigSchema, modelProviderConfigSchema, sessionSchema, sshKeySchema, sshServerSchema, type Role } from '@hesper/shared'
 import { BrowserWindow, type Dialog, type IpcMain, type IpcMainInvokeEvent } from 'electron'
 import { z } from 'zod'
 import {
@@ -12,9 +12,11 @@ import {
   conversationRunsResultSchema,
   conversationStepsResultSchema,
   createRoleInputSchema,
+  createSessionCategoryInputSchema,
   createSessionInputSchema,
   createSshKeyInputSchema,
   createSshServerInputSchema,
+  deleteSessionCategoryResultSchema,
   directorySelectionSchema,
   generateSessionTitleInputSchema,
   ipcChannels,
@@ -41,7 +43,9 @@ import {
   workerInvocationsResultSchema,
   saveProviderApiKeyInputSchema,
   runIdInputSchema,
+  sessionCategoryDtoSchema,
   sessionIdInputSchema,
+  setSessionCategoryInputSchema,
   setSessionModelInputSchema,
   setSessionOutputModeInputSchema,
   setSessionWorkspaceInputSchema,
@@ -57,6 +61,7 @@ import {
   toolDtoSchema,
   unsubscribeAgentEventsResultSchema,
   updateRoleInputSchema,
+  updateSessionCategoryInputSchema,
   updateSessionTitleInputSchema,
   updateSshServerInputSchema,
   updateSettingsInputSchema
@@ -86,6 +91,10 @@ const mutatingChannels = [
   ipcChannels.sessionsSetModel,
   ipcChannels.sessionsSetOutputMode,
   ipcChannels.sessionsMarkViewed,
+  ipcChannels.sessionsSetCategory,
+  ipcChannels.sessionCategoriesCreate,
+  ipcChannels.sessionCategoriesUpdate,
+  ipcChannels.sessionCategoriesDelete,
   ipcChannels.agentEnqueue,
   ipcChannels.agentStop,
   ipcChannels.settingsUpdate,
@@ -336,6 +345,33 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       const session = await options.container.sessionService.markViewed(sessionId)
       await savePersistence()
       return session
+    },
+    [ipcChannels.sessionsSetCategory]: async (_event, payload) => {
+      const input = setSessionCategoryInputSchema.parse(payload)
+      const sessions = await options.container.sessionService.setCategoryForSessions(input.ids, input.categoryId)
+      await savePersistence()
+      return sessions.map((session) => sessionSchema.parse(session))
+    },
+    [ipcChannels.sessionCategoriesList]: async () => {
+      const categories = await options.container.sessionCategoryService.listCategories()
+      return z.array(sessionCategoryDtoSchema).parse(categories)
+    },
+    [ipcChannels.sessionCategoriesCreate]: async (_event, payload) => {
+      const input = createSessionCategoryInputSchema.parse(payload)
+      const category = await options.container.sessionCategoryService.createCategory(input)
+      await savePersistence()
+      return sessionCategoryDtoSchema.parse(category)
+    },
+    [ipcChannels.sessionCategoriesUpdate]: async (_event, payload) => {
+      const input = updateSessionCategoryInputSchema.parse(payload)
+      const category = await options.container.sessionCategoryService.updateCategory(input)
+      await savePersistence()
+      return sessionCategoryDtoSchema.parse(category)
+    },
+    [ipcChannels.sessionCategoriesDelete]: async (_event, payload) => {
+      const result = await options.container.sessionCategoryService.deleteCategory(sessionIdInputSchema.parse(payload))
+      schedulePersistenceSave()
+      return deleteSessionCategoryResultSchema.parse(result)
     },
     [ipcChannels.conversationListMessages]: async (_event, payload) => {
       const sessionId = sessionIdInputSchema.parse(payload)
