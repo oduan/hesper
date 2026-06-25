@@ -671,6 +671,7 @@ function AppContent() {
               ...(source.assistantOutput ? { assistantOutput: source.assistantOutput } : {})
             }).then((updatedSession) => {
               dispatch({ type: 'session.updated', session: updatedSession })
+              titleGeneratedRunIdsRef.current.delete(event.message.runId!)
             }).catch((error) => {
               titleGeneratedRunIdsRef.current.delete(event.message.runId!)
               console.warn('Failed to generate session title', error)
@@ -742,7 +743,18 @@ function AppContent() {
     loadingHistorySessionIdsRef.current = new Set([...loadingHistorySessionIdsRef.current].filter((sessionId) => visible.has(sessionId)))
     createdNewSessionIdsRef.current = new Set([...createdNewSessionIdsRef.current].filter((sessionId) => visible.has(sessionId)))
     latestSettingsRequestIdRef.current = pruneRequestTokens(latestSettingsRequestIdRef.current, visibleSessionIds)
-  }, [state.sessions])
+    pendingTitlePromptsBySessionRef.current = Object.fromEntries(
+      Object.entries(pendingTitlePromptsBySessionRef.current).filter(([sessionId]) => visible.has(sessionId))
+    )
+
+    const visibleRunIds = new Set(Object.values(state.runsById)
+      .filter((run) => visible.has(run.sessionId))
+      .map((run) => run.id))
+    runModelIdsRef.current = Object.fromEntries(
+      Object.entries(runModelIdsRef.current).filter(([runId]) => visibleRunIds.has(runId))
+    )
+    titleGeneratedRunIdsRef.current = new Set([...titleGeneratedRunIdsRef.current].filter((runId) => visibleRunIds.has(runId)))
+  }, [state.runsById, state.sessions])
 
   const createSettingsRequestToken = (sessionId: string, field: SessionSettingsField) => {
     nextSettingsRequestIdRef.current += 1

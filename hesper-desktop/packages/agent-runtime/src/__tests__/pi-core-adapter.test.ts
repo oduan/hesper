@@ -61,6 +61,25 @@ describe('PiCoreAgentAdapter', () => {
   beforeEach(() => {
     vi.mocked(Agent).mockClear()
   })
+
+  it('removes the abort listener after a pi core run completes', async () => {
+    const controller = new AbortController()
+    const addEventListenerSpy = vi.spyOn(controller.signal, 'addEventListener')
+    const removeEventListenerSpy = vi.spyOn(controller.signal, 'removeEventListener')
+    const adapter = new PiCoreAgentAdapter({ modelResolver: resolverFor() })
+
+    await adapter.run({
+      runId: 'run-clean-abort-listener',
+      sessionId: 'session-1',
+      prompt: 'hello',
+      modelId: 'gpt-4o',
+      signal: controller.signal
+    }, vi.fn())
+
+    const abortRegistration = addEventListenerSpy.mock.calls.find(([eventName]) => eventName === 'abort')
+    expect(abortRegistration).toEqual(['abort', expect.any(Function), { once: true }])
+    expect(removeEventListenerSpy).toHaveBeenCalledWith('abort', abortRegistration?.[1])
+  })
   it('passes provider-aware modelRef to the model resolver when present', async () => {
     const resolver = resolverFor()
     const adapter = new PiCoreAgentAdapter({ modelResolver: resolver })

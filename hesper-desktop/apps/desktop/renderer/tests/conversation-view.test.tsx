@@ -78,6 +78,26 @@ function renderConversation(shortcutCommand?: ConversationShortcutCommand) {
 }
 
 describe('ConversationView', () => {
+
+  it('installs and removes the global ctrl wheel listener with the view lifecycle', () => {
+    const addEventListenerSpy = vi.spyOn(window, 'addEventListener')
+    const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener')
+
+    const { unmount } = renderConversation()
+
+    const wheelRegistration = addEventListenerSpy.mock.calls.find(([eventName]) => eventName === 'wheel')
+    expect(wheelRegistration).toEqual([
+      'wheel',
+      expect.any(Function),
+      { capture: true, passive: false }
+    ])
+
+    unmount()
+
+    expect(removeEventListenerSpy).toHaveBeenCalledWith('wheel', wheelRegistration?.[1], { capture: true })
+    addEventListenerSpy.mockRestore()
+    removeEventListenerSpy.mockRestore()
+  })
   it('sends composer content and clears input', async () => {
     const user = userEvent.setup()
     const onSend = vi.fn()

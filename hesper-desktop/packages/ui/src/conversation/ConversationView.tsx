@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type WheelEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type WheelEvent as ReactWheelEvent } from 'react'
 import type { AgentRun, LocalFilePreview, Message, RunStep, Session } from '@hesper/shared'
 import { themeTokens } from '../theme'
 import { Composer, type ComposerSendOptions, type ComposerSkillMention, type ModelOptionGroup, type SkillOption } from './Composer'
@@ -53,53 +53,65 @@ type LocalFilePreviewState =
 
 const userMessageAnchorSelector = '[data-hesper-user-message-anchor="true"]'
 
-let globalCtrlWheelListenerInstalled = false
+let globalCtrlWheelListenerRefCount = 0
+let globalCtrlWheelHandler: ((event: WheelEvent) => void) | undefined
 
-function ensureGlobalCtrlWheelListener() {
-  if (globalCtrlWheelListenerInstalled || typeof window === 'undefined') {
+function handleGlobalCtrlWheel(event: WheelEvent): void {
+  if (!(event.ctrlKey || event.metaKey) || (event.deltaX === 0 && event.deltaY === 0)) {
     return
   }
 
-  window.addEventListener('wheel', (event) => {
-    if (!(event.ctrlKey || event.metaKey) || (event.deltaX === 0 && event.deltaY === 0)) {
-      return
-    }
-
-    const target = getElementTarget(event.target)
-    const fullscreenRoot = target?.closest('[data-hesper-fullscreen-output="true"]')
-    if (fullscreenRoot instanceof HTMLElement) {
-      const fullscreenScroller = fullscreenRoot.querySelector<HTMLElement>('[data-hesper-fullscreen-output-scroll="true"]')
-      if (!fullscreenScroller) {
-        return
-      }
-
-      event.preventDefault()
-      event.stopPropagation()
-      event.stopImmediatePropagation()
-      scrollElementByDelta(fullscreenScroller, event.deltaX, event.deltaY)
-      return
-    }
-
-    const root = target?.closest('[data-hesper-conversation-root="true"]')
-    if (!(root instanceof HTMLElement)) {
-      return
-    }
-
-    const scroller = root.querySelector<HTMLElement>('[data-hesper-message-list="true"]')
-    if (!scroller) {
+  const target = getElementTarget(event.target)
+  const fullscreenRoot = target?.closest('[data-hesper-fullscreen-output="true"]')
+  if (fullscreenRoot instanceof HTMLElement) {
+    const fullscreenScroller = fullscreenRoot.querySelector<HTMLElement>('[data-hesper-fullscreen-output-scroll="true"]')
+    if (!fullscreenScroller) {
       return
     }
 
     event.preventDefault()
     event.stopPropagation()
     event.stopImmediatePropagation()
-    jumpToUserMessageByWheel(scroller, event.deltaY !== 0 ? event.deltaY : event.deltaX)
-    scroller.dispatchEvent(new Event('scroll', { bubbles: false }))
-  }, { capture: true, passive: false })
-  globalCtrlWheelListenerInstalled = true
+    scrollElementByDelta(fullscreenScroller, event.deltaX, event.deltaY)
+    return
+  }
+
+  const root = target?.closest('[data-hesper-conversation-root="true"]')
+  if (!(root instanceof HTMLElement)) {
+    return
+  }
+
+  const scroller = root.querySelector<HTMLElement>('[data-hesper-message-list="true"]')
+  if (!scroller) {
+    return
+  }
+
+  event.preventDefault()
+  event.stopPropagation()
+  event.stopImmediatePropagation()
+  jumpToUserMessageByWheel(scroller, event.deltaY !== 0 ? event.deltaY : event.deltaX)
+  scroller.dispatchEvent(new Event('scroll', { bubbles: false }))
 }
 
-ensureGlobalCtrlWheelListener()
+function retainGlobalCtrlWheelListener(): () => void {
+  if (typeof window === 'undefined') {
+    return () => {}
+  }
+
+  globalCtrlWheelListenerRefCount += 1
+  if (!globalCtrlWheelHandler) {
+    globalCtrlWheelHandler = handleGlobalCtrlWheel
+    window.addEventListener('wheel', globalCtrlWheelHandler, { capture: true, passive: false })
+  }
+
+  return () => {
+    globalCtrlWheelListenerRefCount = Math.max(0, globalCtrlWheelListenerRefCount - 1)
+    if (globalCtrlWheelListenerRefCount === 0 && globalCtrlWheelHandler) {
+      window.removeEventListener('wheel', globalCtrlWheelHandler, { capture: true })
+      globalCtrlWheelHandler = undefined
+    }
+  }
+}
 
 function trimLabel(value: string, fallback: string): string {
   const compact = value.replace(/\s+/g, ' ').trim()
@@ -129,6 +141,19 @@ function compareCreatedAt<T extends { id: string; createdAt: string }>(left: T, 
 
 function sortChronologically<T extends { id: string; createdAt: string }>(items: T[]): T[] {
   return [...items].sort(compareCreatedAt)
+}
+
+function createLayoutContentToken(value: string | undefined): string {
+  if (!value) return '0'
+  const length = value.length
+  const middle = Math.floor(length / 2)
+  return [
+    length,
+    value.charCodeAt(0),
+    value.charCodeAt(Math.max(0, middle - 1)),
+    value.charCodeAt(middle),
+    value.charCodeAt(length - 1)
+  ].join('.')
 }
 
 function createLocalFilePreviewError(error: unknown): string {
@@ -305,7 +330,6 @@ export function ConversationView({
   const [closeFullscreenSignal, setCloseFullscreenSignal] = useState(0)
   const [showJumpToBottom, setShowJumpToBottom] = useState(false)
   const [localFilePreviewState, setLocalFilePreviewState] = useState<LocalFilePreviewState>()
-  ensureGlobalCtrlWheelListener()
   const anchorRefs = useRef<Record<string, HTMLElement | null>>({})
   const messagesScrollRef = useRef<HTMLDivElement | null>(null)
   const messagesContentRef = useRef<HTMLDivElement | null>(null)
@@ -426,14 +450,14 @@ export function ConversationView({
     () => anchorOrder.filter((entry) => entry.kind === 'user' || entry.kind === 'assistant'),
     [anchorOrder]
   )
-  const contentSignature = useMemo(() => JSON.stringify({
-    messages: orderedMessages.map((message) => [message.id, message.role, message.content, message.runId, message.createdAt]),
-    steps: orderedSteps.map((step) => [step.id, step.status, step.summary, step.title, step.createdAt]),
-    stepsByRun: Object.entries(orderedStepsByRun).map(([runId, runSteps]) => [runId, runSteps.map((step) => [step.id, step.status, step.summary, step.title, step.createdAt])]),
-    runs: Object.entries(runsById ?? {}).map(([runId, run]) => [runId, run.status, run.startedAt, run.endedAt]),
-    streamingText,
-    streamingByRun: Object.entries(streamingByRun ?? {})
-  }), [orderedMessages, orderedSteps, orderedStepsByRun, runsById, streamingByRun, streamingText])
+  const contentLayoutSignature = useMemo(() => [
+    orderedMessages.map((message) => [message.id, message.role, message.runId ?? '', message.createdAt, createLayoutContentToken(message.content)].join(':')).join('|'),
+    orderedSteps.map((step) => [step.id, step.status, step.createdAt, step.completedAt ?? '', createLayoutContentToken(step.summary), createLayoutContentToken(step.title)].join(':')).join('|'),
+    Object.entries(orderedStepsByRun).map(([runId, runSteps]) => `${runId}:${runSteps.map((step) => [step.id, step.status, step.createdAt, step.completedAt ?? '', createLayoutContentToken(step.summary), createLayoutContentToken(step.title)].join(':')).join(',')}`).join('|'),
+    Object.entries(runsById ?? {}).map(([runId, run]) => [runId, run.status, run.startedAt ?? '', run.endedAt ?? ''].join(':')).join('|'),
+    createLayoutContentToken(streamingText),
+    Object.entries(streamingByRun ?? {}).map(([runId, text]) => `${runId}:${createLayoutContentToken(text)}`).join('|')
+  ].join('\n'), [orderedMessages, orderedSteps, orderedStepsByRun, runsById, streamingByRun, streamingText])
 
   const focusAnchor = (id: string) => {
     const element = anchorRefs.current[id]
@@ -483,7 +507,7 @@ export function ConversationView({
     updateMessagesScrollState()
   }
 
-  const handleConversationWheelCapture = (event: WheelEvent<HTMLElement>) => {
+  const handleConversationWheelCapture = (event: ReactWheelEvent<HTMLElement>) => {
     if (isInsideFullscreenOutput(event.target) || (event.deltaX === 0 && event.deltaY === 0)) {
       return
     }
@@ -546,6 +570,8 @@ export function ConversationView({
     )
   }, [loadLocalFilePreview])
 
+  useEffect(() => retainGlobalCtrlWheelListener(), [])
+
   useEffect(() => () => {
     localFilePreviewRequestRef.current += 1
   }, [])
@@ -600,7 +626,7 @@ export function ConversationView({
     } else {
       setShowJumpToBottom(true)
     }
-  }, [contentSignature, scrollMessagesToBottom])
+  }, [contentLayoutSignature, scrollMessagesToBottom])
 
   useEffect(() => {
     const scrollElement = messagesScrollRef.current

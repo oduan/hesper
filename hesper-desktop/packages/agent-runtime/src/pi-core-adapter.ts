@@ -122,12 +122,14 @@ export class PiCoreAgentAdapter implements AgentAdapter {
       }
     })
 
-    input.signal.addEventListener('abort', () => agent.abort(), { once: true })
+    const abortAgent = () => agent.abort()
+    input.signal.addEventListener('abort', abortAgent, { once: true })
 
     try {
       await agent.prompt(input.prompt)
       await agent.waitForIdle()
     } finally {
+      input.signal.removeEventListener('abort', abortAgent)
       unsubscribe()
     }
   }

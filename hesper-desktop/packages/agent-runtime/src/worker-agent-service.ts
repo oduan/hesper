@@ -486,6 +486,10 @@ export function createWorkerAgentService(options: WorkerAgentServiceOptions): Wo
     return finalizedChildRuns.get(childRunId)
   }
 
+  function clearFinalizedChildRun(childRunId: string): void {
+    finalizedChildRuns.delete(childRunId)
+  }
+
   function getActiveWorkerByInvocationId(invocationId: string): ActiveWorker | undefined {
     return activeWorkers.get(invocationId)
   }
@@ -700,6 +704,7 @@ export function createWorkerAgentService(options: WorkerAgentServiceOptions): Wo
       if (childRunIdToInvocationId.get(childRun.id) === invocation.id) {
         childRunIdToInvocationId.delete(childRun.id)
       }
+      clearFinalizedChildRun(childRun.id)
     }
   }
 
@@ -910,7 +915,11 @@ export function createWorkerAgentService(options: WorkerAgentServiceOptions): Wo
     active?.controller.abort()
     await broadcastEvent({ type: 'run.cancelled', runId: childRun.id, endedAt })
 
-    return buildSnapshot(invocation.id)
+    const snapshot = await buildSnapshot(invocation.id)
+    if (!active) {
+      clearFinalizedChildRun(childRun.id)
+    }
+    return snapshot
   }
 
   return {
