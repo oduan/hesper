@@ -56,6 +56,18 @@ describe('createModelProviderService', () => {
     expect((await service.listModels('mock')).map((model) => model.id)).toEqual(['mock/hesper-fast'])
   })
 
+  it('seeds imageInput for vision-capable builtin models and keeps DeepSeek V4 text-only', async () => {
+    const persistence = await createInMemoryPersistence()
+    const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
+    const service = createModelProviderService({ persistence, credentialVaultService, now: () => now })
+
+    await service.ensureBuiltinProviders()
+    const models = await service.listModels()
+
+    expect(models.find((model) => model.id === 'gpt-4o')?.capabilities).toContain('imageInput')
+    expect(models.find((model) => model.id === 'deepseek-chat')?.capabilities).not.toContain('imageInput')
+  })
+
   it('seeds builtin providers on first list without overwriting user configuration', async () => {
     const persistence = await createInMemoryPersistence()
     const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
@@ -102,6 +114,47 @@ describe('createModelProviderService', () => {
     expect(await service.listModels('deepseek')).toMatchObject([
       { id: 'deepseek-chat', capabilities: ['streaming', 'toolCalls'], contextWindow: 64000 }
     ])
+  })
+
+  it('infers custom model capabilities only when explicit or existing capabilities are absent', async () => {
+    const persistence = await createInMemoryPersistence()
+    const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
+    const service = createModelProviderService({ persistence, credentialVaultService, now: () => now })
+
+    await service.saveProvider({ id: 'custom-ai', name: 'Custom AI', kind: 'openai-compatible', baseUrl: 'https://api.example.com', enabled: true })
+
+    await expect(service.saveModel({
+      id: 'custom-ai/custom-vision',
+      providerId: 'custom-ai',
+      modelName: 'custom-vision',
+      displayName: 'Custom Vision',
+      enabled: true
+    })).resolves.toMatchObject({ capabilities: ['streaming', 'toolCalls', 'imageInput'] })
+
+    await expect(service.saveModel({
+      id: 'custom-ai/gpt-4o-text',
+      providerId: 'custom-ai',
+      modelName: 'gpt-4o',
+      displayName: 'GPT-4o Text',
+      capabilities: ['streaming'],
+      enabled: true
+    })).resolves.toMatchObject({ capabilities: ['streaming'] })
+
+    await service.saveModel({
+      id: 'custom-ai/existing-json',
+      providerId: 'custom-ai',
+      modelName: 'text-model',
+      displayName: 'Existing JSON',
+      capabilities: ['streaming', 'jsonOutput'],
+      enabled: true
+    })
+    await expect(service.saveModel({
+      id: 'custom-ai/existing-json',
+      providerId: 'custom-ai',
+      modelName: 'custom-vision',
+      displayName: 'Existing JSON',
+      enabled: true
+    })).resolves.toMatchObject({ capabilities: ['streaming', 'jsonOutput'] })
   })
 
   it('disables providers instead of deleting them', async () => {

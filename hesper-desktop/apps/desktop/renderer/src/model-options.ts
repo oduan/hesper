@@ -3,18 +3,43 @@ import type { ModelOptionGroup } from '@hesper/ui'
 import { hesperApi } from './ipc-client'
 
 export const defaultFallbackModelId = 'mock/hesper-fast'
-export const fallbackSessionModelOptions = [defaultFallbackModelId]
+
+const fallbackSessionModels: ModelDto[] = [
+  {
+    id: defaultFallbackModelId,
+    providerId: 'mock',
+    modelName: defaultFallbackModelId,
+    displayName: 'Hesper Mock Fast',
+    capabilities: ['streaming', 'toolCalls'],
+    enabled: true,
+    createdAt: '1970-01-01T00:00:00.000Z',
+    updatedAt: '1970-01-01T00:00:00.000Z'
+  }
+]
+
+export const fallbackSessionModelOptions = fallbackSessionModels.map((model) => model.id)
 
 export type SessionModelCatalog = {
   options: string[]
   optionGroups: ModelOptionGroup[]
   preferredModelId: string
+  modelsById: Record<string, ModelDto>
+}
+
+function modelsByIdFromModels(models: ModelDto[]): Record<string, ModelDto> {
+  return Object.fromEntries(models.map((model) => [model.id, model]))
+}
+
+function modelsByIdForOptions(options: string[], models: ModelDto[]): Record<string, ModelDto> {
+  const modelsById = modelsByIdFromModels(models)
+  return Object.fromEntries(options.flatMap((option) => modelsById[option] ? [[option, modelsById[option]]] : []))
 }
 
 export const fallbackSessionModelCatalog: SessionModelCatalog = {
   options: fallbackSessionModelOptions,
   optionGroups: [],
-  preferredModelId: defaultFallbackModelId
+  preferredModelId: defaultFallbackModelId,
+  modelsById: modelsByIdFromModels(fallbackSessionModels)
 }
 
 export function namespaceModelId(providerId: string, modelName: string): string {
@@ -113,7 +138,8 @@ export function createSessionModelCatalog(providers: ModelProviderDto[], models:
   return {
     options: modelIds,
     optionGroups,
-    preferredModelId
+    preferredModelId,
+    modelsById: modelsByIdForOptions(modelIds, enabledModels)
   }
 }
 
@@ -126,10 +152,12 @@ export async function loadAvailableModelCatalog(): Promise<SessionModelCatalog> 
 
   const models = await listModels()
   if (!listProviders) {
+    const options = createSessionModelOptions(models)
     return {
-      options: createSessionModelOptions(models),
+      options,
       optionGroups: [],
-      preferredModelId: defaultFallbackModelId
+      preferredModelId: defaultFallbackModelId,
+      modelsById: modelsByIdForOptions(options, [...fallbackSessionModels, ...models])
     }
   }
 

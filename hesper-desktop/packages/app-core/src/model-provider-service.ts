@@ -1,5 +1,5 @@
 import type { Persistence } from '@hesper/persistence'
-import { modelProviderConfigSchema, nowIso, type ModelConfig, type ModelProviderConfig, type ModelProviderKind } from '@hesper/shared'
+import { inferModelCapabilitiesFromName, modelProviderConfigSchema, nowIso, type ModelConfig, type ModelProviderConfig, type ModelProviderKind } from '@hesper/shared'
 import { providerApiKeyRef, type CredentialVaultService } from './credential-vault-service'
 
 export type PiAuthProvider = 'openai-codex'
@@ -82,12 +82,12 @@ const providerPresets: SaveModelProviderInput[] = [
 const modelPresets: SaveModelInput[] = [
   { id: 'mock/hesper-fast', providerId: 'mock', modelName: 'mock/hesper-fast', displayName: 'Hesper Mock Fast', capabilities: ['streaming', 'toolCalls'], enabled: true },
   { id: 'deepseek-chat', providerId: 'deepseek', modelName: 'deepseek-chat', displayName: 'DeepSeek Chat', capabilities: ['streaming', 'toolCalls'], enabled: true },
-  { id: 'gpt-4o', providerId: 'openai', modelName: 'gpt-4o', displayName: 'GPT-4o', capabilities: ['streaming', 'toolCalls', 'jsonOutput'], enabled: true },
+  { id: 'gpt-4o', providerId: 'openai', modelName: 'gpt-4o', displayName: 'GPT-4o', capabilities: ['streaming', 'toolCalls', 'jsonOutput', 'imageInput'], enabled: true },
   { id: 'openai-compatible/default', providerId: 'openai-compatible', modelName: 'model-name', displayName: 'Custom model', capabilities: ['streaming', 'toolCalls'], enabled: false }
 ]
 
 const builtinProviderIds = new Set(providerPresets.map((provider) => provider.id))
-const validModelCapabilities = new Set<ModelConfig['capabilities'][number]>(['streaming', 'toolCalls', 'jsonOutput', 'reasoning'])
+const validModelCapabilities = new Set<ModelConfig['capabilities'][number]>(['streaming', 'toolCalls', 'jsonOutput', 'reasoning', 'imageInput'])
 
 export type CodexOAuthCredential = {
   type: 'codex_oauth'
@@ -235,7 +235,12 @@ function mergeModel(existing: ModelConfig | undefined, input: SaveModelInput, ti
     providerId: input.providerId,
     modelName: input.modelName,
     displayName: input.displayName,
-    capabilities: input.capabilities ?? existing?.capabilities ?? ['streaming'],
+    capabilities: input.capabilities ?? existing?.capabilities ?? inferModelCapabilitiesFromName({
+      modelId: input.id,
+      modelName: input.modelName,
+      providerId: input.providerId,
+      existingCapabilities: ['streaming', 'toolCalls']
+    }),
     enabled: input.enabled ?? existing?.enabled ?? true,
     createdAt: existing?.createdAt ?? timestamp,
     updatedAt: timestamp,

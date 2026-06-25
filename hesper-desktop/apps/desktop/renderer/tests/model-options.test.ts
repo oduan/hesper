@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { hesperApi } from '../src/ipc-client'
-import { createSessionModelCatalog, createSessionModelOptions, fallbackSessionModelOptions, loadAvailableModelOptions, modelNameFromNamespacedId, mergeModelOptions, namespaceModelId } from '../src/model-options'
+import { createSessionModelCatalog, createSessionModelOptions, defaultFallbackModelId, fallbackSessionModelCatalog, fallbackSessionModelOptions, loadAvailableModelCatalog, loadAvailableModelOptions, modelNameFromNamespacedId, mergeModelOptions, namespaceModelId } from '../src/model-options'
 
 describe('model-options', () => {
   it('namespaces and denamespaces model ids symmetrically', () => {
@@ -63,6 +63,51 @@ describe('model-options', () => {
         options: [{ value: 'gpt-4o', label: 'OpenAI/gpt-4o' }]
       }
     ])
+    expect(Object.keys(catalog.modelsById)).toEqual(catalog.options)
+    expect(catalog.modelsById['gpt-4o']).toMatchObject({ id: 'gpt-4o', providerId: 'openai' })
+  })
+
+  it('keeps fallback catalog modelsById consistent with options', () => {
+    expect(Object.keys(fallbackSessionModelCatalog.modelsById)).toEqual(fallbackSessionModelCatalog.options)
+    expect(fallbackSessionModelCatalog.modelsById[defaultFallbackModelId]).toMatchObject({ id: defaultFallbackModelId })
+  })
+
+  it('keeps modelsById consistent when the provider catalog is empty or missing matching models', () => {
+    const customModels = [
+      { id: 'custom-vision', providerId: 'custom', modelName: 'custom-vision', enabled: true }
+    ] as any
+
+    for (const catalog of [
+      createSessionModelCatalog([], customModels),
+      createSessionModelCatalog([{ id: 'custom', name: 'Custom', kind: 'custom', enabled: true, hasApiKey: true }] as any, []),
+      createSessionModelCatalog([{ id: 'other', name: 'Other', kind: 'custom', enabled: true, hasApiKey: true }] as any, customModels)
+    ]) {
+      expect(catalog.options).toEqual(fallbackSessionModelCatalog.options)
+      expect(Object.keys(catalog.modelsById)).toEqual(catalog.options)
+    }
+  })
+
+  it('keeps modelsById consistent when providers api is unavailable', async () => {
+    const originalProviders = (hesperApi as any).providers
+    const originalModels = hesperApi.models
+    ;(hesperApi as any).providers = undefined
+    ;(hesperApi as any).models = {
+      list: async () => [
+        { id: 'alpha', providerId: 'custom', modelName: 'alpha', capabilities: ['streaming'], enabled: true, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' },
+        { id: 'beta', providerId: 'custom', modelName: 'beta', capabilities: ['streaming'], enabled: false, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }
+      ]
+    }
+
+    try {
+      const catalog = await loadAvailableModelCatalog()
+      expect(catalog.options).toEqual([defaultFallbackModelId, 'alpha'])
+      expect(Object.keys(catalog.modelsById)).toEqual(catalog.options)
+      expect(catalog.modelsById.alpha).toMatchObject({ id: 'alpha' })
+      expect(catalog.modelsById.beta).toBeUndefined()
+    } finally {
+      ;(hesperApi as any).providers = originalProviders
+      ;(hesperApi as any).models = originalModels
+    }
   })
 
   it('falls back to the default session model when no models api is available', async () => {

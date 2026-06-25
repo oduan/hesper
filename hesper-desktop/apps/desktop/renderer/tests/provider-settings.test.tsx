@@ -996,7 +996,7 @@ describe('provider settings panel', () => {
         providerId: 'deepseek',
         modelName: 'deepseek-reasoner',
         displayName: 'DeepSeek Reasoner',
-        capabilities: ['streaming', 'toolCalls'],
+        capabilities: ['streaming', 'toolCalls', 'jsonOutput', 'imageInput'],
         enabled: true,
         createdAt: now,
         updatedAt: now
@@ -1032,7 +1032,12 @@ describe('provider settings panel', () => {
       expect(saveProvider).toHaveBeenCalledWith(expect.objectContaining({ id: 'deepseek', baseUrl: 'https://api.deepseek.com/v1' }))
     })
     expect(saveModel).toHaveBeenCalledWith(expect.objectContaining({ id: 'deepseek-chat', providerId: 'deepseek', modelName: 'deepseek-chat' }))
-    expect(saveModel).toHaveBeenCalledWith(expect.objectContaining({ id: 'deepseek-reasoner', providerId: 'deepseek', modelName: 'deepseek-reasoner' }))
+    expect(saveModel).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'deepseek-reasoner',
+      providerId: 'deepseek',
+      modelName: 'deepseek-reasoner',
+      capabilities: ['streaming', 'toolCalls', 'jsonOutput', 'imageInput']
+    }))
     expect(saveProviderApiKey).not.toHaveBeenCalled()
   })
 

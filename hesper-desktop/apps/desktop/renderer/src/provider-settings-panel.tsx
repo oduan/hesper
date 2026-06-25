@@ -1,3 +1,4 @@
+import { inferModelCapabilitiesFromName } from '@hesper/shared'
 import { themeTokens } from '@hesper/ui'
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
@@ -128,11 +129,15 @@ function modelIdsFromFormValue(value: string): string[] {
 }
 
 function capabilitiesForModelName(modelName: string): ModelDto['capabilities'] {
-  const capabilities: ModelDto['capabilities'] = ['streaming', 'toolCalls']
+  const existingCapabilities: ModelDto['capabilities'] = ['streaming', 'toolCalls']
   if (/(^|[-_:/])(reasoner|reasoning|r1|thinking|think)([-_:/]|$)/i.test(modelName)) {
-    capabilities.push('reasoning')
+    existingCapabilities.push('reasoning')
   }
-  return capabilities
+  return inferModelCapabilitiesFromName({
+    modelId: modelName,
+    modelName,
+    existingCapabilities
+  }) as ModelDto['capabilities']
 }
 
 function connectionTestInputFromDialog(state: ConnectionDialogState, providers: ModelProviderDto[]): ProviderConnectionTestInput {
@@ -484,12 +489,13 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
       for (const modelId of modelIds) {
         const normalizedModelId = modelIdForProvider(provider.id, modelId)
         const normalizedModelName = displayModelIdForProvider(provider.id, normalizedModelId)
+        const existingModel = models.find((model) => model.id === normalizedModelId && model.providerId === provider.id)
         await hesperApi.models.save({
           id: normalizedModelId,
           providerId: provider.id,
           modelName: normalizedModelName,
           displayName: normalizedModelName,
-          capabilities: capabilitiesForModelName(normalizedModelName),
+          capabilities: existingModel?.capabilities ?? capabilitiesForModelName(normalizedModelName),
           enabled: true
         })
       }
