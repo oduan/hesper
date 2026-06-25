@@ -87,6 +87,7 @@ const modelPresets: SaveModelInput[] = [
 ]
 
 const builtinProviderIds = new Set(providerPresets.map((provider) => provider.id))
+const inferredImageInputBackfillProviderIds = new Set(['openai', 'chatgpt-codex'])
 const validModelCapabilities = new Set<ModelConfig['capabilities'][number]>(['streaming', 'toolCalls', 'jsonOutput', 'reasoning', 'imageInput'])
 
 export type CodexOAuthCredential = {
@@ -246,6 +247,19 @@ function mergeModel(existing: ModelConfig | undefined, input: SaveModelInput, ti
     updatedAt: timestamp,
     ...(input.contextWindow !== undefined ? { contextWindow: input.contextWindow } : existing?.contextWindow !== undefined ? { contextWindow: existing.contextWindow } : {})
   }
+}
+
+function modelWithBackfilledImageInput(model: ModelConfig): ModelConfig | undefined {
+  if (model.capabilities.includes('imageInput') || !inferredImageInputBackfillProviderIds.has(model.providerId)) {
+    return undefined
+  }
+  const inferredCapabilities = inferModelCapabilitiesFromName({
+    modelId: model.id,
+    modelName: model.modelName,
+    providerId: model.providerId,
+    existingCapabilities: model.capabilities
+  })
+  return inferredCapabilities.includes('imageInput') ? { ...model, capabilities: inferredCapabilities } : undefined
 }
 
 function trimOptional(value: string | undefined): string | undefined {
@@ -464,6 +478,16 @@ export function createModelProviderService(options: {
     return model
   }
 
+  const backfillInferredImageInputCapabilities = async (): Promise<void> => {
+    const models = await options.persistence.models.list()
+    for (const model of models) {
+      const backfilled = modelWithBackfilledImageInput(model)
+      if (backfilled) {
+        await options.persistence.models.save(backfilled)
+      }
+    }
+  }
+
   const ensureBuiltinProviders = async (): Promise<void> => {
     for (const provider of providerPresets) {
       if (!await options.persistence.modelProviders.get(provider.id)) {
@@ -475,6 +499,7 @@ export function createModelProviderService(options: {
         await saveModelInternal(model)
       }
     }
+    await backfillInferredImageInputCapabilities()
   }
 
   const connectionTestInput = (input: string | ProviderConnectionTestInput): ProviderConnectionTestInput => (

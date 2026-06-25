@@ -116,6 +116,7 @@ async function bootstrap(): Promise<void> {
   const skillService = createElectronSkillService()
   await startSkillService(skillService)
   container = createServiceContainer({ persistence, agentMode: resolveAgentMode(), credentialCodec: createElectronSafeStorageCredentialCodec(safeStorage), skillService })
+  await container.modelProviderService.ensureBuiltinProviders()
   const attachmentStorage = createAttachmentStorage(app.getPath('userData'))
   disposeIpcHandlers = registerIpcHandlers({ ipcMain, dialog, container, savePersistence, schedulePersistenceSave, openExternal: (url) => shell.openExternal(url), attachmentStorage })
   await savePersistence()

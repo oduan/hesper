@@ -116,6 +116,51 @@ describe('createModelProviderService', () => {
     ])
   })
 
+  it('backfills imageInput for legacy system vision models without changing custom explicit capabilities', async () => {
+    const persistence = await createInMemoryPersistence()
+    const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
+    const service = createModelProviderService({ persistence, credentialVaultService, now: () => now })
+
+    await service.ensureBuiltinProviders()
+    await service.saveModel({
+      id: 'gpt-4o',
+      providerId: 'openai',
+      modelName: 'gpt-4o',
+      displayName: 'GPT-4o',
+      capabilities: ['streaming', 'toolCalls', 'jsonOutput'],
+      enabled: true
+    })
+    await service.saveProvider({ id: 'chatgpt-codex', name: 'ChatGPT Codex', kind: 'pi', authType: 'oauth', piAuthProvider: 'openai-codex', enabled: true, defaultModelId: 'pi/gpt-5.5' })
+    await service.saveModel({
+      id: 'pi/gpt-5.5',
+      providerId: 'chatgpt-codex',
+      modelName: 'gpt-5.5',
+      displayName: 'GPT-5.5',
+      capabilities: ['streaming', 'toolCalls', 'reasoning'],
+      enabled: true
+    })
+    await service.saveProvider({ id: 'custom-ai', name: 'Custom AI', kind: 'openai-compatible', baseUrl: 'https://api.example.com', enabled: true })
+    await service.saveModel({
+      id: 'custom-ai/gpt-4o-text',
+      providerId: 'custom-ai',
+      modelName: 'gpt-4o',
+      displayName: 'GPT-4o Text',
+      capabilities: ['streaming'],
+      enabled: true
+    })
+
+    await expect(service.listModels('openai')).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'gpt-4o', capabilities: expect.arrayContaining(['streaming', 'toolCalls', 'jsonOutput', 'imageInput']) })
+    ]))
+    await expect(service.listModels('chatgpt-codex')).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'pi/gpt-5.5', capabilities: expect.arrayContaining(['streaming', 'toolCalls', 'reasoning', 'imageInput']) })
+    ]))
+    await expect(service.listModels('custom-ai')).resolves.toEqual([
+      expect.objectContaining({ id: 'custom-ai/gpt-4o-text', capabilities: ['streaming'] })
+    ])
+    await expect(persistence.models.get('pi/gpt-5.5')).resolves.toMatchObject({ capabilities: expect.arrayContaining(['imageInput']) })
+  })
+
   it('infers custom model capabilities only when explicit or existing capabilities are absent', async () => {
     const persistence = await createInMemoryPersistence()
     const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
