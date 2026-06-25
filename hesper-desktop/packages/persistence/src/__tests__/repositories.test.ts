@@ -251,6 +251,32 @@ describe('persistence repositories', () => {
     await expect(db.sessions.get('session-product')).resolves.toMatchObject({ categoryId: 'category-product' })
   })
 
+  it('clears session category ids when deleting a session category', async () => {
+    const db = await createInMemoryPersistence()
+    await db.sessionCategories.save({
+      id: 'category-product',
+      name: '产品图',
+      createdAt: now,
+      updatedAt: now
+    })
+    await db.sessions.save({
+      id: 'session-product',
+      title: 'Product prompt',
+      status: 'active',
+      categoryId: 'category-product',
+      outputMode: 'markdown',
+      createdAt: now,
+      updatedAt: now
+    })
+
+    await db.sessionCategories.delete('category-product')
+
+    await expect(db.sessionCategories.get('category-product')).resolves.toBeUndefined()
+    const session = await db.sessions.get('session-product')
+    expect(session).toMatchObject({ id: 'session-product' })
+    expect(session?.categoryId).toBeUndefined()
+  })
+
   it('persists runtime events across all event shapes', async () => {
     const db = await createInMemoryPersistence()
     await db.runs.save({ id: 'run-1', sessionId: 'session-1', status: 'queued', modelId: 'mock', retryCount: 0, maxRetries: 5 })

@@ -758,6 +758,7 @@ export function createRepositories(db: Database): Persistence {
         return fetchAll('SELECT * FROM session_categories ORDER BY sort_seq ASC, name ASC, id ASC').map(toSessionCategory)
       },
       async delete(id) {
+        exec('UPDATE sessions SET category_id = NULL WHERE category_id = ?', [id])
         exec('DELETE FROM session_categories WHERE id = ?', [id])
       }
     },
