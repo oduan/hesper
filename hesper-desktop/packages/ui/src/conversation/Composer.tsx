@@ -75,6 +75,7 @@ const composerThinkingLevelOptions = [
 const maxComposerAttachmentBatchSize = 10
 const maxComposerImageAttachmentBytes = 10 * 1024 * 1024
 const maxComposerTextAttachmentBytes = 1024 * 1024
+const clipboardItemMimeTypes = new WeakMap<File, string>()
 
 export function Composer({
   workspacePath,
@@ -548,15 +549,26 @@ function createAttachmentId(): string {
 }
 
 function getClipboardFiles(dataTransfer: DataTransfer): File[] {
-  const files = Array.from(dataTransfer.files ?? [])
-  if (files.length > 0) return files
-
-  return Array.from(dataTransfer.items ?? [])
+  const itemFiles = Array.from(dataTransfer.items ?? [])
     .filter((item) => item.kind === 'file')
     .flatMap((item) => {
       const file = item.getAsFile()
-      return file ? [file] : []
+      if (!file) return []
+      rememberClipboardItemMimeType(file, item.type)
+      return [file]
     })
+  if (itemFiles.length > 0) return itemFiles
+
+  return Array.from(dataTransfer.files ?? [])
+}
+
+function rememberClipboardItemMimeType(file: File, mimeType: string): void {
+  if (file.type || !mimeType) return
+  clipboardItemMimeTypes.set(file, mimeType)
+}
+
+function effectiveAttachmentMimeType(file: File): string {
+  return file.type || clipboardItemMimeTypes.get(file) || ''
 }
 
 function hasDataTransferFiles(dataTransfer: DataTransfer): boolean {
@@ -568,13 +580,13 @@ function isSupportedDraftAttachmentFile(file: File): boolean {
 }
 
 function isSupportedImageAttachmentFile(file: File): boolean {
-  return file.type.startsWith('image/') && file.size <= maxComposerImageAttachmentBytes
+  return effectiveAttachmentMimeType(file).startsWith('image/') && file.size <= maxComposerImageAttachmentBytes
 }
 
 function isSupportedTextAttachmentFile(file: File): boolean {
   const lowerName = file.name.toLocaleLowerCase()
   const supportedExtension = ['.txt', '.md', '.markdown', '.html', '.htm'].some((extension) => lowerName.endsWith(extension))
-  return supportedExtension && isTextLikeAttachmentMimeType(file.type) && file.size <= maxComposerTextAttachmentBytes
+  return supportedExtension && isTextLikeAttachmentMimeType(effectiveAttachmentMimeType(file)) && file.size <= maxComposerTextAttachmentBytes
 }
 
 function isTextLikeAttachmentMimeType(mimeType: string): boolean {
@@ -597,7 +609,7 @@ async function readDraftAttachmentFromFile(file: File): Promise<ComposerDraftAtt
       id: createAttachmentId(),
       kind: 'text',
       name: file.name,
-      mimeType: file.type || inferTextAttachmentMimeType(file.name),
+      mimeType: effectiveAttachmentMimeType(file) || inferTextAttachmentMimeType(file.name),
       bytes: file.size,
       content: await file.text()
     }
@@ -608,19 +620,26 @@ async function readDraftAttachmentFromFile(file: File): Promise<ComposerDraftAtt
 function readImageDraftAttachment(file: File): Promise<ComposerDraftAttachment> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
+    const mimeType = effectiveAttachmentMimeType(file) || 'application/octet-stream'
     reader.addEventListener('load', () => {
+      const dataUrl = typeof reader.result === 'string' ? normalizeImageDataUrlMimeType(reader.result, mimeType) : ''
       resolve({
         id: createAttachmentId(),
         kind: 'image',
         name: file.name,
-        mimeType: file.type || 'application/octet-stream',
+        mimeType,
         bytes: file.size,
-        dataUrl: typeof reader.result === 'string' ? reader.result : ''
+        dataUrl
       })
     })
     reader.addEventListener('error', () => reject(reader.error ?? new Error('读取图片附件失败')))
     reader.readAsDataURL(file)
   })
+}
+
+function normalizeImageDataUrlMimeType(dataUrl: string, mimeType: string): string {
+  if (!mimeType.startsWith('image/')) return dataUrl
+  return dataUrl.replace(/^data:[^;,]*(;base64,)/u, `data:${mimeType}$1`)
 }
 
 function inferTextAttachmentMimeType(name: string): string {

@@ -895,6 +895,39 @@ describe('ui components', () => {
     expect(onAttachmentsChange).toHaveBeenLastCalledWith([])
   })
 
+  it('uses clipboard item mime type when pasted image files have an empty File.type', async () => {
+    const onAttachmentsChange = vi.fn()
+    render(
+      <Composer
+        workspacePath="C:/dev/hesper"
+        modelId="mock/hesper-fast"
+        modelCapabilities={['imageInput']}
+        attachments={[]}
+        onAttachmentsChange={onAttachmentsChange}
+        onSend={() => undefined}
+      />
+    )
+    const textarea = screen.getByLabelText('消息输入框')
+    const imageFile = new File(['image-bytes'], 'clipboard-image', { type: '' })
+
+    fireEvent.paste(textarea, {
+      clipboardData: {
+        files: [imageFile],
+        items: [
+          {
+            kind: 'file',
+            type: 'image/png',
+            getAsFile: () => imageFile
+          }
+        ]
+      }
+    })
+
+    await waitFor(() => expect(onAttachmentsChange).toHaveBeenCalledWith([
+      expect.objectContaining({ kind: 'image', name: 'clipboard-image', mimeType: 'image/png', bytes: imageFile.size, dataUrl: expect.stringMatching(/^data:image\/png;base64,/) })
+    ]))
+  })
+
   it('hides image drafts for text-only models and restores them for image-capable models', () => {
     const imageAttachment: ComposerDraftAttachment = {
       id: 'attachment-image-1',
