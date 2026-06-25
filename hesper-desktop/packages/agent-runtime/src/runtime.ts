@@ -161,6 +161,7 @@ export class AgentRuntime {
     }
 
     const failedRun = await this.persistFailedRun(existing, normalized)
+    await this.persistRunContextItem(failedRun)
     clearPiEventRunState(runId)
     clearPiToolRunState(runId)
     await this.emitAndPersist({ type: 'run.failed', runId, error: normalized, ...(failedRun.endedAt ? { endedAt: failedRun.endedAt } : {}) })
@@ -314,7 +315,8 @@ export class AgentRuntime {
 
     const latest = await this.persistence.runs.get(runId)
     if (latest && latest.status !== 'failed') {
-      await this.persistFailedRun(latest, error)
+      const failedRun = await this.persistFailedRun(latest, error)
+      await this.persistRunContextItem(failedRun)
     }
     clearPiEventRunState(runId)
     clearPiToolRunState(runId)

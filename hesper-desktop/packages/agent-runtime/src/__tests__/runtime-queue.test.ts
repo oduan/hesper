@@ -322,6 +322,49 @@ describe('AgentRuntime queue', () => {
     expect(getRuntimeInternals(runtime).terminatedRuns.size).toBe(0)
   })
 
+  it('persists context items when an active run is externally failed after useful context was recorded', async () => {
+    const persistence = await createInMemoryPersistence()
+    await persistence.sessions.save({ ...session, id: 'session-compensated-context' })
+
+    const adapter = new ControllableAdapter()
+    const runtime = new AgentRuntime({ persistence, adapter })
+
+    const run = await runtime.enqueue({ sessionId: 'session-compensated-context', prompt: 'will fail with context', modelId: 'mock/hesper-fast' })
+    await adapter.running
+    await persistence.messages.save({
+      id: 'message-compensated-context-user',
+      sessionId: 'session-compensated-context',
+      role: 'user',
+      content: 'will fail with context',
+      contentType: 'plain',
+      runId: run.id,
+      createdAt: '2026-06-25T04:00:00.000Z'
+    })
+    await persistence.steps.save({
+      id: 'step-compensated-context',
+      runId: run.id,
+      type: 'tool_call',
+      status: 'succeeded',
+      title: 'Read File',
+      detail: JSON.stringify({ kind: 'tool_call', toolId: 'filesystem.read-file', output: 'compensated context' }),
+      createdAt: '2026-06-25T04:00:01.000Z'
+    })
+
+    await runtime.failRun(run.id, new Error('external failure'))
+    adapter.finish()
+    await runtime.waitForIdle('session-compensated-context')
+
+    const items = await persistence.contextItems.listByRun(run.id)
+    expect(items).toEqual([
+      expect.objectContaining({
+        id: `context-item-${run.id}-run-summary-v1`,
+        kind: 'run_summary',
+        runId: run.id
+      })
+    ])
+    expect(items[0]?.content).toContain('compensated context')
+  })
+
   it('does not retry an active run after it is compensated during retry backoff', async () => {
     const persistence = await createInMemoryPersistence()
     await persistence.sessions.save({ ...session, id: 'session-compensated-backoff' })
