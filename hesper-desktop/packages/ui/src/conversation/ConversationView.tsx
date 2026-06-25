@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type WheelEvent as ReactWheelEvent } from 'react'
-import type { AgentRun, LocalFilePreview, Message, RunStep, Session } from '@hesper/shared'
+import type { AgentRun, LocalFilePreview, Message, ModelCapability, RunStep, Session } from '@hesper/shared'
 import { themeTokens } from '../theme'
-import { Composer, type ComposerSendOptions, type ComposerSkillMention, type ModelOptionGroup, type SkillOption } from './Composer'
+import { Composer, type ComposerDraftAttachment, type ComposerSendOptions, type ComposerSkillMention, type ModelOptionGroup, type SkillOption } from './Composer'
 import { LocalFilePreviewDialog } from './LocalFilePreviewDialog'
 import { MessageBubble } from './MessageBubble'
 import { OutputBlock } from './OutputBlock'
@@ -25,12 +25,15 @@ export type ConversationViewProps = {
   modelId: string
   modelOptions?: string[]
   modelOptionGroups?: ModelOptionGroup[]
+  modelCapabilities?: ModelCapability[]
   skillOptions?: SkillOption[]
   draftValue?: string
   draftSkillMentions?: ComposerSkillMention[]
+  draftAttachments?: ComposerDraftAttachment[]
   running?: boolean
   onDraftChange?: (value: string) => void
   onDraftSkillMentionsChange?: (mentions: ComposerSkillMention[]) => void
+  onDraftAttachmentsChange?: (attachments: ComposerDraftAttachment[]) => void
   onSend: (content: string, options?: ComposerSendOptions) => void
   onRetryRun?: (message: Message, run: AgentRun) => void
   onStop?: () => void
@@ -313,12 +316,15 @@ export function ConversationView({
   modelId,
   modelOptions,
   modelOptionGroups,
+  modelCapabilities,
   skillOptions,
   draftValue,
   draftSkillMentions,
+  draftAttachments,
   running = false,
   onDraftChange,
   onDraftSkillMentionsChange,
+  onDraftAttachmentsChange,
   onSend,
   onRetryRun,
   onStop,
@@ -850,12 +856,15 @@ export function ConversationView({
             modelId={modelId}
             {...(modelOptions ? { modelOptions } : {})}
             {...(modelOptionGroups ? { modelOptionGroups } : {})}
+            {...(modelCapabilities ? { modelCapabilities } : {})}
             {...(skillOptions ? { skillOptions } : {})}
             {...(draftSkillMentions ? { skillMentions: draftSkillMentions } : {})}
+            {...(draftAttachments ? { attachments: draftAttachments } : {})}
             {...(draftValue !== undefined ? { value: draftValue } : {})}
             running={running}
             {...(onDraftChange ? { onDraftChange } : {})}
             {...(onDraftSkillMentionsChange ? { onSkillMentionsChange: onDraftSkillMentionsChange } : {})}
+            {...(onDraftAttachmentsChange ? { onAttachmentsChange: onDraftAttachmentsChange } : {})}
             {...(onStop ? { onStop } : {})}
             {...(onSelectWorkspace ? { onSelectWorkspace } : {})}
             {...(onModelChange ? { onModelChange } : {})}

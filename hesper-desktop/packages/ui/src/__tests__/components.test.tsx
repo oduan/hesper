@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event'
 import type { AgentRun, LocalFilePreview, Message, RunStep, Session, WorkerAgentInvocation } from '@hesper/shared'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppShell } from '../layout/AppShell'
-import { Composer, type ComposerSkillMention } from '../conversation/Composer'
+import { Composer, type ComposerDraftAttachment, type ComposerSkillMention } from '../conversation/Composer'
 import { ConversationView } from '../conversation/ConversationView'
 import { FullscreenOutput } from '../conversation/FullscreenOutput'
 import { MarkdownOutput } from '../conversation/MarkdownOutput'
@@ -797,6 +797,250 @@ describe('ui components', () => {
 
     await user.type(textarea, 'hello')
     expect(sendButton).toBeEnabled()
+  })
+
+  it('adds pasted image drafts, renders image-only previews, and removes them', async () => {
+    const user = userEvent.setup()
+    const onAttachmentsChange = vi.fn()
+    const renderComposer = (attachments: ComposerDraftAttachment[]) => (
+      <Composer
+        workspacePath="C:/dev/hesper"
+        modelId="mock/hesper-fast"
+        modelCapabilities={['imageInput']}
+        attachments={attachments}
+        onAttachmentsChange={onAttachmentsChange}
+        onSend={() => undefined}
+      />
+    )
+    const { rerender } = render(renderComposer([]))
+    const textarea = screen.getByLabelText('消息输入框')
+    const imageFile = new File(['image-bytes'], 'pasted.png', { type: 'image/png' })
+
+    fireEvent.paste(textarea, {
+      clipboardData: {
+        items: [
+          {
+            kind: 'file',
+            type: 'image/png',
+            getAsFile: () => imageFile
+          }
+        ]
+      }
+    })
+
+    await waitFor(() => expect(onAttachmentsChange).toHaveBeenCalledWith([
+      expect.objectContaining({ kind: 'image', name: 'pasted.png', mimeType: 'image/png', bytes: imageFile.size })
+    ]))
+    const pastedAttachment = onAttachmentsChange.mock.calls.at(-1)![0][0] as ComposerDraftAttachment
+
+    rerender(renderComposer([pastedAttachment]))
+
+    expect(screen.queryByText('pasted.png')).not.toBeInTheDocument()
+    expect(screen.getByRole('img', { name: '图片附件预览' })).toBeInTheDocument()
+    const removeButtons = screen.getAllByRole('button', { name: '移除图片附件' })
+    expect(removeButtons).toHaveLength(1)
+
+    await user.click(removeButtons[0]!)
+
+    expect(onAttachmentsChange).toHaveBeenLastCalledWith([])
+  })
+
+  it('hides image drafts for text-only models and restores them for image-capable models', () => {
+    const imageAttachment: ComposerDraftAttachment = {
+      id: 'attachment-image-1',
+      kind: 'image',
+      name: 'hidden.png',
+      mimeType: 'image/png',
+      bytes: 12,
+      dataUrl: 'data:image/png;base64,aGVsbG8='
+    }
+    const { rerender } = render(
+      <Composer
+        workspacePath="C:/dev/hesper"
+        modelId="text-only"
+        modelCapabilities={['streaming']}
+        attachments={[imageAttachment]}
+        onAttachmentsChange={() => undefined}
+        onSend={() => undefined}
+      />
+    )
+
+    expect(screen.queryByText('hidden.png')).not.toBeInTheDocument()
+    expect(screen.queryByRole('img', { name: '图片附件预览' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '移除图片附件' })).not.toBeInTheDocument()
+
+    rerender(
+      <Composer
+        workspacePath="C:/dev/hesper"
+        modelId="image-capable"
+        modelCapabilities={['streaming', 'imageInput']}
+        attachments={[imageAttachment]}
+        onAttachmentsChange={() => undefined}
+        onSend={() => undefined}
+      />
+    )
+
+    expect(screen.getByRole('img', { name: '图片附件预览' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '移除图片附件' })).toBeInTheDocument()
+  })
+
+  it('sends visible text attachments without content and shows a file drag affordance', async () => {
+    const user = userEvent.setup()
+    const onSend = vi.fn()
+    const onAttachmentsChange = vi.fn()
+    const textAttachment: ComposerDraftAttachment = {
+      id: 'attachment-text-1',
+      kind: 'text',
+      name: 'notes.md',
+      mimeType: 'text/markdown',
+      bytes: 15,
+      content: '# Notes'
+    }
+
+    render(
+      <Composer
+        workspacePath="C:/dev/hesper"
+        modelId="mock/hesper-fast"
+        modelCapabilities={['streaming']}
+        value=""
+        attachments={[textAttachment]}
+        onAttachmentsChange={onAttachmentsChange}
+        onSend={onSend}
+      />
+    )
+
+    const inputRegion = screen.getByLabelText('消息输入区')
+    const sendButton = screen.getByRole('button', { name: '发送' })
+    expect(sendButton).toBeEnabled()
+
+    fireEvent.dragEnter(inputRegion, {
+      dataTransfer: {
+        types: ['Files'],
+        files: [new File(['dragged'], 'dragged.md', { type: 'text/markdown' })]
+      }
+    })
+
+    expect(screen.getByText('松开即可添加附件')).toBeInTheDocument()
+
+    await user.click(sendButton)
+
+    expect(onSend).toHaveBeenCalledWith('', expect.objectContaining({
+      thinkingLevel: 'high',
+      draftAttachments: [textAttachment]
+    }))
+    expect(onAttachmentsChange).toHaveBeenLastCalledWith([])
+  })
+
+  it('keeps attachments from concurrent async drops', async () => {
+    const onAttachmentsChange = vi.fn()
+    const firstText = createDeferred<string>()
+    const secondText = createDeferred<string>()
+    const firstFile = new File(['first'], 'first.md', { type: 'text/markdown' })
+    const secondFile = new File(['second'], 'second.md', { type: 'text/markdown' })
+    Object.defineProperty(firstFile, 'text', { configurable: true, value: vi.fn(() => firstText.promise) })
+    Object.defineProperty(secondFile, 'text', { configurable: true, value: vi.fn(() => secondText.promise) })
+
+    render(
+      <Composer
+        workspacePath="C:/dev/hesper"
+        modelId="mock/hesper-fast"
+        attachments={[]}
+        onAttachmentsChange={onAttachmentsChange}
+        onSend={() => undefined}
+      />
+    )
+
+    const inputRegion = screen.getByLabelText('消息输入区')
+    fireEvent.drop(inputRegion, { dataTransfer: { types: ['Files'], files: [firstFile] } })
+    fireEvent.drop(inputRegion, { dataTransfer: { types: ['Files'], files: [secondFile] } })
+
+    await act(async () => {
+      firstText.resolve('# first')
+      secondText.resolve('# second')
+      await Promise.all([firstText.promise, secondText.promise])
+    })
+
+    await waitFor(() => {
+      const lastAttachments = onAttachmentsChange.mock.calls.at(-1)?.[0] as ComposerDraftAttachment[] | undefined
+      expect(lastAttachments?.map((attachment) => attachment.name).sort()).toEqual(['first.md', 'second.md'])
+    })
+  })
+
+  it('keeps successful files when one read fails and ignores oversized or unsafe text files', async () => {
+    const onAttachmentsChange = vi.fn()
+    const goodFile = new File(['good'], 'good.md', { type: 'text/markdown' })
+    const failingFile = new File(['bad'], 'bad.md', { type: 'text/markdown' })
+    const oversizedFile = new File([new Uint8Array(1024 * 1024 + 1)], 'big.md', { type: 'text/markdown' })
+    const unsafeMimeFile = new File(['json'], 'unsafe.md', { type: 'application/json' })
+    const goodText = vi.fn().mockResolvedValue('# good')
+    const failingText = vi.fn().mockRejectedValue(new Error('read failed'))
+    const oversizedText = vi.fn().mockResolvedValue('# big')
+    const unsafeMimeText = vi.fn().mockResolvedValue('# unsafe')
+    Object.defineProperty(goodFile, 'text', { configurable: true, value: goodText })
+    Object.defineProperty(failingFile, 'text', { configurable: true, value: failingText })
+    Object.defineProperty(oversizedFile, 'text', { configurable: true, value: oversizedText })
+    Object.defineProperty(unsafeMimeFile, 'text', { configurable: true, value: unsafeMimeText })
+
+    render(
+      <Composer
+        workspacePath="C:/dev/hesper"
+        modelId="mock/hesper-fast"
+        attachments={[]}
+        onAttachmentsChange={onAttachmentsChange}
+        onSend={() => undefined}
+      />
+    )
+
+    fireEvent.drop(screen.getByLabelText('消息输入区'), {
+      dataTransfer: {
+        types: ['Files'],
+        files: [goodFile, failingFile, oversizedFile, unsafeMimeFile]
+      }
+    })
+
+    await waitFor(() => expect(onAttachmentsChange).toHaveBeenCalledWith([
+      expect.objectContaining({ kind: 'text', name: 'good.md', content: '# good' })
+    ]))
+    expect(goodText).toHaveBeenCalledTimes(1)
+    expect(failingText).toHaveBeenCalledTimes(1)
+    expect(oversizedText).not.toHaveBeenCalled()
+    expect(unsafeMimeText).not.toHaveBeenCalled()
+  })
+
+  it('does not append pending attachment reads after sending text', async () => {
+    const user = userEvent.setup()
+    const onAttachmentsChange = vi.fn()
+    const onSend = vi.fn()
+    const pendingText = createDeferred<string>()
+    const pendingFile = new File(['pending'], 'pending.md', { type: 'text/markdown' })
+    Object.defineProperty(pendingFile, 'text', { configurable: true, value: vi.fn(() => pendingText.promise) })
+
+    render(
+      <Composer
+        workspacePath="C:/dev/hesper"
+        modelId="mock/hesper-fast"
+        attachments={[]}
+        onAttachmentsChange={onAttachmentsChange}
+        onSend={onSend}
+      />
+    )
+
+    fireEvent.drop(screen.getByLabelText('消息输入区'), {
+      dataTransfer: { types: ['Files'], files: [pendingFile] }
+    })
+    await user.type(screen.getByLabelText('消息输入框'), 'send without pending attachment')
+    await user.click(screen.getByRole('button', { name: '发送' }))
+
+    expect(onSend).toHaveBeenCalledWith('send without pending attachment', expect.objectContaining({ thinkingLevel: 'high' }))
+
+    await act(async () => {
+      pendingText.resolve('# pending')
+      await pendingText.promise
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(onAttachmentsChange).not.toHaveBeenCalled()
   })
 
   it('shows model choices as connection groups and expands models on hover', async () => {

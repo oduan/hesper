@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent } from 'react'
-import type { ModelThinkingLevel } from '@hesper/shared'
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent, type CSSProperties, type DragEvent, type KeyboardEvent } from 'react'
+import { createId, type ModelCapability, type ModelThinkingLevel } from '@hesper/shared'
 import { themeTokens } from '../theme'
 import { ThemedSelect, type ThemedSelectOptionGroup } from './ThemedSelect'
 
@@ -13,10 +13,15 @@ export type SkillOption = {
 
 export type ComposerThinkingLevel = ModelThinkingLevel
 
+export type ComposerDraftAttachment =
+  | { id: string; kind: 'image'; name: string; mimeType: string; bytes: number; dataUrl: string }
+  | { id: string; kind: 'text'; name: string; mimeType: string; bytes: number; content: string }
+
 export type ComposerSendOptions = {
   prompt?: string
   displayPrompt?: string
   thinkingLevel?: ComposerThinkingLevel
+  draftAttachments?: ComposerDraftAttachment[]
 }
 
 export type ComposerSkillMention = {
@@ -34,7 +39,10 @@ export type ComposerProps = {
   skillMentions?: ComposerSkillMention[]
   value?: string
   running?: boolean
+  modelCapabilities?: ModelCapability[]
+  attachments?: ComposerDraftAttachment[]
   onDraftChange?: (value: string) => void
+  onAttachmentsChange?: (attachments: ComposerDraftAttachment[]) => void
   onSkillMentionsChange?: (mentions: ComposerSkillMention[]) => void
   onSend: (content: string, options?: ComposerSendOptions) => void
   onStop?: () => void
@@ -64,6 +72,9 @@ const composerThinkingLevelOptions = [
   { value: 'high', label: '高' },
   { value: 'xhigh', label: '超高' }
 ] satisfies Array<{ value: ComposerThinkingLevel; label: string }>
+const maxComposerAttachmentBatchSize = 10
+const maxComposerImageAttachmentBytes = 10 * 1024 * 1024
+const maxComposerTextAttachmentBytes = 1024 * 1024
 
 export function Composer({
   workspacePath,
@@ -74,7 +85,10 @@ export function Composer({
   skillMentions: controlledSkillMentions,
   value: controlledValue,
   running = false,
+  modelCapabilities,
+  attachments = [],
   onDraftChange,
+  onAttachmentsChange,
   onSkillMentionsChange,
   onSend,
   onStop,
@@ -89,12 +103,18 @@ export function Composer({
   const [textareaScroll, setTextareaScroll] = useState({ top: 0, left: 0 })
   const [internalSkillMentions, setInternalSkillMentions] = useState<SkillMentionRange[]>([])
   const [thinkingLevel, setThinkingLevel] = useState<ComposerThinkingLevel>(() => readStoredComposerThinkingLevel())
+  const [draggingFiles, setDraggingFiles] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const skillOptionRefs = useRef<Array<HTMLButtonElement | null>>([])
   const value = controlledValue ?? internalValue
   const selectedSkillMentions = controlledSkillMentions ?? internalSkillMentions
   const lastHandledSendSignalRef = useRef(0)
-  const canSend = useMemo(() => value.trim().length > 0, [value])
+  const attachmentsRef = useRef(attachments)
+  const mountedRef = useRef(true)
+  const attachmentMutationVersionRef = useRef(0)
+  const imageInputSupported = composerSupportsImageInput(modelCapabilities)
+  const visibleAttachments = useMemo(() => visibleComposerAttachments(attachments, imageInputSupported), [attachments, imageInputSupported])
+  const canSend = useMemo(() => value.trim().length > 0 || visibleAttachments.length > 0, [value, visibleAttachments])
   const mentionToken = useMemo(() => findMentionToken(value, selectionStart), [selectionStart, value])
   const skillMentionRanges = useMemo(() => normalizeSkillMentionRanges(value, selectedSkillMentions), [selectedSkillMentions, value])
   const composerSegments = useMemo(() => createComposerSegments(value, skillMentionRanges), [skillMentionRanges, value])
@@ -145,6 +165,65 @@ export function Composer({
     writeStoredComposerThinkingLevel(nextValue)
   }, [])
 
+  const appendAttachments = useCallback((nextAttachments: ComposerDraftAttachment[], readVersion: number) => {
+    if (nextAttachments.length === 0 || !mountedRef.current || readVersion !== attachmentMutationVersionRef.current) return
+    const mergedAttachments = [...attachmentsRef.current, ...nextAttachments]
+    attachmentsRef.current = mergedAttachments
+    onAttachmentsChange?.(mergedAttachments)
+  }, [onAttachmentsChange])
+
+  const replaceAttachmentsAfterDestructiveMutation = useCallback((nextAttachments: ComposerDraftAttachment[]) => {
+    attachmentMutationVersionRef.current += 1
+    attachmentsRef.current = nextAttachments
+    onAttachmentsChange?.(nextAttachments)
+  }, [onAttachmentsChange])
+
+  const removeAttachment = useCallback((attachmentId: string) => {
+    replaceAttachmentsAfterDestructiveMutation(attachmentsRef.current.filter((attachment) => attachment.id !== attachmentId))
+  }, [replaceAttachmentsAfterDestructiveMutation])
+
+  const handlePaste = useCallback((event: ClipboardEvent<HTMLTextAreaElement>) => {
+    const imageFiles = getClipboardFiles(event.clipboardData)
+      .filter(isSupportedImageAttachmentFile)
+      .slice(0, maxComposerAttachmentBatchSize)
+    if (imageFiles.length === 0) return
+
+    event.preventDefault()
+    const readVersion = attachmentMutationVersionRef.current
+    void readDraftAttachments(imageFiles, readImageDraftAttachment).then((nextAttachments) => appendAttachments(nextAttachments, readVersion))
+  }, [appendAttachments])
+
+  const handleDragEnter = useCallback((event: DragEvent<HTMLElement>) => {
+    if (!hasDataTransferFiles(event.dataTransfer)) return
+    event.preventDefault()
+    setDraggingFiles(true)
+  }, [])
+
+  const handleDragOver = useCallback((event: DragEvent<HTMLElement>) => {
+    if (!hasDataTransferFiles(event.dataTransfer)) return
+    event.preventDefault()
+    setDraggingFiles(true)
+  }, [])
+
+  const handleDragLeave = useCallback((event: DragEvent<HTMLElement>) => {
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
+    setDraggingFiles(false)
+  }, [])
+
+  const handleDrop = useCallback((event: DragEvent<HTMLElement>) => {
+    if (!hasDataTransferFiles(event.dataTransfer)) return
+    event.preventDefault()
+    setDraggingFiles(false)
+    const files = Array.from(event.dataTransfer.files ?? [])
+    const supportedFiles = files
+      .filter(isSupportedDraftAttachmentFile)
+      .slice(0, maxComposerAttachmentBatchSize)
+    if (supportedFiles.length === 0) return
+
+    const readVersion = attachmentMutationVersionRef.current
+    void readDraftAttachments(supportedFiles, readDraftAttachmentFromFile).then((nextAttachments) => appendAttachments(nextAttachments, readVersion))
+  }, [appendAttachments])
+
   const confirmSkill = useCallback((skill: SkillOption) => {
     if (!mentionToken) return
     const mentionText = createSkillMentionText(skill)
@@ -185,20 +264,40 @@ export function Composer({
     }
 
     const content = value.trim()
-    if (!content) {
+    const currentAttachments = attachmentsRef.current
+    const sendableAttachments = visibleComposerAttachments(currentAttachments, imageInputSupported)
+    if (!content && sendableAttachments.length === 0) {
       return
     }
 
     const injectedPrompt = createInjectedPrompt(content, skillOptions)
-    const baseSendOptions = { thinkingLevel } satisfies ComposerSendOptions
+    const baseSendOptions = {
+      thinkingLevel,
+      ...(sendableAttachments.length > 0 ? { draftAttachments: sendableAttachments } : {})
+    } satisfies ComposerSendOptions
     if (injectedPrompt && injectedPrompt !== content) {
       onSend(content, { ...baseSendOptions, prompt: injectedPrompt, displayPrompt: content })
     } else {
       onSend(content, baseSendOptions)
     }
     setComposerValue('', [])
+    if (sendableAttachments.length > 0) {
+      const sentAttachmentIds = new Set(sendableAttachments.map((attachment) => attachment.id))
+      replaceAttachmentsAfterDestructiveMutation(currentAttachments.filter((attachment) => !sentAttachmentIds.has(attachment.id)))
+    } else {
+      attachmentMutationVersionRef.current += 1
+    }
     setActiveSkillIndex(0)
-  }, [onSend, onStop, running, setComposerValue, skillOptions, thinkingLevel, value])
+  }, [imageInputSupported, onSend, onStop, replaceAttachmentsAfterDestructiveMutation, running, setComposerValue, skillOptions, thinkingLevel, value])
+
+  useEffect(() => {
+    attachmentsRef.current = attachments
+  }, [attachments])
+
+  useEffect(() => () => {
+    mountedRef.current = false
+    attachmentMutationVersionRef.current += 1
+  }, [])
 
   useEffect(() => {
     if (sendSignal <= 0 || sendSignal === lastHandledSendSignalRef.current) {
@@ -223,6 +322,10 @@ export function Composer({
   return (
     <section
       aria-label="消息输入区"
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
       style={{
         display: 'grid',
         gap: themeTokens.spacing.sm,
@@ -265,6 +368,37 @@ export function Composer({
           </div>
         </>
       ) : null}
+      {draggingFiles || visibleAttachments.length > 0 ? (
+        <div aria-label="附件预览" style={attachmentPreviewAreaStyle}>
+          {draggingFiles ? <div style={attachmentDropHintStyle}>松开即可添加附件</div> : null}
+          {visibleAttachments.map((attachment) => attachment.kind === 'image' ? (
+            <div key={attachment.id} style={imageAttachmentPreviewStyle}>
+              <img src={attachment.dataUrl} alt="图片附件预览" style={imageAttachmentThumbnailStyle} />
+              <button
+                type="button"
+                aria-label="移除图片附件"
+                onClick={() => removeAttachment(attachment.id)}
+                style={attachmentRemoveButtonStyle}
+              >
+                ×
+              </button>
+            </div>
+          ) : (
+            <div key={attachment.id} style={textAttachmentPreviewStyle}>
+              <span style={textAttachmentNameStyle}>{attachment.name}</span>
+              <span style={textAttachmentMetaStyle}>{formatAttachmentMeta(attachment)}</span>
+              <button
+                type="button"
+                aria-label={`移除附件 ${attachment.name}`}
+                onClick={() => removeAttachment(attachment.id)}
+                style={textAttachmentRemoveButtonStyle}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
       <div style={editorWrapperStyle}>
         {hasSkillMentionPills ? (
           <div aria-hidden="true" style={{ ...highlightMirrorStyle, transform: `translate(${-textareaScroll.left}px, ${-textareaScroll.top}px)` }}>
@@ -291,6 +425,7 @@ export function Composer({
           onClick={updateSelectionStart}
           onKeyUp={updateSelectionStart}
           onSelect={updateSelectionStart}
+          onPaste={handlePaste}
           onScroll={(event) => setTextareaScroll({
             top: event.currentTarget.scrollTop,
             left: event.currentTarget.scrollLeft
@@ -398,6 +533,106 @@ export function Composer({
       </div>
     </section>
   )
+}
+
+export function composerSupportsImageInput(capabilities?: ModelCapability[]): boolean {
+  return capabilities?.includes('imageInput') === true
+}
+
+export function visibleComposerAttachments(attachments: ComposerDraftAttachment[], imageInputSupported: boolean): ComposerDraftAttachment[] {
+  return attachments.filter((attachment) => attachment.kind !== 'image' || imageInputSupported)
+}
+
+function createAttachmentId(): string {
+  return createId('attachment' as Parameters<typeof createId>[0])
+}
+
+function getClipboardFiles(dataTransfer: DataTransfer): File[] {
+  const files = Array.from(dataTransfer.files ?? [])
+  if (files.length > 0) return files
+
+  return Array.from(dataTransfer.items ?? [])
+    .filter((item) => item.kind === 'file')
+    .flatMap((item) => {
+      const file = item.getAsFile()
+      return file ? [file] : []
+    })
+}
+
+function hasDataTransferFiles(dataTransfer: DataTransfer): boolean {
+  return Array.from(dataTransfer.types ?? []).includes('Files') || (dataTransfer.files?.length ?? 0) > 0
+}
+
+function isSupportedDraftAttachmentFile(file: File): boolean {
+  return isSupportedImageAttachmentFile(file) || isSupportedTextAttachmentFile(file)
+}
+
+function isSupportedImageAttachmentFile(file: File): boolean {
+  return file.type.startsWith('image/') && file.size <= maxComposerImageAttachmentBytes
+}
+
+function isSupportedTextAttachmentFile(file: File): boolean {
+  const lowerName = file.name.toLocaleLowerCase()
+  const supportedExtension = ['.txt', '.md', '.markdown', '.html', '.htm'].some((extension) => lowerName.endsWith(extension))
+  return supportedExtension && isTextLikeAttachmentMimeType(file.type) && file.size <= maxComposerTextAttachmentBytes
+}
+
+function isTextLikeAttachmentMimeType(mimeType: string): boolean {
+  return mimeType.length === 0 || mimeType.startsWith('text/')
+}
+
+async function readDraftAttachments(files: File[], readFile: (file: File) => Promise<ComposerDraftAttachment | undefined>): Promise<ComposerDraftAttachment[]> {
+  const results = await Promise.allSettled(files.map(readFile))
+  return results.flatMap((result) => (
+    result.status === 'fulfilled' && result.value ? [result.value] : []
+  ))
+}
+
+async function readDraftAttachmentFromFile(file: File): Promise<ComposerDraftAttachment | undefined> {
+  if (isSupportedImageAttachmentFile(file)) {
+    return readImageDraftAttachment(file)
+  }
+  if (isSupportedTextAttachmentFile(file)) {
+    return {
+      id: createAttachmentId(),
+      kind: 'text',
+      name: file.name,
+      mimeType: file.type || inferTextAttachmentMimeType(file.name),
+      bytes: file.size,
+      content: await file.text()
+    }
+  }
+  return undefined
+}
+
+function readImageDraftAttachment(file: File): Promise<ComposerDraftAttachment> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.addEventListener('load', () => {
+      resolve({
+        id: createAttachmentId(),
+        kind: 'image',
+        name: file.name,
+        mimeType: file.type || 'application/octet-stream',
+        bytes: file.size,
+        dataUrl: typeof reader.result === 'string' ? reader.result : ''
+      })
+    })
+    reader.addEventListener('error', () => reject(reader.error ?? new Error('读取图片附件失败')))
+    reader.readAsDataURL(file)
+  })
+}
+
+function inferTextAttachmentMimeType(name: string): string {
+  const lowerName = name.toLocaleLowerCase()
+  if (lowerName.endsWith('.md') || lowerName.endsWith('.markdown')) return 'text/markdown'
+  if (lowerName.endsWith('.html') || lowerName.endsWith('.htm')) return 'text/html'
+  return 'text/plain'
+}
+
+function formatAttachmentMeta(attachment: ComposerDraftAttachment): string {
+  const size = attachment.bytes < 1024 ? `${attachment.bytes} B` : `${Math.round(attachment.bytes / 1024)} KB`
+  return `${attachment.mimeType || 'text/plain'} · ${size}`
 }
 
 function formatWorkspaceDisplayName(workspacePath?: string): string {
@@ -672,6 +907,102 @@ const skillNameStyle = {
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap'
+} satisfies CSSProperties
+
+const attachmentPreviewAreaStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: themeTokens.spacing.sm,
+  flexWrap: 'wrap'
+} satisfies CSSProperties
+
+const attachmentDropHintStyle = {
+  border: `1px dashed ${themeTokens.color.border}`,
+  borderRadius: themeTokens.radius.lg,
+  color: themeTokens.color.textMuted,
+  padding: `${themeTokens.spacing.sm} ${themeTokens.spacing.md}`,
+  fontSize: themeTokens.typography.body
+} satisfies CSSProperties
+
+const imageAttachmentPreviewStyle = {
+  position: 'relative',
+  width: 96,
+  height: 72,
+  borderRadius: themeTokens.radius.lg,
+  overflow: 'hidden',
+  background: themeTokens.color.softControl
+} satisfies CSSProperties
+
+const imageAttachmentThumbnailStyle = {
+  width: '100%',
+  height: '100%',
+  display: 'block',
+  objectFit: 'cover'
+} satisfies CSSProperties
+
+const attachmentRemoveButtonStyle = {
+  position: 'absolute',
+  top: 4,
+  right: 4,
+  width: 22,
+  height: 22,
+  border: 0,
+  borderRadius: 999,
+  background: 'rgba(0, 0, 0, 0.55)',
+  color: '#ffffff',
+  cursor: 'pointer',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  lineHeight: 1,
+  fontSize: 16
+} satisfies CSSProperties
+
+const textAttachmentPreviewStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'minmax(0, 1fr) auto',
+  columnGap: themeTokens.spacing.sm,
+  rowGap: 2,
+  alignItems: 'center',
+  minWidth: 160,
+  maxWidth: 280,
+  borderRadius: themeTokens.radius.lg,
+  background: themeTokens.color.softControl,
+  padding: `${themeTokens.spacing.xs} ${themeTokens.spacing.sm}`
+} satisfies CSSProperties
+
+const textAttachmentNameStyle = {
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  color: themeTokens.color.text
+} satisfies CSSProperties
+
+const textAttachmentMetaStyle = {
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  color: themeTokens.color.textMuted,
+  fontSize: 12
+} satisfies CSSProperties
+
+const textAttachmentRemoveButtonStyle = {
+  gridRow: '1 / span 2',
+  gridColumn: 2,
+  width: 24,
+  height: 24,
+  border: 0,
+  borderRadius: 999,
+  background: 'transparent',
+  color: themeTokens.color.textMuted,
+  cursor: 'pointer',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  lineHeight: 1,
+  fontSize: 16
 } satisfies CSSProperties
 
 const editorWrapperStyle = {
