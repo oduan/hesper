@@ -225,6 +225,15 @@ export function EntityListPane({
   }, [sessions])
 
   useEffect(() => {
+    if (activeSection !== 'sessions' || !activeSessionId || selectedSessionIds.length === 0) return
+    if (!sessions.some((session) => session.id === activeSessionId)) return
+    if (selectedSessionIds.includes(activeSessionId)) return
+
+    setSelectedSessionIds([activeSessionId])
+    setSelectionAnchorSessionId(activeSessionId)
+  }, [activeSection, activeSessionId, selectedSessionIds, sessions])
+
+  useEffect(() => {
     const roleIdSet = new Set(roles.map((role) => role.id))
     setSelectedRoleIds((current) => {
       const next = current.filter((roleId) => roleIdSet.has(roleId))

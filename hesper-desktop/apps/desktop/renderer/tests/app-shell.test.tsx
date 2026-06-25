@@ -497,6 +497,41 @@ describe('renderer App', () => {
     expect(await screen.findAllByText('New chat')).not.toHaveLength(0)
   })
 
+  it('moves the selected session row to a newly-created session', async () => {
+    const user = userEvent.setup()
+    listSessions.mockResolvedValueOnce([
+      {
+        id: 'session-existing',
+        title: 'Existing chat',
+        status: 'active',
+        outputMode: 'markdown',
+        createdAt: '2026-06-10T03:00:00.000Z',
+        updatedAt: '2026-06-10T03:00:00.000Z'
+      }
+    ] as any)
+    createSession.mockResolvedValueOnce({
+      id: 'session-new-selected',
+      title: 'New chat',
+      status: 'active',
+      outputMode: 'markdown',
+      createdAt: '2026-06-10T03:00:10.000Z',
+      updatedAt: '2026-06-10T03:00:10.000Z'
+    } as any)
+
+    render(<App />)
+
+    const existingRow = await screen.findByRole('button', { name: 'Existing chat' })
+    await user.click(existingRow)
+    expect(existingRow).toHaveClass('is-selected')
+
+    await user.click((await screen.findAllByRole('button', { name: '新建会话' }))[0]!)
+
+    const newRow = await screen.findByRole('button', { name: 'New chat' })
+    await waitFor(() => expect(newRow).toHaveAttribute('aria-current', 'true'))
+    expect(newRow).toHaveClass('is-selected')
+    expect(existingRow).not.toHaveClass('is-selected')
+  })
+
   it('deletes a newly-created empty session when switching to another session', async () => {
     const user = userEvent.setup()
     listSessions.mockResolvedValueOnce([
