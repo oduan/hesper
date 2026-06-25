@@ -18,7 +18,7 @@ function createDeferred<T>() {
   return { promise, resolve, reject }
 }
 
-const { listSessions, createSession, updateTitle, deleteSession, generateTitle, markViewed, listRoles, createRole, updateRole, deleteRole, listSkills, refreshSkills, listMessages, listMessagesByRun, listRuns, listSteps, listWorkerInvocationsByParentRun, filesPreview, enqueue, stopRun, onEvent, getSettings, updateSettings, listProviders, listModels, listTools, setToolEnabled, toolCredentialStatus, saveToolApiKey, deleteToolApiKey, sshKeysList, sshKeysCreate, sshKeysDelete, sshServersList, sshServersCreate, sshServersUpdate, sshServersDelete, minimizeWindow, toggleMaximizeWindow, closeWindow } = vi.hoisted(() => ({
+const { listSessions, createSession, updateTitle, deleteSession, setModel, generateTitle, markViewed, listRoles, createRole, updateRole, deleteRole, listSkills, refreshSkills, listMessages, listMessagesByRun, listRuns, listSteps, listWorkerInvocationsByParentRun, filesPreview, enqueue, stopRun, onEvent, getSettings, updateSettings, listProviders, listModels, listTools, setToolEnabled, toolCredentialStatus, saveToolApiKey, deleteToolApiKey, sshKeysList, sshKeysCreate, sshKeysDelete, sshServersList, sshServersCreate, sshServersUpdate, sshServersDelete, minimizeWindow, toggleMaximizeWindow, closeWindow } = vi.hoisted(() => ({
   listSessions: vi.fn(async () => []),
   createSession: vi.fn(async () => ({
     id: 'session-1',
@@ -40,6 +40,15 @@ const { listSessions, createSession, updateTitle, deleteSession, generateTitle, 
     id,
     title: 'Deleted chat',
     status: 'deleted',
+    outputMode: 'markdown',
+    createdAt: '2026-06-10T03:00:00.000Z',
+    updatedAt: '2026-06-10T03:00:12.000Z'
+  })),
+  setModel: vi.fn(async (input: { id: string; defaultModelId: string }) => ({
+    id: input.id,
+    title: 'Current chat',
+    status: 'active',
+    defaultModelId: input.defaultModelId,
     outputMode: 'markdown',
     createdAt: '2026-06-10T03:00:00.000Z',
     updatedAt: '2026-06-10T03:00:12.000Z'
@@ -211,6 +220,7 @@ vi.mock('../src/ipc-client', () => ({
       create: createSession,
       updateTitle,
       delete: deleteSession,
+      setModel,
       generateTitle,
       markViewed
     },
@@ -282,6 +292,7 @@ describe('renderer App', () => {
     createSession.mockClear()
     updateTitle.mockClear()
     deleteSession.mockClear()
+    setModel.mockClear()
     generateTitle.mockClear()
     markViewed.mockClear()
     listRoles.mockReset()
@@ -597,6 +608,55 @@ describe('renderer App', () => {
 
     await waitFor(() => expect(screen.getByLabelText('消息输入框')).toHaveValue(''))
     expect(deleteSession).not.toHaveBeenCalledWith('session-new-draft')
+  })
+
+  it('keeps a newly-created session with only an attachment draft when switching away', async () => {
+    const user = userEvent.setup()
+    listProviders.mockResolvedValueOnce([
+      { id: 'openai', name: 'OpenAI', kind: 'openai', enabled: true, hasApiKey: true, defaultModelId: 'gpt-5.5', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+    ] as any)
+    listModels.mockResolvedValueOnce([
+      { id: 'gpt-5.5', providerId: 'openai', modelName: 'gpt-5.5', displayName: 'GPT-5.5', capabilities: ['streaming', 'imageInput'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+    ] as any)
+    listSessions.mockResolvedValueOnce([
+      { id: 'session-existing', title: 'Existing chat', status: 'active', defaultModelId: 'gpt-5.5', outputMode: 'markdown', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+    ] as any)
+    createSession.mockResolvedValueOnce({
+      id: 'session-new-attachment',
+      title: 'New chat',
+      status: 'active',
+      defaultModelId: 'gpt-5.5',
+      outputMode: 'markdown',
+      createdAt: '2026-06-10T03:00:10.000Z',
+      updatedAt: '2026-06-10T03:00:10.000Z'
+    } as any)
+
+    render(<App />)
+
+    expect(await screen.findByRole('button', { name: 'Existing chat' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: '选择模型' })).toHaveTextContent('OpenAI/gpt-5.5'))
+    await user.click((await screen.findAllByRole('button', { name: '新建会话' }))[0]!)
+
+    const imageFile = new File(['image-bytes'], 'draft.png', { type: 'image/png' })
+    fireEvent.paste(await screen.findByLabelText('消息输入框'), {
+      clipboardData: {
+        items: [
+          {
+            kind: 'file',
+            type: 'image/png',
+            getAsFile: () => imageFile
+          }
+        ]
+      }
+    })
+    expect(await screen.findByRole('img', { name: '图片附件预览' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Existing chat' }))
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Existing chat' })).toHaveAttribute('aria-current', 'true'))
+    expect(deleteSession).not.toHaveBeenCalledWith('session-new-attachment')
+    await user.click(screen.getByRole('button', { name: 'New chat' }))
+    expect(await screen.findByRole('img', { name: '图片附件预览' })).toBeInTheDocument()
   })
 
   it('keeps a newly-created session with a user message when switching away', async () => {
@@ -2110,6 +2170,90 @@ describe('renderer App', () => {
     await waitFor(() => {
       expect(screen.getAllByText('hello world')).toHaveLength(1)
     })
+  })
+
+  it('filters image draft attachments for text-only models and restores them for image-capable models', async () => {
+    const user = userEvent.setup()
+
+    listProviders.mockResolvedValueOnce([
+      { id: 'deepseek', name: 'DeepSeek', kind: 'deepseek', enabled: true, hasApiKey: true, defaultModelId: 'deepseek-v4-flash', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' },
+      { id: 'openai', name: 'OpenAI', kind: 'openai', enabled: true, hasApiKey: true, defaultModelId: 'gpt-5.5', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+    ] as any)
+    listModels.mockResolvedValueOnce([
+      { id: 'deepseek-v4-flash', providerId: 'deepseek', modelName: 'deepseek-v4-flash', displayName: 'DeepSeek V4 Flash', capabilities: ['streaming'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' },
+      { id: 'gpt-5.5', providerId: 'openai', modelName: 'gpt-5.5', displayName: 'GPT-5.5', capabilities: ['streaming', 'imageInput'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+    ] as any)
+    listSessions.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        title: 'Attachment draft chat',
+        status: 'active',
+        workspacePath: 'C:/workspace',
+        defaultModelId: 'deepseek-v4-flash',
+        outputMode: 'markdown',
+        createdAt: '2026-06-10T03:00:00.000Z',
+        updatedAt: '2026-06-10T03:00:00.000Z'
+      }
+    ] as any)
+
+    render(<App />)
+
+    const modelButton = await screen.findByRole('button', { name: '选择模型' })
+    await waitFor(() => expect(modelButton).toHaveTextContent('DeepSeek/deepseek-v4-flash'))
+    const composer = screen.getByLabelText('消息输入框')
+    const imageFile = new File(['image-bytes'], 'hidden.png', { type: 'image/png' })
+
+    fireEvent.paste(composer, {
+      clipboardData: {
+        items: [
+          {
+            kind: 'file',
+            type: 'image/png',
+            getAsFile: () => imageFile
+          }
+        ]
+      }
+    })
+
+    expect(screen.queryByRole('img', { name: '图片附件预览' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '选择模型' }))
+    await user.hover(await screen.findByRole('button', { name: '连接 OpenAI' }))
+    await user.click(await screen.findByRole('option', { name: 'OpenAI/gpt-5.5' }))
+    expect(await screen.findByRole('img', { name: '图片附件预览' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '选择模型' }))
+    await user.hover(await screen.findByRole('button', { name: '连接 DeepSeek' }))
+    await user.click(await screen.findByRole('option', { name: 'DeepSeek/deepseek-v4-flash' }))
+    await waitFor(() => expect(screen.queryByRole('img', { name: '图片附件预览' })).not.toBeInTheDocument())
+
+    await user.type(screen.getByLabelText('消息输入框'), 'send as text only')
+    await user.click(screen.getByRole('button', { name: '发送' }))
+
+    await waitFor(() => expect(enqueue).toHaveBeenCalledTimes(1))
+    const textOnlyPayload = (enqueue.mock.calls[0] as unknown as [any])[0]
+    expect(textOnlyPayload).toEqual(expect.objectContaining({
+      sessionId: 'session-1',
+      modelId: 'deepseek-v4-flash',
+      prompt: 'send as text only'
+    }))
+    expect(textOnlyPayload.draftAttachments?.some((attachment: any) => attachment.kind === 'image')).not.toBe(true)
+
+    await user.click(screen.getByRole('button', { name: '选择模型' }))
+    await user.hover(await screen.findByRole('button', { name: '连接 OpenAI' }))
+    await user.click(await screen.findByRole('option', { name: 'OpenAI/gpt-5.5' }))
+    expect(await screen.findByRole('img', { name: '图片附件预览' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '发送' }))
+
+    await waitFor(() => expect(enqueue).toHaveBeenCalledTimes(2))
+    expect((enqueue.mock.calls[1] as unknown as [any])[0]).toEqual(expect.objectContaining({
+      sessionId: 'session-1',
+      modelId: 'gpt-5.5',
+      draftAttachments: [
+        expect.objectContaining({ kind: 'image', name: 'hidden.png', mimeType: 'image/png', bytes: imageFile.size })
+      ]
+    }))
   })
 
   it('passes the selected thinking intensity when enqueueing a run', async () => {

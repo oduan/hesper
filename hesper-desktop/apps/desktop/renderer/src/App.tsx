@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react'
 import { createId, defaultAppThemeId, nowIso, type AgentRun, type Message, type RunStep, type Session, type WorkerAgentInvocation } from '@hesper/shared'
-import { AppShell, ConversationView, resolveThemeVariant, themeTokens, type AppSection, type ComposerSendOptions, type ComposerSkillMention, type ConversationShortcutCommand, type SkillOption } from '@hesper/ui'
+import { AppShell, ConversationView, resolveThemeVariant, themeTokens, type AppSection, type ComposerDraftAttachment, type ComposerSendOptions, type ComposerSkillMention, type ConversationShortcutCommand, type SkillOption } from '@hesper/ui'
 import { AppStoreProvider, useAppStore } from './app-store'
 import { hesperApi } from './ipc-client'
 import { defaultFallbackModelId, fallbackSessionModelCatalog, loadAvailableModelCatalog, mergeModelOptions, type SessionModelCatalog } from './model-options'
@@ -143,6 +143,7 @@ function AppContent() {
   const [sendErrorsBySession, setSendErrorsBySession] = useState<Record<string, string>>({})
   const [draftsBySession, setDraftsBySession] = useState<Record<string, string>>({})
   const [draftSkillMentionsBySession, setDraftSkillMentionsBySession] = useState<Record<string, ComposerSkillMention[]>>({})
+  const [draftAttachmentsBySession, setDraftAttachmentsBySession] = useState<Record<string, ComposerDraftAttachment[]>>({})
   const [pendingSettingsBySession, setPendingSettingsBySession] = useState<Record<string, SessionSettingsOverride>>({})
   const [shortcutCommand, setShortcutCommand] = useState<ConversationShortcutCommand>()
   const [sessionModelCatalog, setSessionModelCatalog] = useState<SessionModelCatalog>(fallbackSessionModelCatalog)
@@ -736,6 +737,7 @@ function AppContent() {
     setSendErrorsBySession((current) => pruneSessionRecord(current, visibleSessionIds))
     setDraftsBySession((current) => pruneSessionRecord(current, visibleSessionIds))
     setDraftSkillMentionsBySession((current) => pruneSessionRecord(current, visibleSessionIds))
+    setDraftAttachmentsBySession((current) => pruneSessionRecord(current, visibleSessionIds))
     setPendingSettingsBySession((current) => pruneSessionRecord(current, visibleSessionIds))
     setHistoryErrorsBySession((current) => pruneSessionRecord(current, visibleSessionIds))
     const visible = new Set(visibleSessionIds)
@@ -832,6 +834,8 @@ function AppContent() {
     streamingByRun: state.streamingByRun
   }), [state.childMessagesByRun, state.runsById, state.stepsByRun, state.streamingByRun, state.workerInvocationIdByParentStepId, state.workerInvocationsById])
   const activeModelId = activeSession ? resolveSessionModelId(activeSession.defaultModelId, sessionModelCatalog.preferredModelId, explicitModelSelectionSessionIdsRef.current.has(activeSession.id)) : sessionModelCatalog.preferredModelId
+  const activeModelConfig = sessionModelCatalog.modelsById[activeModelId]
+  const activeModelCapabilities = activeModelConfig?.capabilities ?? []
   const activeModelOptions = activeSession?.defaultModelId ? mergeModelOptions(sessionModelCatalog.options, [activeModelId, activeSession.defaultModelId]) : mergeModelOptions(sessionModelCatalog.options, [activeModelId])
 
   const updateAppSettings = async (patch: UpdateSettingsInput) => {
@@ -1234,9 +1238,11 @@ function AppContent() {
     if (!session || session.title !== 'New chat') return false
     const hasMessages = (stateRef.current.messagesBySession[sessionId] ?? []).length > 0
     const hasDraft = (draftsBySession[sessionId] ?? '').trim().length > 0
+    const hasDraftSkillMentions = (draftSkillMentionsBySession[sessionId] ?? []).length > 0
+    const hasDraftAttachments = (draftAttachmentsBySession[sessionId] ?? []).length > 0
     const hasLatestRun = Boolean(stateRef.current.latestRunIdBySession[sessionId])
     const hasRun = Object.values(stateRef.current.runsById).some((run) => run.sessionId === sessionId)
-    return !hasMessages && !hasDraft && !hasLatestRun && !hasRun
+    return !hasMessages && !hasDraft && !hasDraftSkillMentions && !hasDraftAttachments && !hasLatestRun && !hasRun
   }
 
   const deleteEmptyNewSessionBeforeSwitch = async (nextSessionId: string) => {
@@ -1406,9 +1412,11 @@ function AppContent() {
             modelId={activeModelId}
             modelOptions={activeModelOptions}
             modelOptionGroups={sessionModelCatalog.optionGroups}
+            modelCapabilities={activeModelCapabilities}
             skillOptions={skills.map(toSkillOption)}
             draftValue={draftsBySession[activeSession.id] ?? ''}
             draftSkillMentions={draftSkillMentionsBySession[activeSession.id] ?? []}
+            draftAttachments={draftAttachmentsBySession[activeSession.id] ?? []}
             running={Boolean(activeRunningRunId)}
             loadLocalFilePreview={(path) => hesperApi.files.preview({ sessionId: activeSession.id, path })}
             onDraftChange={(value) => {
@@ -1422,6 +1430,16 @@ function AppContent() {
                   return next
                 }
                 return { ...current, [activeSession.id]: mentions }
+              })
+            }}
+            onDraftAttachmentsChange={(attachments) => {
+              setDraftAttachmentsBySession((current) => {
+                if (attachments.length === 0) {
+                  const next = { ...current }
+                  delete next[activeSession.id]
+                  return next
+                }
+                return { ...current, [activeSession.id]: attachments }
               })
             }}
             onStop={() => {
@@ -1456,9 +1474,11 @@ function AppContent() {
                 session: activeSession,
                 modelId: activeModelId,
                 content,
+                modelCapabilities: activeModelCapabilities,
                 ...(sendOptions ? { sendOptions } : {}),
                 dispatch,
-                setSendErrorsBySession
+                setSendErrorsBySession,
+                setDraftAttachmentsBySession
               })
             }}
             onRetryRun={(message, run) => {
@@ -1789,18 +1809,23 @@ async function sendMessage({
   session,
   modelId,
   content,
+  modelCapabilities = [],
   dispatch,
   sendOptions,
-  setSendErrorsBySession
+  setSendErrorsBySession,
+  setDraftAttachmentsBySession
 }: {
   session: Pick<Session, 'id' | 'workspacePath' | 'updatedAt'>
   modelId: string
   content: string
+  modelCapabilities?: readonly string[]
   sendOptions?: ComposerSendOptions
   dispatch: ReturnType<typeof useAppStore>['dispatch']
   setSendErrorsBySession: Dispatch<SetStateAction<Record<string, string>>>
+  setDraftAttachmentsBySession?: Dispatch<SetStateAction<Record<string, ComposerDraftAttachment[]>>>
 }) {
   setSendErrorsBySession((current) => clearSessionSendError(current, session.id))
+  const draftAttachments = filterDraftAttachmentsForModel(sendOptions?.draftAttachments, modelCapabilities)
   const message = createOptimisticUserMessage({ session, content })
   dispatch({ type: 'message.optimistic', message })
   dispatch({ type: 'session.touched', sessionId: session.id, updatedAt: message.createdAt })
@@ -1812,11 +1837,13 @@ async function sendMessage({
       ...(sendOptions?.displayPrompt ? { displayPrompt: sendOptions.displayPrompt } : {}),
       modelId,
       ...(sendOptions?.thinkingLevel ? { thinkingLevel: sendOptions.thinkingLevel } : {}),
+      ...(draftAttachments.length > 0 ? { draftAttachments } : {}),
       messageId: message.id,
       messageCreatedAt: message.createdAt,
       ...(session.workspacePath ? { workspacePath: session.workspacePath } : {})
     })
     dispatch({ type: 'message.run-linked', sessionId: session.id, messageId: message.id, runId: result.runId })
+    clearSentDraftAttachments(session.id, draftAttachments, setDraftAttachmentsBySession)
   } catch (error) {
     dispatch({ type: 'message.removed', sessionId: session.id, messageId: message.id })
     dispatch({ type: 'session.touch-reverted', sessionId: session.id, optimisticUpdatedAt: message.createdAt, previousUpdatedAt: session.updatedAt })
@@ -1825,6 +1852,41 @@ async function sendMessage({
       [session.id]: error instanceof Error ? error.message : 'unknown enqueue error'
     }))
   }
+}
+
+function filterDraftAttachmentsForModel(attachments: ComposerDraftAttachment[] | undefined, modelCapabilities: readonly string[]): ComposerDraftAttachment[] {
+  if (!attachments?.length) {
+    return []
+  }
+
+  const supportsImageInput = modelCapabilities.includes('imageInput')
+  return attachments.filter((attachment) => attachment.kind !== 'image' || supportsImageInput)
+}
+
+function clearSentDraftAttachments(
+  sessionId: string,
+  sentAttachments: ComposerDraftAttachment[],
+  setDraftAttachmentsBySession?: Dispatch<SetStateAction<Record<string, ComposerDraftAttachment[]>>>
+) {
+  if (!setDraftAttachmentsBySession || sentAttachments.length === 0) {
+    return
+  }
+
+  const sentAttachmentIds = new Set(sentAttachments.map((attachment) => attachment.id))
+  setDraftAttachmentsBySession((current) => {
+    const remaining = (current[sessionId] ?? []).filter((attachment) => !sentAttachmentIds.has(attachment.id))
+    if (remaining.length === (current[sessionId]?.length ?? 0)) {
+      return current
+    }
+
+    const next = { ...current }
+    if (remaining.length === 0) {
+      delete next[sessionId]
+    } else {
+      next[sessionId] = remaining
+    }
+    return next
+  })
 }
 
 function toSkillOption(skill: SkillOption): SkillOption {

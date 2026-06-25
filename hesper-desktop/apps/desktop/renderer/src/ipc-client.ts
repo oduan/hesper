@@ -201,6 +201,9 @@ export function createFallbackHesperApi(): HesperDesktopApi {
         throw new Error('本地文件预览在 renderer fallback 模式不可用')
       }
     },
+    attachments: {
+      readDataUrl: async () => ({ dataUrl: '' })
+    },
     agent: {
       enqueue: async (_input: AgentEnqueueInput) => ({ runId: `run-fallback-${nextRunNumber++}` }),
       stop: async (_runId: string) => undefined,
