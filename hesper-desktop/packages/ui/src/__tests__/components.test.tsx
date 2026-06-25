@@ -799,6 +799,56 @@ describe('ui components', () => {
     expect(sendButton).toBeEnabled()
   })
 
+  it('adds pasted text drafts, renders file chips, and sends attachment-only messages', async () => {
+    const user = userEvent.setup()
+    const onAttachmentsChange = vi.fn()
+    const onSend = vi.fn()
+    const renderComposer = (attachments: ComposerDraftAttachment[]) => (
+      <Composer
+        workspacePath="C:/dev/hesper"
+        modelId="mock/hesper-fast"
+        attachments={attachments}
+        onAttachmentsChange={onAttachmentsChange}
+        onSend={onSend}
+      />
+    )
+    const { rerender } = render(renderComposer([]))
+    const textarea = screen.getByLabelText('消息输入框')
+    const markdownFile = new File(['# pasted'], 'pasted.md', { type: 'text/markdown' })
+    const readText = vi.fn().mockResolvedValue('# pasted')
+    Object.defineProperty(markdownFile, 'text', { configurable: true, value: readText })
+
+    fireEvent.paste(textarea, {
+      clipboardData: {
+        items: [
+          {
+            kind: 'file',
+            type: 'text/markdown',
+            getAsFile: () => markdownFile
+          }
+        ]
+      }
+    })
+
+    await waitFor(() => expect(onAttachmentsChange).toHaveBeenCalledWith([
+      expect.objectContaining({ kind: 'text', name: 'pasted.md', mimeType: 'text/markdown', bytes: markdownFile.size, content: '# pasted' })
+    ]))
+    expect(readText).toHaveBeenCalledTimes(1)
+    const pastedAttachment = onAttachmentsChange.mock.calls.at(-1)![0][0] as ComposerDraftAttachment
+
+    rerender(renderComposer([pastedAttachment]))
+
+    expect(screen.getByText('pasted.md')).toBeInTheDocument()
+    expect(screen.getByText(/text\/markdown/)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '发送' }))
+
+    expect(onSend).toHaveBeenCalledWith('', expect.objectContaining({
+      thinkingLevel: 'high',
+      draftAttachments: [pastedAttachment]
+    }))
+  })
+
   it('adds pasted image drafts, renders image-only previews, and removes them', async () => {
     const user = userEvent.setup()
     const onAttachmentsChange = vi.fn()

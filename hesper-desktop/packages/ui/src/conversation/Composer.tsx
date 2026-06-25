@@ -183,14 +183,14 @@ export function Composer({
   }, [replaceAttachmentsAfterDestructiveMutation])
 
   const handlePaste = useCallback((event: ClipboardEvent<HTMLTextAreaElement>) => {
-    const imageFiles = getClipboardFiles(event.clipboardData)
-      .filter(isSupportedImageAttachmentFile)
+    const supportedFiles = getClipboardFiles(event.clipboardData)
+      .filter(isSupportedDraftAttachmentFile)
       .slice(0, maxComposerAttachmentBatchSize)
-    if (imageFiles.length === 0) return
+    if (supportedFiles.length === 0) return
 
     event.preventDefault()
     const readVersion = attachmentMutationVersionRef.current
-    void readDraftAttachments(imageFiles, readImageDraftAttachment).then((nextAttachments) => appendAttachments(nextAttachments, readVersion))
+    void readDraftAttachments(supportedFiles, readDraftAttachmentFromFile).then((nextAttachments) => appendAttachments(nextAttachments, readVersion))
   }, [appendAttachments])
 
   const handleDragEnter = useCallback((event: DragEvent<HTMLElement>) => {

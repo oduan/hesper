@@ -1280,6 +1280,51 @@ describe('registerIpcHandlers', () => {
     expect((await persistence.events.listByRun(run.id)).map((event) => event.type)).toContain('run.failed')
   })
 
+  it('enqueues and persists text draft attachments when the prompt is empty', async () => {
+    const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), 'hesper-ipc-attachments-'))
+    try {
+      const persistence = await createInMemoryPersistence()
+      const container = createServiceContainer({ persistence, agentMode: 'mock' })
+      const storage = createAttachmentStorage(userDataPath)
+      const session = await container.sessionService.createSession({ title: 'Attachment-only IPC' })
+      const run = {
+        id: 'run-attachment-only',
+        sessionId: session.id,
+        status: 'running',
+        modelId: 'mock/hesper-fast',
+        retryCount: 0,
+        maxRetries: 2,
+        startedAt: '2026-06-26T00:00:00.000Z'
+      } as const
+      await persistence.runs.save(run)
+      const enqueueSpy = vi.spyOn(container.agentRuntime, 'enqueue').mockResolvedValueOnce(run as Awaited<ReturnType<typeof container.agentRuntime.enqueue>>)
+      const { handles } = registerTestIpcHandlers(container, { attachmentStorage: storage })
+
+      await expect(handles.get(ipcChannels.agentEnqueue)?.({ sender: { id: 1 } }, {
+        sessionId: session.id,
+        prompt: '',
+        modelId: 'mock/hesper-fast',
+        messageId: 'message-attachment-only',
+        draftAttachments: [
+          { kind: 'text', name: 'notes.md', mimeType: 'text/markdown', bytes: 7, content: '# Notes' }
+        ]
+      })).resolves.toEqual({ runId: run.id })
+
+      expect(enqueueSpy).toHaveBeenCalledWith(expect.objectContaining({
+        prompt: '',
+        attachments: [expect.objectContaining({ kind: 'text', name: 'notes.md', bytes: 7 })]
+      }))
+      const [message] = await persistence.messages.listBySession(session.id)
+      expect(message).toEqual(expect.objectContaining({
+        id: 'message-attachment-only',
+        content: '',
+        attachments: [expect.objectContaining({ kind: 'text', name: 'notes.md', bytes: 7 })]
+      }))
+    } finally {
+      await fs.rm(userDataPath, { recursive: true, force: true })
+    }
+  })
+
   it('stores draft image and text attachments as file-backed message metadata', async () => {
     const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), 'hesper-ipc-attachments-'))
     try {
@@ -1609,9 +1654,14 @@ describe('registerIpcHandlers', () => {
     }
 
     registerIpcHandlers({ ipcMain, dialog, container })
+    const session = await container.sessionService.createSession({ title: 'Validation' })
+    const enqueueSpy = vi.spyOn(container.agentRuntime, 'enqueue')
 
     await expect(handles.get(ipcChannels.agentEnqueue)?.({ sender: { id: 1 } }, { sessionId: '', prompt: '', modelId: '' })).rejects.toThrow()
+    await expect(handles.get(ipcChannels.agentEnqueue)?.({ sender: { id: 1 } }, { sessionId: session.id, prompt: '', modelId: 'mock/hesper-fast' })).rejects.toThrow()
+    expect(enqueueSpy).not.toHaveBeenCalled()
     expect(await persistence.messages.listBySession('')).toEqual([])
+    expect(await persistence.messages.listBySession(session.id)).toEqual([])
   })
 
   it('controls the source BrowserWindow through window IPC channels', async () => {

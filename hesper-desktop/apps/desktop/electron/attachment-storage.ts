@@ -118,34 +118,40 @@ export function createAttachmentStorage(userDataPath: string): AttachmentStorage
       const safeSessionId = assertSafePathSegment(sessionId, 'sessionId')
       const safeMessageId = assertSafePathSegment(messageId, 'messageId')
       const messageDirectory = path.join(attachmentRoot, safeSessionId, safeMessageId)
-      await fs.mkdir(messageDirectory, { recursive: true })
 
-      const attachments: MessageAttachment[] = []
-      for (const draftAttachment of draftAttachments) {
-        const id = `attachment-${crypto.randomUUID()}`
-        const fileName = `${id}-${sanitizeFileName(draftAttachment.name)}`
-        const relativePath = toPosixRelativePath('attachments', safeSessionId, safeMessageId, fileName)
-        const filePath = resolveRelativeAttachmentPath(relativePath)
+      try {
+        await fs.mkdir(messageDirectory, { recursive: true })
 
-        const data = draftAttachment.kind === 'image'
-          ? (() => {
-              assertImageMimeType(draftAttachment.mimeType)
-              return decodeBase64DataUrl(draftAttachment.dataUrl, draftAttachment.mimeType)
-            })()
-          : Buffer.from(draftAttachment.content, 'utf8')
-        await fs.writeFile(filePath, data)
+        const attachments: MessageAttachment[] = []
+        for (const draftAttachment of draftAttachments) {
+          const id = `attachment-${crypto.randomUUID()}`
+          const fileName = `${id}-${sanitizeFileName(draftAttachment.name)}`
+          const relativePath = toPosixRelativePath('attachments', safeSessionId, safeMessageId, fileName)
+          const filePath = resolveRelativeAttachmentPath(relativePath)
 
-        attachments.push({
-          id,
-          kind: draftAttachment.kind,
-          name: draftAttachment.name,
-          mimeType: draftAttachment.mimeType,
-          bytes: data.byteLength,
-          relativePath
-        })
+          const data = draftAttachment.kind === 'image'
+            ? (() => {
+                assertImageMimeType(draftAttachment.mimeType)
+                return decodeBase64DataUrl(draftAttachment.dataUrl, draftAttachment.mimeType)
+              })()
+            : Buffer.from(draftAttachment.content, 'utf8')
+          await fs.writeFile(filePath, data)
+
+          attachments.push({
+            id,
+            kind: draftAttachment.kind,
+            name: draftAttachment.name,
+            mimeType: draftAttachment.mimeType,
+            bytes: data.byteLength,
+            relativePath
+          })
+        }
+
+        return attachments
+      } catch (error) {
+        await fs.rm(messageDirectory, { recursive: true, force: true }).catch(() => undefined)
+        throw error
       }
-
-      return attachments
     },
 
     async readAttachmentDataUrl({ relativePath, mimeType }) {

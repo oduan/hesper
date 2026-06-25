@@ -144,7 +144,7 @@ export const draftAttachmentSchema = z.discriminatedUnion('kind', [
 
 export const agentEnqueueInputSchema = z.object({
   sessionId: nonEmptyStringSchema,
-  prompt: nonEmptyStringSchema,
+  prompt: z.string(),
   displayPrompt: nonEmptyStringSchema.optional(),
   modelId: nonEmptyStringSchema,
   thinkingLevel: modelThinkingLevelSchema.optional(),
@@ -154,6 +154,16 @@ export const agentEnqueueInputSchema = z.object({
   messageId: nonEmptyStringSchema.optional(),
   messageCreatedAt: z.string().datetime().optional(),
   draftAttachments: z.array(draftAttachmentSchema).optional()
+}).superRefine((input, ctx) => {
+  const hasPromptContent = input.prompt.trim().length > 0
+  const hasDraftAttachments = (input.draftAttachments?.length ?? 0) > 0
+  if (!hasPromptContent && !hasDraftAttachments) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['prompt'],
+      message: 'prompt or draftAttachments is required'
+    })
+  }
 })
 
 export const attachmentReadDataUrlInputSchema = z.object({

@@ -72,6 +72,27 @@ describe('attachment storage', () => {
     }
   })
 
+  it('removes the message attachment directory when saving a later draft attachment fails', async () => {
+    const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), 'hesper-attachments-'))
+    try {
+      const storage = createAttachmentStorage(userDataPath)
+      const messageDirectory = path.join(userDataPath, 'attachments', 'session-1', 'message-rollback')
+
+      await expect(storage.saveDraftAttachments({
+        sessionId: 'session-1',
+        messageId: 'message-rollback',
+        draftAttachments: [
+          { kind: 'text', name: 'notes.txt', mimeType: 'text/plain', bytes: 5, content: 'hello' },
+          { kind: 'image', name: 'broken.png', mimeType: 'image/png', bytes: 5, dataUrl: 'not-a-data-url' }
+        ]
+      })).rejects.toThrow('Image draft attachment must be a base64 data URL')
+
+      await expect(fs.access(messageDirectory)).rejects.toThrow()
+    } finally {
+      await fs.rm(userDataPath, { recursive: true, force: true })
+    }
+  })
+
   it('rejects relative paths that traverse outside the attachments root', async () => {
     const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), 'hesper-attachments-'))
     try {
