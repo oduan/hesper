@@ -31,9 +31,9 @@ function createStep(input: {
     type: input.type,
     status: input.status,
     title: input.title,
-    summary: input.summary,
-    detail: input.detail,
-    createdAt: input.createdAt
+    createdAt: input.createdAt,
+    ...(input.summary !== undefined ? { summary: input.summary } : {}),
+    ...(input.detail !== undefined ? { detail: input.detail } : {})
   }
 }
 

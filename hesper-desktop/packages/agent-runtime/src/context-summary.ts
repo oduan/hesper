@@ -1,166 +1,197 @@
 import type { AgentRun, Message, RunStep } from '@hesper/shared'
 
 export type BuildRunContextSummaryInput = {
-  run: Pick<AgentRun, 'id'> & Partial<AgentRun>
-  messages: Message[]
-  steps: RunStep[]
+  run: Pick<AgentRun, 'id'>
+  messages?: Array<Pick<Message, 'role' | 'content' | 'createdAt'> & Partial<Pick<Message, 'id'>>>
+  steps?: Array<Pick<RunStep, 'type' | 'status' | 'title' | 'createdAt'> & Partial<Pick<RunStep, 'id' | 'summary' | 'detail'>>>
   maxChars?: number
 }
 
 const DEFAULT_MAX_CHARS = 6000
-const FIELD_MAX_CHARS = 1800
-const CONTEXT_CLOSE = '\n</hesper_run_context>'
+const REDACTED_VALUE = '[redacted-sensitive-value]'
+const SENSITIVE_FIELD_NAME_PATTERN = /(?:api[_ -]?key|secret|token|password)/i
 
-type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue }
+function compareText(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0
+}
 
-function isSensitiveKey(key: string): boolean {
-  const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, '')
-  return normalized === 'apikey'
-    || normalized === 'secret'
-    || normalized === 'token'
-    || normalized === 'password'
-    || normalized === 'accesstoken'
-    || normalized === 'refreshtoken'
+function normalizeLineEndings(value: string): string {
+  return value.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+}
+
+function sanitizeTextSection(value: string): string {
+  return normalizeLineEndings(redactSensitiveText(value)).trim()
+}
+
+function sanitizeStructuredText(value: string): string {
+  return normalizeLineEndings(redactSensitiveText(value)).trim()
+}
+
+function escapeXmlAttribute(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
 }
 
 function redactSensitiveText(value: string): string {
   return value
-    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/gi, '[redacted-sensitive-value]')
-    .replace(/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, '[redacted-sensitive-value]')
-    .replace(/\bgithub_pat_[A-Za-z0-9_]{20,}\b/g, '[redacted-sensitive-value]')
-    .replace(/\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{20,}\b/g, '[redacted-sensitive-value]')
-    .replace(/\bxox[abprs]-[A-Za-z0-9-]{10,}\b/g, '[redacted-sensitive-value]')
-    .replace(/\bglpat-[A-Za-z0-9_-]{12,}\b/g, '[redacted-sensitive-value]')
-    .replace(/\bnpm_[A-Za-z0-9]{20,}\b/g, '[redacted-sensitive-value]')
-    .replace(/\bhf_[A-Za-z0-9]{20,}\b/g, '[redacted-sensitive-value]')
-    .replace(/\bAKIA[0-9A-Z]{16}\b/g, '[redacted-sensitive-value]')
-    .replace(/\bAIza[0-9A-Za-z_-]{20,}\b/g, '[redacted-sensitive-value]')
-    .replace(/(?:sk|pk|rk)-[A-Za-z0-9_-]{8,}/g, '[redacted-sensitive-value]')
-    .replace(/([?&](?:api[_-]?key|access[_-]?token|refresh[_-]?token|token|password|secret)=)[^&#\s]+/gi, '$1[redacted-sensitive-value]')
-    .replace(/\b(api[_ -]?key|secret|token|password)\b\s*[:=]\s*["']?[^"'\s,;|]+/gi, '[redacted-sensitive-value]')
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]{8,}\b/gi, REDACTED_VALUE)
+    .replace(/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, REDACTED_VALUE)
+    .replace(/\bgithub_pat_[A-Za-z0-9_]{20,}\b/g, REDACTED_VALUE)
+    .replace(/\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{20,}\b/g, REDACTED_VALUE)
+    .replace(/\bxox[abprs]-[A-Za-z0-9-]{10,}\b/g, REDACTED_VALUE)
+    .replace(/\bglpat-[A-Za-z0-9_-]{12,}\b/g, REDACTED_VALUE)
+    .replace(/\bnpm_[A-Za-z0-9]{20,}\b/g, REDACTED_VALUE)
+    .replace(/\bhf_[A-Za-z0-9]{20,}\b/g, REDACTED_VALUE)
+    .replace(/\bAKIA[0-9A-Z]{16}\b/g, REDACTED_VALUE)
+    .replace(/\bAIza[0-9A-Za-z_-]{20,}\b/g, REDACTED_VALUE)
+    .replace(/(?:sk|pk|rk)-[A-Za-z0-9_-]{8,}/g, REDACTED_VALUE)
+    .replace(/\b(api[_ -]?key|secret|token|password)\b\s*[:=]\s*["']?([^"'\s,;]+)/gi, REDACTED_VALUE)
 }
 
-function normalizeWhitespace(value: string): string {
-  return value.replace(/\r\n/g, '\n').replace(/[ \t]+\n/g, '\n').trim()
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const prototype = Object.getPrototypeOf(value)
+  return prototype === Object.prototype || prototype === null
 }
 
-function stableCompare(left: string, right: string): number {
-  if (left < right) return -1
-  if (left > right) return 1
-  return 0
-}
-
-function compareCreatedThenId<T extends { createdAt: string; id: string }>(left: T, right: T): number {
-  const byCreatedAt = stableCompare(left.createdAt, right.createdAt)
-  return byCreatedAt === 0 ? stableCompare(left.id, right.id) : byCreatedAt
-}
-
-function stableJsonStringify(value: unknown, keyHint?: string): string {
-  if (keyHint && isSensitiveKey(keyHint)) return JSON.stringify('[redacted-sensitive-value]')
-  if (value === undefined) return JSON.stringify(null)
-  if (value === null || typeof value === 'number' || typeof value === 'boolean') return JSON.stringify(value)
-  if (typeof value === 'string') return JSON.stringify(redactSensitiveText(value))
-  if (Array.isArray(value)) return `[${value.map((item) => stableJsonStringify(item)).join(',')}]`
-  if (typeof value === 'object') {
-    const record = value as Record<string, unknown>
-    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableJsonStringify(record[key], key)}`).join(',')}}`
+function normalizeStructuredValue(value: unknown): unknown {
+  if (typeof value === 'string') return sanitizeStructuredText(value)
+  if (Array.isArray(value)) return value.map((item) => normalizeStructuredValue(item))
+  if (value instanceof Date) return value.toISOString()
+  if (isPlainObject(value)) {
+    const normalized: Record<string, unknown> = {}
+    for (const key of Object.keys(value).sort(compareText)) {
+      const raw = value[key]
+      normalized[key] = SENSITIVE_FIELD_NAME_PATTERN.test(key)
+        ? REDACTED_VALUE
+        : normalizeStructuredValue(raw)
+    }
+    return normalized
   }
-  return JSON.stringify(redactSensitiveText(String(value)))
+  return value
 }
 
-function stringifyBounded(value: unknown, maxChars = FIELD_MAX_CHARS): string {
-  const raw = typeof value === 'string' ? value : stableJsonStringify(value)
-  const redacted = normalizeWhitespace(redactSensitiveText(raw))
-  if (redacted.length <= maxChars) return redacted
-  const markerReserve = 40
-  const prefixLength = Math.max(0, maxChars - markerReserve)
-  return `${redacted.slice(0, prefixLength)}\n[truncated ${redacted.length - prefixLength} chars]`
+function stableJsonStringify(value: unknown): string {
+  return JSON.stringify(normalizeStructuredValue(value)) ?? 'null'
 }
 
-function latestContent(messages: Message[], role: Message['role']): string | undefined {
-  const message = [...messages]
-    .filter((candidate) => candidate.role === role && candidate.content.trim())
-    .sort(compareCreatedThenId)
-    .at(-1)
-  return message ? stringifyBounded(message.content, 1200) : undefined
+function sortChronologically<T extends { createdAt: string, id?: string }>(items: T[]): T[] {
+  return items
+    .map((item, index) => ({ item, index }))
+    .sort((left, right) => {
+      return compareText(left.item.createdAt, right.item.createdAt) || compareText(left.item.id ?? '', right.item.id ?? '') || left.index - right.index
+    })
+    .map(({ item }) => item)
 }
 
-function parseStructuredDetail(detail: string): unknown {
+function latestContentByRole(messages: Array<Pick<Message, 'role' | 'content' | 'createdAt'> & Partial<Pick<Message, 'id'>>>, role: Message['role']): string | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]
+    if (!message || message.role !== role) continue
+    const content = sanitizeTextSection(message.content)
+    if (content) return content
+  }
+  return undefined
+}
+
+function parseDetailValue(detail: string): unknown | undefined {
+  const normalized = normalizeLineEndings(detail).trim()
+  if (!normalized) return undefined
   try {
-    return JSON.parse(detail) as unknown
+    return JSON.parse(normalized) as unknown
   } catch {
-    return detail
+    return normalized
   }
 }
 
-function boundedJsonValue(value: unknown, maxChars: number): unknown {
-  const rendered = stableJsonStringify(value)
-  if (rendered.length <= maxChars) return value
-  return stringifyBounded(rendered, maxChars)
-}
-
-function renderStep(step: RunStep): string | undefined {
-  if (step.type !== 'tool_call' && step.type !== 'tool_result') return undefined
-  const payload: Record<string, unknown> = {
-    type: step.type,
+function buildToolEntry(step: Pick<RunStep, 'type' | 'status' | 'title' | 'createdAt'> & Partial<Pick<RunStep, 'id' | 'summary' | 'detail'>>): Record<string, unknown> | undefined {
+  const entry: Record<string, unknown> = {
     status: step.status,
-    title: stringifyBounded(step.title, 240)
+    title: sanitizeTextSection(step.title),
+    type: step.type
   }
-  if (step.summary) payload.summary = stringifyBounded(step.summary, 500)
-  if (step.detail) payload.detail = boundedJsonValue(parseStructuredDetail(step.detail), 1400)
-  return stableJsonStringify(payload)
+
+  if (step.summary) {
+    const summary = sanitizeTextSection(step.summary)
+    if (summary) entry.summary = summary
+  }
+
+  if (typeof step.detail === 'string') {
+    const parsed = parseDetailValue(step.detail)
+    if (parsed !== undefined) entry.detail = parsed
+  }
+
+  return Object.keys(entry).length > 0 ? entry : undefined
 }
 
-function clampSummary(value: string, maxChars: number): string {
-  if (value.length <= maxChars) return value
-  if (maxChars <= 0) return ''
+function normalizeMaxChars(maxChars: number | undefined): number {
+  if (typeof maxChars !== 'number' || !Number.isFinite(maxChars) || maxChars <= 0) return DEFAULT_MAX_CHARS
+  return Math.floor(maxChars)
+}
 
-  const hasClosing = value.endsWith(CONTEXT_CLOSE)
-  const suffix = hasClosing ? CONTEXT_CLOSE : ''
-  const body = hasClosing ? value.slice(0, -CONTEXT_CLOSE.length) : value
-  let omitted = body.length
-  let marker = `\n[truncated ${omitted} chars]`
-  let prefixLength = maxChars - suffix.length - marker.length
+function truncateSummary(opening: string, body: string, closing: string, maxChars: number): string {
+  const full = `${opening}\n${body}\n${closing}`
+  if (full.length <= maxChars) return full
 
-  for (let index = 0; index < 4; index += 1) {
-    if (prefixLength <= 0) break
-    omitted = body.length - prefixLength
-    marker = `\n[truncated ${omitted} chars]`
-    const nextPrefixLength = maxChars - suffix.length - marker.length
-    if (nextPrefixLength === prefixLength) break
-    prefixLength = nextPrefixLength
+  const candidateForPrefix = (prefixLength: number): string => {
+    const prefix = body.slice(0, prefixLength)
+    const omitted = body.length - prefixLength
+    const marker = `[truncated ${omitted} chars]`
+    return `${opening}\n${prefix}${prefixLength > 0 ? '\n' : ''}${marker}\n${closing}`
   }
 
-  if (prefixLength <= 0) {
-    const compact = `${marker}${suffix}`
-    return compact.length <= maxChars ? compact : compact.slice(0, maxChars)
-  }
+  const minimumCandidate = `${opening}\n[truncated ${body.length} chars]\n${closing}`
+  if (minimumCandidate.length > maxChars) return minimumCandidate.slice(0, maxChars)
 
-  return `${body.slice(0, prefixLength)}${marker}${suffix}`
+  let low = 0
+  let high = body.length
+  let best = minimumCandidate
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2)
+    const candidate = candidateForPrefix(mid)
+    if (candidate.length <= maxChars) {
+      best = candidate
+      low = mid + 1
+    } else {
+      high = mid - 1
+    }
+  }
+  return best
 }
 
 export function buildRunContextSummary(input: BuildRunContextSummaryInput): string | undefined {
-  const maxChars = input.maxChars ?? DEFAULT_MAX_CHARS
-  const user = latestContent(input.messages, 'user')
-  const assistant = latestContent(input.messages, 'assistant')
-  const toolSections = [...input.steps]
-    .sort(compareCreatedThenId)
-    .map(renderStep)
-    .filter((section): section is string => Boolean(section))
+  const maxChars = normalizeMaxChars(input.maxChars)
+  const orderedMessages = sortChronologically(input.messages ?? [])
+  const latestUser = latestContentByRole(orderedMessages, 'user')
+  const latestAssistant = latestContentByRole(orderedMessages, 'assistant')
 
-  const hasUsefulContext = Boolean(user || assistant || toolSections.length || input.run.error)
-  if (!hasUsefulContext) return undefined
+  const toolEntries = sortChronologically(input.steps ?? [])
+    .filter((step) => step.type === 'tool_call' || step.type === 'tool_result')
+    .map((step) => buildToolEntry(step))
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry))
 
-  const lines = [`<hesper_run_context run_id="${input.run.id}">`, 'purpose: previous_run_continuity_not_new_user_request']
-  if (user) lines.push('latest_user_request:', user)
-  if (assistant) lines.push('latest_assistant_result:', assistant)
-  if (input.run.status === 'failed' && input.run.error) {
-    lines.push('run_error:', stringifyBounded(input.run.error.message, 1200))
+  if (!latestUser && !latestAssistant && toolEntries.length === 0) return undefined
+
+  const bodyLines: string[] = ['purpose: previous_run_continuity_not_new_user_request']
+  if (latestUser) {
+    bodyLines.push('latest_user_request:')
+    bodyLines.push(latestUser)
   }
-  if (toolSections.length) {
-    lines.push('tool_activity:')
-    lines.push(...toolSections)
+  if (latestAssistant) {
+    bodyLines.push('latest_assistant_result:')
+    bodyLines.push(latestAssistant)
   }
-  lines.push('</hesper_run_context>')
-  return clampSummary(lines.join('\n'), maxChars)
+  if (toolEntries.length > 0) {
+    bodyLines.push('tool_activity:')
+    for (const entry of toolEntries) {
+      bodyLines.push(stableJsonStringify(entry))
+    }
+  }
+
+  const opening = `<hesper_run_context run_id="${escapeXmlAttribute(input.run.id)}">`
+  const closing = '</hesper_run_context>'
+  return truncateSummary(opening, bodyLines.join('\n'), closing, maxChars)
 }
