@@ -141,6 +141,40 @@ describe('PiCoreAgentAdapter', () => {
     }))
   })
 
+  it('passes synthetic run context messages as user-role transcript entries', async () => {
+    const adapter = new PiCoreAgentAdapter({ modelResolver: resolverFor() })
+
+    await adapter.run({
+      runId: 'run-with-context-summary',
+      sessionId: 'session-1',
+      prompt: 'continue',
+      modelId: 'gpt-4o',
+      historyMessages: [
+        {
+          id: 'context-summary-run-1',
+          sessionId: 'session-1',
+          role: 'user',
+          content: '<hesper_run_context run_id="run-1">\ntool_activity:\n{"detail":{"output":"hello"},"status":"succeeded","title":"Read File","type":"tool_call"}\n</hesper_run_context>',
+          contentType: 'plain',
+          runId: 'run-1',
+          createdAt: '2026-06-25T04:00:00.000Z'
+        }
+      ],
+      signal: new AbortController().signal
+    }, vi.fn())
+
+    expect(Agent).toHaveBeenCalledWith(expect.objectContaining({
+      initialState: expect.objectContaining({
+        messages: [
+          expect.objectContaining({
+            role: 'user',
+            content: expect.stringContaining('<hesper_run_context run_id="run-1">')
+          })
+        ]
+      })
+    }))
+  })
+
   it('requests medium thinking for reasoning-capable real models', async () => {
     const resolver: ModelResolver = {
       resolve: vi.fn(async () => ({
