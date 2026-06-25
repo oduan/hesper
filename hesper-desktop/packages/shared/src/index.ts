@@ -1,6 +1,7 @@
 export * from './domain'
 export * from './events'
 export * from './ids'
+export * from './model-capabilities'
 export * from './result'
 export * from './schemas'
 export * from './theme-settings'

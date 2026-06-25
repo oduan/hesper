@@ -3,6 +3,7 @@ import type {
   AgentRun,
   LocalFilePreview,
   Message,
+  MessageAttachment,
   ModelConfig,
   ModelProviderConfig,
   ModelRef,
@@ -104,7 +105,7 @@ const modelConfigBaseSchema = z.object({
   providerId: z.string().min(1),
   modelName: z.string().min(1),
   displayName: z.string().min(1),
-  capabilities: z.array(z.enum(['streaming', 'toolCalls', 'jsonOutput', 'reasoning'])),
+  capabilities: z.array(z.enum(['streaming', 'toolCalls', 'jsonOutput', 'reasoning', 'imageInput'])),
   contextWindow: z.number().int().positive().optional(),
   enabled: z.boolean().optional(),
   createdAt: z.string().datetime(),
@@ -137,6 +138,17 @@ const sessionBaseSchema = z.object({
 
 export const sessionSchema = sessionBaseSchema.transform(stripUndefined)
 
+const messageAttachmentBaseSchema = z.object({
+  id: z.string().min(1),
+  kind: z.enum(['image', 'text']),
+  name: z.string().min(1),
+  mimeType: z.string().min(1),
+  bytes: z.number().int().nonnegative(),
+  relativePath: z.string().min(1)
+}).strict()
+
+export const messageAttachmentSchema = messageAttachmentBaseSchema.transform(stripUndefined) satisfies z.ZodType<NormalizeOptional<MessageAttachment>>
+
 const messageBaseSchema = z.object({
   id: z.string().min(1),
   sessionId: z.string().min(1),
@@ -144,6 +156,7 @@ const messageBaseSchema = z.object({
   content: z.string(),
   contentType: z.enum(['markdown', 'html', 'plain']),
   runId: z.string().optional(),
+  attachments: z.array(messageAttachmentSchema).optional(),
   createdAt: z.string().datetime()
 })
 

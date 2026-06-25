@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   agentRuntimeEventSchema,
   agentRunSchema,
+  messageSchema,
   modelConfigSchema,
   modelProviderConfigSchema,
   roleSchema,
@@ -221,6 +222,44 @@ describe('shared schemas', () => {
       createdAt: '2026-06-20T15:20:00.000Z',
       updatedAt: '2026-06-20T15:20:00.000Z'
     })).toThrow()
+  })
+
+  it('parses user messages with file-backed attachments', () => {
+    const message = messageSchema.parse({
+      id: 'message-attachment-1',
+      sessionId: 'session-1',
+      role: 'user',
+      content: '看这张图',
+      contentType: 'plain',
+      createdAt: '2026-06-26T00:00:00.000Z',
+      attachments: [
+        { id: 'attachment-image-1', kind: 'image', name: 'pasted-image.png', mimeType: 'image/png', bytes: 128, relativePath: 'attachments/session-1/message-attachment-1/attachment-image-1.png' },
+        { id: 'attachment-text-1', kind: 'text', name: 'notes.md', mimeType: 'text/markdown', bytes: 64, relativePath: 'attachments/session-1/message-attachment-1/attachment-text-1.md' }
+      ]
+    })
+    expect(message.attachments).toHaveLength(2)
+    expect(message.attachments?.[0]?.kind).toBe('image')
+  })
+
+  it('rejects unsupported file attachment kinds', () => {
+    expect(() => messageSchema.parse({
+      id: 'message-attachment-2',
+      sessionId: 'session-1',
+      role: 'user',
+      content: '附件类型不对',
+      contentType: 'plain',
+      createdAt: '2026-06-26T00:00:00.000Z',
+      attachments: [
+        { id: 'attachment-file-1', kind: 'file', name: 'archive.bin', mimeType: 'application/octet-stream', bytes: 1, relativePath: 'attachments/session-1/message-attachment-2/attachment-file-1.bin' }
+      ]
+    })).toThrow()
+  })
+
+  it('accepts imageInput as a model capability', () => {
+    const model = modelConfigSchema.parse({
+      id: 'gpt-5.5', providerId: 'openai', modelName: 'gpt-5.5', displayName: 'GPT-5.5', capabilities: ['streaming', 'toolCalls', 'reasoning', 'imageInput'], createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:00.000Z'
+    })
+    expect(model.capabilities).toContain('imageInput')
   })
 
   it('validates model capabilities and provider linkage', () => {

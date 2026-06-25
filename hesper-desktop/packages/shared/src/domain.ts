@@ -18,6 +18,17 @@ export type LocalFilePreview = {
   warning?: string
 }
 
+export type MessageAttachmentKind = 'image' | 'text'
+
+export type MessageAttachment = {
+  id: string
+  kind: MessageAttachmentKind
+  name: string
+  mimeType: string
+  bytes: number
+  relativePath: string
+}
+
 export type RunError = {
   code: 'network_error' | 'timeout' | 'rate_limit_transient' | 'stream_interrupted' | 'tool_error' | 'unknown'
   message: string
@@ -27,7 +38,7 @@ export type RunError = {
 export type ModelProviderKind = 'mock' | 'openai' | 'deepseek' | 'openai-compatible' | 'anthropic' | 'custom' | 'pi'
 export type ModelProviderAuthType = 'api_key' | 'oauth' | 'none'
 export type PiAuthProvider = 'openai-codex'
-export type ModelCapability = 'streaming' | 'toolCalls' | 'jsonOutput' | 'reasoning'
+export type ModelCapability = 'streaming' | 'toolCalls' | 'jsonOutput' | 'reasoning' | 'imageInput'
 export type ModelThinkingLevel = 'low' | 'medium' | 'high' | 'xhigh'
 export type ToolPermissionMode = 'allow' | 'deny' | 'ask'
 export type ToolPermissionScope = 'global' | 'session' | 'role' | 'worker-agent'
@@ -99,6 +110,7 @@ export type Message = {
   content: string
   contentType: MessageContentType
   runId?: string
+  attachments?: MessageAttachment[]
   createdAt: string
 }
 
