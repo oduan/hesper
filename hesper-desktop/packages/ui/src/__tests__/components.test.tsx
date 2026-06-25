@@ -947,6 +947,44 @@ describe('ui components', () => {
     expect(sendOptions.prompt).not.toContain('call skills.get')
   })
 
+  it('keeps native textarea text visible while skill mention highlighting renders as a background layer', async () => {
+    const user = userEvent.setup()
+
+    const { container } = render(
+      <Composer
+        workspacePath="C:/dev/hesper"
+        modelId="mock/hesper-fast"
+        skillOptions={[{ id: 'skill-superpowers', name: 'using-superpowers' }]}
+        onSend={() => undefined}
+      />
+    )
+
+    const textarea = screen.getByLabelText('消息输入框') as HTMLTextAreaElement
+    await user.type(textarea, '@using')
+    await user.keyboard('{Enter}')
+    await user.type(textarea, '测试一下\n测试一下')
+
+    expect(textarea).toHaveValue('@using-superpowers 测试一下\n测试一下')
+    expect(textarea).toHaveClass('hesper-skill-mention-textarea')
+    expect(textarea).toHaveStyle({
+      color: themeTokens.color.text,
+      overflowWrap: 'anywhere',
+      whiteSpace: 'pre-wrap'
+    })
+    expect(textarea.style.color).not.toBe('transparent')
+
+    const pill = container.querySelector('[data-skill-mention-pill="true"]') as HTMLElement
+    const mirror = pill.parentElement as HTMLElement
+    expect(mirror).toHaveAttribute('aria-hidden', 'true')
+    expect(mirror.style.color).toBe('transparent')
+    expect(mirror).toHaveStyle({
+      overflowWrap: 'anywhere',
+      whiteSpace: 'pre-wrap'
+    })
+    expect(mirror.style.webkitTextFillColor).toBe('transparent')
+    expect(pill).toHaveStyle({ background: themeTokens.color.softControl })
+  })
+
   it('keeps selected skill mention metadata when the composer remounts', async () => {
     const user = userEvent.setup()
     const skillOptions = [{ id: 'skill-research', name: 'Research' }]
