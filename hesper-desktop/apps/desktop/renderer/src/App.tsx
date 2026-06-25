@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react'
-import { createId, defaultAppThemeId, nowIso, type AgentRun, type Message, type RunStep, type Session, type WorkerAgentInvocation } from '@hesper/shared'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react'
+import { createId, defaultAppThemeId, nowIso, type AgentRun, type Message, type MessageAttachment, type RunStep, type Session, type WorkerAgentInvocation } from '@hesper/shared'
 import { AppShell, ConversationView, resolveThemeVariant, themeTokens, type AppSection, type ComposerDraftAttachment, type ComposerSendOptions, type ComposerSkillMention, type ConversationShortcutCommand, type SkillOption } from '@hesper/ui'
 import { AppStoreProvider, useAppStore } from './app-store'
 import { hesperApi } from './ipc-client'
@@ -195,6 +195,9 @@ function AppContent() {
   const activeSkill = skills.find((skill) => skill.id === activeSkillId) ?? skills[0]
   const activeToolCredentialStatus = activeTool ? toolCredentialStatuses[activeTool.id] : undefined
   const pendingToolIdList = useMemo(() => [...pendingToolIds], [pendingToolIds])
+  const loadAttachmentDataUrl = useCallback((attachment: MessageAttachment) => (
+    hesperApi.attachments!.readDataUrl({ relativePath: attachment.relativePath, mimeType: attachment.mimeType }).then((result) => result.dataUrl)
+  ), [])
 
   const createRolesRequestId = () => {
     nextRolesRequestIdRef.current += 1
@@ -1419,6 +1422,7 @@ function AppContent() {
             draftAttachments={draftAttachmentsBySession[activeSession.id] ?? []}
             running={Boolean(activeRunningRunId)}
             loadLocalFilePreview={(path) => hesperApi.files.preview({ sessionId: activeSession.id, path })}
+            loadAttachmentDataUrl={loadAttachmentDataUrl}
             onDraftChange={(value) => {
               setDraftsBySession((current) => ({ ...current, [activeSession.id]: value }))
             }}

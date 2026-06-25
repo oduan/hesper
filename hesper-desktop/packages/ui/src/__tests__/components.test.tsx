@@ -2,7 +2,7 @@ import '@testing-library/jest-dom/vitest'
 import { useState } from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import type { AgentRun, LocalFilePreview, Message, RunStep, Session, WorkerAgentInvocation } from '@hesper/shared'
+import type { AgentRun, LocalFilePreview, Message, MessageAttachment, RunStep, Session, WorkerAgentInvocation } from '@hesper/shared'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppShell } from '../layout/AppShell'
 import { Composer, type ComposerDraftAttachment, type ComposerSkillMention } from '../conversation/Composer'
@@ -1498,6 +1498,205 @@ describe('ui components', () => {
 
     expect(screen.getByLabelText('助手消息')).toHaveStyle({ fontSize: 'var(--hesper-font-size, 14px)' })
     expect(screen.queryByLabelText(/^发送时间：/)).not.toBeInTheDocument()
+  })
+
+  it('renders user image attachments from persisted data URLs without showing filenames', async () => {
+    const dataUrl = 'data:image/png;base64,aW1hZ2U='
+    const loadAttachmentDataUrl = vi.fn(async () => dataUrl)
+
+    render(
+      <MessageBubble
+        message={{
+          id: 'message-user-image-attachment',
+          sessionId: 'session-1',
+          role: 'user',
+          content: '请看这张图',
+          contentType: 'plain',
+          attachments: [
+            {
+              id: 'attachment-image-1',
+              kind: 'image',
+              name: 'secret-name.png',
+              mimeType: 'image/png',
+              bytes: 128,
+              relativePath: 'attachments/secret-name.png'
+            }
+          ],
+          createdAt: now
+        }}
+        loadAttachmentDataUrl={loadAttachmentDataUrl}
+      />
+    )
+
+    expect(screen.getByText('请看这张图')).toBeInTheDocument()
+    const image = await screen.findByAltText('图片附件')
+    expect(image).toHaveAttribute('src', dataUrl)
+    expect(screen.queryByText('secret-name.png')).not.toBeInTheDocument()
+    expect(loadAttachmentDataUrl).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps loaded image attachments when rerendered with a new loader reference', async () => {
+    const firstDataUrl = 'data:image/png;base64,Zmlyc3Q='
+    const secondDataUrl = 'data:image/png;base64,c2Vjb25k'
+    const message = {
+      id: 'message-user-stable-image-attachment',
+      sessionId: 'session-1',
+      role: 'user',
+      content: '图片已加载',
+      contentType: 'plain',
+      attachments: [
+        {
+          id: 'attachment-stable-image-1',
+          kind: 'image',
+          name: 'secret-stable.png',
+          mimeType: 'image/png',
+          bytes: 128,
+          relativePath: 'attachments/secret-stable.png'
+        }
+      ],
+      createdAt: now
+    } satisfies Message
+    const firstLoader = vi.fn(async () => firstDataUrl)
+    const secondLoader = vi.fn(async () => secondDataUrl)
+
+    const { rerender } = render(<MessageBubble message={message} loadAttachmentDataUrl={firstLoader} />)
+
+    expect(await screen.findByAltText('图片附件')).toHaveAttribute('src', firstDataUrl)
+    rerender(<MessageBubble message={message} loadAttachmentDataUrl={secondLoader} />)
+
+    expect(screen.getByAltText('图片附件')).toHaveAttribute('src', firstDataUrl)
+    expect(screen.queryByLabelText('图片附件加载中')).not.toBeInTheDocument()
+    expect(firstLoader).toHaveBeenCalledTimes(1)
+    expect(secondLoader).not.toHaveBeenCalled()
+  })
+
+  it('ignores stale image attachment load results after the attachment path changes', async () => {
+    const staleDataUrl = 'data:image/png;base64,c3RhbGU='
+    const freshDataUrl = 'data:image/png;base64,ZnJlc2g='
+    const staleLoad = createDeferred<string>()
+    const freshLoad = createDeferred<string>()
+    const createMessage = (relativePath: string): Message => ({
+      id: 'message-user-stale-image-attachment',
+      sessionId: 'session-1',
+      role: 'user',
+      content: '图片会更新',
+      contentType: 'plain',
+      attachments: [
+        {
+          id: 'attachment-shared-image-id',
+          kind: 'image',
+          name: 'secret-stale.png',
+          mimeType: 'image/png',
+          bytes: 128,
+          relativePath
+        }
+      ],
+      createdAt: now
+    })
+    const loadAttachmentDataUrl = vi.fn((attachment: MessageAttachment) => (
+      attachment.relativePath.endsWith('fresh.png') ? freshLoad.promise : staleLoad.promise
+    ))
+
+    const { rerender } = render(
+      <MessageBubble message={createMessage('attachments/stale.png')} loadAttachmentDataUrl={loadAttachmentDataUrl} />
+    )
+    rerender(<MessageBubble message={createMessage('attachments/fresh.png')} loadAttachmentDataUrl={loadAttachmentDataUrl} />)
+
+    await act(async () => {
+      staleLoad.resolve(staleDataUrl)
+    })
+    expect(screen.queryByAltText('图片附件')).not.toBeInTheDocument()
+
+    await act(async () => {
+      freshLoad.resolve(freshDataUrl)
+    })
+    expect(await screen.findByAltText('图片附件')).toHaveAttribute('src', freshDataUrl)
+    expect(screen.queryByText('secret-stale.png')).not.toBeInTheDocument()
+    expect(loadAttachmentDataUrl).toHaveBeenCalledTimes(2)
+  })
+
+  it('renders multiple image and text attachments without mixing image data URLs', async () => {
+    const imageUrls: Record<string, string> = {
+      'attachment-image-one': 'data:image/png;base64,b25l',
+      'attachment-image-two': 'data:image/png;base64,dHdv'
+    }
+    const loadAttachmentDataUrl = vi.fn(async (attachment: MessageAttachment) => imageUrls[attachment.id] ?? '')
+
+    render(
+      <MessageBubble
+        message={{
+          id: 'message-user-mixed-attachments',
+          sessionId: 'session-1',
+          role: 'user',
+          content: '混合附件',
+          contentType: 'plain',
+          attachments: [
+            {
+              id: 'attachment-image-one',
+              kind: 'image',
+              name: 'secret-one.png',
+              mimeType: 'image/png',
+              bytes: 128,
+              relativePath: 'attachments/secret-one.png'
+            },
+            {
+              id: 'attachment-text-notes',
+              kind: 'text',
+              name: 'notes.md',
+              mimeType: 'text/markdown',
+              bytes: 2048,
+              relativePath: 'attachments/notes.md'
+            },
+            {
+              id: 'attachment-image-two',
+              kind: 'image',
+              name: 'secret-two.png',
+              mimeType: 'image/png',
+              bytes: 256,
+              relativePath: 'attachments/secret-two.png'
+            }
+          ],
+          createdAt: now
+        }}
+        loadAttachmentDataUrl={loadAttachmentDataUrl}
+      />
+    )
+
+    await waitFor(() => expect(screen.getAllByAltText('图片附件')).toHaveLength(2))
+    const images = screen.getAllByAltText('图片附件')
+    expect(images[0]).toHaveAttribute('src', imageUrls['attachment-image-one'])
+    expect(images[1]).toHaveAttribute('src', imageUrls['attachment-image-two'])
+    expect(screen.getByText('notes.md')).toBeInTheDocument()
+    expect(screen.queryByText('secret-one.png')).not.toBeInTheDocument()
+    expect(screen.queryByText('secret-two.png')).not.toBeInTheDocument()
+  })
+
+  it('renders text attachments as file chips next to message content', () => {
+    render(
+      <MessageBubble
+        message={{
+          id: 'message-user-text-attachment',
+          sessionId: 'session-1',
+          role: 'user',
+          content: '请读取笔记',
+          contentType: 'plain',
+          attachments: [
+            {
+              id: 'attachment-text-1',
+              kind: 'text',
+              name: 'notes.md',
+              mimeType: 'text/markdown',
+              bytes: 2048,
+              relativePath: 'attachments/notes.md'
+            }
+          ],
+          createdAt: now
+        }}
+      />
+    )
+
+    expect(screen.getByText('请读取笔记')).toBeInTheDocument()
+    expect(screen.getByText('notes.md')).toBeInTheDocument()
   })
 
   it('renders markdown output as formatted elements instead of raw text', () => {

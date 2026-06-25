@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type WheelEvent as ReactWheelEvent } from 'react'
-import type { AgentRun, LocalFilePreview, Message, ModelCapability, RunStep, Session } from '@hesper/shared'
+import type { AgentRun, LocalFilePreview, Message, MessageAttachment, ModelCapability, RunStep, Session } from '@hesper/shared'
 import { themeTokens } from '../theme'
 import { Composer, type ComposerDraftAttachment, type ComposerSendOptions, type ComposerSkillMention, type ModelOptionGroup, type SkillOption } from './Composer'
 import { LocalFilePreviewDialog } from './LocalFilePreviewDialog'
@@ -40,6 +40,7 @@ export type ConversationViewProps = {
   onSelectWorkspace?: () => void
   onModelChange?: (modelId: string) => void
   loadLocalFilePreview?: (path: string) => Promise<LocalFilePreview>
+  loadAttachmentDataUrl?: (attachment: MessageAttachment) => Promise<string>
   shortcutCommand?: ConversationShortcutCommand
 }
 
@@ -331,6 +332,7 @@ export function ConversationView({
   onSelectWorkspace,
   onModelChange,
   loadLocalFilePreview,
+  loadAttachmentDataUrl,
   shortcutCommand
 }: ConversationViewProps) {
   const [closeFullscreenSignal, setCloseFullscreenSignal] = useState(0)
@@ -727,7 +729,10 @@ export function ConversationView({
                     onLocalFileClick={handleLocalFileClick}
                   />
                 ) : (
-                  <MessageBubble message={message} />
+                  <MessageBubble
+                    message={message}
+                    {...(loadAttachmentDataUrl ? { loadAttachmentDataUrl } : {})}
+                  />
                 )}
                 {shouldShowMessageRunSteps(message, messageSteps) ? (
                   <div style={{ marginTop: themeTokens.spacing.sm }}>

@@ -1,12 +1,13 @@
-import type { CSSProperties } from 'react'
-import type { Message } from '@hesper/shared'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import type { Message, MessageAttachment } from '@hesper/shared'
 import { themeTokens } from '../theme'
 
 export type MessageBubbleProps = {
   message: Message
+  loadAttachmentDataUrl?: (attachment: MessageAttachment) => Promise<string>
 }
 
-export function MessageBubble({ message }: MessageBubbleProps) {
+export function MessageBubble({ message, loadAttachmentDataUrl }: MessageBubbleProps) {
   const isUser = message.role === 'user'
   const timestamp = isUser ? formatMessageTimestamp(message.createdAt) : undefined
 
@@ -18,6 +19,10 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       }}
     >
       <div style={messageStackStyle(isUser)}>
+        <MessageAttachments
+          message={message}
+          {...(loadAttachmentDataUrl ? { loadAttachmentDataUrl } : {})}
+        />
         <article
           aria-label={isUser ? '用户消息' : '助手消息'}
           style={{
@@ -49,6 +54,151 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   )
 }
 
+type MessageAttachmentsProps = {
+  message: Message
+  loadAttachmentDataUrl?: (attachment: MessageAttachment) => Promise<string>
+}
+
+const emptyAttachments: MessageAttachment[] = []
+
+type LoadedImageDataUrl = {
+  cacheKey: string
+  dataUrl: string
+}
+
+function MessageAttachments({ message, loadAttachmentDataUrl }: MessageAttachmentsProps) {
+  const attachments = message.attachments ?? emptyAttachments
+  const imageAttachments = useMemo(() => attachments.filter((attachment) => attachment.kind === 'image'), [attachments])
+  const textAttachments = useMemo(() => attachments.filter((attachment) => attachment.kind === 'text'), [attachments])
+  const imageAttachmentSignature = useMemo(() => imageAttachments.map(createImageAttachmentCacheKey).join('\u0001'), [imageAttachments])
+  const hasAttachmentDataUrlLoader = Boolean(loadAttachmentDataUrl)
+  const [imageDataUrls, setImageDataUrls] = useState<Record<string, LoadedImageDataUrl>>({})
+  const imageDataUrlsRef = useRef(imageDataUrls)
+  const loadAttachmentDataUrlRef = useRef(loadAttachmentDataUrl)
+  const pendingImageCacheKeysRef = useRef(new Set<string>())
+
+  useEffect(() => {
+    imageDataUrlsRef.current = imageDataUrls
+  }, [imageDataUrls])
+
+  useEffect(() => {
+    loadAttachmentDataUrlRef.current = loadAttachmentDataUrl
+  }, [loadAttachmentDataUrl])
+
+  useEffect(() => {
+    let cancelled = false
+    const activeCacheKeys = new Map(imageAttachments.map((attachment) => [attachment.id, createImageAttachmentCacheKey(attachment)] as const))
+    const activeCacheKeySet = new Set(activeCacheKeys.values())
+
+    for (const pendingCacheKey of pendingImageCacheKeysRef.current) {
+      if (!activeCacheKeySet.has(pendingCacheKey)) {
+        pendingImageCacheKeysRef.current.delete(pendingCacheKey)
+      }
+    }
+
+    setImageDataUrls((current) => {
+      let changed = false
+      const next: Record<string, LoadedImageDataUrl> = {}
+
+      for (const [attachmentId, loadedImage] of Object.entries(current)) {
+        if (activeCacheKeys.get(attachmentId) === loadedImage.cacheKey) {
+          next[attachmentId] = loadedImage
+        } else {
+          changed = true
+        }
+      }
+
+      return changed ? next : current
+    })
+
+    if (!hasAttachmentDataUrlLoader || imageAttachments.length === 0) {
+      return () => {
+        cancelled = true
+      }
+    }
+
+    for (const attachment of imageAttachments) {
+      const cacheKey = createImageAttachmentCacheKey(attachment)
+      const loadedImage = imageDataUrlsRef.current[attachment.id]
+      if (loadedImage?.cacheKey === cacheKey || pendingImageCacheKeysRef.current.has(cacheKey)) {
+        continue
+      }
+
+      pendingImageCacheKeysRef.current.add(cacheKey)
+      void Promise.resolve().then(() => {
+        const loader = loadAttachmentDataUrlRef.current
+        if (!loader) throw new Error('Attachment loader unavailable')
+        return loader(attachment)
+      }).then(
+        (dataUrl) => {
+          if (cancelled) return
+          setImageDataUrls((current) => {
+            if (activeCacheKeys.get(attachment.id) !== cacheKey) {
+              return current
+            }
+            return { ...current, [attachment.id]: { cacheKey, dataUrl } }
+          })
+        },
+        () => {
+          // Keep historical message rendering resilient if an attachment file is missing.
+        }
+      ).finally(() => {
+        pendingImageCacheKeysRef.current.delete(cacheKey)
+      })
+    }
+
+    return () => {
+      cancelled = true
+    }
+  }, [hasAttachmentDataUrlLoader, imageAttachmentSignature])
+
+  if (attachments.length === 0) {
+    return null
+  }
+
+  return (
+    <div aria-label="消息附件" style={attachmentsGridStyle}>
+      {imageAttachments.map((attachment) => {
+        const loadedImage = imageDataUrls[attachment.id]
+        const dataUrl = loadedImage?.cacheKey === createImageAttachmentCacheKey(attachment) ? loadedImage.dataUrl : undefined
+        return dataUrl ? (
+          <img
+            key={attachment.id}
+            alt="图片附件"
+            src={dataUrl}
+            style={attachmentImageStyle}
+          />
+        ) : (
+          <div key={attachment.id} aria-label="图片附件加载中" style={attachmentImagePlaceholderStyle} />
+        )
+      })}
+      {textAttachments.map((attachment) => (
+        <div key={attachment.id} style={fileChipStyle}>
+          <span aria-hidden="true" style={fileChipIconStyle}>📄</span>
+          <span style={fileChipTextStyle}>{attachment.name}</span>
+          <span style={fileChipMetaStyle}>{formatAttachmentMeta(attachment)}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function createImageAttachmentCacheKey(attachment: MessageAttachment): string {
+  return [attachment.id, attachment.relativePath, attachment.mimeType].join('\u0000')
+}
+
+function formatAttachmentMeta(attachment: MessageAttachment): string {
+  const parts = [attachment.mimeType, formatBytes(attachment.bytes)].filter(Boolean)
+  return parts.join(' · ')
+}
+
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return ''
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
 function formatMessageTimestamp(value: string): string | undefined {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return undefined
@@ -69,6 +219,74 @@ function messageStackStyle(isUser: boolean): CSSProperties {
     gap: 3
   }
 }
+
+const attachmentsGridStyle = {
+  maxWidth: '100%',
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(112px, max-content))',
+  gap: themeTokens.spacing.xs,
+  justifyContent: 'end'
+} satisfies CSSProperties
+
+const attachmentImageStyle = {
+  display: 'block',
+  maxWidth: 220,
+  maxHeight: 160,
+  width: 'auto',
+  height: 'auto',
+  objectFit: 'cover',
+  borderRadius: themeTokens.radius.md,
+  boxShadow: `0 8px 24px ${themeTokens.color.shadow}`
+} satisfies CSSProperties
+
+const attachmentImagePlaceholderStyle = {
+  width: 112,
+  height: 72,
+  borderRadius: themeTokens.radius.md,
+  background: themeTokens.color.softControl,
+  opacity: 0.72
+} satisfies CSSProperties
+
+const fileChipStyle = {
+  minWidth: 0,
+  maxWidth: 260,
+  display: 'inline-grid',
+  gridTemplateColumns: 'auto minmax(0, 1fr)',
+  columnGap: themeTokens.spacing.xs,
+  rowGap: 2,
+  alignItems: 'center',
+  padding: `${themeTokens.spacing.xs} ${themeTokens.spacing.sm}`,
+  borderRadius: 999,
+  background: themeTokens.color.surfaceMuted,
+  color: themeTokens.color.text,
+  boxShadow: `0 8px 24px ${themeTokens.color.shadow}`
+} satisfies CSSProperties
+
+const fileChipIconStyle = {
+  gridRow: '1 / span 2',
+  fontSize: 14,
+  lineHeight: 1
+} satisfies CSSProperties
+
+const fileChipTextStyle = {
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  fontSize: themeTokens.typography.body,
+  lineHeight: 1.2,
+  fontWeight: 600
+} satisfies CSSProperties
+
+const fileChipMetaStyle = {
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  color: themeTokens.color.textMuted,
+  fontSize: themeTokens.typography.tiny,
+  lineHeight: 1.2
+} satisfies CSSProperties
 
 const timestampStyle = {
   justifySelf: 'end',
