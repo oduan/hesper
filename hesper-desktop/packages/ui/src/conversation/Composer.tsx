@@ -86,7 +86,7 @@ export function Composer({
   const [selectionStart, setSelectionStart] = useState(0)
   const [activeSkillIndex, setActiveSkillIndex] = useState(0)
   const [dismissedMentionStart, setDismissedMentionStart] = useState<number>()
-  const [textareaScrollTop, setTextareaScrollTop] = useState(0)
+  const [textareaScroll, setTextareaScroll] = useState({ top: 0, left: 0 })
   const [internalSkillMentions, setInternalSkillMentions] = useState<SkillMentionRange[]>([])
   const [thinkingLevel, setThinkingLevel] = useState<ComposerThinkingLevel>(() => readStoredComposerThinkingLevel())
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
@@ -267,7 +267,7 @@ export function Composer({
       ) : null}
       <div style={editorWrapperStyle}>
         {hasSkillMentionPills ? (
-          <div aria-hidden="true" style={{ ...highlightMirrorStyle, transform: `translateY(-${textareaScrollTop}px)` }}>
+          <div aria-hidden="true" style={{ ...highlightMirrorStyle, transform: `translate(${-textareaScroll.left}px, ${-textareaScroll.top}px)` }}>
             {composerSegments.map((segment, index) => segment.kind === 'skill' ? (
               <span key={`${segment.skill.id}-${index}`} data-skill-mention-pill="true" style={skillMentionPillStyle}>{segment.text}</span>
             ) : (
@@ -291,7 +291,10 @@ export function Composer({
           onClick={updateSelectionStart}
           onKeyUp={updateSelectionStart}
           onSelect={updateSelectionStart}
-          onScroll={(event) => setTextareaScrollTop(event.currentTarget.scrollTop)}
+          onScroll={(event) => setTextareaScroll({
+            top: event.currentTarget.scrollTop,
+            left: event.currentTarget.scrollLeft
+          })}
           onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
             if ((event.key === 'Backspace' || event.key === 'Delete') && deleteSkillMentionAtSelection(event.key)) {
               event.preventDefault()
@@ -328,7 +331,7 @@ export function Composer({
           }}
           style={{
             ...textareaStyle,
-            ...(hasSkillMentionPills ? transparentTextareaStyle : {})
+            ...(hasSkillMentionPills ? skillMentionTextareaStyle : {})
           }}
         />
       </div>
@@ -678,6 +681,22 @@ const editorWrapperStyle = {
   overflow: 'hidden'
 } satisfies CSSProperties
 
+const sharedEditorTextStyle = {
+  padding: '0 2px',
+  fontFamily: 'inherit',
+  fontSize: themeTokens.typography.body,
+  fontWeight: 'inherit',
+  letterSpacing: 'inherit',
+  lineHeight: 1.5
+} satisfies CSSProperties
+
+const skillMentionEditorTextLayoutStyle = {
+  ...sharedEditorTextStyle,
+  whiteSpace: 'pre-wrap',
+  overflowWrap: 'anywhere',
+  wordBreak: 'break-word'
+} satisfies CSSProperties
+
 const highlightMirrorStyle = {
   position: 'absolute',
   inset: 0,
@@ -685,15 +704,11 @@ const highlightMirrorStyle = {
   boxSizing: 'border-box',
   pointerEvents: 'none',
   overflow: 'hidden',
-  color: themeTokens.color.text,
-  padding: '0 2px',
-  fontFamily: 'inherit',
-  fontSize: themeTokens.typography.body,
-  fontWeight: 'inherit',
-  letterSpacing: 'inherit',
-  lineHeight: 1.5,
-  whiteSpace: 'pre-wrap',
-  overflowWrap: 'anywhere'
+  color: 'transparent',
+  WebkitTextFillColor: 'transparent',
+  textShadow: 'none',
+  zIndex: 0,
+  ...skillMentionEditorTextLayoutStyle
 } satisfies CSSProperties
 
 const skillMentionPillStyle = {
@@ -704,21 +719,24 @@ const skillMentionPillStyle = {
   boxShadow: `1px 0 0 1px ${themeTokens.color.softControl}`,
   boxDecorationBreak: 'clone',
   WebkitBoxDecorationBreak: 'clone',
-  color: themeTokens.color.text,
+  color: 'transparent',
+  WebkitTextFillColor: 'transparent',
   padding: 0,
   lineHeight: 1.5,
   whiteSpace: 'pre-wrap'
 } satisfies CSSProperties
 
-const transparentTextareaStyle = {
-  color: 'transparent',
-  caretColor: themeTokens.color.text
+const skillMentionTextareaStyle = {
+  caretColor: themeTokens.color.text,
+  ...skillMentionEditorTextLayoutStyle
 } satisfies CSSProperties
 
 const textareaStyle = {
   width: '100%',
   boxSizing: 'border-box',
   display: 'block',
+  position: 'relative',
+  zIndex: 1,
   resize: 'none',
   minHeight: 96,
   maxHeight: 210,
@@ -728,12 +746,7 @@ const textareaStyle = {
   outline: 0,
   background: 'transparent',
   color: themeTokens.color.text,
-  padding: '0 2px',
-  fontFamily: 'inherit',
-  fontSize: themeTokens.typography.body,
-  fontWeight: 'inherit',
-  letterSpacing: 'inherit',
-  lineHeight: 1.5
+  ...sharedEditorTextStyle
 } satisfies CSSProperties
 
 const controlButtonStyle = {
