@@ -7,13 +7,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppShell } from '../layout/AppShell'
 import { ActivityRail } from '../layout/ActivityRail'
 import { Composer, type ComposerDraftAttachment, type ComposerSkillMention } from '../conversation/Composer'
-import { ConversationView } from '../conversation/ConversationView'
+import { ConversationView, type ConversationGitPanelProps } from '../conversation/ConversationView'
 import { FullscreenOutput } from '../conversation/FullscreenOutput'
 import { MarkdownOutput } from '../conversation/MarkdownOutput'
 import { MessageBubble } from '../conversation/MessageBubble'
 import { OutputBlock } from '../conversation/OutputBlock'
 import { RunSteps } from '../conversation/RunSteps'
 import { themeTokens } from '../theme'
+import type { GitGraphRowView } from '../git/git-graph-types'
 
 const now = '2026-06-10T03:00:00.000Z'
 
@@ -59,6 +60,55 @@ function renderConversationWithAssistant(content: string, loadLocalFilePreview?:
   )
 }
 
+const gitGraphRow = {
+  commitHash: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  shortHash: 'aaaaaaa',
+  parents: [],
+  subject: 'Add Git panel entry',
+  authorName: 'Oisin',
+  authorEmail: 'oisin@example.com',
+  authoredAt: now,
+  refs: [{ name: 'refs/heads/feature/git-log-panel', shortName: 'feature/git-log-panel', type: 'local-branch' }],
+  graph: {
+    lanes: [{ id: 'lane-0', active: true }],
+    nodeLaneId: 'lane-0'
+  }
+} satisfies GitGraphRowView
+
+function createGitPanel(overrides: Partial<ConversationGitPanelProps> = {}): ConversationGitPanelProps {
+  return {
+    visible: true,
+    open: false,
+    currentBranch: 'feature/git-log-panel',
+    dirty: false,
+    rows: [gitGraphRow],
+    selectedCommit: gitGraphRow.commitHash,
+    onOpen: vi.fn(),
+    onClose: vi.fn(),
+    onSelectCommit: vi.fn(),
+    onLoadCommitDetail: vi.fn(),
+    onCreateBranch: vi.fn(),
+    onCreateTag: vi.fn(),
+    onCheckout: vi.fn(),
+    onCopyCommitId: vi.fn(),
+    ...overrides
+  }
+}
+
+function renderConversationWithGitPanel(gitPanel?: ConversationGitPanelProps) {
+  return render(
+    <ConversationView
+      session={baseSession}
+      messages={[]}
+      steps={[]}
+      streamingText=""
+      modelId="mock/hesper-fast"
+      onSend={() => undefined}
+      {...(gitPanel ? { gitPanel } : {})}
+    />
+  )
+}
+
 afterEach(() => {
   cleanup()
   window.localStorage.clear()
@@ -67,6 +117,102 @@ afterEach(() => {
 })
 
 describe('ui components', () => {
+  it('does not render a Git graph entry when no git panel is configured', () => {
+    renderConversationWithGitPanel()
+
+    expect(screen.queryByRole('button', { name: '打开 Git 图谱' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Git 提交图谱' })).not.toBeInTheDocument()
+  })
+
+  it('renders the Git graph entry with branch name and a centered three-column header layout', () => {
+    renderConversationWithGitPanel(createGitPanel())
+
+    const button = screen.getByRole('button', { name: /打开 Git 图谱，当前分支 feature\/git-log-panel/ })
+    expect(button).toBeInTheDocument()
+    expect(button).toHaveTextContent('feature/git-log-panel')
+
+    const header = screen.getByRole('heading', { name: '测试会话' }).closest('header')
+    expect(header).toHaveStyle({ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)' })
+    expect(header?.querySelector('[data-hesper-git-entry-slot="true"]')).toContainElement(button)
+  })
+
+  it('shows a visible focus ring on the Git graph entry when reached by keyboard', async () => {
+    const user = userEvent.setup()
+    renderConversationWithGitPanel(createGitPanel())
+
+    await user.tab()
+
+    const button = screen.getByRole('button', { name: /打开 Git 图谱，当前分支 feature\/git-log-panel/ })
+    expect(button).toHaveFocus()
+    expect(button).toHaveStyle({ outline: `2px solid ${themeTokens.color.accent}` })
+  })
+
+  it('describes a dirty Git working tree without using a live status region', () => {
+    renderConversationWithGitPanel(createGitPanel({ dirty: true }))
+
+    const button = screen.getByRole('button', { name: /打开 Git 图谱，当前分支 feature\/git-log-panel/ })
+    expect(button).toHaveAccessibleDescription('工作区有未提交更改')
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('does not open the Git graph when the entry is disabled', async () => {
+    const user = userEvent.setup()
+    const gitPanel = createGitPanel({ disabled: true, onOpen: vi.fn() })
+    renderConversationWithGitPanel(gitPanel)
+
+    await user.click(screen.getByRole('button', { name: /打开 Git 图谱，当前分支 feature\/git-log-panel/ }))
+
+    expect(gitPanel.onOpen).not.toHaveBeenCalled()
+  })
+
+  it('marks the Git graph entry busy while loading', () => {
+    renderConversationWithGitPanel(createGitPanel({ loading: true }))
+
+    expect(screen.getByRole('button', { name: /正在加载/ })).toHaveAttribute('aria-busy', 'true')
+  })
+
+  it('exposes Git graph entry errors in the accessible label', () => {
+    renderConversationWithGitPanel(createGitPanel({ error: '拉取失败' }))
+
+    expect(screen.getByRole('button', { name: /错误：拉取失败/ })).toBeInTheDocument()
+  })
+
+  it('calls onOpen when the Git graph entry is clicked without showing the keyboard focus ring', async () => {
+    const user = userEvent.setup()
+    const gitPanel = createGitPanel({ onOpen: vi.fn() })
+    renderConversationWithGitPanel(gitPanel)
+
+    const button = screen.getByRole('button', { name: /打开 Git 图谱，当前分支 feature\/git-log-panel/ })
+    await user.click(button)
+
+    expect(gitPanel.onOpen).toHaveBeenCalledTimes(1)
+    expect(button).toHaveFocus()
+    expect(button).toHaveStyle({ outline: '2px solid transparent' })
+  })
+
+  it('renders the Git fullscreen dialog when the git panel is open', () => {
+    renderConversationWithGitPanel(createGitPanel({ open: true }))
+
+    expect(screen.getByRole('dialog', { name: 'Git 提交图谱' })).toBeInTheDocument()
+    expect(screen.getByText('Add Git panel entry')).toBeInTheDocument()
+  })
+
+  it('delegates Escape closing of the Git fullscreen dialog to gitPanel.onClose', () => {
+    const gitPanel = createGitPanel({ open: true, onClose: vi.fn() })
+    renderConversationWithGitPanel(gitPanel)
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+
+    expect(gitPanel.onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the window title bar owned by AppShell rather than ConversationView', () => {
+    renderConversationWithGitPanel(createGitPanel())
+
+    expect(screen.queryByLabelText('窗口标题栏')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '测试会话' })).toBeInTheDocument()
+  })
+
   it('renders high-density desktop shell rails and panes', async () => {
     const user = userEvent.setup()
     const onCreateSession = vi.fn()

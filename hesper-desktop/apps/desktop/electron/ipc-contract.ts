@@ -26,6 +26,12 @@ export const ipcChannels = {
   workerInvocationsListByParentRun: 'workerInvocations:listByParentRun',
   attachmentsReadDataUrl: 'attachments:readDataUrl',
   filesPreview: 'files:preview',
+  gitGetState: 'git:getState',
+  gitListLog: 'git:listLog',
+  gitGetCommit: 'git:getCommit',
+  gitCreateBranch: 'git:createBranch',
+  gitCreateTag: 'git:createTag',
+  gitCheckout: 'git:checkout',
   dialogSelectDirectory: 'dialog:selectDirectory',
   agentEnqueue: 'agent:enqueue',
   agentStop: 'agent:stop',
@@ -112,6 +118,127 @@ export const localFilePreviewInputSchema = z.object({
   path: nonEmptyStringSchema
 }).strict()
 export const localFilePreviewResultSchema = localFilePreviewSchema
+
+export const gitRefSchema = z.object({
+  name: nonEmptyStringSchema,
+  shortName: nonEmptyStringSchema,
+  type: z.enum(['local-branch', 'remote-branch', 'tag', 'head']),
+  targetCommit: nonEmptyStringSchema.optional()
+}).strict()
+
+export const gitGraphLaneSchema = z.object({
+  id: nonEmptyStringSchema,
+  color: nonEmptyStringSchema,
+  active: z.boolean(),
+  topActive: z.boolean().optional(),
+  bottomActive: z.boolean().optional()
+}).strict()
+
+export const gitGraphEdgeSchema = z.object({
+  fromLaneId: nonEmptyStringSchema,
+  toLaneId: nonEmptyStringSchema,
+  fromPosition: z.enum(['top', 'center', 'bottom']).optional(),
+  toPosition: z.enum(['top', 'center', 'bottom']).optional()
+}).strict()
+
+export const gitGraphRowSchema = z.object({
+  commitHash: nonEmptyStringSchema,
+  shortHash: nonEmptyStringSchema,
+  parents: z.array(nonEmptyStringSchema),
+  subject: z.string(),
+  authorName: z.string(),
+  authorEmail: z.string(),
+  authoredAt: z.string().datetime(),
+  refs: z.array(gitRefSchema),
+  graph: z.object({
+    lanes: z.array(gitGraphLaneSchema),
+    nodeLaneId: nonEmptyStringSchema.optional(),
+    edges: z.array(gitGraphEdgeSchema).optional()
+  }).strict()
+}).strict()
+
+export const gitRepositoryStateSchema = z.object({
+  sessionId: nonEmptyStringSchema,
+  workspacePath: nonEmptyStringSchema.optional(),
+  repositoryName: nonEmptyStringSchema.optional(),
+  commitCount: z.number().int().nonnegative().optional(),
+  isGitRepository: z.boolean(),
+  currentBranch: nonEmptyStringSchema.optional(),
+  headCommit: nonEmptyStringSchema.optional(),
+  dirty: z.boolean(),
+  changedFiles: z.number().int().nonnegative(),
+  refs: z.array(gitRefSchema)
+}).strict()
+
+export const gitCommitFileChangeSchema = z.object({
+  path: nonEmptyStringSchema,
+  oldPath: nonEmptyStringSchema.optional(),
+  status: z.enum(['added', 'modified', 'deleted', 'renamed', 'copied', 'type-change', 'unmerged', 'unknown']),
+  additions: z.number().int().nonnegative().optional(),
+  deletions: z.number().int().nonnegative().optional()
+}).strict()
+
+export const gitLogResultSchema = z.object({
+  rows: z.array(gitGraphRowSchema),
+  limit: z.number().int().positive(),
+  hasMore: z.boolean()
+}).strict()
+
+export const gitCommitDetailSchema = z.object({
+  commitHash: nonEmptyStringSchema,
+  shortHash: nonEmptyStringSchema,
+  parents: z.array(nonEmptyStringSchema),
+  subject: z.string(),
+  body: z.string(),
+  authorName: z.string(),
+  authorEmail: z.string(),
+  authoredAt: z.string().datetime(),
+  committerName: z.string(),
+  committerEmail: z.string(),
+  committedAt: z.string().datetime(),
+  refs: z.array(gitRefSchema),
+  files: z.array(gitCommitFileChangeSchema)
+}).strict()
+
+export const gitActionResultSchema = z.object({
+  success: z.boolean(),
+  message: z.string().optional(),
+  state: gitRepositoryStateSchema.optional()
+}).strict()
+
+export const gitSessionInputSchema = z.object({
+  sessionId: nonEmptyStringSchema
+}).strict()
+
+export const gitLogInputSchema = z.object({
+  sessionId: nonEmptyStringSchema,
+  limit: z.number().int().min(1).max(500).optional(),
+  offset: z.number().int().nonnegative().optional()
+}).strict()
+
+export const gitCommitInputSchema = z.object({
+  sessionId: nonEmptyStringSchema,
+  commit: nonEmptyStringSchema
+}).strict()
+
+export const gitCreateBranchInputSchema = z.object({
+  sessionId: nonEmptyStringSchema,
+  commit: nonEmptyStringSchema,
+  branchName: nonEmptyStringSchema,
+  checkout: z.boolean().optional()
+}).strict()
+
+export const gitCreateTagInputSchema = z.object({
+  sessionId: nonEmptyStringSchema,
+  commit: nonEmptyStringSchema,
+  tagName: nonEmptyStringSchema
+}).strict()
+
+export const gitCheckoutInputSchema = z.object({
+  sessionId: nonEmptyStringSchema,
+  ref: nonEmptyStringSchema
+}).strict()
+
 export const conversationMessagesResultSchema = z.array(messageSchema)
 export const conversationMessagesByRunResultSchema = z.array(messageSchema)
 export const conversationRunsResultSchema = z.array(agentRunSchema)
@@ -516,6 +643,21 @@ export type ConversationMessagesByRunInput = z.infer<typeof conversationMessages
 export type WorkerInvocationsListByParentRunInput = z.infer<typeof workerInvocationsListByParentRunInputSchema>
 export type LocalFilePreviewInput = z.infer<typeof localFilePreviewInputSchema>
 export type LocalFilePreviewDto = z.infer<typeof localFilePreviewResultSchema>
+export type GitRefDto = z.infer<typeof gitRefSchema>
+export type GitGraphLaneDto = z.infer<typeof gitGraphLaneSchema>
+export type GitGraphEdgeDto = z.infer<typeof gitGraphEdgeSchema>
+export type GitGraphRowDto = z.infer<typeof gitGraphRowSchema>
+export type GitRepositoryStateDto = z.infer<typeof gitRepositoryStateSchema>
+export type GitCommitFileChangeDto = z.infer<typeof gitCommitFileChangeSchema>
+export type GitLogResultDto = z.infer<typeof gitLogResultSchema>
+export type GitCommitDetailDto = z.infer<typeof gitCommitDetailSchema>
+export type GitActionResultDto = z.infer<typeof gitActionResultSchema>
+export type GitSessionInput = z.infer<typeof gitSessionInputSchema>
+export type GitLogInput = z.infer<typeof gitLogInputSchema>
+export type GitCommitInput = z.infer<typeof gitCommitInputSchema>
+export type GitCreateBranchInput = z.infer<typeof gitCreateBranchInputSchema>
+export type GitCreateTagInput = z.infer<typeof gitCreateTagInputSchema>
+export type GitCheckoutInput = z.infer<typeof gitCheckoutInputSchema>
 export type ModelProviderDto = z.infer<typeof modelProviderConfigSchema>
 export type ModelDto = z.infer<typeof modelConfigSchema>
 
@@ -552,6 +694,14 @@ export type HesperDesktopApi = {
   }
   files: {
     preview(input: LocalFilePreviewInput): Promise<LocalFilePreviewDto>
+  }
+  git: {
+    getState(input: GitSessionInput): Promise<GitRepositoryStateDto>
+    listLog(input: GitLogInput): Promise<GitLogResultDto>
+    getCommit(input: GitCommitInput): Promise<GitCommitDetailDto>
+    createBranch(input: GitCreateBranchInput): Promise<GitActionResultDto>
+    createTag(input: GitCreateTagInput): Promise<GitActionResultDto>
+    checkout(input: GitCheckoutInput): Promise<GitActionResultDto>
   }
   attachments?: {
     readDataUrl(input: AttachmentReadDataUrlInput): Promise<AttachmentDataUrlResult>

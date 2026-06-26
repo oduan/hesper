@@ -34,6 +34,7 @@ export type AppAction =
   | { type: 'session.created'; session: Session }
   | { type: 'session.updated'; session: Session }
   | { type: 'sessions.deleted'; sessionIds: string[] }
+  | { type: 'session.unread-completion-marked'; sessionId: string; completedAt: string }
   | { type: 'session.touched'; sessionId: string; updatedAt: string }
   | { type: 'session.touch-reverted'; sessionId: string; optimisticUpdatedAt: string; previousUpdatedAt: string }
   | { type: 'session.selected'; sessionId: string }
@@ -91,6 +92,27 @@ function revertSessionUpdatedAt(sessions: Session[], sessionId: string, optimist
     }
     return { ...session, updatedAt: previousUpdatedAt }
   })
+}
+
+function withSessionUnreadCompletion(sessions: Session[], sessionId: string, completedAt: string): Session[] {
+  let changed = false
+  const nextSessions = sessions.map((session) => {
+    if (session.id !== sessionId) {
+      return session
+    }
+
+    const updatedAt = session.updatedAt >= completedAt ? session.updatedAt : completedAt
+    const unreadCompletedAt = session.unreadCompletedAt && session.unreadCompletedAt >= completedAt
+      ? session.unreadCompletedAt
+      : completedAt
+    if (session.updatedAt === updatedAt && session.unreadCompletedAt === unreadCompletedAt) {
+      return session
+    }
+
+    changed = true
+    return { ...session, updatedAt, unreadCompletedAt }
+  })
+  return changed ? nextSessions : sessions
 }
 
 function mergeById<T extends { id: string }>(items: T[], nextItem: T): T[] {
@@ -289,6 +311,12 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const deletedSessionIds = new Set(action.sessionIds)
       const sessions = state.sessions.filter((session) => !deletedSessionIds.has(session.id))
       return withActiveSessionForCurrentScope({ ...state, sessions })
+    }
+    case 'session.unread-completion-marked': {
+      return {
+        ...state,
+        sessions: sortSessions(withSessionUnreadCompletion(state.sessions, action.sessionId, action.completedAt))
+      }
     }
     case 'session.touched': {
       return {
