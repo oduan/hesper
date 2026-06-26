@@ -131,7 +131,7 @@ async function initDisconnectedRepo(workspacePath: string) {
   await fs.writeFile(path.join(workspacePath, 'main.txt'), 'main\n')
   await git(workspacePath, ['add', 'main.txt'])
   await git(workspacePath, ['commit', '-m', 'Main root'])
-  await git(workspacePath, ['branch', '-M', 'main'])
+  await git(workspacePath, ['branch', '-M', 'topic-a'])
   const mainCommit = (await git(workspacePath, ['rev-parse', 'HEAD'])).stdout.trim()
 
   await git(workspacePath, ['switch', '--orphan', 'docs'])
@@ -140,6 +140,7 @@ async function initDisconnectedRepo(workspacePath: string) {
   await git(workspacePath, ['add', 'docs.txt'])
   await git(workspacePath, ['commit', '-m', 'Docs root'])
   const docsCommit = (await git(workspacePath, ['rev-parse', 'HEAD'])).stdout.trim()
+  await git(workspacePath, ['switch', '--detach', docsCommit])
 
   return { docsCommit, mainCommit }
 }
@@ -331,12 +332,12 @@ describe('GitService', () => {
         return row?.graph.lanes.find((lane) => lane.id === row.graph.nodeLaneId)?.color
       }
 
-      expect(nodeLane(history.side)).toBe('lane-0')
-      expect(nodeLane(history.postMerge)).toBe('lane-1')
-      expect(nodeLane(history.merge)).toBe('lane-1')
-      expect(nodeLane(history.mainTwo)).toBe('lane-1')
-      expect(nodeLane(history.mainOne)).toBe('lane-1')
+      expect(nodeLane(history.postMerge)).toBe('lane-0')
+      expect(nodeLane(history.merge)).toBe('lane-0')
+      expect(nodeLane(history.mainTwo)).toBe('lane-0')
+      expect(nodeLane(history.mainOne)).toBe('lane-0')
       expect(nodeLane(history.base)).toBe('lane-0')
+      expect(nodeLane(history.side)).toBe('lane-1')
       expect(history.branchCommits.map(nodeLane)).toEqual(history.branchCommits.map(() => 'lane-2'))
       expect(new Set(history.branchCommits.map(nodeColor))).toEqual(new Set([nodeColor(history.branchTip)]))
       expect(nodeColor(history.branchTip)).not.toBe(nodeColor(history.mainTwo))

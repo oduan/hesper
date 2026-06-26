@@ -113,16 +113,19 @@ export class GitService {
       throw new Error('Invalid git log offset: must be a non-negative integer')
     }
     const requestedCount = offset + limit + 1
-    const output = await this.git(workspacePath, [
-      'log',
-      '--all',
-      '--topo-order',
-      `--max-count=${requestedCount}`,
-      '--date=iso-strict',
-      '--decorate=full',
-      `--pretty=format:%H%x00%h%x00%P%x00%s%x00%an%x00%ae%x00%aI%x00%D%x1e`
+    const [output, primaryBranchCommit] = await Promise.all([
+      this.git(workspacePath, [
+        'log',
+        '--all',
+        '--topo-order',
+        `--max-count=${requestedCount}`,
+        '--date=iso-strict',
+        '--decorate=full',
+        `--pretty=format:%H%x00%h%x00%P%x00%s%x00%an%x00%ae%x00%aI%x00%D%x1e`
+      ]),
+      this.resolvePrimaryBranchCommit(workspacePath)
     ])
-    const allRows = parseLogRows(output.stdout)
+    const allRows = parseLogRows(output.stdout, primaryBranchCommit)
     return {
       rows: allRows.slice(offset, offset + limit),
       limit,
@@ -275,6 +278,24 @@ export class GitService {
     return result.stdout.trim().length > 0
   }
 
+  private async resolvePrimaryBranchCommit(workspacePath: string): Promise<string | undefined> {
+    const remoteHead = (await this.optionalGit(workspacePath, ['symbolic-ref', '--quiet', '--short', 'refs/remotes/origin/HEAD'])).stdout.trim()
+    const currentBranch = (await this.optionalGit(workspacePath, ['branch', '--show-current'])).stdout.trim()
+    const candidates = [
+      remoteHead,
+      'refs/heads/main',
+      'refs/heads/master',
+      currentBranch ? `refs/heads/${currentBranch}` : undefined
+    ].filter((candidate): candidate is string => Boolean(candidate))
+
+    for (const candidate of candidates) {
+      const result = await this.optionalGit(workspacePath, ['rev-parse', '--verify', `${candidate}^{commit}`])
+      const commit = result.stdout.trim().split(/\r?\n/)[0]
+      if (isFullCommitHash(commit)) return commit
+    }
+    return undefined
+  }
+
   private async listRepositoryRefs(workspacePath: string): Promise<GitRefDto[]> {
     const refsOutput = await this.optionalGit(workspacePath, [
       'for-each-ref',
@@ -370,7 +391,7 @@ function parseNonNegativeInteger(output: string): number | undefined {
   return Number.isInteger(value) && value >= 0 ? value : undefined
 }
 
-function parseLogRows(output: string): GitGraphRowDto[] {
+function parseLogRows(output: string, primaryBranchCommit?: string): GitGraphRowDto[] {
   const rows = output
     .split(RECORD_SEPARATOR)
     .map((record) => record.trim())
@@ -390,7 +411,7 @@ function parseLogRows(output: string): GitGraphRowDto[] {
       }
     })
 
-  return attachGraph(rows)
+  return attachGraph(rows, primaryBranchCommit)
 }
 
 type ActiveGitLane = {
@@ -404,11 +425,14 @@ type ClaimedColorSlots = {
   overflowCursor: number
 }
 
-function attachGraph(rows: GitGraphRowWithoutGraph[]): GitGraphRowDto[] {
+function attachGraph(rows: GitGraphRowWithoutGraph[], primaryBranchCommit?: string): GitGraphRowDto[] {
   let activeLanes: ActiveGitLane[] = []
   const claimedColorSlots: ClaimedColorSlots = {
     available: BRANCH_LINE_COLORS.map((_, index) => index),
     overflowCursor: 0
+  }
+  if (primaryBranchCommit) {
+    activeLanes[0] = { commit: primaryBranchCommit, colorSlot: claimColorSlot(claimedColorSlots) }
   }
 
   return rows.map((row) => {
@@ -541,9 +565,8 @@ function laneId(index: number): string {
   return `lane-${index}`
 }
 
-function removeAvailableColorSlot(availableColorSlots: number[], colorSlot: number): void {
-  const availableIndex = availableColorSlots.indexOf(colorSlot)
-  if (availableIndex !== -1) availableColorSlots.splice(availableIndex, 1)
+function isFullCommitHash(value: string | undefined): value is string {
+  return typeof value === 'string' && /^[a-f0-9]{40}$/i.test(value)
 }
 
 const BRANCH_LINE_COLORS = [

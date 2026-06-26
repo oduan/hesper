@@ -1167,10 +1167,8 @@ function AppContent() {
         onOpen: () => {
           const sessionId = activeSession.id
           const workspacePath = activeWorkspacePath
-          const currentGitState = gitUiStateBySession[sessionId]
-          const shouldLoad = currentGitState?.workspacePath !== workspacePath || !currentGitState?.rows?.length
           setGitUiStateBySession((current) => mergeGitUiState(current, sessionId, { workspacePath, open: true }))
-          if (shouldLoad) void loadGitLog(sessionId, gitLogPageSize, undefined, workspacePath)
+          void refreshGitPanel(sessionId, workspacePath)
         },
         onClose: () => {
           const sessionId = activeSession.id

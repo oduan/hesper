@@ -665,6 +665,34 @@ describe('renderer App', () => {
     expect(screen.getByRole('row', { name: /Head row aaaaaaa/ })).toHaveAttribute('aria-selected', 'true')
   })
 
+  it('refreshes Git state and first log page every time the graph opens', async () => {
+    const user = userEvent.setup()
+    const firstCommit = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+    const latestCommit = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+    listSessions.mockResolvedValueOnce([
+      sessionFixture('session-git', 'Git workspace', 'C:/workspace')
+    ] as any)
+    getGitState
+      .mockResolvedValueOnce(gitStateFixture('session-git', 'C:/workspace', firstCommit))
+      .mockResolvedValue(gitStateFixture('session-git', 'C:/workspace', latestCommit))
+    listGitLog
+      .mockResolvedValueOnce({ rows: [gitRowFixture(firstCommit, 'Cached head')], limit: 60, hasMore: false })
+      .mockResolvedValueOnce({ rows: [gitRowFixture(latestCommit, 'Latest master head')], limit: 60, hasMore: false })
+
+    render(<App />)
+
+    const gitEntry = await screen.findByRole('button', { name: /打开 Git 图谱/ })
+    await user.click(gitEntry)
+    expect(await screen.findByText('Cached head')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '关闭 Git 提交图谱' }))
+
+    await user.click(gitEntry)
+
+    await waitFor(() => expect(getGitState).toHaveBeenCalledTimes(3))
+    await waitFor(() => expect(listGitLog).toHaveBeenCalledTimes(2))
+    expect(await screen.findByText('Latest master head')).toBeInTheDocument()
+  })
+
   it('loads additional Git log pages when the graph scroll nears the bottom', async () => {
     const user = userEvent.setup()
     const firstPageRows = Array.from({ length: 60 }, (_, index) => {
@@ -747,7 +775,7 @@ describe('renderer App', () => {
       commit,
       branchName: 'feature/test-branch'
     }))
-    await waitFor(() => expect(getGitState).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(getGitState).toHaveBeenCalledTimes(3))
     expect(listGitLog).toHaveBeenCalledTimes(2)
   })
 
