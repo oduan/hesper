@@ -1,5 +1,8 @@
 # hesper desktop
 
+[Hesper](https://github.com/oduan/hesper) 的桌面客户端。
+
+
 MVP1 desktop client for hesper.
 
 - Electron shell
