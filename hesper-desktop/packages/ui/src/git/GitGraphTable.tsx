@@ -110,13 +110,16 @@ function GraphOverlay({ rows }: { rows: GitGraphRowView[] }) {
 
         const fromX = laneInset + fromIndex * laneGap
         const toX = laneInset + toIndex * laneGap
-        const path = edgePath(rowIndex, fromX, toX, edge.fromPosition ?? 'center', edge.toPosition ?? 'bottom')
+        const fromPosition = edge.fromPosition ?? 'center'
+        const toPosition = edge.toPosition ?? 'bottom'
+        const path = edgePath(rowIndex, fromX, toX, fromPosition, toPosition)
+        const colorIndex = toPosition === 'center' ? fromIndex : toIndex
         return [
           <path
             key={`edge-${row.commitHash}-${edge.fromLaneId}-${edge.toLaneId}-${edgeIndex}`}
             data-testid={`git-graph-edge-${row.commitHash}-${edge.fromLaneId}-${edge.toLaneId}`}
             d={path}
-            style={edgeSvgStyle(lanes[toIndex] ?? lanes[fromIndex], toIndex)}
+            style={edgeSvgStyle(lanes[colorIndex], colorIndex)}
             vectorEffect="non-scaling-stroke"
           />
         ]

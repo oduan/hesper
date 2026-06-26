@@ -393,8 +393,11 @@ function parseLogRows(output: string): GitGraphRowDto[] {
   return attachGraph(rows)
 }
 
+type ActiveGitLane = string | undefined
+type GitGraphEdge = NonNullable<GitGraphRowDto['graph']['edges']>[number]
+
 function attachGraph(rows: GitGraphRowWithoutGraph[]): GitGraphRowDto[] {
-  let activeLanes: string[] = []
+  let activeLanes: ActiveGitLane[] = []
   const lineColorsByCommit = new Map<string, string>()
   let nextColorIndex = 0
 
@@ -408,81 +411,104 @@ function attachGraph(rows: GitGraphRowWithoutGraph[]): GitGraphRowDto[] {
 
   return rows.map((row) => {
     const lanesBefore = [...activeLanes]
-    let nodeLaneIndex = lanesBefore.indexOf(row.commitHash)
-    if (nodeLaneIndex === -1) {
-      nodeLaneIndex = activeLanes.length
-      activeLanes = [...activeLanes, row.commitHash]
+    let currentPositions = lanePositions(lanesBefore, row.commitHash)
+    if (currentPositions.length === 0) {
+      const newLaneIndex = findFreeLane(activeLanes, activeLanes.length)
+      activeLanes[newLaneIndex] = row.commitHash
+      currentPositions = [newLaneIndex]
     }
 
+    const nodeLaneIndex = currentPositions[0]!
     const nodeColor = assignColor(row.commitHash)
+    const lanesAfter = [...activeLanes]
+    for (const position of currentPositions) {
+      lanesAfter[position] = undefined
+    }
+
+    const edges: GitGraphEdge[] = currentPositions.slice(1).map((fromIndex) => ({
+      fromLaneId: laneId(fromIndex),
+      toLaneId: laneId(nodeLaneIndex),
+      fromPosition: 'top',
+      toPosition: 'center'
+    }))
+
     row.parents.forEach((parent, parentIndex) => {
-      assignColor(parent, parentIndex === 0 ? nodeColor : undefined)
+      const preferredColor = parentIndex === 0 ? nodeColor : undefined
+      assignColor(parent, preferredColor)
+
+      const reusableLaneIndex = parentIndex > 0 && row.parents.length > 1 ? lanesAfter.indexOf(parent) : -1
+      const targetIndex = reusableLaneIndex >= 0
+        ? reusableLaneIndex
+        : placeParentLane(lanesAfter, parent, parentIndex === 0 ? nodeLaneIndex : nodeLaneIndex + parentIndex)
+
+      if (targetIndex !== nodeLaneIndex) {
+        edges.push({
+          fromLaneId: laneId(nodeLaneIndex),
+          toLaneId: laneId(targetIndex),
+          fromPosition: 'center',
+          toPosition: 'bottom'
+        })
+      }
     })
 
-    const lanesAfter = nextActiveLanes(activeLanes, nodeLaneIndex, row.parents)
-    const laneCount = Math.max(lanesBefore.length, activeLanes.length, lanesAfter.length, nodeLaneIndex + 1)
-    const edges = [
-      ...row.parents.flatMap((parent) => {
-        const targetIndex = lanesAfter.indexOf(parent)
-        if (targetIndex === -1 || targetIndex === nodeLaneIndex) return []
-        return [{ fromLaneId: laneId(nodeLaneIndex), toLaneId: laneId(targetIndex), fromPosition: 'center' as const, toPosition: 'bottom' as const }]
+    trimTrailingEmptyLanes(lanesAfter)
+    const laneCount = Math.max(lanesBefore.length, activeLanes.length, lanesAfter.length, nodeLaneIndex + 1, ...edgeLaneIndexes(edges))
+    const graph = {
+      lanes: Array.from({ length: laneCount }, (_, index) => {
+        const topCommit = lanesBefore[index]
+        const bottomCommit = lanesAfter[index]
+        const laneCommit = bottomCommit ?? topCommit ?? (index === nodeLaneIndex ? row.commitHash : undefined)
+        const topActive = topCommit !== undefined
+        const bottomActive = bottomCommit !== undefined
+        const active = topActive || bottomActive || index === nodeLaneIndex
+        return {
+          id: laneId(index),
+          color: laneCommit ? assignColor(laneCommit) : laneColor(index),
+          active,
+          topActive,
+          bottomActive
+        }
       }),
-      ...lanesBefore.flatMap((commit, fromIndex) => {
-        if (commit === row.commitHash) return []
-        const toIndex = lanesAfter.indexOf(commit)
-        if (toIndex === -1 || toIndex === fromIndex) return []
-        return [{ fromLaneId: laneId(fromIndex), toLaneId: laneId(toIndex), fromPosition: 'top' as const, toPosition: 'bottom' as const }]
-      })
-    ]
+      nodeLaneId: laneId(nodeLaneIndex),
+      edges
+    }
 
     activeLanes = lanesAfter
 
-    return {
-      ...row,
-      graph: {
-        lanes: Array.from({ length: laneCount }, (_, index) => {
-          const topCommit = lanesBefore[index]
-          const bottomCommit = lanesAfter[index]
-          const laneCommit = bottomCommit ?? topCommit ?? (index === nodeLaneIndex ? row.commitHash : undefined)
-          const topActive = topCommit !== undefined
-          const bottomActive = bottomCommit !== undefined
-          const active = topActive || bottomActive || index === nodeLaneIndex
-          return {
-            id: laneId(index),
-            color: laneCommit ? assignColor(laneCommit) : laneColor(index),
-            active,
-            topActive,
-            bottomActive
-          }
-        }),
-        nodeLaneId: laneId(nodeLaneIndex),
-        edges
-      }
-    }
+    return { ...row, graph }
   })
 }
 
-function nextActiveLanes(activeLanes: string[], nodeLaneIndex: number, parents: string[]): string[] {
-  if (parents.length === 0) {
-    return activeLanes.filter((_, index) => index !== nodeLaneIndex)
-  }
-
-  const next = [...activeLanes]
-  next.splice(nodeLaneIndex, 1, ...parents)
-  dedupeActiveLanes(next)
-  return next
+function lanePositions(activeLanes: ActiveGitLane[], commit: string): number[] {
+  return activeLanes.flatMap((candidate, index) => candidate === commit ? [index] : [])
 }
 
-function dedupeActiveLanes(activeLanes: string[]): void {
-  const seen = new Set<string>()
-  for (let index = activeLanes.length - 1; index >= 0; index -= 1) {
-    const commit = activeLanes[index]
-    if (commit === undefined || seen.has(commit)) {
-      activeLanes.splice(index, 1)
-      continue
-    }
-    seen.add(commit)
+function findFreeLane(activeLanes: ActiveGitLane[], preferredIndex: number): number {
+  for (let index = preferredIndex; index < activeLanes.length; index += 1) {
+    if (activeLanes[index] === undefined) return index
   }
+  return activeLanes.length
+}
+
+function placeParentLane(activeLanes: ActiveGitLane[], parent: string, preferredIndex: number): number {
+  const targetIndex = findFreeLane(activeLanes, preferredIndex)
+  activeLanes[targetIndex] = parent
+  return targetIndex
+}
+
+function trimTrailingEmptyLanes(activeLanes: ActiveGitLane[]): void {
+  while (activeLanes.length > 0 && activeLanes[activeLanes.length - 1] === undefined) {
+    activeLanes.pop()
+  }
+}
+
+function edgeLaneIndexes(edges: Array<{ fromLaneId: string; toLaneId: string }>): number[] {
+  return edges.flatMap((edge) => [laneNumber(edge.fromLaneId) + 1, laneNumber(edge.toLaneId) + 1])
+}
+
+function laneNumber(id: string): number {
+  const value = Number.parseInt(id.replace(/^lane-/, ''), 10)
+  return Number.isInteger(value) && value >= 0 ? value : 0
 }
 
 function laneId(index: number): string {

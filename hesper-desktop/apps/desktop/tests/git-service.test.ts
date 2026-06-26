@@ -212,7 +212,7 @@ describe('GitService', () => {
 
   it('builds graph lanes and edges from branching history', async () => {
     await withTempDir(async (workspacePath) => {
-      const { mergeCommit } = await initBranchingRepo(workspacePath)
+      const { baseCommit, mergeCommit } = await initBranchingRepo(workspacePath)
       const service = createGitService({ id: 'session-1', workspacePath })
 
       const result = await service.listLog({ sessionId: 'session-1', limit: 10 })
@@ -224,6 +224,9 @@ describe('GitService', () => {
       expect(result.rows.some((row) => row.graph.lanes.some((lane) => lane.topActive !== undefined || lane.bottomActive !== undefined))).toBe(true)
       expect(result.rows.find((row) => row.commitHash === mergeCommit)?.graph.edges).toEqual(expect.arrayContaining([
         expect.objectContaining({ fromLaneId: expect.any(String), toLaneId: expect.any(String) })
+      ]))
+      expect(result.rows.find((row) => row.commitHash === baseCommit)?.graph.edges).toEqual(expect.arrayContaining([
+        expect.objectContaining({ fromPosition: 'top', toPosition: 'center' })
       ]))
     })
   })
