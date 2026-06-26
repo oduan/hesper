@@ -202,6 +202,7 @@ describe('ui components', () => {
     expect(onCreateSessionCategory).toHaveBeenCalledTimes(1)
     const input = (await screen.findByLabelText('重命名分类')) as HTMLInputElement
     expect(input).toHaveValue('新分类')
+    expect(input).toHaveFocus()
     expect(input.selectionStart).toBe(0)
     expect(input.selectionEnd).toBe(3)
 
@@ -230,8 +231,11 @@ describe('ui components', () => {
     const menu = screen.getByRole('menu', { name: '分类操作' })
     await user.click(within(menu).getByRole('menuitem', { name: '重命名' }))
 
-    const input = await screen.findByLabelText('重命名分类')
+    const input = (await screen.findByLabelText('重命名分类')) as HTMLInputElement
     expect(input).toHaveValue('产品图')
+    expect(input).toHaveFocus()
+    expect(input.selectionStart).toBe(0)
+    expect(input.selectionEnd).toBe('产品图'.length)
     await user.clear(input)
     await user.type(input, '商业图{Enter}')
     expect(onRenameSessionCategory).toHaveBeenCalledWith('category-product', '商业图')
