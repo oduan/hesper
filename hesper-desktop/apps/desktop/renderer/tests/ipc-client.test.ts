@@ -24,6 +24,7 @@ describe('ipc-client fallback', () => {
     const [cleared] = await api.sessions.setCategory({ ids: [session.id], categoryId: undefined })
 
     expect(session.categoryId).toBe(category.id)
+    expect(cleared?.updatedAt).toBe(session.updatedAt)
     expect(cleared).not.toHaveProperty('categoryId')
   })
 
@@ -52,7 +53,9 @@ describe('ipc-client fallback', () => {
     const listed = (await api.sessions.list()).find((candidate) => candidate.id === session.id)
     const blankCategory = await api.sessions.create({ title: 'Blank category', categoryId: '   ' })
 
+    expect(cleared?.updatedAt).toBe(session.updatedAt)
     expect(cleared).not.toHaveProperty('categoryId')
+    expect(listed?.updatedAt).toBe(session.updatedAt)
     expect(listed).not.toHaveProperty('categoryId')
     expect(blankCategory).not.toHaveProperty('categoryId')
   })
@@ -70,13 +73,16 @@ describe('ipc-client fallback', () => {
     const api = createHesperApi({ allowFallback: true })
     const session = await api.sessions.create({ title: 'Flag me' })
 
-    await expect(api.sessions.setMarked({ ids: [session.id], isMarked: true })).resolves.toMatchObject([{ id: session.id, isMarked: true }])
-    await expect(api.sessions.setMarked({ ids: [session.id], isMarked: false })).resolves.toMatchObject([{ id: session.id }])
+    const [marked] = await api.sessions.setMarked({ ids: [session.id], isMarked: true })
+    expect(marked).toMatchObject({ id: session.id, isMarked: true, updatedAt: session.updatedAt })
+    const [unmarked] = await api.sessions.setMarked({ ids: [session.id], isMarked: false })
+    expect(unmarked).toMatchObject({ id: session.id, updatedAt: session.updatedAt })
+    expect(unmarked).not.toHaveProperty('isMarked')
 
     const archived = await api.sessions.archive(session.id)
-    expect(archived.status).toBe('archived')
+    expect(archived).toMatchObject({ status: 'archived', updatedAt: session.updatedAt })
     const restored = await api.sessions.restore(session.id)
-    expect(restored.status).toBe('active')
+    expect(restored).toMatchObject({ status: 'active', updatedAt: session.updatedAt })
   })
 
   it('lists and retrieves skills in fallback mode', async () => {

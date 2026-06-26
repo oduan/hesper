@@ -575,7 +575,7 @@ const categoryItemWrapperStyle: CSSProperties = {
 }
 
 const sessionSpecialSeparatorStyle: CSSProperties = {
-  margin: `6px 10px 6px ${sessionCategorySurfaceLeft}px`,
+  margin: `6px 0 6px ${sessionCategorySurfaceLeft + sessionCategoryTextInset}px`,
   height: 1,
   background: themeTokens.color.border,
   borderRadius: 1

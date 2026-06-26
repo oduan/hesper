@@ -100,14 +100,21 @@ function updateMockSession(session: SessionDto, overrides: Partial<SessionDto> =
   }) as SessionDto
 }
 
+function patchMockSessionWithoutTouch(session: SessionDto, overrides: Partial<SessionDto> = {}): SessionDto {
+  return withDefined({
+    ...session,
+    ...overrides
+  }) as SessionDto
+}
+
 function clearMockSessionCategory(session: SessionDto): SessionDto {
   const { categoryId: _categoryId, ...uncategorized } = session
-  return updateMockSession(uncategorized)
+  return patchMockSessionWithoutTouch(uncategorized)
 }
 
 function clearMockSessionMarked(session: SessionDto): SessionDto {
   const { isMarked: _isMarked, ...unmarked } = session
-  return updateMockSession(unmarked)
+  return patchMockSessionWithoutTouch(unmarked)
 }
 
 export function createFallbackHesperApi(): HesperDesktopApi {
@@ -142,6 +149,14 @@ export function createFallbackHesperApi(): HesperDesktopApi {
     const existing = sessions.find((session) => session.id === id) ?? createMockSession({ title: 'New chat' }, id)
     const updated = updater(existing)
     sessions = [updated, ...sessions.filter((session) => session.id !== id)]
+    return updated
+  }
+  const replaceSessionPreservingPosition = (id: string, updater: (session: SessionDto) => SessionDto): SessionDto => {
+    const existing = sessions.find((session) => session.id === id) ?? createMockSession({ title: 'New chat' }, id)
+    const updated = updater(existing)
+    sessions = sessions.some((session) => session.id === id)
+      ? sessions.map((session) => session.id === id ? updated : session)
+      : [updated, ...sessions]
     return updated
   }
   const cloneModelRef = (modelRef: ManagedRoleDto['defaultModelRef']): ManagedRoleDto['defaultModelRef'] => modelRef ? { ...modelRef } : undefined
@@ -205,8 +220,8 @@ export function createFallbackHesperApi(): HesperDesktopApi {
         const words = input.userPrompt.replace(/\s+/g, ' ').trim().slice(0, 18)
         return replaceSession(input.id, (session) => updateMockSession(session, { title: words || '新会话' }))
       },
-      archive: async (id: string) => replaceSession(id, (session) => updateMockSession(session, { status: 'archived' })),
-      restore: async (id: string) => replaceSession(id, (session) => updateMockSession(session, { status: 'active' })),
+      archive: async (id: string) => replaceSessionPreservingPosition(id, (session) => patchMockSessionWithoutTouch(session, { status: 'archived' })),
+      restore: async (id: string) => replaceSessionPreservingPosition(id, (session) => patchMockSessionWithoutTouch(session, { status: 'active' })),
       setMarked: async (input: SetSessionMarkedInput) => {
         const targetSessions = input.ids.map((id) => {
           const session = sessions.find((candidate) => candidate.id === id && candidate.status !== 'deleted')
@@ -215,7 +230,7 @@ export function createFallbackHesperApi(): HesperDesktopApi {
           }
           return session
         })
-        const updatedSessions = targetSessions.map((session) => input.isMarked ? updateMockSession(session, { isMarked: true }) : clearMockSessionMarked(session))
+        const updatedSessions = targetSessions.map((session) => input.isMarked ? patchMockSessionWithoutTouch(session, { isMarked: true }) : clearMockSessionMarked(session))
         const updatedById = new Map(updatedSessions.map((session) => [session.id, session]))
         sessions = sessions.map((session) => updatedById.get(session.id) ?? session)
         return input.ids.map((id) => updatedById.get(id) as SessionDto)
@@ -240,7 +255,7 @@ export function createFallbackHesperApi(): HesperDesktopApi {
           }
           return session
         })
-        const updatedSessions = targetSessions.map((session) => categoryId ? updateMockSession(session, { categoryId }) : clearMockSessionCategory(session))
+        const updatedSessions = targetSessions.map((session) => categoryId ? patchMockSessionWithoutTouch(session, { categoryId }) : clearMockSessionCategory(session))
         const updatedById = new Map(updatedSessions.map((session) => [session.id, session]))
         sessions = sessions.map((session) => updatedById.get(session.id) ?? session)
         return input.ids.map((id) => updatedById.get(id) as SessionDto)

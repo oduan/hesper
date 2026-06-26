@@ -122,7 +122,7 @@ export function createSessionService(persistence: Persistence): SessionService {
       const normalizedCategoryId = normalizeCategoryId(categoryId)
       await assertCategoryExists(persistence, normalizedCategoryId)
       const session = await loadSession(persistence, id)
-      const candidate = { ...session, categoryId: normalizedCategoryId, updatedAt: nowIso() }
+      const candidate = { ...session, categoryId: normalizedCategoryId }
       const updated = stripUndefined(candidate) as Session
       await persistence.sessions.save(updated)
       return updated
@@ -135,7 +135,7 @@ export function createSessionService(persistence: Persistence): SessionService {
         loadedSessions.push(await loadSession(persistence, id))
       }
       const updated = loadedSessions.map((session) => {
-        const candidate = { ...session, categoryId: normalizedCategoryId, updatedAt: nowIso() }
+        const candidate = { ...session, categoryId: normalizedCategoryId }
         return stripUndefined(candidate) as Session
       })
       for (const session of updated) {
@@ -163,15 +163,19 @@ export function createSessionService(persistence: Persistence): SessionService {
     },
     async archiveSession(id) {
       const session = await loadSession(persistence, id)
-      return saveSession(persistence, session, 'archived')
+      const updated: Session = { ...session, status: 'archived' }
+      await persistence.sessions.save(updated)
+      return updated
     },
     async restoreSession(id) {
       const session = await loadSession(persistence, id)
-      return saveSession(persistence, session, 'active')
+      const updated: Session = { ...session, status: 'active' }
+      await persistence.sessions.save(updated)
+      return updated
     },
     async setMarked(id, isMarked) {
       const session = await loadSession(persistence, id)
-      const candidate = { ...session, isMarked: isMarked ? true : undefined, updatedAt: nowIso() }
+      const candidate = { ...session, isMarked: isMarked ? true : undefined }
       const updated = stripUndefined(candidate) as Session
       await persistence.sessions.save(updated)
       return updated
@@ -183,8 +187,7 @@ export function createSessionService(persistence: Persistence): SessionService {
       }
       const updated = loadedSessions.map((session) => stripUndefined({
         ...session,
-        isMarked: isMarked ? true : undefined,
-        updatedAt: nowIso()
+        isMarked: isMarked ? true : undefined
       }) as Session)
       for (const session of updated) {
         await persistence.sessions.save(session)

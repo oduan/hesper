@@ -14,19 +14,23 @@ describe('createSessionService', () => {
     const created = await sessions.createSession({ title: '分类会话', categoryId: 'category-product', now })
     expect(created.categoryId).toBe('category-product')
 
-    await expect(sessions.setCategory(created.id, 'category-avatar')).resolves.toMatchObject({ categoryId: 'category-avatar' })
+    const avatarCategorized = await sessions.setCategory(created.id, 'category-avatar')
+    expect(avatarCategorized).toMatchObject({ categoryId: 'category-avatar', updatedAt: created.updatedAt })
 
     const uncategorized = await sessions.setCategory(created.id, undefined)
+    expect(uncategorized.updatedAt).toBe(created.updatedAt)
     expect(uncategorized).not.toHaveProperty('categoryId')
     await expect(persistence.sessions.get(created.id)).resolves.not.toHaveProperty('categoryId')
 
     await sessions.setCategory(created.id, 'category-product')
     const clearedWithBlank = await sessions.setCategory(created.id, '')
+    expect(clearedWithBlank.updatedAt).toBe(created.updatedAt)
     expect(clearedWithBlank).not.toHaveProperty('categoryId')
     await expect(persistence.sessions.get(created.id)).resolves.not.toHaveProperty('categoryId')
 
     await sessions.setCategory(created.id, 'category-product')
     const batch = await sessions.setCategoryForSessions([created.id], undefined)
+    expect(batch[0]?.updatedAt).toBe(created.updatedAt)
     expect(batch[0]).not.toHaveProperty('categoryId')
     await expect(persistence.sessions.get(created.id)).resolves.not.toHaveProperty('categoryId')
   })
@@ -60,6 +64,7 @@ describe('createSessionService', () => {
 
     const moved = await sessions.setCategoryForSessions([first.id, second.id], 'category-target')
     expect(moved.map((session) => session.categoryId)).toEqual(['category-target', 'category-target'])
+    expect(moved.map((session) => session.updatedAt)).toEqual([first.updatedAt, second.updatedAt])
     await expect(persistence.sessions.get(first.id)).resolves.toMatchObject({ categoryId: 'category-target' })
     await expect(persistence.sessions.get(second.id)).resolves.toMatchObject({ categoryId: 'category-target' })
   })
@@ -238,19 +243,22 @@ describe('createSessionService', () => {
     const first = await sessions.createSession({ title: 'First', now })
     const second = await sessions.createSession({ title: 'Second', now })
 
-    await expect(sessions.setMarked(first.id, true)).resolves.toMatchObject({ id: first.id, isMarked: true })
-    await expect(persistence.sessions.get(first.id)).resolves.toMatchObject({ isMarked: true })
+    const firstMarked = await sessions.setMarked(first.id, true)
+    expect(firstMarked).toMatchObject({ id: first.id, isMarked: true, updatedAt: first.updatedAt })
+    await expect(persistence.sessions.get(first.id)).resolves.toMatchObject({ isMarked: true, updatedAt: first.updatedAt })
 
     const markedBatch = await sessions.setMarkedForSessions([first.id, second.id], true)
     expect(markedBatch.map((session) => session.isMarked)).toEqual([true, true])
+    expect(markedBatch.map((session) => session.updatedAt)).toEqual([first.updatedAt, second.updatedAt])
 
     const unmarkedBatch = await sessions.setMarkedForSessions([first.id, second.id], false)
     expect(unmarkedBatch.map((session) => session.isMarked)).toEqual([undefined, undefined])
+    expect(unmarkedBatch.map((session) => session.updatedAt)).toEqual([first.updatedAt, second.updatedAt])
     await expect(persistence.sessions.get(first.id)).resolves.not.toHaveProperty('isMarked')
 
     const archived = await sessions.archiveSession(first.id)
-    expect(archived.status).toBe('archived')
-    await expect(sessions.restoreSession(first.id)).resolves.toMatchObject({ id: first.id, status: 'active' })
+    expect(archived).toMatchObject({ status: 'archived', updatedAt: first.updatedAt })
+    await expect(sessions.restoreSession(first.id)).resolves.toMatchObject({ id: first.id, status: 'active', updatedAt: first.updatedAt })
   })
 
   it('creates, updates, archives and deletes sessions', async () => {

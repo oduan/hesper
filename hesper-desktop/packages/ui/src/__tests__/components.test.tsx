@@ -232,7 +232,9 @@ describe('ui components', () => {
 
     const nav = screen.getByRole('navigation', { name: '会话分类导航' })
     expect(within(nav).getByRole('button', { name: '产品图' })).toBeInTheDocument()
-    expect(within(nav).getByTestId('session-special-separator')).toBeInTheDocument()
+    const separator = within(nav).getByTestId('session-special-separator')
+    expect(separator).toBeInTheDocument()
+    expect(separator).toHaveStyle({ margin: '6px 0px 6px 32px' })
 
     await user.click(within(nav).getByRole('button', { name: '已标记' }))
     expect(onSelectSessionSpecialView).toHaveBeenCalledWith('marked')
