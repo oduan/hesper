@@ -135,7 +135,7 @@ export const gitGraphRowSchema = z.object({
   subject: z.string(),
   authorName: z.string(),
   authorEmail: z.string(),
-  authoredAt: nonEmptyStringSchema,
+  authoredAt: z.string().datetime(),
   refs: z.array(gitRefSchema),
   graph: z.object({
     lanes: z.array(gitGraphLaneSchema),
@@ -149,9 +149,10 @@ export const gitRepositoryStateSchema = z.object({
   workspacePath: nonEmptyStringSchema.optional(),
   isGitRepository: z.boolean(),
   currentBranch: z.string().optional(),
-  headCommit: z.string().optional(),
+  headCommit: nonEmptyStringSchema.optional(),
   dirty: z.boolean(),
-  changedFiles: z.number().int().nonnegative()
+  changedFiles: z.number().int().nonnegative(),
+  refs: z.array(gitRefSchema)
 }).strict()
 
 export const gitCommitFileChangeSchema = z.object({
@@ -163,7 +164,9 @@ export const gitCommitFileChangeSchema = z.object({
 }).strict()
 
 export const gitLogResultSchema = z.object({
-  rows: z.array(gitGraphRowSchema)
+  rows: z.array(gitGraphRowSchema),
+  limit: z.number().int().positive(),
+  hasMore: z.boolean()
 }).strict()
 
 export const gitCommitDetailSchema = z.object({
@@ -174,10 +177,10 @@ export const gitCommitDetailSchema = z.object({
   body: z.string(),
   authorName: z.string(),
   authorEmail: z.string(),
-  authoredAt: nonEmptyStringSchema,
+  authoredAt: z.string().datetime(),
   committerName: z.string(),
   committerEmail: z.string(),
-  committedAt: nonEmptyStringSchema,
+  committedAt: z.string().datetime(),
   refs: z.array(gitRefSchema),
   files: z.array(gitCommitFileChangeSchema)
 }).strict()
