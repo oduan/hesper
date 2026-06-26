@@ -27,6 +27,13 @@ async function git(workspacePath: string, args: string[]) {
   return execFileAsync('git', ['-C', workspacePath, ...args], { encoding: 'utf8' })
 }
 
+async function gitAt(workspacePath: string, date: string, args: string[]) {
+  return execFileAsync('git', ['-C', workspacePath, ...args], {
+    encoding: 'utf8',
+    env: { ...process.env, GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date }
+  })
+}
+
 async function gitWithInput(workspacePath: string, args: string[], input: string): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     const child = spawn('git', ['-C', workspacePath, ...args], { stdio: ['pipe', 'pipe', 'pipe'] })
@@ -135,6 +142,61 @@ async function initDisconnectedRepo(workspacePath: string) {
   const docsCommit = (await git(workspacePath, ['rev-parse', 'HEAD'])).stdout.trim()
 
   return { docsCommit, mainCommit }
+}
+
+async function initSshLikeMergeRepo(workspacePath: string) {
+  await execFileAsync('git', ['init', workspacePath], { encoding: 'utf8' })
+  await git(workspacePath, ['config', 'user.name', 'Test User'])
+  await git(workspacePath, ['config', 'user.email', 'test@example.com'])
+
+  await fs.writeFile(path.join(workspacePath, 'base.txt'), 'base\n')
+  await git(workspacePath, ['add', 'base.txt'])
+  await gitAt(workspacePath, '2026-01-01T00:00:00+0000', ['commit', '-m', 'fix: reduce connection onboarding typography'])
+  await git(workspacePath, ['branch', '-M', 'main'])
+  const base = (await git(workspacePath, ['rev-parse', 'HEAD'])).stdout.trim()
+
+  await fs.writeFile(path.join(workspacePath, 'timeline.txt'), 'timeline\n')
+  await git(workspacePath, ['add', 'timeline.txt'])
+  await gitAt(workspacePath, '2026-01-02T00:00:00+0000', ['commit', '-m', 'feat: improve tool step display and empty chat cleanup'])
+  const mainOne = (await git(workspacePath, ['rev-parse', 'HEAD'])).stdout.trim()
+
+  await fs.writeFile(path.join(workspacePath, 'timeline.txt'), 'timeline\nhide resource\n')
+  await git(workspacePath, ['add', 'timeline.txt'])
+  await gitAt(workspacePath, '2026-01-03T00:00:00+0000', ['commit', '-m', 'fix: hide tool step resource in timeline'])
+  const mainTwo = (await git(workspacePath, ['rev-parse', 'HEAD'])).stdout.trim()
+
+  await git(workspacePath, ['switch', '-c', 'ssh-tools', base])
+  const branchCommits: string[] = []
+  for (const [index, subject] of [
+    'docs: design ssh tools',
+    'feat(shared): add ssh domain schemas',
+    'feat(persistence): store ssh metadata and executions',
+    'feat(app-core): manage ssh servers and executions',
+    'fix(app-core): align ssh service contract'
+  ].entries()) {
+    await fs.writeFile(path.join(workspacePath, `ssh-${index}.txt`), `${subject}\n`)
+    await git(workspacePath, ['add', '.'])
+    await gitAt(workspacePath, `2026-01-0${index + 4}T00:00:00+0000`, ['commit', '-m', subject])
+    branchCommits.push((await git(workspacePath, ['rev-parse', 'HEAD'])).stdout.trim())
+  }
+  const branchTip = branchCommits.at(-1)!
+
+  await git(workspacePath, ['switch', 'main'])
+  await gitAt(workspacePath, '2026-01-09T00:00:00+0000', ['merge', '--no-ff', 'ssh-tools', '-m', 'merge: ssh tools'])
+  const merge = (await git(workspacePath, ['rev-parse', 'HEAD'])).stdout.trim()
+
+  await fs.writeFile(path.join(workspacePath, 'settings.txt'), 'settings\n')
+  await git(workspacePath, ['add', 'settings.txt'])
+  await gitAt(workspacePath, '2026-01-10T00:00:00+0000', ['commit', '-m', 'feat(renderer): move ssh management to settings'])
+  const postMerge = (await git(workspacePath, ['rev-parse', 'HEAD'])).stdout.trim()
+
+  await git(workspacePath, ['switch', '-c', 'side', base])
+  await fs.writeFile(path.join(workspacePath, 'side.txt'), 'side\n')
+  await git(workspacePath, ['add', 'side.txt'])
+  await gitAt(workspacePath, '2026-12-01T00:00:00+0000', ['commit', '-m', 'side: active unrelated branch'])
+  const side = (await git(workspacePath, ['rev-parse', 'HEAD'])).stdout.trim()
+
+  return { base, mainOne, mainTwo, branchCommits, branchTip, merge, postMerge, side }
 }
 
 function createGitService(session: TestSession) {
@@ -252,6 +314,32 @@ describe('GitService', () => {
       const colors = result.rows.flatMap((row) => row.graph.lanes.map((lane) => lane.color))
       expect(colors).toContain('#dc2626')
       expect(colors).toContain('#2563eb')
+    })
+  })
+
+
+  it('keeps ssh-like merge nodes on native lanes with stable lane colors', async () => {
+    await withTempDir(async (workspacePath) => {
+      const history = await initSshLikeMergeRepo(workspacePath)
+      const service = createGitService({ id: 'session-1', workspacePath })
+
+      const result = await service.listLog({ sessionId: 'session-1', limit: 20 })
+      const rowByHash = new Map(result.rows.map((row) => [row.commitHash, row]))
+      const nodeLane = (hash: string) => rowByHash.get(hash)?.graph.nodeLaneId
+      const nodeColor = (hash: string) => {
+        const row = rowByHash.get(hash)
+        return row?.graph.lanes.find((lane) => lane.id === row.graph.nodeLaneId)?.color
+      }
+
+      expect(nodeLane(history.side)).toBe('lane-0')
+      expect(nodeLane(history.postMerge)).toBe('lane-1')
+      expect(nodeLane(history.merge)).toBe('lane-1')
+      expect(nodeLane(history.mainTwo)).toBe('lane-1')
+      expect(nodeLane(history.mainOne)).toBe('lane-1')
+      expect(nodeLane(history.base)).toBe('lane-0')
+      expect(history.branchCommits.map(nodeLane)).toEqual(history.branchCommits.map(() => 'lane-2'))
+      expect(new Set(history.branchCommits.map(nodeColor))).toEqual(new Set([nodeColor(history.branchTip)]))
+      expect(nodeColor(history.branchTip)).not.toBe(nodeColor(history.mainTwo))
     })
   })
 
