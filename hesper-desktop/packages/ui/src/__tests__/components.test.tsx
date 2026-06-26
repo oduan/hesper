@@ -1777,12 +1777,45 @@ describe('ui components', () => {
     )
 
     await waitFor(() => expect(screen.getAllByAltText('图片附件')).toHaveLength(2))
+    const attachmentList = screen.getByLabelText('消息附件')
+    expect(attachmentList).toHaveStyle({ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end' })
     const images = screen.getAllByAltText('图片附件')
     expect(images[0]).toHaveAttribute('src', imageUrls['attachment-image-one'])
     expect(images[1]).toHaveAttribute('src', imageUrls['attachment-image-two'])
+    expect(images[0]).toHaveStyle({ maxWidth: '128px', maxHeight: '96px' })
+    expect(images[1]).toHaveStyle({ maxWidth: '128px', maxHeight: '96px' })
     expect(screen.getByText('notes.md')).toBeInTheDocument()
+    expect(screen.getByText('notes.md').closest('div')).toHaveStyle({ maxWidth: '180px' })
     expect(screen.queryByText('secret-one.png')).not.toBeInTheDocument()
     expect(screen.queryByText('secret-two.png')).not.toBeInTheDocument()
+  })
+
+  it('aligns assistant attachment rows with assistant messages', () => {
+    render(
+      <MessageBubble
+        message={{
+          id: 'message-assistant-text-attachment',
+          sessionId: 'session-1',
+          role: 'assistant',
+          content: '附件如下',
+          contentType: 'plain',
+          attachments: [
+            {
+              id: 'attachment-assistant-text-1',
+              kind: 'text',
+              name: 'result.md',
+              mimeType: 'text/markdown',
+              bytes: 1024,
+              relativePath: 'attachments/result.md'
+            }
+          ],
+          createdAt: now
+        }}
+      />
+    )
+
+    expect(screen.getByLabelText('消息附件')).toHaveStyle({ display: 'flex', justifyContent: 'flex-start' })
+    expect(screen.getByText('result.md')).toBeInTheDocument()
   })
 
   it('renders text attachments as file chips next to message content', () => {

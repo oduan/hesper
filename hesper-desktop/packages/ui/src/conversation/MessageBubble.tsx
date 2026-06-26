@@ -22,6 +22,7 @@ export function MessageBubble({ message, loadAttachmentDataUrl }: MessageBubbleP
       <div style={messageStackStyle(isUser)}>
         <MessageAttachments
           message={message}
+          isUser={isUser}
           {...(loadAttachmentDataUrl ? { loadAttachmentDataUrl } : {})}
         />
         {shouldRenderContentBubble ? (
@@ -59,6 +60,7 @@ export function MessageBubble({ message, loadAttachmentDataUrl }: MessageBubbleP
 
 type MessageAttachmentsProps = {
   message: Message
+  isUser: boolean
   loadAttachmentDataUrl?: (attachment: MessageAttachment) => Promise<string>
 }
 
@@ -69,7 +71,7 @@ type LoadedImageDataUrl = {
   dataUrl: string
 }
 
-function MessageAttachments({ message, loadAttachmentDataUrl }: MessageAttachmentsProps) {
+function MessageAttachments({ message, isUser, loadAttachmentDataUrl }: MessageAttachmentsProps) {
   const attachments = message.attachments ?? emptyAttachments
   const imageAttachments = useMemo(() => attachments.filter((attachment) => attachment.kind === 'image'), [attachments])
   const textAttachments = useMemo(() => attachments.filter((attachment) => attachment.kind === 'text'), [attachments])
@@ -160,7 +162,7 @@ function MessageAttachments({ message, loadAttachmentDataUrl }: MessageAttachmen
   }
 
   return (
-    <div aria-label="消息附件" style={attachmentsGridStyle}>
+    <div aria-label="消息附件" style={attachmentListStyle(isUser)}>
       {imageAttachments.map((attachment) => {
         const loadedImage = imageDataUrls[attachment.id]
         const dataUrl = loadedImage?.cacheKey === createImageAttachmentCacheKey(attachment) ? loadedImage.dataUrl : undefined
@@ -223,28 +225,32 @@ function messageStackStyle(isUser: boolean): CSSProperties {
   }
 }
 
-const attachmentsGridStyle = {
-  maxWidth: '100%',
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(112px, max-content))',
-  gap: themeTokens.spacing.xs,
-  justifyContent: 'end'
-} satisfies CSSProperties
+function attachmentListStyle(isUser: boolean): CSSProperties {
+  return {
+    maxWidth: '100%',
+    display: 'flex',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: themeTokens.spacing.xs,
+    justifyContent: isUser ? 'flex-end' : 'flex-start',
+    alignItems: 'flex-end'
+  }
+}
 
 const attachmentImageStyle = {
   display: 'block',
-  maxWidth: 220,
-  maxHeight: 160,
+  maxWidth: 128,
+  maxHeight: 96,
   width: 'auto',
   height: 'auto',
   objectFit: 'cover',
   borderRadius: themeTokens.radius.md,
-  boxShadow: `0 8px 24px ${themeTokens.color.shadow}`
+  boxShadow: `0 4px 14px ${themeTokens.color.shadow}`
 } satisfies CSSProperties
 
 const attachmentImagePlaceholderStyle = {
-  width: 112,
-  height: 72,
+  width: 96,
+  height: 64,
   borderRadius: themeTokens.radius.md,
   background: themeTokens.color.softControl,
   opacity: 0.72
@@ -252,22 +258,22 @@ const attachmentImagePlaceholderStyle = {
 
 const fileChipStyle = {
   minWidth: 0,
-  maxWidth: 260,
+  maxWidth: 180,
   display: 'inline-grid',
   gridTemplateColumns: 'auto minmax(0, 1fr)',
   columnGap: themeTokens.spacing.xs,
   rowGap: 2,
   alignItems: 'center',
-  padding: `${themeTokens.spacing.xs} ${themeTokens.spacing.sm}`,
+  padding: `4px ${themeTokens.spacing.sm}`,
   borderRadius: 999,
   background: themeTokens.color.surfaceMuted,
   color: themeTokens.color.text,
-  boxShadow: `0 8px 24px ${themeTokens.color.shadow}`
+  boxShadow: `0 4px 14px ${themeTokens.color.shadow}`
 } satisfies CSSProperties
 
 const fileChipIconStyle = {
   gridRow: '1 / span 2',
-  fontSize: 14,
+  fontSize: 12,
   lineHeight: 1
 } satisfies CSSProperties
 
@@ -276,8 +282,8 @@ const fileChipTextStyle = {
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
-  fontSize: themeTokens.typography.body,
-  lineHeight: 1.2,
+  fontSize: 12,
+  lineHeight: 1.15,
   fontWeight: 600
 } satisfies CSSProperties
 
