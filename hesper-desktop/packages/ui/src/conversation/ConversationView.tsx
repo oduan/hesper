@@ -3,6 +3,8 @@ import type { AgentRun, LocalFilePreview, Message, MessageAttachment, ModelCapab
 import { themeTokens } from '../theme'
 import { Composer, type ComposerDraftAttachment, type ComposerSendOptions, type ComposerSkillMention, type ModelOptionGroup, type SkillOption } from './Composer'
 import { LocalFilePreviewDialog } from './LocalFilePreviewDialog'
+import { GitGraphFullscreen } from '../git/GitGraphFullscreen'
+import type { GitCommitDetailView, GitGraphRowView } from '../git/git-graph-types'
 import { MessageBubble } from './MessageBubble'
 import { OutputBlock } from './OutputBlock'
 import type { NavigationItem } from './RightNavigation'
@@ -12,6 +14,28 @@ export type ConversationShortcutCommand =
   | { type: 'send'; nonce: number }
   | { type: 'close-panels'; nonce: number }
   | { type: 'jump-message'; nonce: number; direction: 'previous' | 'next'; assistantOnly: boolean }
+
+export type ConversationGitPanelProps = {
+  visible: boolean
+  open: boolean
+  disabled?: boolean
+  currentBranch?: string
+  dirty?: boolean
+  loading?: boolean
+  error?: string
+  rows: GitGraphRowView[]
+  selectedCommit?: string
+  detail?: GitCommitDetailView
+  onOpen: () => void
+  onClose: () => void
+  onRefresh?: () => void
+  onSelectCommit: (commitHash: string) => void
+  onLoadCommitDetail: (commitHash: string) => void
+  onCreateBranch: (commitHash: string) => void
+  onCreateTag: (commitHash: string) => void
+  onCheckout: (ref: string) => void
+  onCopyCommitId?: (commitHash: string) => void
+}
 
 export type ConversationViewProps = {
   session: Session
@@ -42,6 +66,7 @@ export type ConversationViewProps = {
   loadLocalFilePreview?: (path: string) => Promise<LocalFilePreview>
   loadAttachmentDataUrl?: (attachment: MessageAttachment) => Promise<string>
   shortcutCommand?: ConversationShortcutCommand
+  gitPanel?: ConversationGitPanelProps
 }
 
 type AnchorEntry = {
@@ -333,11 +358,14 @@ export function ConversationView({
   onModelChange,
   loadLocalFilePreview,
   loadAttachmentDataUrl,
-  shortcutCommand
+  shortcutCommand,
+  gitPanel
 }: ConversationViewProps) {
   const [closeFullscreenSignal, setCloseFullscreenSignal] = useState(0)
   const [showJumpToBottom, setShowJumpToBottom] = useState(false)
   const [localFilePreviewState, setLocalFilePreviewState] = useState<LocalFilePreviewState>()
+  const shouldShowGitPanel = gitPanel?.visible === true
+  const gitPanelDisabled = Boolean(gitPanel?.disabled)
   const anchorRefs = useRef<Record<string, HTMLElement | null>>({})
   const messagesScrollRef = useRef<HTMLDivElement | null>(null)
   const messagesContentRef = useRef<HTMLDivElement | null>(null)
@@ -677,6 +705,32 @@ export function ConversationView({
           }}
         >
           <h2 style={{ margin: 0, maxWidth: '65%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: themeTokens.typography.body, lineHeight: 1.2, textAlign: 'center', fontWeight: 700 }}>{session.title}</h2>
+          {shouldShowGitPanel && gitPanel ? (
+            <div style={gitPanelEntryAreaStyle}>
+              <button
+                type="button"
+                aria-label="打开 Git 图谱"
+                disabled={gitPanelDisabled}
+                onClick={() => {
+                  if (gitPanelDisabled) return
+                  gitPanel.onOpen()
+                }}
+                style={{
+                  ...gitPanelEntryButtonStyle,
+                  ...(gitPanel.open ? gitPanelEntryButtonActiveStyle : {}),
+                  ...(gitPanelDisabled ? gitPanelEntryButtonDisabledStyle : {})
+                }}
+              >
+                <svg aria-hidden="true" viewBox="0 0 24 24" style={gitPanelEntryIconStyle}>
+                  <path d="M7 4v8a4 4 0 0 0 4 4h6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M7 4a2 2 0 1 0 0 4 2 2 0 0 0 0-4ZM17 14a2 2 0 1 0 0 4 2 2 0 0 0 0-4ZM17 4a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z" fill="none" stroke="currentColor" strokeWidth="2" />
+                  <path d="M7 8v2a4 4 0 0 0 4 4h2a4 4 0 0 0 4-4V8" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+                {gitPanel.currentBranch ? <span style={gitPanelEntryBranchStyle}>{gitPanel.currentBranch}</span> : null}
+                {gitPanel.dirty ? <span aria-label="工作区有未提交更改" role="status" style={gitPanelDirtyDotStyle} /> : null}
+              </button>
+            </div>
+          ) : null}
         </header>
         <div style={messagesAreaStyle} onWheelCapture={handleConversationWheelCapture}>
           <div
@@ -878,6 +932,23 @@ export function ConversationView({
           />
         </div>
       </section>
+      {shouldShowGitPanel && gitPanel ? (
+        <GitGraphFullscreen
+          open={gitPanel.open}
+          rows={gitPanel.rows}
+          onClose={gitPanel.onClose}
+          onSelectCommit={gitPanel.onSelectCommit}
+          onLoadCommitDetail={gitPanel.onLoadCommitDetail}
+          onCreateBranch={gitPanel.onCreateBranch}
+          onCreateTag={gitPanel.onCreateTag}
+          onCheckout={gitPanel.onCheckout}
+          {...(gitPanel.selectedCommit !== undefined ? { selectedCommit: gitPanel.selectedCommit } : {})}
+          {...(gitPanel.detail !== undefined ? { detail: gitPanel.detail } : {})}
+          {...(gitPanel.loading !== undefined ? { loading: gitPanel.loading } : {})}
+          {...(gitPanel.error !== undefined ? { error: gitPanel.error } : {})}
+          {...(gitPanel.onCopyCommitId ? { onCopyCommitId: gitPanel.onCopyCommitId } : {})}
+        />
+      ) : null}
       {localFilePreviewState ? (
         <LocalFilePreviewDialog
           path={localFilePreviewState.path}
@@ -891,6 +962,74 @@ export function ConversationView({
     </div>
   )
 }
+
+const gitPanelEntryAreaStyle = {
+  position: 'absolute',
+  top: 12,
+  right: themeTokens.spacing.lg,
+  maxWidth: '30%',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'flex-end',
+  pointerEvents: 'auto'
+} satisfies CSSProperties
+
+const gitPanelEntryButtonStyle = {
+  minWidth: 34,
+  height: 30,
+  border: 0,
+  outline: 0,
+  borderRadius: 999,
+  background: themeTokens.color.softControl,
+  color: themeTokens.color.textMuted,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 6,
+  padding: '0 10px',
+  cursor: 'pointer',
+  fontSize: 12,
+  lineHeight: 1,
+  maxWidth: '100%',
+  boxShadow: `0 10px 24px ${themeTokens.color.shadow}`
+} satisfies CSSProperties
+
+const gitPanelEntryButtonActiveStyle = {
+  color: themeTokens.color.accent,
+  background: themeTokens.color.hover
+} satisfies CSSProperties
+
+const gitPanelEntryButtonDisabledStyle = {
+  cursor: 'not-allowed',
+  opacity: 0.45,
+  boxShadow: 'none'
+} satisfies CSSProperties
+
+const gitPanelEntryIconStyle = {
+  width: 16,
+  height: 16,
+  display: 'block',
+  flex: '0 0 auto'
+} satisfies CSSProperties
+
+const gitPanelEntryBranchStyle = {
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  maxWidth: 180,
+  color: 'inherit',
+  fontWeight: 650
+} satisfies CSSProperties
+
+const gitPanelDirtyDotStyle = {
+  width: 8,
+  height: 8,
+  borderRadius: 999,
+  background: themeTokens.color.warning,
+  boxShadow: `0 0 0 3px ${themeTokens.color.warningSoft}`,
+  flex: '0 0 auto'
+} satisfies CSSProperties
 
 const messagesAreaStyle = {
   position: 'relative',
