@@ -18,7 +18,7 @@ function createDeferred<T>() {
   return { promise, resolve, reject }
 }
 
-const { listSessions, listSessionCategories, createSession, createSessionCategory, updateSessionCategory, deleteSessionCategory, setSessionCategory, updateTitle, deleteSession, setModel, generateTitle, markViewed, listRoles, createRole, updateRole, deleteRole, listSkills, refreshSkills, listMessages, listMessagesByRun, listRuns, listSteps, listWorkerInvocationsByParentRun, filesPreview, readAttachmentDataUrl, enqueue, stopRun, onEvent, getSettings, updateSettings, listProviders, listModels, listTools, setToolEnabled, toolCredentialStatus, saveToolApiKey, deleteToolApiKey, sshKeysList, sshKeysCreate, sshKeysDelete, sshServersList, sshServersCreate, sshServersUpdate, sshServersDelete, minimizeWindow, toggleMaximizeWindow, closeWindow } = vi.hoisted(() => ({
+const { listSessions, listSessionCategories, createSession, createSessionCategory, updateSessionCategory, deleteSessionCategory, setSessionCategory, updateTitle, archiveSession, restoreSession, deleteSession, setSessionMarked, setModel, generateTitle, markViewed, listRoles, createRole, updateRole, deleteRole, listSkills, refreshSkills, listMessages, listMessagesByRun, listRuns, listSteps, listWorkerInvocationsByParentRun, filesPreview, readAttachmentDataUrl, enqueue, stopRun, onEvent, getSettings, updateSettings, listProviders, listModels, listTools, setToolEnabled, toolCredentialStatus, saveToolApiKey, deleteToolApiKey, sshKeysList, sshKeysCreate, sshKeysDelete, sshServersList, sshServersCreate, sshServersUpdate, sshServersDelete, minimizeWindow, toggleMaximizeWindow, closeWindow } = vi.hoisted(() => ({
   listSessions: vi.fn(async () => []),
   listSessionCategories: vi.fn(async (): Promise<any[]> => []),
   createSession: vi.fn(async () => ({
@@ -62,6 +62,22 @@ const { listSessions, listSessionCategories, createSession, createSessionCategor
     createdAt: '2026-06-10T03:00:00.000Z',
     updatedAt: '2026-06-10T03:00:12.000Z'
   }))),
+  archiveSession: vi.fn(async (id: string) => ({
+    id,
+    title: 'Archived chat',
+    status: 'archived',
+    outputMode: 'markdown',
+    createdAt: '2026-06-10T03:00:00.000Z',
+    updatedAt: '2026-06-10T03:00:12.000Z'
+  })),
+  restoreSession: vi.fn(async (id: string) => ({
+    id,
+    title: 'Restored chat',
+    status: 'active',
+    outputMode: 'markdown',
+    createdAt: '2026-06-10T03:00:00.000Z',
+    updatedAt: '2026-06-10T03:00:12.000Z'
+  })),
   deleteSession: vi.fn(async (id: string) => ({
     id,
     title: 'Deleted chat',
@@ -70,6 +86,15 @@ const { listSessions, listSessionCategories, createSession, createSessionCategor
     createdAt: '2026-06-10T03:00:00.000Z',
     updatedAt: '2026-06-10T03:00:12.000Z'
   })),
+  setSessionMarked: vi.fn(async (input: { ids: string[]; isMarked: boolean }) => input.ids.map((id) => ({
+    id,
+    title: 'Marked chat',
+    status: 'active',
+    ...(input.isMarked ? { isMarked: true } : {}),
+    outputMode: 'markdown',
+    createdAt: '2026-06-10T03:00:00.000Z',
+    updatedAt: '2026-06-10T03:00:12.000Z'
+  }))),
   setModel: vi.fn(async (input: { id: string; defaultModelId: string }) => ({
     id: input.id,
     title: 'Current chat',
@@ -246,7 +271,10 @@ vi.mock('../src/ipc-client', () => ({
       list: listSessions,
       create: createSession,
       updateTitle,
+      archive: archiveSession,
+      restore: restoreSession,
       delete: deleteSession,
+      setMarked: setSessionMarked,
       setModel,
       generateTitle,
       markViewed,
@@ -331,7 +359,10 @@ describe('renderer App', () => {
     deleteSessionCategory.mockClear()
     setSessionCategory.mockClear()
     updateTitle.mockClear()
+    archiveSession.mockClear()
+    restoreSession.mockClear()
     deleteSession.mockClear()
+    setSessionMarked.mockClear()
     setModel.mockClear()
     generateTitle.mockClear()
     markViewed.mockClear()
@@ -615,6 +646,62 @@ describe('renderer App', () => {
     await user.click((await screen.findAllByRole('button', { name: '新建会话' }))[0]!)
 
     expect(createSession).toHaveBeenCalledWith({ title: 'New chat', categoryId: 'category-product' })
+  })
+
+  it('shows active sessions in all sessions and archived sessions only in archive view', async () => {
+    const user = userEvent.setup()
+    listSessions.mockResolvedValueOnce([
+      { id: 'session-active', title: 'Active chat', status: 'active', outputMode: 'markdown', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:01:00.000Z' },
+      { id: 'session-archived', title: 'Archived chat', status: 'archived', outputMode: 'markdown', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:02:00.000Z' }
+    ] as any)
+
+    render(<App />)
+
+    expect(await screen.findByRole('button', { name: 'Active chat' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Archived chat' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '归档' }))
+    expect(within(screen.getByLabelText('实体列表')).getByRole('heading', { name: '归档' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Archived chat' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Active chat' })).not.toBeInTheDocument()
+  })
+
+  it('filters marked active sessions from the marked view', async () => {
+    const user = userEvent.setup()
+    listSessions.mockResolvedValueOnce([
+      { id: 'session-marked', title: 'Marked chat', status: 'active', isMarked: true, outputMode: 'markdown', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:03:00.000Z' },
+      { id: 'session-plain', title: 'Plain chat', status: 'active', outputMode: 'markdown', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:02:00.000Z' },
+      { id: 'session-archived-marked', title: 'Archived marked chat', status: 'archived', isMarked: true, outputMode: 'markdown', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:04:00.000Z' }
+    ] as any)
+
+    render(<App />)
+    await user.click(await screen.findByRole('button', { name: '已标记' }))
+
+    expect(within(screen.getByLabelText('实体列表')).getByRole('heading', { name: '已标记' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Marked chat' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Plain chat' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Archived marked chat' })).not.toBeInTheDocument()
+  })
+
+  it('archives and marks sessions from the context menu', async () => {
+    const user = userEvent.setup()
+    listSessions.mockResolvedValueOnce([
+      { id: 'session-1', title: 'Action chat', status: 'active', outputMode: 'markdown', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:01:00.000Z' }
+    ] as any)
+    setSessionMarked.mockResolvedValueOnce([{ id: 'session-1', title: 'Action chat', status: 'active', isMarked: true, outputMode: 'markdown', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:02:00.000Z' }] as any)
+    archiveSession.mockResolvedValueOnce({ id: 'session-1', title: 'Action chat', status: 'archived', isMarked: true, outputMode: 'markdown', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:03:00.000Z' } as any)
+
+    render(<App />)
+
+    const row = await screen.findByRole('button', { name: 'Action chat' })
+    fireEvent.contextMenu(row)
+    await user.click(await screen.findByRole('menuitem', { name: '标记' }))
+    await waitFor(() => expect(setSessionMarked).toHaveBeenCalledWith({ ids: ['session-1'], isMarked: true }))
+
+    fireEvent.contextMenu(await screen.findByRole('button', { name: 'Action chat' }))
+    await user.click(await screen.findByRole('menuitem', { name: '归档' }))
+    await waitFor(() => expect(archiveSession).toHaveBeenCalledWith('session-1'))
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Action chat' })).not.toBeInTheDocument())
   })
 
   it('confirms and deletes a category with its sessions', async () => {
@@ -1681,10 +1768,10 @@ describe('renderer App', () => {
       {
         id: 'session-2',
         title: 'Other chat',
-        status: 'archived',
+        status: 'active',
         outputMode: 'markdown',
-        createdAt: '2026-06-10T03:10:00.000Z',
-        updatedAt: '2026-06-10T03:10:00.000Z'
+        createdAt: '2026-06-10T02:59:00.000Z',
+        updatedAt: '2026-06-10T02:59:00.000Z'
       }
     ] as any)
     listMessages.mockImplementation(async (sessionId?: string) => (sessionId === 'session-1'

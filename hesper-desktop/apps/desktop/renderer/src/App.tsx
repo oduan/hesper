@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react'
 import { createId, defaultAppThemeId, nowIso, type AgentRun, type Message, type MessageAttachment, type RunStep, type Session, type WorkerAgentInvocation } from '@hesper/shared'
 import { AppShell, ConversationView, resolveThemeVariant, themeTokens, type AppSection, type ComposerDraftAttachment, type ComposerSendOptions, type ComposerSkillMention, type ConversationShortcutCommand, type SkillOption } from '@hesper/ui'
-import { AppStoreProvider, useAppStore } from './app-store'
+import { AppStoreProvider, useAppStore, type SessionSpecialView } from './app-store'
 import { hesperApi } from './ipc-client'
 import { defaultFallbackModelId, fallbackSessionModelCatalog, loadAvailableModelCatalog, mergeModelOptions, type SessionModelCatalog } from './model-options'
 import type { AppSettings, CreateSshKeyInput, CreateSshServerInput, DraftAttachment, ManagedRoleDto, SkillDto, SshKeyDto, SshServerDto, ToolCredentialStatus, ToolDto, UpdateSettingsInput, UpdateSshServerInput } from '../../electron/ipc-contract'
@@ -134,6 +134,13 @@ function applySessionUnreadCompletion(session: Session, completedAt: string): Se
     : completedAt
   if (session.unreadCompletedAt === unreadCompletedAt && session.updatedAt === updatedAt) return session
   return { ...session, unreadCompletedAt, updatedAt }
+}
+
+function visibleSessionsForScope(sessions: Session[], categoryId: string | undefined, specialView: SessionSpecialView | undefined): Session[] {
+  if (specialView === 'archived') return sessions.filter((session) => session.status === 'archived')
+  if (specialView === 'marked') return sessions.filter((session) => session.status === 'active' && session.isMarked)
+  if (categoryId) return sessions.filter((session) => session.status === 'active' && session.categoryId === categoryId)
+  return sessions.filter((session) => session.status === 'active')
 }
 
 function AppContent() {
@@ -813,15 +820,18 @@ function AppContent() {
     [pendingSettingsBySession, state.sessions]
   )
   const visibleSessions = useMemo(
-    () => state.activeSessionCategoryId
-      ? effectiveSessions.filter((session) => session.categoryId === state.activeSessionCategoryId)
-      : effectiveSessions,
-    [effectiveSessions, state.activeSessionCategoryId]
+    () => visibleSessionsForScope(effectiveSessions, state.activeSessionCategoryId, state.activeSessionSpecialView),
+    [effectiveSessions, state.activeSessionCategoryId, state.activeSessionSpecialView]
   )
   const activeSession = effectiveSessions.find((session) => session.id === state.activeSessionId)
   const activeSessionCategory = state.activeSessionCategoryId
     ? state.sessionCategories.find((category) => category.id === state.activeSessionCategoryId)
     : undefined
+  const activeSessionListTitle = state.activeSessionSpecialView === 'marked'
+    ? '已标记'
+    : state.activeSessionSpecialView === 'archived'
+      ? '归档'
+      : activeSessionCategory?.name ?? '所有会话'
   const activeSendError = activeSession ? sendErrorsBySession[activeSession.id] : undefined
   const activeHistoryError = activeSession ? historyErrorsBySession[activeSession.id] : undefined
   const isSessionsSection = state.activeSection === 'sessions'
@@ -1305,8 +1315,45 @@ function AppContent() {
     }
   }
 
+  const archiveSessions = async (sessionId: string, sessionIds?: string[]) => {
+    const targetSessionIds = normalizeSessionActionIds(sessionId, sessionIds)
+    for (const targetSessionId of targetSessionIds) {
+      try {
+        const updatedSession = await hesperApi.sessions.archive(targetSessionId)
+        dispatch({ type: 'session.updated', session: updatedSession })
+      } catch (error) {
+        console.warn('Failed to archive session', targetSessionId, error)
+      }
+    }
+  }
+
+  const restoreSessions = async (sessionId: string, sessionIds?: string[]) => {
+    const targetSessionIds = normalizeSessionActionIds(sessionId, sessionIds)
+    for (const targetSessionId of targetSessionIds) {
+      try {
+        const updatedSession = await hesperApi.sessions.restore(targetSessionId)
+        dispatch({ type: 'session.updated', session: updatedSession })
+      } catch (error) {
+        console.warn('Failed to restore session', targetSessionId, error)
+      }
+    }
+  }
+
+  const setSessionsMarked = async (_sessionId: string, sessionIds: string[] | undefined, isMarked: boolean) => {
+    const ids = sessionIds?.length ? sessionIds : [_sessionId]
+    try {
+      const updatedSessions = await hesperApi.sessions.setMarked({ ids, isMarked })
+      for (const session of updatedSessions) {
+        dispatch({ type: 'session.updated', session })
+      }
+    } catch (error) {
+      console.warn('Failed to set session marked state', error)
+    }
+  }
+
   const createTrackedSession = async () => {
-    const session = await createSession(dispatch, sessionModelCatalog.preferredModelId, stateRef.current.activeSessionCategoryId)
+    const categoryId = stateRef.current.activeSessionSpecialView ? undefined : stateRef.current.activeSessionCategoryId
+    const session = await createSession(dispatch, sessionModelCatalog.preferredModelId, categoryId)
     createdNewSessionIdsRef.current.add(session.id)
   }
 
@@ -1346,8 +1393,8 @@ function AppContent() {
     <AppShell
       sessions={visibleSessions}
       activeSection={state.activeSection}
-      title={isSessionsSection ? activeSessionCategory?.name ?? activeSession?.title ?? '新建会话' : getSectionTitle(state.activeSection)}
-      {...(isSessionsSection ? { entityListTitle: activeSessionCategory?.name ?? '所有会话' } : {})}
+      title={isSessionsSection ? activeSessionListTitle === '所有会话' ? activeSession?.title ?? '新建会话' : activeSessionListTitle : getSectionTitle(state.activeSection)}
+      {...(isSessionsSection ? { entityListTitle: activeSessionListTitle } : {})}
       platform={hesperApi.window.platform}
       appearance={{ themeId: appSettings.themeId, themeMode: requestedThemeMode, fontSize: appSettings.fontSize }}
       activeSettingsCategory={activeSettingsCategory}
@@ -1368,12 +1415,17 @@ function AppContent() {
       {...(activeSkillId ? { activeSkillId } : {})}
       {...(state.activeSessionId ? { activeSessionId: state.activeSessionId } : {})}
       {...(state.activeSessionCategoryId ? { activeSessionCategoryId: state.activeSessionCategoryId } : {})}
+      {...(state.activeSessionSpecialView ? { activeSessionSpecialView: state.activeSessionSpecialView } : {})}
       onCreateSession={async () => {
         dispatch({ type: 'section.selected', section: 'sessions' })
+        if (stateRef.current.activeSessionSpecialView) {
+          dispatch({ type: 'sessionCategory.selected' })
+        }
         await createTrackedSession()
       }}
       onSelectSection={(section) => dispatch({ type: 'section.selected', section })}
       onSelectSessionCategory={(categoryId) => dispatch(categoryId ? { type: 'sessionCategory.selected', categoryId } : { type: 'sessionCategory.selected' })}
+      onSelectSessionSpecialView={(view) => dispatch({ type: 'sessionSpecialView.selected', view })}
       onCreateSessionCategory={createSessionCategory}
       onRenameSessionCategory={renameSessionCategory}
       onDeleteSessionCategory={(categoryId) => {
@@ -1384,6 +1436,15 @@ function AppContent() {
       }}
       onSetSessionCategory={(sessionId, sessionIds, categoryId) => {
         void setSessionCategory(sessionId, sessionIds, categoryId)
+      }}
+      onArchiveSession={(sessionId, sessionIds) => {
+        void archiveSessions(sessionId, sessionIds)
+      }}
+      onRestoreSession={(sessionId, sessionIds) => {
+        void restoreSessions(sessionId, sessionIds)
+      }}
+      onSetSessionMarked={(sessionId, sessionIds, isMarked) => {
+        void setSessionsMarked(sessionId, sessionIds, isMarked)
       }}
       onSelectSettingsCategory={setActiveSettingsCategory}
       onSelectTool={setActiveToolId}
@@ -1593,6 +1654,9 @@ function AppContent() {
         <EmptyConversationState
           {...(loadError ? { loadError } : {})}
           onCreateSession={async () => {
+            if (stateRef.current.activeSessionSpecialView) {
+              dispatch({ type: 'sessionCategory.selected' })
+            }
             await createTrackedSession()
           }}
         />
