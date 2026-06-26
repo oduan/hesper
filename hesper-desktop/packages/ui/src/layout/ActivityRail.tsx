@@ -64,16 +64,23 @@ export function ActivityRail({
   onRenameSessionCategory,
   onDeleteSessionCategory
 }: ActivityRailProps) {
-  const [fallbackSessionsExpanded, setFallbackSessionsExpanded] = useState(true)
+  const [fallbackSessionsExpanded, setFallbackSessionsExpanded] = useState(() => sessionsExpanded ?? true)
   const [categoryMenu, setCategoryMenu] = useState<CategoryMenuState>()
   const [editingCategory, setEditingCategory] = useState<EditingCategoryState>()
   const renameInputRef = useRef<HTMLInputElement>(null)
   const categoryMenuFirstItemRef = useRef<HTMLButtonElement>(null)
-  const effectiveSessionsExpanded = sessionsExpanded ?? fallbackSessionsExpanded
+  const isSessionsExpandedControlled = sessionsExpanded !== undefined && onToggleSessionsExpanded !== undefined
+  const effectiveSessionsExpanded = isSessionsExpandedControlled ? sessionsExpanded : fallbackSessionsExpanded
   const visibleCategories =
     editingCategory?.isNew && !sessionCategories.some((category) => category.id === editingCategory.id)
       ? [...sessionCategories, { id: editingCategory.id, name: editingCategory.name }]
       : sessionCategories
+
+  useEffect(() => {
+    if (!isSessionsExpandedControlled && sessionsExpanded !== undefined) {
+      setFallbackSessionsExpanded(sessionsExpanded)
+    }
+  }, [isSessionsExpandedControlled, sessionsExpanded])
 
   useEffect(() => {
     if (!categoryMenu) return undefined
@@ -106,13 +113,11 @@ export function ActivityRail({
   const handleToggleSessionsExpanded = () => {
     onSelectSection?.('sessions')
     setCategoryMenu(undefined)
-    if (onToggleSessionsExpanded) {
+    if (isSessionsExpandedControlled) {
       onToggleSessionsExpanded()
       return
     }
-    if (sessionsExpanded === undefined) {
-      setFallbackSessionsExpanded((expanded) => !expanded)
-    }
+    setFallbackSessionsExpanded((expanded) => !expanded)
   }
 
   const handleSelectAllSessions = () => {
@@ -278,10 +283,8 @@ export function ActivityRail({
                                     cancelEditingCategory()
                                   }
                                 }}
-                                onBlur={(event) => {
-                                  if (editingCategory.isNew && !event.currentTarget.value.trim()) {
-                                    cancelEditingCategory()
-                                  }
+                                onBlur={() => {
+                                  commitEditingCategory()
                                 }}
                                 style={categoryRenameInputStyle}
                               />

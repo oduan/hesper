@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event'
 import type { AgentRun, LocalFilePreview, Message, RunStep, Session, WorkerAgentInvocation } from '@hesper/shared'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppShell } from '../layout/AppShell'
+import { ActivityRail } from '../layout/ActivityRail'
 import { Composer, type ComposerSkillMention } from '../conversation/Composer'
 import { ConversationView } from '../conversation/ConversationView'
 import { FullscreenOutput } from '../conversation/FullscreenOutput'
@@ -265,6 +266,146 @@ describe('ui components', () => {
     expect(icon).toHaveAttribute('height', '16')
     expect(screen.queryByRole('button', { name: '所有会话' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '产品图' })).not.toBeInTheDocument()
+  })
+
+  it('toggles sessions internally when expanded prop is provided without a handler', async () => {
+    const user = userEvent.setup()
+
+    render(
+      <ActivityRail
+        activeSection="sessions"
+        sessionsExpanded={false}
+        sessionCategories={[{ id: 'category-product', name: '产品图', createdAt: now, updatedAt: now }]}
+      />
+    )
+
+    const sessionsButton = screen.getByRole('button', { name: '会话' })
+    expect(screen.getByTestId('sessions-disclosure-icon')).toHaveAttribute('data-state', 'collapsed')
+    expect(screen.queryByRole('button', { name: '所有会话' })).not.toBeInTheDocument()
+
+    await user.click(sessionsButton)
+    expect(screen.getByTestId('sessions-disclosure-icon')).toHaveAttribute('data-state', 'expanded')
+    expect(screen.getByRole('button', { name: '所有会话' })).toBeInTheDocument()
+
+    await user.click(sessionsButton)
+    expect(screen.getByTestId('sessions-disclosure-icon')).toHaveAttribute('data-state', 'collapsed')
+    expect(screen.queryByRole('button', { name: '所有会话' })).not.toBeInTheDocument()
+  })
+
+  it('commits category rename on blur and exits editing mode', async () => {
+    const user = userEvent.setup()
+    const onRenameSessionCategory = vi.fn()
+
+    render(
+      <ActivityRail
+        activeSection="sessions"
+        sessionsExpanded
+        sessionCategories={[{ id: 'category-product', name: '产品图', createdAt: now, updatedAt: now }]}
+        onRenameSessionCategory={onRenameSessionCategory}
+      />
+    )
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: '产品图' }))
+    await user.click(within(screen.getByRole('menu', { name: '分类操作' })).getByRole('menuitem', { name: '重命名' }))
+
+    const input = (await screen.findByLabelText('重命名分类')) as HTMLInputElement
+    await user.clear(input)
+    await user.type(input, '商业图')
+    fireEvent.blur(input)
+
+    await waitFor(() => {
+      expect(onRenameSessionCategory).toHaveBeenCalledWith('category-product', '商业图')
+    })
+    expect(screen.queryByLabelText('重命名分类')).not.toBeInTheDocument()
+  })
+
+  it('deletes empty new category on blur and Enter, then exits editing mode', async () => {
+    const user = userEvent.setup()
+    const onCreateSessionCategory = vi.fn(async () => ({
+      id: 'category-new',
+      name: '新分类',
+      createdAt: now,
+      updatedAt: now
+    }))
+    const onDeleteSessionCategory = vi.fn()
+
+    render(
+      <ActivityRail
+        activeSection="sessions"
+        sessionsExpanded
+        sessionCategories={[]}
+        onCreateSessionCategory={onCreateSessionCategory}
+        onDeleteSessionCategory={onDeleteSessionCategory}
+      />
+    )
+
+    const createEmptyCategory = async () => {
+      fireEvent.contextMenu(screen.getByRole('button', { name: '所有会话' }))
+      await user.click(within(screen.getByRole('menu', { name: '会话分类操作' })).getByRole('menuitem', { name: '新建分类' }))
+      const input = (await screen.findByLabelText('重命名分类')) as HTMLInputElement
+      await user.clear(input)
+      return input
+    }
+
+    fireEvent.blur(await createEmptyCategory())
+    await waitFor(() => {
+      expect(onDeleteSessionCategory).toHaveBeenCalledWith('category-new')
+    })
+    expect(screen.queryByLabelText('重命名分类')).not.toBeInTheDocument()
+
+    await user.type(await createEmptyCategory(), '{Enter}')
+    await waitFor(() => {
+      expect(onDeleteSessionCategory).toHaveBeenCalledTimes(2)
+    })
+    expect(onDeleteSessionCategory).toHaveBeenLastCalledWith('category-new')
+    expect(screen.queryByLabelText('重命名分类')).not.toBeInTheDocument()
+  })
+
+  it('selects all sessions and categories from the activity rail and marks active rows', async () => {
+    const user = userEvent.setup()
+    const onSelectSection = vi.fn()
+    const onSelectSessionCategory = vi.fn()
+    const category = { id: 'category-product', name: '产品图', createdAt: now, updatedAt: now }
+
+    const { rerender } = render(
+      <ActivityRail
+        activeSection="sessions"
+        sessionsExpanded
+        sessionCategories={[category]}
+        onSelectSection={onSelectSection}
+        onSelectSessionCategory={onSelectSessionCategory}
+      />
+    )
+
+    const allSessionsButton = screen.getByRole('button', { name: '所有会话' })
+    expect(allSessionsButton).toHaveAttribute('aria-current', 'page')
+    expect(allSessionsButton).toHaveClass('is-active')
+
+    await user.click(allSessionsButton)
+    expect(onSelectSection).toHaveBeenLastCalledWith('sessions')
+    expect(onSelectSessionCategory).toHaveBeenLastCalledWith(undefined)
+
+    const categoryButton = screen.getByRole('button', { name: '产品图' })
+    expect(categoryButton).not.toHaveAttribute('aria-current')
+    await user.click(categoryButton)
+    expect(onSelectSection).toHaveBeenLastCalledWith('sessions')
+    expect(onSelectSessionCategory).toHaveBeenLastCalledWith('category-product')
+
+    rerender(
+      <ActivityRail
+        activeSection="sessions"
+        activeSessionCategoryId="category-product"
+        sessionsExpanded
+        sessionCategories={[category]}
+        onSelectSection={onSelectSection}
+        onSelectSessionCategory={onSelectSessionCategory}
+      />
+    )
+
+    expect(screen.getByRole('button', { name: '所有会话' })).not.toHaveAttribute('aria-current')
+    const activeCategoryButton = screen.getByRole('button', { name: '产品图' })
+    expect(activeCategoryButton).toHaveAttribute('aria-current', 'page')
+    expect(activeCategoryButton).toHaveClass('is-active')
   })
 
   it('renders builtin tools with global enable switches in the entity list', async () => {
