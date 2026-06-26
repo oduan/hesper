@@ -46,11 +46,12 @@ export function GitGraphFullscreen({
     [detailCommitHash, rows, selectedCommit]
   )
 
-  const focusCommitRow = (commitHash?: string) => {
+  const focusCommitRow = (commitHash?: string, fallbackToFirstRow = true) => {
     const root = rootRef.current
     if (!root) return
     const rowsByHash = Array.from(root.querySelectorAll<HTMLElement>('[data-git-commit-hash]'))
-    const row = rowsByHash.find((candidate) => candidate.getAttribute('data-git-commit-hash') === commitHash) ?? rowsByHash[0]
+    const selectedRow = rowsByHash.find((candidate) => candidate.getAttribute('data-git-commit-hash') === commitHash)
+    const row = selectedRow ?? (fallbackToFirstRow ? rowsByHash[0] : undefined)
     ;(row ?? root).focus()
   }
 
@@ -80,10 +81,12 @@ export function GitGraphFullscreen({
     }
 
     window.setTimeout(() => {
-      if (document.activeElement !== document.body) return
-      focusCommitRow(selectedCommit)
+      const root = rootRef.current
+      if (!root) return
+      if (document.activeElement && root.contains(document.activeElement)) return
+      focusCommitRow(selectedCommit, false)
     }, 0)
-  }, [open])
+  }, [open, selectedCommit])
 
   useEffect(() => {
     if (!open) return undefined

@@ -236,6 +236,41 @@ describe('GitGraphFullscreen', () => {
     expect(closedCallbacks.onClose).not.toHaveBeenCalled()
   })
 
+  it('moves focus from an external opener into the fullscreen dialog on open', async () => {
+    const callbacks = {
+      onClose: vi.fn(),
+      onSelectCommit: vi.fn(),
+      onLoadCommitDetail: vi.fn(),
+      onCreateBranch: vi.fn(),
+      onCreateTag: vi.fn(),
+      onCheckout: vi.fn(),
+      onCopyCommitId: vi.fn()
+    }
+    const view = (open: boolean) => (
+      <>
+        <button type="button">外部打开按钮</button>
+        <GitGraphFullscreen
+          open={open}
+          rows={rows}
+          selectedCommit={firstRow.commitHash}
+          detail={detail}
+          {...callbacks}
+        />
+      </>
+    )
+    const { rerender } = render(view(false))
+    const externalButton = screen.getByRole('button', { name: '外部打开按钮' })
+
+    externalButton.focus()
+    expect(externalButton).toHaveFocus()
+
+    rerender(view(true))
+    const row = screen.getByRole('row', { name: /Add git graph panel/ })
+
+    await waitFor(() => expect(row).toHaveFocus())
+    expect(externalButton).not.toHaveFocus()
+  })
+
   it('keeps dt and dd inside a description list in the drawer', () => {
     renderGraph()
 
