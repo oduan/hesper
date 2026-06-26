@@ -18,6 +18,7 @@ Thumbs.db
 
 # Superpowers visual brainstorming artifacts
 .superpowers/
+/docs/superpowers/
 
 # Agent coordination reports
 .agent-reports/
