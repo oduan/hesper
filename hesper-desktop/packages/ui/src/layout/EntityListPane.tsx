@@ -51,8 +51,11 @@ export type EntityListPaneProps = {
   onSelectSettingsCategory?: (category: SettingsCategory) => void
   onRenameSession?: (sessionId: string, title: string) => void
   onRegenerateSessionTitle?: (sessionId: string, sessionIds?: string[]) => void
+  onArchiveSession?: (sessionId: string, sessionIds?: string[]) => void
+  onRestoreSession?: (sessionId: string, sessionIds?: string[]) => void
   onDeleteSession?: (sessionId: string, sessionIds?: string[]) => void
   onSetSessionCategory?: (sessionId: string, sessionIds: string[] | undefined, categoryId?: string) => void
+  onSetSessionMarked?: (sessionId: string, sessionIds: string[] | undefined, isMarked: boolean) => void
   onDeleteRole?: (roleId: string, roleIds?: string[]) => void
 }
 
@@ -75,8 +78,10 @@ type EditingSessionState = {
   title: string
 }
 
+type SessionMenuItemKey = 'rename' | 'regenerate-title' | 'category' | 'mark' | 'unmark' | 'archive' | 'restore' | 'delete'
+
 type SessionMenuItem = {
-  key: 'rename' | 'regenerate-title' | 'category' | 'delete'
+  key: SessionMenuItemKey
   label: string
   danger?: boolean
   hasSubmenu?: boolean
@@ -87,13 +92,6 @@ type RoleMenuItem = {
   label: string
   danger?: boolean
 }
-
-const sessionMenuItems: SessionMenuItem[] = [
-  { key: 'rename', label: '重命名' },
-  { key: 'regenerate-title', label: '重新生成标题' },
-  { key: 'category', label: '分类', hasSubmenu: true },
-  { key: 'delete', label: '删除', danger: true }
-]
 
 const roleMenuItems: RoleMenuItem[] = [
   { key: 'delete', label: '删除', danger: true }
@@ -111,6 +109,16 @@ function NewMessageIcon() {
           strokeLinejoin="round"
         />
         <circle cx="11.9" cy="4.2" r="2.15" fill={themeTokens.color.accent} stroke={themeTokens.color.surface} strokeWidth="1" />
+      </svg>
+    </span>
+  )
+}
+
+function MarkedFlagIcon({ sessionId }: { sessionId: string }) {
+  return (
+    <span aria-hidden="true" data-testid={`session-marked-icon-${sessionId}`} style={markedFlagIconStyle}>
+      <svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" style={{ display: 'block' }}>
+        <path d="M4 2.7c0-.5.4-.9.9-.9h6.2c.5 0 .9.4.9.9v8.8c0 .7-.8 1.1-1.4.7L8 10.4l-2.6 1.8c-.6.4-1.4 0-1.4-.7V2.7Z" fill="currentColor" />
       </svg>
     </span>
   )
@@ -156,8 +164,11 @@ export function EntityListPane({
   onSelectSettingsCategory,
   onRenameSession,
   onRegenerateSessionTitle,
+  onArchiveSession,
+  onRestoreSession,
   onDeleteSession,
   onSetSessionCategory,
+  onSetSessionMarked,
   onDeleteRole
 }: EntityListPaneProps) {
   const heading = title ?? (activeSection === 'sessions' ? '所有会话' : activeSection === 'settings' ? '设置' : activeSection === 'tools' ? '工具' : activeSection === 'roles' ? '角色' : activeSection === 'skills' ? '技能' : '列表')
@@ -172,6 +183,7 @@ export function EntityListPane({
   const [relativeNowMs, setRelativeNowMs] = useState(() => Date.now())
   const runningSessionIdSet = useMemo(() => new Set(runningSessionIds), [runningSessionIds])
   const pendingToolIdSet = useMemo(() => new Set(pendingToolIds), [pendingToolIds])
+  const sessionCategoryNameById = useMemo(() => new Map(sessionCategories.map((category) => [category.id, category.name])), [sessionCategories])
   const selectedSessionIdSet = useMemo(() => new Set(selectedSessionIds), [selectedSessionIds])
   const selectedRoleIdSet = useMemo(() => new Set(selectedRoleIds), [selectedRoleIds])
   const renameInputRef = useRef<HTMLInputElement>(null)
@@ -357,7 +369,24 @@ export function EntityListPane({
     onRenameSession?.(editingSession.sessionId, nextTitle)
   }
 
-  const handleMenuAction = (action: typeof sessionMenuItems[number]['key'], menuState: SessionMenuState) => {
+  const getSessionMenuItems = (menuState: SessionMenuState): SessionMenuItem[] => {
+    const targetSessions = menuState.sessionIds
+      .map((sessionId) => sessions.find((session) => session.id === sessionId))
+      .filter((session): session is Session => Boolean(session))
+    const allMarked = targetSessions.length > 0 && targetSessions.every((session) => session.isMarked)
+    const allArchived = targetSessions.length > 0 && targetSessions.every((session) => session.status === 'archived')
+
+    return [
+      { key: 'rename', label: '重命名' },
+      { key: 'regenerate-title', label: '重新生成标题' },
+      { key: 'category', label: '分类', hasSubmenu: true },
+      allMarked ? { key: 'unmark', label: '取消标记' } : { key: 'mark', label: '标记' },
+      allArchived ? { key: 'restore', label: '取消归档' } : { key: 'archive', label: '归档' },
+      { key: 'delete', label: '删除', danger: true }
+    ]
+  }
+
+  const handleMenuAction = (action: SessionMenuItemKey, menuState: SessionMenuState) => {
     if (action === 'category') {
       setSessionCategorySubmenuOpen(true)
       return
@@ -371,6 +400,18 @@ export function EntityListPane({
         return
       case 'regenerate-title':
         onRegenerateSessionTitle?.(menuState.sessionId, menuState.sessionIds)
+        return
+      case 'mark':
+        onSetSessionMarked?.(menuState.sessionId, menuState.sessionIds, true)
+        return
+      case 'unmark':
+        onSetSessionMarked?.(menuState.sessionId, menuState.sessionIds, false)
+        return
+      case 'archive':
+        onArchiveSession?.(menuState.sessionId, menuState.sessionIds)
+        return
+      case 'restore':
+        onRestoreSession?.(menuState.sessionId, menuState.sessionIds)
         return
       case 'delete':
         onDeleteSession?.(menuState.sessionId, menuState.sessionIds)
@@ -467,6 +508,18 @@ export function EntityListPane({
                       <div style={sessionTitleRowStyle}>
                         {isRunning ? <RunningStatusIcon ariaHidden /> : hasUnreadCompletion ? <NewMessageIcon /> : null}
                         <span style={sessionTitleTextStyle}>{session.title}</span>
+                      </div>
+                      <div style={sessionMetaRowStyle}>
+                        {session.isMarked ? (
+                          <>
+                            <MarkedFlagIcon sessionId={session.id} />
+                            {session.categoryId && sessionCategoryNameById.get(session.categoryId) ? (
+                              <span data-testid={`session-category-chip-${session.id}`} style={sessionCategoryChipStyle}>
+                                {sessionCategoryNameById.get(session.categoryId)}
+                              </span>
+                            ) : null}
+                          </>
+                        ) : null}
                       </div>
                       {relativeUpdatedAt ? <span aria-hidden="true" style={sessionRelativeTimeStyle}>{relativeUpdatedAt}</span> : null}
                     </button>
@@ -621,7 +674,7 @@ export function EntityListPane({
           onClick={(event) => event.stopPropagation()}
         >
           <style>{sessionMenuHoverCss}</style>
-          {sessionMenuItems.map((item) => (
+          {getSessionMenuItems(sessionMenu).map((item) => (
             <button
               key={item.key}
               type="button"
@@ -740,9 +793,9 @@ const settingsCategories: Array<{ id: SettingsCategory; title: string; label: st
 ]
 
 const sessionRowStyle: CSSProperties = {
-  gridTemplateColumns: 'minmax(0, 1fr) auto',
+  gridTemplateColumns: 'minmax(0, 1fr) minmax(0, auto) auto',
   alignItems: 'center',
-  columnGap: 10
+  columnGap: 8
 }
 
 const toolRowStyle: CSSProperties = {
@@ -861,6 +914,35 @@ const sessionTitleTextStyle: CSSProperties = {
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap'
+}
+
+const sessionMetaRowStyle: CSSProperties = {
+  minWidth: 0,
+  maxWidth: 120,
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 4,
+  overflow: 'hidden'
+}
+
+const markedFlagIconStyle: CSSProperties = {
+  width: 14,
+  height: 14,
+  flex: '0 0 14px',
+  display: 'inline-grid',
+  placeItems: 'center',
+  color: themeTokens.color.accent
+}
+
+const sessionCategoryChipStyle: CSSProperties = {
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  color: themeTokens.color.textMuted,
+  fontSize: 11,
+  fontWeight: 600,
+  opacity: 0.82
 }
 
 const sessionRelativeTimeStyle: CSSProperties = {

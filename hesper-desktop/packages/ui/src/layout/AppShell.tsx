@@ -43,8 +43,11 @@ export type AppShellProps = {
   onSelectSettingsCategory?: (category: SettingsCategory) => void
   onRenameSession?: (sessionId: string, title: string) => void
   onRegenerateSessionTitle?: (sessionId: string, sessionIds?: string[]) => void
+  onArchiveSession?: (sessionId: string, sessionIds?: string[]) => void
+  onRestoreSession?: (sessionId: string, sessionIds?: string[]) => void
   onDeleteSession?: (sessionId: string, sessionIds?: string[]) => void
   onSetSessionCategory?: (sessionId: string, sessionIds: string[] | undefined, categoryId?: string) => void
+  onSetSessionMarked?: (sessionId: string, sessionIds: string[] | undefined, isMarked: boolean) => void
   onCreateSessionCategory?: () => Promise<SessionCategoryListItem | undefined>
   onRenameSessionCategory?: (categoryId: string, name: string) => void | Promise<void>
   onDeleteSessionCategory?: (categoryId: string) => void | Promise<void>
@@ -91,8 +94,11 @@ export function AppShell({
   onSelectSettingsCategory,
   onRenameSession,
   onRegenerateSessionTitle,
+  onArchiveSession,
+  onRestoreSession,
   onDeleteSession,
   onSetSessionCategory,
+  onSetSessionMarked,
   onCreateSessionCategory,
   onRenameSessionCategory,
   onDeleteSessionCategory,
@@ -223,8 +229,11 @@ export function AppShell({
           {...(onSelectSettingsCategory ? { onSelectSettingsCategory } : {})}
           {...(onRenameSession ? { onRenameSession } : {})}
           {...(onRegenerateSessionTitle ? { onRegenerateSessionTitle } : {})}
+          {...(onArchiveSession ? { onArchiveSession } : {})}
+          {...(onRestoreSession ? { onRestoreSession } : {})}
           {...(onDeleteSession ? { onDeleteSession } : {})}
           {...(onSetSessionCategory ? { onSetSessionCategory } : {})}
+          {...(onSetSessionMarked ? { onSetSessionMarked } : {})}
           {...(onDeleteRole ? { onDeleteRole } : {})}
         />
         <section

@@ -1201,6 +1201,60 @@ describe('ui components', () => {
     expect(onRenameSession).toHaveBeenCalledWith('session-2', '只改第二个')
   })
 
+  it('toggles marked sessions from the session context menu and shows flag metadata', async () => {
+    const user = userEvent.setup()
+    const onSetSessionMarked = vi.fn()
+    render(
+      <AppShell
+        activeSection="sessions"
+        title="Hesper"
+        sessions={[
+          { id: 'session-1', title: 'Marked chat', status: 'active', isMarked: true, categoryId: 'category-very-long', outputMode: 'markdown', createdAt: now, updatedAt: now },
+          { id: 'session-2', title: 'Plain chat', status: 'active', outputMode: 'markdown', createdAt: now, updatedAt: now }
+        ]}
+        sessionCategories={[{ id: 'category-very-long', name: '很长很长的分类名称', createdAt: now, updatedAt: now }]}
+        onSetSessionMarked={onSetSessionMarked}
+      />
+    )
+
+    expect(screen.getByTestId('session-marked-icon-session-1')).toBeInTheDocument()
+    expect(screen.getByTestId('session-category-chip-session-1')).toHaveTextContent('很长很长的分类名称')
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'Plain chat' }))
+    await user.click(within(screen.getByRole('menu', { name: '会话操作' })).getByRole('menuitem', { name: '标记' }))
+    expect(onSetSessionMarked).toHaveBeenCalledWith('session-2', ['session-2'], true)
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'Marked chat' }))
+    await user.click(within(screen.getByRole('menu', { name: '会话操作' })).getByRole('menuitem', { name: '取消标记' }))
+    expect(onSetSessionMarked).toHaveBeenCalledWith('session-1', ['session-1'], false)
+  })
+
+  it('shows archive and restore actions based on session status', async () => {
+    const user = userEvent.setup()
+    const onArchiveSession = vi.fn()
+    const onRestoreSession = vi.fn()
+    render(
+      <AppShell
+        activeSection="sessions"
+        title="Hesper"
+        sessions={[
+          { id: 'session-active', title: 'Active chat', status: 'active', outputMode: 'markdown', createdAt: now, updatedAt: now },
+          { id: 'session-archived', title: 'Archived chat', status: 'archived', outputMode: 'markdown', createdAt: now, updatedAt: now }
+        ]}
+        onArchiveSession={onArchiveSession}
+        onRestoreSession={onRestoreSession}
+      />
+    )
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'Active chat' }))
+    await user.click(within(screen.getByRole('menu', { name: '会话操作' })).getByRole('menuitem', { name: '归档' }))
+    expect(onArchiveSession).toHaveBeenCalledWith('session-active', ['session-active'])
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'Archived chat' }))
+    await user.click(within(screen.getByRole('menu', { name: '会话操作' })).getByRole('menuitem', { name: '取消归档' }))
+    expect(onRestoreSession).toHaveBeenCalledWith('session-archived', ['session-archived'])
+  })
+
   it('moves selected sessions from the session context category submenu', async () => {
     const user = userEvent.setup()
     const onSetSessionCategory = vi.fn()
