@@ -116,6 +116,27 @@ async function initBranchingRepo(workspacePath: string) {
   return { baseCommit, featureCommit, mainCommit, mergeCommit }
 }
 
+async function initDisconnectedRepo(workspacePath: string) {
+  await execFileAsync('git', ['init', workspacePath], { encoding: 'utf8' })
+  await git(workspacePath, ['config', 'user.name', 'Test User'])
+  await git(workspacePath, ['config', 'user.email', 'test@example.com'])
+
+  await fs.writeFile(path.join(workspacePath, 'main.txt'), 'main\n')
+  await git(workspacePath, ['add', 'main.txt'])
+  await git(workspacePath, ['commit', '-m', 'Main root'])
+  await git(workspacePath, ['branch', '-M', 'main'])
+  const mainCommit = (await git(workspacePath, ['rev-parse', 'HEAD'])).stdout.trim()
+
+  await git(workspacePath, ['switch', '--orphan', 'docs'])
+  await git(workspacePath, ['rm', '-rf', '.']).catch(() => undefined)
+  await fs.writeFile(path.join(workspacePath, 'docs.txt'), 'docs\n')
+  await git(workspacePath, ['add', 'docs.txt'])
+  await git(workspacePath, ['commit', '-m', 'Docs root'])
+  const docsCommit = (await git(workspacePath, ['rev-parse', 'HEAD'])).stdout.trim()
+
+  return { docsCommit, mainCommit }
+}
+
 function createGitService(session: TestSession) {
   return new GitService({ sessionService: createSessionService(session) })
 }
@@ -228,6 +249,24 @@ describe('GitService', () => {
       expect(result.rows.find((row) => row.commitHash === baseCommit)?.graph.edges).toEqual(expect.arrayContaining([
         expect.objectContaining({ fromPosition: 'top', toPosition: 'center' })
       ]))
+      const colors = result.rows.flatMap((row) => row.graph.lanes.map((lane) => lane.color))
+      expect(colors).toContain('#dc2626')
+      expect(colors).toContain('#2563eb')
+    })
+  })
+
+  it('recycles classic graph colors after disconnected lines end', async () => {
+    await withTempDir(async (workspacePath) => {
+      await initDisconnectedRepo(workspacePath)
+      const service = createGitService({ id: 'session-1', workspacePath })
+
+      const result = await service.listLog({ sessionId: 'session-1', limit: 10 })
+      const rootNodeColors = result.rows
+        .filter((row) => row.parents.length === 0)
+        .map((row) => row.graph.lanes.find((lane) => lane.id === row.graph.nodeLaneId)?.color)
+
+      expect(rootNodeColors).toHaveLength(2)
+      expect(rootNodeColors).toEqual(['#dc2626', '#dc2626'])
     })
   })
 

@@ -398,15 +398,46 @@ type GitGraphEdge = NonNullable<GitGraphRowDto['graph']['edges']>[number]
 
 function attachGraph(rows: GitGraphRowWithoutGraph[]): GitGraphRowDto[] {
   let activeLanes: ActiveGitLane[] = []
-  const lineColorsByCommit = new Map<string, string>()
-  let nextColorIndex = 0
+  const lineColorSlotsByCommit = new Map<string, number>()
+  const availableColorSlots = BRANCH_LINE_COLORS.map((_, index) => index)
+  let overflowColorCursor = 0
 
-  const assignColor = (commit: string, preferredColor?: string): string => {
-    const existing = lineColorsByCommit.get(commit)
-    if (existing) return existing
-    const color = preferredColor ?? laneColor(nextColorIndex++)
-    lineColorsByCommit.set(commit, color)
-    return color
+  const assignColorSlot = (commit: string, preferredSlot?: number): number => {
+    const existing = lineColorSlotsByCommit.get(commit)
+    if (existing !== undefined) return existing
+
+    if (preferredSlot !== undefined) {
+      removeAvailableColorSlot(availableColorSlots, preferredSlot)
+      lineColorSlotsByCommit.set(commit, preferredSlot)
+      return preferredSlot
+    }
+
+    const nextAvailableSlot = availableColorSlots.shift()
+    const colorSlot = nextAvailableSlot ?? overflowColorCursor++ % BRANCH_LINE_COLORS.length
+    lineColorSlotsByCommit.set(commit, colorSlot)
+    return colorSlot
+  }
+
+  const commitColor = (commit: string): string => laneColor(assignColorSlot(commit))
+
+  const releaseInactiveColors = (lanesAfter: ActiveGitLane[]): void => {
+    const activeCommits = new Set(lanesAfter.filter((commit): commit is string => commit !== undefined))
+    const activeColorSlots = new Set<number>()
+
+    for (const commit of activeCommits) {
+      const colorSlot = lineColorSlotsByCommit.get(commit)
+      if (colorSlot !== undefined) activeColorSlots.add(colorSlot)
+    }
+
+    for (const commit of Array.from(lineColorSlotsByCommit.keys())) {
+      if (!activeCommits.has(commit)) lineColorSlotsByCommit.delete(commit)
+    }
+
+    availableColorSlots.splice(
+      0,
+      availableColorSlots.length,
+      ...BRANCH_LINE_COLORS.map((_, index) => index).filter((index) => !activeColorSlots.has(index))
+    )
   }
 
   return rows.map((row) => {
@@ -419,7 +450,7 @@ function attachGraph(rows: GitGraphRowWithoutGraph[]): GitGraphRowDto[] {
     }
 
     const nodeLaneIndex = currentPositions[0]!
-    const nodeColor = assignColor(row.commitHash)
+    const nodeColorSlot = assignColorSlot(row.commitHash)
     const lanesAfter = [...activeLanes]
     for (const position of currentPositions) {
       lanesAfter[position] = undefined
@@ -433,8 +464,8 @@ function attachGraph(rows: GitGraphRowWithoutGraph[]): GitGraphRowDto[] {
     }))
 
     row.parents.forEach((parent, parentIndex) => {
-      const preferredColor = parentIndex === 0 ? nodeColor : undefined
-      assignColor(parent, preferredColor)
+      const preferredColorSlot = parentIndex === 0 ? nodeColorSlot : undefined
+      assignColorSlot(parent, preferredColorSlot)
 
       const reusableLaneIndex = parentIndex > 0 && row.parents.length > 1 ? lanesAfter.indexOf(parent) : -1
       const targetIndex = reusableLaneIndex >= 0
@@ -463,7 +494,7 @@ function attachGraph(rows: GitGraphRowWithoutGraph[]): GitGraphRowDto[] {
         const active = topActive || bottomActive || index === nodeLaneIndex
         return {
           id: laneId(index),
-          color: laneCommit ? assignColor(laneCommit) : laneColor(index),
+          color: laneCommit ? commitColor(laneCommit) : laneColor(index),
           active,
           topActive,
           bottomActive
@@ -474,6 +505,7 @@ function attachGraph(rows: GitGraphRowWithoutGraph[]): GitGraphRowDto[] {
     }
 
     activeLanes = lanesAfter
+    releaseInactiveColors(activeLanes)
 
     return { ...row, graph }
   })
@@ -515,9 +547,24 @@ function laneId(index: number): string {
   return `lane-${index}`
 }
 
+function removeAvailableColorSlot(availableColorSlots: number[], colorSlot: number): void {
+  const availableIndex = availableColorSlots.indexOf(colorSlot)
+  if (availableIndex !== -1) availableColorSlots.splice(availableIndex, 1)
+}
+
+const BRANCH_LINE_COLORS = [
+  '#dc2626', // red
+  '#2563eb', // blue
+  '#16a34a', // green
+  '#ca8a04', // yellow
+  '#7c3aed', // purple
+  '#0891b2', // cyan
+  '#db2777', // pink
+  '#ea580c' // orange
+] as const
+
 function laneColor(index: number): string {
-  const colors = ['#7c3aed', '#2563eb', '#16a34a', '#dc2626', '#ea580c', '#0891b2', '#9333ea', '#4b5563']
-  return colors[index % colors.length]!
+  return BRANCH_LINE_COLORS[index % BRANCH_LINE_COLORS.length]!
 }
 
 function splitParents(value: string): string[] {

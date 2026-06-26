@@ -42,6 +42,7 @@ export function GitGraphTable({ rows, selectedCommit, onSelectCommit, onOpenCont
         <tbody>
           {rows.map((row, rowIndex) => {
             const selected = selectedCommit === row.commitHash
+            const graphColor = rowNodeColor(row)
             return (
               <tr
                 key={row.commitHash}
@@ -57,7 +58,7 @@ export function GitGraphTable({ rows, selectedCommit, onSelectCommit, onOpenCont
                 <td aria-hidden="true" style={{ ...cellStyle, ...graphCellStyle }} />
                 <td style={{ ...cellStyle, ...descriptionCellStyle }}>
                   <span aria-label="提交描述" style={descriptionContentStyle}>
-                    {row.refs.map((ref) => <GitRefBadge key={`${ref.type}-${ref.name}`} refView={ref} />)}
+                    {row.refs.map((ref) => <GitRefBadge key={`${ref.type}-${ref.name}`} refView={ref} graphColor={graphColor} />)}
                     <span style={subjectStyle}>{row.subject}</span>
                   </span>
                 </td>
@@ -176,13 +177,25 @@ const laneIndex = (lanes: GitGraphLaneView[], laneId: string) => {
 const laneColor = (lane: GitGraphLaneView, index: number) => {
   if (lane.color) return lane.color
   const colors = [
-    themeTokens.color.accent,
-    themeTokens.color.success,
-    themeTokens.color.warning,
-    themeTokens.color.danger,
-    themeTokens.color.textMuted
+    '#dc2626',
+    '#2563eb',
+    '#16a34a',
+    '#ca8a04',
+    '#7c3aed',
+    '#0891b2',
+    '#db2777',
+    '#ea580c'
   ]
   return colors[index % colors.length]
+}
+
+const rowNodeColor = (row: GitGraphRowView): string | undefined => {
+  const lanes = normalizedLanes(row)
+  const nodeLaneId = row.graph.nodeLaneId ?? lanes.find((lane) => lane.active)?.id ?? lanes[0]?.id
+  if (!nodeLaneId) return undefined
+  const nodeIndex = laneIndex(lanes, nodeLaneId)
+  const lane = lanes[nodeIndex]
+  return lane ? laneColor(lane, nodeIndex) : undefined
 }
 
 const nodeSvgStyle = (lane: GitGraphLaneView, index: number): CSSProperties => ({

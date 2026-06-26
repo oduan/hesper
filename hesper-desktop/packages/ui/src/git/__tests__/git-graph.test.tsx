@@ -103,12 +103,17 @@ describe('GitGraphFullscreen', () => {
     expect(screen.getByRole('columnheader', { name: '提交' })).toBeInTheDocument()
   })
 
-  it('renders branch and tag refs before the commit message', () => {
+  it('renders branch and tag refs before the commit message with graph-colored branch badges', () => {
     renderGraph()
 
     const row = screen.getByRole('row', { name: /Add git graph panel/ })
     const description = within(row).getByLabelText('提交描述')
     expect(description.textContent).toMatch(/^feature\/git-log-panelv1\.2\.3Add git graph panel/)
+    expect(within(description).getByText('feature/git-log-panel')).toHaveStyle({
+      borderColor: '#dc2626',
+      background: 'rgba(220, 38, 38, 0.18)'
+    })
+    expect(within(description).getByText('v1.2.3')).not.toHaveStyle({ borderColor: '#dc2626' })
   })
 
   it('shows repository-specific summary information in the top-left header', () => {
