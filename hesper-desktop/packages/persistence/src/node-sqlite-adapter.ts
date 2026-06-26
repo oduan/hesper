@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { DatabaseSync, type StatementSync } from 'node:sqlite'
+import { DatabaseSync, type SQLInputValue, type StatementSync } from 'node:sqlite'
 import { bindSqliteValues, type SqliteAdapter, type SqliteRow } from './sqlite-adapter'
 
 export function createNodeSqliteFileAdapter(filePath: string): SqliteAdapter {
@@ -12,9 +12,9 @@ export function createNodeSqliteFileAdapter(filePath: string): SqliteAdapter {
   db.exec('PRAGMA busy_timeout = 5000')
   db.exec('PRAGMA foreign_keys = ON')
 
-  const runWithParams = <T>(sql: string, params: unknown[], runner: (statement: StatementSync, bound: unknown[]) => T): T => {
+  const runWithParams = <T>(sql: string, params: unknown[], runner: (statement: StatementSync, bound: SQLInputValue[]) => T): T => {
     const statement = db.prepare(sql)
-    return runner(statement, bindSqliteValues(params))
+    return runner(statement, bindSqliteValues(params) as SQLInputValue[])
   }
 
   return {

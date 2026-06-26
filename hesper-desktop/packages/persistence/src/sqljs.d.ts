@@ -3,6 +3,7 @@ declare module 'sql.js' {
     run(sql: string, params?: unknown[]): void
     prepare(sql: string): any
     export(): Uint8Array
+    close(): void
   }
 
   export default function initSqlJs(): Promise<{
