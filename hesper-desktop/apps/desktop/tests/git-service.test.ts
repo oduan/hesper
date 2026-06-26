@@ -147,6 +147,8 @@ describe('GitService', () => {
       expect(state).toMatchObject({
         sessionId: 'session-1',
         workspacePath,
+        repositoryName: path.basename(workspacePath),
+        commitCount: 2,
         isGitRepository: true,
         currentBranch: 'main',
         headCommit: secondCommit,
@@ -187,6 +189,24 @@ describe('GitService', () => {
         expect.objectContaining({ type: 'local-branch', shortName: 'main' }),
         expect.objectContaining({ type: 'tag', shortName: 'v1.0.0' })
       ]))
+    })
+  })
+
+  it('supports offset pagination while preserving graph context', async () => {
+    await withTempDir(async (workspacePath) => {
+      const { firstCommit } = await initGitRepo(workspacePath)
+      const service = createGitService({ id: 'session-1', workspacePath })
+
+      const result = await service.listLog({ sessionId: 'session-1', limit: 1, offset: 1 })
+
+      expect(result.limit).toBe(1)
+      expect(result.hasMore).toBe(false)
+      expect(result.rows).toHaveLength(1)
+      expect(result.rows[0]).toMatchObject({
+        commitHash: firstCommit,
+        subject: 'Initial commit',
+        graph: expect.objectContaining({ lanes: expect.any(Array), nodeLaneId: expect.any(String) })
+      })
     })
   })
 

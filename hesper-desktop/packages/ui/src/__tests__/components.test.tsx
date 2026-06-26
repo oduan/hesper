@@ -176,14 +176,17 @@ describe('ui components', () => {
     expect(screen.getByRole('button', { name: /错误：拉取失败/ })).toBeInTheDocument()
   })
 
-  it('calls onOpen when the Git graph entry is clicked', async () => {
+  it('calls onOpen when the Git graph entry is clicked without showing the keyboard focus ring', async () => {
     const user = userEvent.setup()
     const gitPanel = createGitPanel({ onOpen: vi.fn() })
     renderConversationWithGitPanel(gitPanel)
 
-    await user.click(screen.getByRole('button', { name: /打开 Git 图谱，当前分支 feature\/git-log-panel/ }))
+    const button = screen.getByRole('button', { name: /打开 Git 图谱，当前分支 feature\/git-log-panel/ })
+    await user.click(button)
 
     expect(gitPanel.onOpen).toHaveBeenCalledTimes(1)
+    expect(button).toHaveFocus()
+    expect(button).toHaveStyle({ outline: '2px solid transparent' })
   })
 
   it('renders the Git fullscreen dialog when the git panel is open', () => {

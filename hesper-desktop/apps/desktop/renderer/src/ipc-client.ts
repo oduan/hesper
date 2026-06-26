@@ -287,9 +287,12 @@ export function createFallbackHesperApi(): HesperDesktopApi {
   }
   const createFallbackGitState = (sessionId: string): GitRepositoryStateDto => {
     const session = sessions.find((candidate) => candidate.id === sessionId)
+    const workspaceName = session?.workspacePath?.split(/[\\/]/).filter(Boolean).pop()
     return withDefined({
       sessionId,
       workspacePath: session?.workspacePath,
+      repositoryName: workspaceName ?? 'fallback-repository',
+      commitCount: createFallbackGitRows(3).length,
       isGitRepository: true,
       currentBranch: 'main',
       headCommit: fallbackGitHeadCommit,
@@ -392,11 +395,12 @@ export function createFallbackHesperApi(): HesperDesktopApi {
       getState: async (input): Promise<GitRepositoryStateDto> => createFallbackGitState(input.sessionId),
       listLog: async (input): Promise<GitLogResultDto> => {
         const limit = clampFallbackGitLogLimit(input.limit)
+        const offset = Math.max(0, input.offset ?? 0)
         const totalRows = createFallbackGitRows(3)
         return {
-          rows: totalRows.slice(0, limit),
+          rows: totalRows.slice(offset, offset + limit),
           limit,
-          hasMore: totalRows.length > limit
+          hasMore: totalRows.length > offset + limit
         }
       },
       getCommit: async (input): Promise<GitCommitDetailDto> => createFallbackGitCommitDetail(input.commit),

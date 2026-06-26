@@ -105,7 +105,7 @@ const { listSessions, createSession, updateTitle, deleteSession, setWorkspace, s
     changedFiles: 0,
     refs: []
   })) as any,
-  listGitLog: vi.fn(async () => ({ rows: [], limit: 200, hasMore: false })) as any,
+  listGitLog: vi.fn(async () => ({ rows: [], limit: 60, hasMore: false })) as any,
   getGitCommit: vi.fn(async (input: { commit: string }) => ({
     commitHash: input.commit,
     shortHash: input.commit.slice(0, 7),
@@ -409,7 +409,7 @@ describe('renderer App', () => {
       changedFiles: 0,
       refs: []
     }))
-    listGitLog.mockResolvedValue({ rows: [], limit: 200, hasMore: false })
+    listGitLog.mockResolvedValue({ rows: [], limit: 60, hasMore: false })
     getGitCommit.mockImplementation(async (input: { commit: string }) => ({
       commitHash: input.commit,
       shortHash: input.commit.slice(0, 7),
@@ -594,6 +594,8 @@ describe('renderer App', () => {
     sessionId,
     workspacePath,
     isGitRepository: true,
+    repositoryName: workspacePath.split(/[\/]/).filter(Boolean).pop() ?? 'workspace',
+    commitCount: 123,
     currentBranch: 'main',
     headCommit,
     dirty: false,
@@ -646,7 +648,7 @@ describe('renderer App', () => {
     getGitState.mockResolvedValue(gitStateFixture('session-git', 'C:/workspace', headCommit))
     listGitLog.mockResolvedValue({
       rows: [gitRowFixture(secondCommit, 'Second row'), gitRowFixture(headCommit, 'Head row')],
-      limit: 200,
+      limit: 60,
       hasMore: false
     })
 
@@ -655,10 +657,48 @@ describe('renderer App', () => {
     const gitEntry = await screen.findByRole('button', { name: /打开 Git 图谱.*当前分支 main/ })
     await user.click(gitEntry)
 
-    await waitFor(() => expect(listGitLog).toHaveBeenCalledWith({ sessionId: 'session-git', limit: 200 }))
+    await waitFor(() => expect(listGitLog).toHaveBeenCalledWith({ sessionId: 'session-git', limit: 60, offset: 0 }))
     expect(await screen.findByRole('dialog', { name: 'Git 提交图谱' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'workspace' })).toBeInTheDocument()
+    expect(screen.getByLabelText('仓库 Git 信息')).toHaveTextContent('123 次提交')
     expect(screen.getByText('Head row')).toBeInTheDocument()
     expect(screen.getByRole('row', { name: /Head row aaaaaaa/ })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('loads additional Git log pages when the graph scroll nears the bottom', async () => {
+    const user = userEvent.setup()
+    const firstPageRows = Array.from({ length: 60 }, (_, index) => {
+      const commitHash = index.toString(16).padStart(40, '0')
+      return gitRowFixture(commitHash, index === 0 ? 'First page row' : `First page filler ${index}`)
+    })
+    const firstCommit = firstPageRows[0]!.commitHash
+    const nextCommit = 'cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd'
+    listSessions.mockResolvedValueOnce([
+      sessionFixture('session-git', 'Git workspace', 'C:/workspace')
+    ] as any)
+    getGitState.mockResolvedValue(gitStateFixture('session-git', 'C:/workspace', firstCommit))
+    listGitLog.mockImplementation(async (input: { offset?: number }) => ({
+      rows: input.offset === 60
+        ? [gitRowFixture(nextCommit, 'Next page row')]
+        : firstPageRows,
+      limit: 60,
+      hasMore: input.offset !== 60
+    }))
+
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: /打开 Git 图谱/ }))
+    expect(await screen.findByText('First page row')).toBeInTheDocument()
+
+    const content = screen.getByRole('main', { name: 'Git 图谱内容' })
+    Object.defineProperty(content, 'scrollHeight', { configurable: true, value: 1000 })
+    Object.defineProperty(content, 'clientHeight', { configurable: true, value: 600 })
+    Object.defineProperty(content, 'scrollTop', { configurable: true, value: 360 })
+    fireEvent.scroll(content)
+
+    await waitFor(() => expect(listGitLog).toHaveBeenCalledWith({ sessionId: 'session-git', limit: 60, offset: 60 }))
+    expect(await screen.findByText('Next page row')).toBeInTheDocument()
+    expect(screen.getByText('First page row')).toBeInTheDocument()
   })
 
   it('loads and displays commit detail for the selected row', async () => {
@@ -668,7 +708,7 @@ describe('renderer App', () => {
       sessionFixture('session-git', 'Git workspace', 'C:/workspace')
     ] as any)
     getGitState.mockResolvedValue(gitStateFixture('session-git', 'C:/workspace', commit))
-    listGitLog.mockResolvedValue({ rows: [gitRowFixture(commit, 'Detail row')], limit: 200, hasMore: false })
+    listGitLog.mockResolvedValue({ rows: [gitRowFixture(commit, 'Detail row')], limit: 60, hasMore: false })
     getGitCommit.mockResolvedValue(gitDetailFixture(commit, 'Detailed commit subject'))
 
     render(<App />)
@@ -692,7 +732,7 @@ describe('renderer App', () => {
       sessionFixture('session-git', 'Git workspace', 'C:/workspace')
     ] as any)
     getGitState.mockResolvedValue(gitStateFixture('session-git', 'C:/workspace', commit))
-    listGitLog.mockResolvedValue({ rows: [gitRowFixture(commit, 'Branch row')], limit: 200, hasMore: false })
+    listGitLog.mockResolvedValue({ rows: [gitRowFixture(commit, 'Branch row')], limit: 60, hasMore: false })
     createGitBranch.mockResolvedValue({ success: true })
 
     render(<App />)
@@ -744,7 +784,7 @@ describe('renderer App', () => {
       rows: input.sessionId === 'session-one'
         ? [gitRowFixture(firstCommit, 'First session commit')]
         : [gitRowFixture(secondCommit, 'Second session commit')],
-      limit: 200,
+      limit: 60,
       hasMore: false
     }))
     getGitCommit.mockImplementation(async (input: { commit: string }) => gitDetailFixture(input.commit, input.commit === firstCommit ? 'First detail' : 'Second detail'))
@@ -763,7 +803,7 @@ describe('renderer App', () => {
     expect(await screen.findByText('Second session commit')).toBeInTheDocument()
     expect(screen.queryByText('First session commit')).not.toBeInTheDocument()
     expect(screen.queryByText('First detail')).not.toBeInTheDocument()
-    expect(listGitLog).toHaveBeenLastCalledWith({ sessionId: 'session-two', limit: 200 })
+    expect(listGitLog).toHaveBeenLastCalledWith({ sessionId: 'session-two', limit: 60, offset: 0 })
   })
 
   it('clears Git cache when the same session workspace changes and reloads the new workspace log', async () => {
@@ -784,7 +824,7 @@ describe('renderer App', () => {
       rows: activeWorkspace === 'C:/repo-a'
         ? [gitRowFixture(repoACommit, 'Repo A commit')]
         : [gitRowFixture(repoBCommit, 'Repo B commit')],
-      limit: 200,
+      limit: 60,
       hasMore: false
     }))
 
@@ -801,7 +841,7 @@ describe('renderer App', () => {
 
     expect(await screen.findByText('Repo B commit')).toBeInTheDocument()
     expect(screen.queryByText('Repo A commit')).not.toBeInTheDocument()
-    expect(listGitLog).toHaveBeenLastCalledWith({ sessionId: 'session-git', limit: 200 })
+    expect(listGitLog).toHaveBeenLastCalledWith({ sessionId: 'session-git', limit: 60, offset: 0 })
   })
 
   it('does not checkout when the checkout prompt is cancelled', async () => {
@@ -812,7 +852,7 @@ describe('renderer App', () => {
       sessionFixture('session-git', 'Git workspace', 'C:/workspace')
     ] as any)
     getGitState.mockResolvedValue(gitStateFixture('session-git', 'C:/workspace', commit))
-    listGitLog.mockResolvedValue({ rows: [gitRowFixture(commit, 'Checkout row')], limit: 200, hasMore: false })
+    listGitLog.mockResolvedValue({ rows: [gitRowFixture(commit, 'Checkout row')], limit: 60, hasMore: false })
 
     render(<App />)
 
@@ -844,7 +884,7 @@ describe('renderer App', () => {
       rows: activeWorkspace === 'C:/repo-a'
         ? [gitRowFixture(repoACommit, 'Repo A stale row')]
         : [gitRowFixture(repoBCommit, 'Repo B fresh row')],
-      limit: 200,
+      limit: 60,
       hasMore: false
     }))
     getGitCommit.mockReturnValueOnce(staleDetail.promise)

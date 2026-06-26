@@ -19,9 +19,14 @@ export type ConversationGitPanelProps = {
   visible: boolean
   open: boolean
   disabled?: boolean
+  repositoryName?: string
   currentBranch?: string
+  commitCount?: number
+  loadedCount?: number
+  hasMore?: boolean
   dirty?: boolean
   loading?: boolean
+  loadingMore?: boolean
   error?: string
   rows: GitGraphRowView[]
   selectedCommit?: string
@@ -30,6 +35,7 @@ export type ConversationGitPanelProps = {
   onClose: () => void
   onSelectCommit: (commitHash: string) => void
   onLoadCommitDetail: (commitHash: string) => void
+  onLoadMore?: () => void
   onCreateBranch: (commitHash: string) => void
   onCreateTag: (commitHash: string) => void
   onCheckout: (ref: string) => void
@@ -364,6 +370,7 @@ export function ConversationView({
   const [showJumpToBottom, setShowJumpToBottom] = useState(false)
   const [localFilePreviewState, setLocalFilePreviewState] = useState<LocalFilePreviewState>()
   const [gitPanelEntryFocused, setGitPanelEntryFocused] = useState(false)
+  const gitPanelEntryPointerFocusRef = useRef(false)
   const shouldShowGitPanel = gitPanel?.visible === true
   const gitPanelDisabled = Boolean(gitPanel?.disabled)
   const gitPanelBranchLabel = gitPanel?.currentBranch ? `，当前分支 ${gitPanel.currentBranch}` : ''
@@ -720,8 +727,19 @@ export function ConversationView({
                 aria-busy={gitPanel.loading ? 'true' : undefined}
                 aria-describedby={gitPanel.dirty ? gitPanelDirtyDescriptionId : undefined}
                 disabled={gitPanelDisabled}
-                onFocus={() => setGitPanelEntryFocused(true)}
-                onBlur={() => setGitPanelEntryFocused(false)}
+                onPointerDown={() => {
+                  gitPanelEntryPointerFocusRef.current = true
+                  setGitPanelEntryFocused(false)
+                }}
+                onFocus={(event) => {
+                  const isNativeFocusVisible = typeof event.currentTarget.matches === 'function' && event.currentTarget.matches(':focus-visible')
+                  setGitPanelEntryFocused(!gitPanelEntryPointerFocusRef.current || isNativeFocusVisible)
+                  gitPanelEntryPointerFocusRef.current = false
+                }}
+                onBlur={() => {
+                  gitPanelEntryPointerFocusRef.current = false
+                  setGitPanelEntryFocused(false)
+                }}
                 onClick={() => {
                   if (gitPanelDisabled) return
                   gitPanel.onOpen()
@@ -961,6 +979,14 @@ export function ConversationView({
           onCreateBranch={gitPanel.onCreateBranch}
           onCreateTag={gitPanel.onCreateTag}
           onCheckout={gitPanel.onCheckout}
+          {...(gitPanel.repositoryName !== undefined ? { repositoryName: gitPanel.repositoryName } : {})}
+          {...(gitPanel.currentBranch !== undefined ? { currentBranch: gitPanel.currentBranch } : {})}
+          {...(gitPanel.commitCount !== undefined ? { commitCount: gitPanel.commitCount } : {})}
+          {...(gitPanel.loadedCount !== undefined ? { loadedCount: gitPanel.loadedCount } : {})}
+          {...(gitPanel.hasMore !== undefined ? { hasMore: gitPanel.hasMore } : {})}
+          {...(gitPanel.dirty !== undefined ? { dirty: gitPanel.dirty } : {})}
+          {...(gitPanel.loadingMore !== undefined ? { loadingMore: gitPanel.loadingMore } : {})}
+          {...(gitPanel.onLoadMore ? { onLoadMore: gitPanel.onLoadMore } : {})}
           {...(gitPanel.selectedCommit !== undefined ? { selectedCommit: gitPanel.selectedCommit } : {})}
           {...(gitPanel.detail !== undefined ? { detail: gitPanel.detail } : {})}
           {...(gitPanel.loading !== undefined ? { loading: gitPanel.loading } : {})}

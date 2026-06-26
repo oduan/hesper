@@ -40,6 +40,7 @@ type GitUiStateBySession = Record<string, {
   open?: boolean | undefined
   loadingState?: boolean | undefined
   loadingLog?: boolean | undefined
+  loadingMore?: boolean | undefined
   loadingDetailByCommit?: Record<string, boolean> | undefined
   selectedCommit?: string | undefined
   detailsByCommit?: Record<string, GitCommitDetailDto> | undefined
@@ -56,6 +57,8 @@ const defaultAppSettings: AppSettings = {
   fontSize: 14,
   soul: ''
 }
+
+const gitLogPageSize = 60
 
 export function clearSessionSendError(errors: Record<string, string>, sessionId: string): Record<string, string> {
   if (!(sessionId in errors)) {
@@ -149,6 +152,12 @@ function getErrorMessage(error: unknown, fallback: string): string {
 function selectDefaultGitCommit(repository?: GitRepositoryStateDto, rows: GitGraphRowDto[] = [], currentSelection?: string): string | undefined {
   if (currentSelection && rows.some((row) => row.commitHash === currentSelection)) return currentSelection
   return repository?.headCommit ?? rows[0]?.commitHash
+}
+
+function appendUniqueGitRows(currentRows: GitGraphRowDto[], nextRows: GitGraphRowDto[]): GitGraphRowDto[] {
+  if (currentRows.length === 0) return nextRows
+  const seen = new Set(currentRows.map((row) => row.commitHash))
+  return [...currentRows, ...nextRows.filter((row) => !seen.has(row.commitHash))]
 }
 
 function mergeGitUiState(
@@ -974,6 +983,7 @@ function AppContent() {
         logLimit: undefined,
         open: false,
         loadingLog: false,
+        loadingMore: false,
         loadingDetailByCommit: undefined,
         selectedCommit: undefined,
         detailsByCommit: undefined
@@ -997,6 +1007,7 @@ function AppContent() {
                 open: false,
                 loadingState: false,
                 loadingLog: false,
+                loadingMore: false,
                 loadingDetailByCommit: undefined,
                 selectedCommit: undefined,
                 detailsByCommit: undefined,
@@ -1021,45 +1032,53 @@ function AppContent() {
 
   const loadGitLog = useCallback(async (
     sessionId: string,
-    limit = 200,
+    limit = gitLogPageSize,
     repositoryOverride?: GitRepositoryStateDto,
-    workspacePath?: string
+    workspacePath?: string,
+    options: { offset?: number; append?: boolean } = {}
   ): Promise<GitGraphRowDto[] | undefined> => {
     const expectedWorkspacePath = workspacePath ?? repositoryOverride?.workspacePath
     if (!expectedWorkspacePath) return undefined
 
+    const offset = options.offset ?? 0
+    const append = options.append === true
     const requestId = (latestGitLogRequestIdRef.current[sessionId] ?? 0) + 1
     latestGitLogRequestIdRef.current = { ...latestGitLogRequestIdRef.current, [sessionId]: requestId }
     setGitUiStateBySession((current) => {
       if (current[sessionId]?.workspacePath !== expectedWorkspacePath) return current
-      return mergeGitUiState(current, sessionId, { loadingLog: true, error: undefined })
+      return mergeGitUiState(current, sessionId, { loadingLog: !append, loadingMore: append, error: undefined })
     })
 
     try {
-      const result = await hesperApi.git.listLog({ sessionId, limit })
+      const result = await hesperApi.git.listLog({ sessionId, limit, offset })
       if (latestGitLogRequestIdRef.current[sessionId] === requestId) {
+        let mergedRows: GitGraphRowDto[] | undefined
         setGitUiStateBySession((current) => {
           const currentSessionState = current[sessionId]
           if (currentSessionState?.workspacePath !== expectedWorkspacePath) return current
           const repository = repositoryOverride ?? currentSessionState.repository
           if (repository?.workspacePath !== expectedWorkspacePath) return current
+          mergedRows = append ? appendUniqueGitRows(currentSessionState.rows ?? [], result.rows) : result.rows
           return mergeGitUiState(current, sessionId, {
-            rows: result.rows,
+            rows: mergedRows,
             logLimit: result.limit,
             hasMore: result.hasMore,
             loadingLog: false,
-            selectedCommit: selectDefaultGitCommit(repository, result.rows, currentSessionState.selectedCommit),
+            loadingMore: false,
+            selectedCommit: selectDefaultGitCommit(repository, mergedRows, currentSessionState.selectedCommit),
             error: undefined
           })
         })
+        return mergedRows
       }
-      return result.rows
+      return undefined
     } catch (error) {
       if (latestGitLogRequestIdRef.current[sessionId] === requestId) {
         setGitUiStateBySession((current) => {
           if (current[sessionId]?.workspacePath !== expectedWorkspacePath) return current
           return mergeGitUiState(current, sessionId, {
             loadingLog: false,
+            loadingMore: false,
             error: getErrorMessage(error, 'Git 日志加载失败')
           })
         })
@@ -1071,7 +1090,7 @@ function AppContent() {
   const refreshGitPanel = useCallback(async (sessionId: string, workspacePath: string) => {
     const repository = await loadGitRepositoryState(sessionId, workspacePath)
     if (repository?.isGitRepository && repository.workspacePath === workspacePath) {
-      await loadGitLog(sessionId, 200, repository, workspacePath)
+      await loadGitLog(sessionId, gitLogPageSize, repository, workspacePath)
     }
   }, [loadGitLog, loadGitRepositoryState])
 
@@ -1089,6 +1108,7 @@ function AppContent() {
         open: false,
         loadingState: false,
         loadingLog: false,
+        loadingMore: false,
         loadingDetailByCommit: undefined,
         selectedCommit: undefined,
         detailsByCommit: undefined,
@@ -1108,6 +1128,7 @@ function AppContent() {
         open: false,
         loadingState: false,
         loadingLog: false,
+        loadingMore: false,
         loadingDetailByCommit: undefined,
         selectedCommit: undefined,
         detailsByCommit: undefined,
@@ -1131,9 +1152,14 @@ function AppContent() {
     ? {
         visible: true,
         open: Boolean(activeGitUiState.open),
+        ...(activeGitUiState.repository.repositoryName ? { repositoryName: activeGitUiState.repository.repositoryName } : {}),
         ...(activeGitUiState.repository.currentBranch ? { currentBranch: activeGitUiState.repository.currentBranch } : {}),
+        ...(activeGitUiState.repository.commitCount !== undefined ? { commitCount: activeGitUiState.repository.commitCount } : {}),
+        loadedCount: activeGitUiState.rows?.length ?? 0,
+        hasMore: Boolean(activeGitUiState.hasMore),
         dirty: activeGitUiState.repository.dirty,
-        loading: Boolean(activeGitUiState.loadingState || activeGitUiState.loadingLog || (activeGitSelectedCommit ? activeGitUiState.loadingDetailByCommit?.[activeGitSelectedCommit] : false)),
+        loading: Boolean(activeGitUiState.loadingState || (activeGitUiState.loadingLog && !(activeGitUiState.rows?.length)) || (activeGitSelectedCommit ? activeGitUiState.loadingDetailByCommit?.[activeGitSelectedCommit] : false)),
+        loadingMore: Boolean(activeGitUiState.loadingMore),
         ...(activeGitUiState.error ? { error: activeGitUiState.error } : {}),
         rows: (activeGitUiState.rows ?? []).map(toGitGraphRowView),
         ...(activeGitSelectedCommit ? { selectedCommit: activeGitSelectedCommit } : {}),
@@ -1141,9 +1167,10 @@ function AppContent() {
         onOpen: () => {
           const sessionId = activeSession.id
           const workspacePath = activeWorkspacePath
-          const shouldLoad = gitUiStateBySession[sessionId]?.workspacePath !== workspacePath || !gitUiStateBySession[sessionId]?.rows
+          const currentGitState = gitUiStateBySession[sessionId]
+          const shouldLoad = currentGitState?.workspacePath !== workspacePath || !currentGitState?.rows?.length
           setGitUiStateBySession((current) => mergeGitUiState(current, sessionId, { workspacePath, open: true }))
-          if (shouldLoad) void loadGitLog(sessionId, 200, undefined, workspacePath)
+          if (shouldLoad) void loadGitLog(sessionId, gitLogPageSize, undefined, workspacePath)
         },
         onClose: () => {
           const sessionId = activeSession.id
@@ -1199,6 +1226,24 @@ function AppContent() {
                 error: getErrorMessage(error, 'Git 提交详情加载失败')
               })
             })
+          })
+        },
+        onLoadMore: () => {
+          const sessionId = activeSession.id
+          const workspacePath = activeWorkspacePath
+          const currentGitState = gitUiStateRef.current[sessionId]
+          if (
+            currentGitState?.workspacePath !== workspacePath ||
+            currentGitState.repository?.workspacePath !== workspacePath ||
+            !currentGitState.hasMore ||
+            currentGitState.loadingLog ||
+            currentGitState.loadingMore
+          ) {
+            return
+          }
+          void loadGitLog(sessionId, gitLogPageSize, currentGitState.repository, workspacePath, {
+            offset: currentGitState.rows?.length ?? 0,
+            append: true
           })
         },
         onCreateBranch: (commit: string) => {

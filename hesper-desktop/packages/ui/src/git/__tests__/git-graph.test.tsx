@@ -111,18 +111,31 @@ describe('GitGraphFullscreen', () => {
     expect(description.textContent).toMatch(/^feature\/git-log-panelv1\.2\.3Add git graph panel/)
   })
 
-  it('centers graph lanes and nodes on the same lane x coordinate', () => {
+  it('shows repository-specific summary information in the top-left header', () => {
+    renderGraph({ repositoryName: 'hesper-desktop', currentBranch: 'feature/git-log-panel', commitCount: 1234, loadedCount: 60, hasMore: true })
+
+    expect(screen.getByRole('heading', { name: 'hesper-desktop' })).toBeInTheDocument()
+    expect(screen.getByLabelText('仓库 Git 信息')).toHaveTextContent('1,234 次提交')
+    expect(screen.getByLabelText('仓库 Git 信息')).toHaveTextContent('已加载 60')
+    expect(screen.getByLabelText('仓库 Git 信息')).toHaveTextContent('分支 feature/git-log-panel')
+    expect(screen.queryByText('Repository history')).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Git 提交图谱' })).not.toBeInTheDocument()
+  })
+
+  it('draws continuous graph lanes and smooth branch curves', () => {
     renderGraph()
 
     const row = screen.getByRole('row', { name: /Add git graph panel/ })
     const lane = within(row).getByTestId('git-graph-lane-feature')
     const node = within(row).getByTestId('git-graph-node-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+    const edge = within(row).getByTestId('git-graph-edge-main-feature')
 
-    expect(lane.style.left).toBe('var(--git-graph-lane-x)')
-    expect(node.style.left).toBe('var(--git-graph-lane-x)')
-    expect(lane.style.getPropertyValue('--git-graph-lane-x')).toBe(node.style.getPropertyValue('--git-graph-lane-x'))
-    expect(lane).toHaveStyle({ transform: 'translateX(-50%)' })
-    expect(node).toHaveStyle({ transform: 'translate(-50%, -50%)' })
+    expect(lane).toHaveAttribute('x1', node.getAttribute('cx'))
+    expect(lane).toHaveAttribute('x2', node.getAttribute('cx'))
+    expect(lane).toHaveAttribute('y1', '0')
+    expect(Number(lane.getAttribute('y2'))).toBeGreaterThan(42)
+    expect(edge.getAttribute('d')).toContain(' C ')
+    expect(edge.style.fill).toBe('none')
   })
 
   it('opens the commit context menu from a right click and shows all actions', () => {
@@ -343,6 +356,38 @@ describe('GitGraphFullscreen', () => {
     await waitFor(() => expect(second).toHaveAttribute('aria-selected', 'true'))
     expect(first).toHaveAttribute('aria-selected', 'false')
     expect(second).toHaveStyle({ background: themeTokens.color.hover })
+  })
+
+  it('loads more commits when scrolling near the bottom and more history exists', () => {
+    const onLoadMore = vi.fn()
+    renderGraph({ hasMore: true, loadedCount: rows.length, onLoadMore })
+
+    const content = screen.getByRole('main', { name: 'Git 图谱内容' })
+    Object.defineProperty(content, 'scrollHeight', { configurable: true, value: 1000 })
+    Object.defineProperty(content, 'clientHeight', { configurable: true, value: 600 })
+    Object.defineProperty(content, 'scrollTop', { configurable: true, value: 80 })
+
+    fireEvent.scroll(content)
+    expect(onLoadMore).not.toHaveBeenCalled()
+
+    Object.defineProperty(content, 'scrollTop', { configurable: true, value: 340 })
+    fireEvent.scroll(content)
+    expect(onLoadMore).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('status')).toHaveTextContent('继续向下滚动加载更多')
+  })
+
+  it('does not load more while a pagination request is already running', () => {
+    const onLoadMore = vi.fn()
+    renderGraph({ hasMore: true, loadingMore: true, onLoadMore })
+
+    const content = screen.getByRole('main', { name: 'Git 图谱内容' })
+    Object.defineProperty(content, 'scrollHeight', { configurable: true, value: 1000 })
+    Object.defineProperty(content, 'clientHeight', { configurable: true, value: 600 })
+    Object.defineProperty(content, 'scrollTop', { configurable: true, value: 380 })
+
+    fireEvent.scroll(content)
+    expect(onLoadMore).not.toHaveBeenCalled()
+    expect(screen.getByRole('status')).toHaveTextContent('正在加载更多提交')
   })
 
   it('moves focus from an external opener into the fullscreen dialog on open', async () => {

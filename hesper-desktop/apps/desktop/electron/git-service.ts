@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process'
 import fs from 'node:fs/promises'
+import path from 'node:path'
 import { promisify } from 'node:util'
 import type {
   GitActionResultDto,
@@ -71,17 +72,21 @@ export class GitService {
       return baseState
     }
 
-    const [currentBranch, headCommit, statusOutput, refs] = await Promise.all([
+    const [currentBranch, headCommit, commitCountOutput, statusOutput, refs] = await Promise.all([
       this.optionalGit(workspace.workspacePath, ['branch', '--show-current']),
       this.optionalGit(workspace.workspacePath, ['rev-parse', 'HEAD']),
+      this.optionalGit(workspace.workspacePath, ['rev-list', '--count', 'HEAD']),
       this.git(workspace.workspacePath, ['status', '--porcelain=v1']),
       this.listRepositoryRefs(workspace.workspacePath)
     ])
 
     const changedFiles = countChangedFiles(statusOutput.stdout)
+    const commitCount = parseNonNegativeInteger(commitCountOutput.stdout)
     const state: GitRepositoryStateDto = {
       sessionId: input.sessionId,
       workspacePath: workspace.workspacePath,
+      repositoryName: path.basename(workspace.workspacePath),
+      ...(commitCount !== undefined ? { commitCount } : {}),
       isGitRepository: true,
       ...(currentBranch.stdout.trim() ? { currentBranch: currentBranch.stdout.trim() } : {}),
       ...(headCommit.stdout.trim() ? { headCommit: headCommit.stdout.trim() } : {}),
@@ -100,10 +105,14 @@ export class GitService {
   async listLog(input: GitLogInput): Promise<GitLogResultDto> {
     const { workspacePath } = await this.requireRepository(input.sessionId)
     const limit = input.limit ?? DEFAULT_LOG_LIMIT
+    const offset = input.offset ?? 0
     if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
       throw new Error('Invalid git log limit: must be an integer between 1 and 500')
     }
-    const requestedCount = limit + 1
+    if (!Number.isInteger(offset) || offset < 0) {
+      throw new Error('Invalid git log offset: must be a non-negative integer')
+    }
+    const requestedCount = offset + limit + 1
     const output = await this.git(workspacePath, [
       'log',
       `--max-count=${requestedCount}`,
@@ -113,9 +122,9 @@ export class GitService {
     ])
     const allRows = parseLogRows(output.stdout)
     return {
-      rows: allRows.slice(0, limit),
+      rows: allRows.slice(offset, offset + limit),
       limit,
-      hasMore: allRows.length > limit
+      hasMore: allRows.length > offset + limit
     }
   }
 
@@ -352,6 +361,11 @@ function bufferToString(value: string | Buffer | undefined): string {
 
 function countChangedFiles(statusOutput: string): number {
   return statusOutput.split(/\r?\n/).filter((line) => line.trim().length > 0).length
+}
+
+function parseNonNegativeInteger(output: string): number | undefined {
+  const value = Number.parseInt(output.trim(), 10)
+  return Number.isInteger(value) && value >= 0 ? value : undefined
 }
 
 function parseLogRows(output: string): GitGraphRowDto[] {

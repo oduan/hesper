@@ -148,6 +148,8 @@ export const gitGraphRowSchema = z.object({
 export const gitRepositoryStateSchema = z.object({
   sessionId: nonEmptyStringSchema,
   workspacePath: nonEmptyStringSchema.optional(),
+  repositoryName: nonEmptyStringSchema.optional(),
+  commitCount: z.number().int().nonnegative().optional(),
   isGitRepository: z.boolean(),
   currentBranch: nonEmptyStringSchema.optional(),
   headCommit: nonEmptyStringSchema.optional(),
@@ -198,7 +200,8 @@ export const gitSessionInputSchema = z.object({
 
 export const gitLogInputSchema = z.object({
   sessionId: nonEmptyStringSchema,
-  limit: z.number().int().min(1).max(500).optional()
+  limit: z.number().int().min(1).max(500).optional(),
+  offset: z.number().int().nonnegative().optional()
 }).strict()
 
 export const gitCommitInputSchema = z.object({

@@ -20,6 +20,10 @@ export type GitGraphTableProps = {
 
 const laneGap = 18
 const laneInset = 14
+const graphRowHeight = 42
+const graphLineOverlap = 2
+const graphSvgHeight = graphRowHeight + graphLineOverlap * 2
+const graphNodeY = graphLineOverlap + graphRowHeight / 2
 
 export function GitGraphTable({ rows, selectedCommit, onSelectCommit, onOpenContextMenu, onOpenDetail }: GitGraphTableProps) {
   return (
@@ -75,31 +79,51 @@ function CommitGraph({ row }: { row: GitGraphRowView }) {
   const graphWidth = laneInset * 2 + (laneCount - 1) * laneGap
 
   return (
-    <div aria-hidden="true" style={{ ...graphCanvasStyle, width: graphWidth }}>
+    <svg
+      aria-hidden="true"
+      viewBox={`0 0 ${graphWidth} ${graphSvgHeight}`}
+      preserveAspectRatio="none"
+      style={{ ...graphCanvasStyle, width: graphWidth }}
+    >
+      {lanes.map((lane, index) => {
+        const x = laneInset + index * laneGap
+        return (
+          <line
+            key={lane.id}
+            data-testid={`git-graph-lane-${lane.id}`}
+            x1={x}
+            x2={x}
+            y1={0}
+            y2={graphSvgHeight}
+            style={laneSvgStyle(lane, index)}
+          />
+        )
+      })}
       {row.graph.edges?.map((edge, index) => {
         const fromIndex = laneIndex(lanes, edge.fromLaneId)
         const toIndex = laneIndex(lanes, edge.toLaneId)
+        if (fromIndex === toIndex) return null
         const x1 = laneInset + fromIndex * laneGap
         const x2 = laneInset + toIndex * laneGap
-        return <span key={`${edge.fromLaneId}-${edge.toLaneId}-${index}`} style={edgeStyle(x1, x2)} />
-      })}
-      {lanes.map((lane, index) => {
-        const laneX = `${laneInset + index * laneGap}px`
         return (
-          <span
-            key={lane.id}
-            data-testid={`git-graph-lane-${lane.id}`}
-            style={laneStyle(lane, index, laneX)}
+          <path
+            key={`${edge.fromLaneId}-${edge.toLaneId}-${index}`}
+            data-testid={`git-graph-edge-${edge.fromLaneId}-${edge.toLaneId}`}
+            d={edgePath(x1, x2)}
+            style={edgeSvgStyle(lanes[fromIndex] ?? lanes[toIndex], fromIndex)}
           />
         )
       })}
       {nodeLaneId ? (
-        <span
+        <circle
           data-testid={`git-graph-node-${row.commitHash}`}
-          style={nodeStyle(lanes, nodeLaneId)}
+          cx={laneInset + laneIndex(lanes, nodeLaneId) * laneGap}
+          cy={graphNodeY}
+          r={5.5}
+          style={nodeSvgStyle(lanes, nodeLaneId)}
         />
       ) : null}
-    </div>
+    </svg>
   )
 }
 
@@ -117,51 +141,37 @@ const laneColor = (lane: GitGraphLaneView, index: number) => {
   return colors[index % colors.length]
 }
 
-const nodeStyle = (lanes: GitGraphLaneView[], nodeLaneId: string): CSSProperties & Record<'--git-graph-lane-x', string> => {
+const nodeSvgStyle = (lanes: GitGraphLaneView[], nodeLaneId: string): CSSProperties => {
   const index = laneIndex(lanes, nodeLaneId)
   const lane = lanes[index] ?? { id: nodeLaneId, active: true }
-  const x = `${laneInset + index * laneGap}px`
   return {
-    '--git-graph-lane-x': x,
-    position: 'absolute',
-    left: 'var(--git-graph-lane-x)',
-    top: '50%',
-    width: 11,
-    height: 11,
-    borderRadius: 999,
-    border: `2px solid ${themeTokens.color.surface}`,
-    background: laneColor(lane, index),
-    boxShadow: `0 0 0 1px ${laneColor(lane, index)}`,
-    transform: 'translate(-50%, -50%)',
-    zIndex: 2
+    fill: laneColor(lane, index),
+    stroke: themeTokens.color.surface,
+    strokeWidth: 3,
+    filter: `drop-shadow(0 0 0 ${laneColor(lane, index)})`
   }
 }
 
-const laneStyle = (lane: GitGraphLaneView, index: number, laneX: string): CSSProperties & Record<'--git-graph-lane-x', string> => ({
-  '--git-graph-lane-x': laneX,
-  position: 'absolute',
-  left: 'var(--git-graph-lane-x)',
-  top: 0,
-  bottom: 0,
-  width: 2,
-  borderRadius: 999,
-  background: lane.active ? laneColor(lane, index) : themeTokens.color.borderSubtle,
-  opacity: lane.active ? 1 : 0.55,
-  transform: 'translateX(-50%)'
+const laneSvgStyle = (lane: GitGraphLaneView, index: number): CSSProperties => ({
+  stroke: lane.active ? laneColor(lane, index) : themeTokens.color.borderSubtle,
+  strokeWidth: 2,
+  strokeLinecap: 'round',
+  opacity: lane.active ? 1 : 0.55
 })
 
-const edgeStyle = (fromX: number, toX: number): CSSProperties => ({
-  position: 'absolute',
-  left: Math.min(fromX, toX),
-  top: '50%',
-  width: Math.max(2, Math.abs(toX - fromX)),
-  height: 2,
-  borderRadius: 999,
-  background: themeTokens.color.borderSubtle,
-  transform: fromX <= toX ? 'rotate(28deg)' : 'rotate(-28deg)',
-  transformOrigin: fromX <= toX ? 'left center' : 'right center',
-  opacity: 0.8
+const edgeSvgStyle = (lane: GitGraphLaneView | undefined, index: number): CSSProperties => ({
+  fill: 'none',
+  stroke: lane ? laneColor(lane, index) : themeTokens.color.borderSubtle,
+  strokeWidth: 2,
+  strokeLinecap: 'round',
+  strokeLinejoin: 'round',
+  opacity: 0.9
 })
+
+const edgePath = (fromX: number, toX: number) => {
+  const controlY = graphNodeY + (graphSvgHeight - graphNodeY) * 0.58
+  return `M ${fromX} ${graphNodeY} C ${fromX} ${controlY}, ${toX} ${controlY}, ${toX} ${graphSvgHeight}`
+}
 
 const handleContextMenu = (
   event: MouseEvent<HTMLTableRowElement>,
@@ -288,8 +298,8 @@ const cellStyle: CSSProperties = {
   whiteSpace: 'nowrap'
 }
 
-const graphCellStyle: CSSProperties = { padding: 0 }
-const graphCanvasStyle: CSSProperties = { position: 'relative', height: 42, margin: '0 auto' }
+const graphCellStyle: CSSProperties = { padding: 0, overflow: 'visible', borderBottom: 0 }
+const graphCanvasStyle: CSSProperties = { display: 'block', height: graphSvgHeight, margin: `${-graphLineOverlap}px auto`, overflow: 'visible' }
 const descriptionCellStyle: CSSProperties = { minWidth: 0 }
 const descriptionContentStyle: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: themeTokens.spacing.xs, minWidth: 0, maxWidth: '100%' }
 const subjectStyle: CSSProperties = { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
