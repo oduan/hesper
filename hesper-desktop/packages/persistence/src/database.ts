@@ -9,9 +9,9 @@ async function createSqlJsPersistence(data?: Uint8Array): Promise<Persistence> {
   const SQL = await initSqlJs()
   const db = new SQL.Database(data)
   const adapter = createSqlJsAdapter(db)
-  adapter.exec(schemaSql)
-  migrateDatabaseSchema(adapter)
-  return createRepositories(adapter)
+  await adapter.exec(schemaSql)
+  await migrateDatabaseSchema(adapter)
+  return await createRepositories(adapter)
 }
 
 export async function createInMemoryPersistence(data?: Uint8Array): Promise<Persistence> {
@@ -21,9 +21,9 @@ export async function createInMemoryPersistence(data?: Uint8Array): Promise<Pers
 export async function createFilePersistence(path: string): Promise<Persistence> {
   const { createNodeSqliteFileAdapter } = await import('./node-sqlite-adapter')
   const adapter = createNodeSqliteFileAdapter(path)
-  adapter.exec(schemaSql)
-  migrateDatabaseSchema(adapter)
-  return createRepositories(adapter)
+  await adapter.exec(schemaSql)
+  await migrateDatabaseSchema(adapter)
+  return await createRepositories(adapter)
 }
 
 export function exportDatabaseBytes(persistence: Persistence): Uint8Array {

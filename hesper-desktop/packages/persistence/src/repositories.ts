@@ -602,7 +602,7 @@ function parseRuntimeEvent(value: unknown): RuntimeEventRecord {
   return agentRuntimeEventSchema.parse(value)
 }
 
-export function createRepositories(db: SqliteAdapter): Persistence {
+export async function createRepositories(db: SqliteAdapter): Promise<Persistence> {
   const sequencedTables = [
     'sessions',
     'session_categories',
@@ -622,43 +622,44 @@ export function createRepositories(db: SqliteAdapter): Persistence {
     'ssh_command_results',
     'credential_records'
   ]
-  const exec = (sql: string, params: unknown[] = []) => db.run(sql, params)
-  const fetchAll = (sql: string, params: unknown[] = []) => db.all(sql, params)
-  const fetchOne = (sql: string, params: unknown[] = []) => db.get(sql, params)
+  const exec = async (sql: string, params: unknown[] = []) => db.run(sql, params)
+  const fetchAll = async (sql: string, params: unknown[] = []) => db.all(sql, params)
+  const fetchOne = async (sql: string, params: unknown[] = []) => db.get(sql, params)
 
-  const maxSequence = sequencedTables.reduce((max, table) => {
-    const value = Number((fetchOne(`SELECT MAX(sort_seq) AS max_sort_seq FROM ${table}`) as { max_sort_seq?: unknown } | undefined)?.max_sort_seq ?? 0)
-    return Number.isFinite(value) ? Math.max(max, value) : max
-  }, 0)
+  let maxSequence = 0
+  for (const table of sequencedTables) {
+    const value = Number(((await fetchOne(`SELECT MAX(sort_seq) AS max_sort_seq FROM ${table}`)) as { max_sort_seq?: unknown } | undefined)?.max_sort_seq ?? 0)
+    if (Number.isFinite(value)) maxSequence = Math.max(maxSequence, value)
+  }
   let sequence = maxSequence
   const nextSeq = () => ++sequence
 
-  const upsert = (table: string, columns: string[], values: unknown[], id: string) => {
+  const upsert = async (table: string, columns: string[], values: unknown[], id: string) => {
     const placeholders = columns.map(() => '?').join(', ')
     const updateColumns = columns.filter((column) => column !== 'id' && column !== 'sort_seq').map((column) => `${column}=excluded.${column}`).join(', ')
-    const existing = fetchAll(`SELECT sort_seq FROM ${table} WHERE id = ?`, [id])[0]
+    const existing = (await fetchAll(`SELECT sort_seq FROM ${table} WHERE id = ?`, [id]))[0]
     const finalValues = values.slice()
     finalValues[finalValues.length - 1] = existing ? existing.sort_seq : finalValues[finalValues.length - 1]
-    exec(
+    await exec(
       `INSERT INTO ${table} (${columns.join(', ')}) VALUES (${placeholders}) ON CONFLICT(id) DO UPDATE SET ${updateColumns}`,
       finalValues
     )
   }
-  const tableColumns = (table: string): Set<string> => {
+  const tableColumns = async (table: string): Promise<Set<string>> => {
     const columns = new Set<string>()
-    for (const row of fetchAll(`PRAGMA table_info(${table})`)) {
+    for (const row of await fetchAll(`PRAGMA table_info(${table})`)) {
       if (typeof row.name === 'string') columns.add(row.name)
     }
     return columns
   }
-  const roleColumns = tableColumns('roles')
+  const roleColumns = await tableColumns('roles')
   const hasLegacyRoleSubagentColumn = roleColumns.has('can_be_subagent')
 
   const persistence: Persistence = {
     settings: {
       async save(settings) {
-        exec('DELETE FROM app_settings')
-        exec('INSERT INTO app_settings (default_model_id, default_output_mode, theme_mode, theme_id, font_size, soul, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)', [
+        await exec('DELETE FROM app_settings')
+        await exec('INSERT INTO app_settings (default_model_id, default_output_mode, theme_mode, theme_id, font_size, soul, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)', [
           settings.defaultModelId,
           settings.defaultOutputMode,
           settings.themeMode,
@@ -669,13 +670,13 @@ export function createRepositories(db: SqliteAdapter): Persistence {
         ])
       },
       async get() {
-        const row = fetchAll('SELECT * FROM app_settings LIMIT 1')[0]
+        const row = (await fetchAll('SELECT * FROM app_settings LIMIT 1'))[0]
         return row ? toAppSettingsRecord(row) : undefined
       }
     },
     sessions: {
       async save(session) {
-        upsert('sessions', [
+        await upsert('sessions', [
           'id',
           'title',
           'status',
@@ -720,16 +721,16 @@ export function createRepositories(db: SqliteAdapter): Persistence {
         ], session.id)
       },
       async get(id) {
-        const row = fetchAll('SELECT * FROM sessions WHERE id = ?', [id])[0]
+        const row = (await fetchAll('SELECT * FROM sessions WHERE id = ?', [id]))[0]
         return row ? toSession(row) : undefined
       },
       async listVisible() {
-        return fetchAll("SELECT * FROM sessions WHERE status != 'deleted' ORDER BY updated_at DESC, sort_seq ASC, id ASC").map(toSession)
+        return (await fetchAll("SELECT * FROM sessions WHERE status != 'deleted' ORDER BY updated_at DESC, sort_seq ASC, id ASC")).map(toSession)
       }
     },
     sessionCategories: {
       async save(category) {
-        upsert('session_categories', [
+        await upsert('session_categories', [
           'id',
           'name',
           'created_at',
@@ -744,20 +745,20 @@ export function createRepositories(db: SqliteAdapter): Persistence {
         ], category.id)
       },
       async get(id) {
-        const row = fetchAll('SELECT * FROM session_categories WHERE id = ?', [id])[0]
+        const row = (await fetchAll('SELECT * FROM session_categories WHERE id = ?', [id]))[0]
         return row ? toSessionCategory(row) : undefined
       },
       async list() {
-        return fetchAll('SELECT * FROM session_categories ORDER BY sort_seq ASC, name ASC, id ASC').map(toSessionCategory)
+        return (await fetchAll('SELECT * FROM session_categories ORDER BY sort_seq ASC, name ASC, id ASC')).map(toSessionCategory)
       },
       async delete(id) {
-        exec('UPDATE sessions SET category_id = NULL WHERE category_id = ?', [id])
-        exec('DELETE FROM session_categories WHERE id = ?', [id])
+        await exec('UPDATE sessions SET category_id = NULL WHERE category_id = ?', [id])
+        await exec('DELETE FROM session_categories WHERE id = ?', [id])
       }
     },
     messages: {
       async save(message) {
-        upsert('messages', ['id', 'session_id', 'role', 'content', 'content_type', 'run_id', 'attachments_json', 'created_at', 'sort_seq'], [
+        await upsert('messages', ['id', 'session_id', 'role', 'content', 'content_type', 'run_id', 'attachments_json', 'created_at', 'sort_seq'], [
           message.id,
           message.sessionId,
           message.role,
@@ -770,7 +771,7 @@ export function createRepositories(db: SqliteAdapter): Persistence {
         ], message.id)
       },
       async listBySession(sessionId) {
-        return fetchAll(
+        return (await fetchAll(
           `SELECT messages.*
            FROM messages
            LEFT JOIN agent_runs ON agent_runs.id = messages.run_id
@@ -782,15 +783,15 @@ export function createRepositories(db: SqliteAdapter): Persistence {
              )
            ORDER BY messages.sort_seq ASC, messages.id ASC`,
           [sessionId]
-        ).map(toMessage)
+        )).map(toMessage)
       },
       async listByRun(runId) {
-        return fetchAll('SELECT * FROM messages WHERE run_id = ? ORDER BY sort_seq ASC, id ASC', [runId]).map(toMessage)
+        return (await fetchAll('SELECT * FROM messages WHERE run_id = ? ORDER BY sort_seq ASC, id ASC', [runId])).map(toMessage)
       }
     },
     runs: {
       async save(run) {
-        upsert('agent_runs', ['id', 'session_id', 'parent_run_id', 'worker_agent_invocation_id', 'depth', 'status', 'model_id', 'workspace_path', 'retry_count', 'max_retries', 'started_at', 'ended_at', 'error_json', 'sort_seq'], [
+        await upsert('agent_runs', ['id', 'session_id', 'parent_run_id', 'worker_agent_invocation_id', 'depth', 'status', 'model_id', 'workspace_path', 'retry_count', 'max_retries', 'started_at', 'ended_at', 'error_json', 'sort_seq'], [
           run.id,
           run.sessionId,
           run.parentRunId,
@@ -808,16 +809,16 @@ export function createRepositories(db: SqliteAdapter): Persistence {
         ], run.id)
       },
       async get(id) {
-        const row = fetchAll('SELECT * FROM agent_runs WHERE id = ?', [id])[0]
+        const row = (await fetchAll('SELECT * FROM agent_runs WHERE id = ?', [id]))[0]
         return row ? toRun(row) : undefined
       },
       async listBySession(sessionId) {
-        return fetchAll('SELECT * FROM agent_runs WHERE session_id = ? ORDER BY sort_seq ASC, id ASC', [sessionId]).map(toRun)
+        return (await fetchAll('SELECT * FROM agent_runs WHERE session_id = ? ORDER BY sort_seq ASC, id ASC', [sessionId])).map(toRun)
       }
     },
     steps: {
       async save(step) {
-        upsert('run_steps', ['id', 'run_id', 'type', 'status', 'title', 'summary', 'detail', 'created_at', 'completed_at', 'sort_seq'], [
+        await upsert('run_steps', ['id', 'run_id', 'type', 'status', 'title', 'summary', 'detail', 'created_at', 'completed_at', 'sort_seq'], [
           step.id,
           step.runId,
           step.type,
@@ -831,12 +832,12 @@ export function createRepositories(db: SqliteAdapter): Persistence {
         ], step.id)
       },
       async listByRun(runId) {
-        return fetchAll('SELECT * FROM run_steps WHERE run_id = ? ORDER BY sort_seq ASC, id ASC', [runId]).map(toStep)
+        return (await fetchAll('SELECT * FROM run_steps WHERE run_id = ? ORDER BY sort_seq ASC, id ASC', [runId])).map(toStep)
       }
     },
     contextItems: {
       async save(item) {
-        upsert('run_context_items', ['id', 'session_id', 'run_id', 'kind', 'version', 'content', 'token_estimate', 'source_hash', 'created_at', 'sort_seq'], [
+        await upsert('run_context_items', ['id', 'session_id', 'run_id', 'kind', 'version', 'content', 'token_estimate', 'source_hash', 'created_at', 'sort_seq'], [
           item.id,
           item.sessionId,
           item.runId,
@@ -850,28 +851,28 @@ export function createRepositories(db: SqliteAdapter): Persistence {
         ], item.id)
       },
       async get(id) {
-        const row = fetchAll('SELECT * FROM run_context_items WHERE id = ?', [id])[0]
+        const row = (await fetchAll('SELECT * FROM run_context_items WHERE id = ?', [id]))[0]
         return row ? toRunContextItem(row) : undefined
       },
       async listByRun(runId) {
-        return fetchAll('SELECT * FROM run_context_items WHERE run_id = ? ORDER BY sort_seq ASC, id ASC', [runId]).map(toRunContextItem)
+        return (await fetchAll('SELECT * FROM run_context_items WHERE run_id = ? ORDER BY sort_seq ASC, id ASC', [runId])).map(toRunContextItem)
       },
       async listBySession(sessionId) {
-        return fetchAll('SELECT * FROM run_context_items WHERE session_id = ? ORDER BY sort_seq ASC, id ASC', [sessionId]).map(toRunContextItem)
+        return (await fetchAll('SELECT * FROM run_context_items WHERE session_id = ? ORDER BY sort_seq ASC, id ASC', [sessionId])).map(toRunContextItem)
       }
     },
     events: {
       async append(event) {
         const runId = extractRunId(event)
-        exec('INSERT INTO runtime_events (run_id, event_json) VALUES (?, ?)', [runId, JSON.stringify(event)])
+        await exec('INSERT INTO runtime_events (run_id, event_json) VALUES (?, ?)', [runId, JSON.stringify(event)])
       },
       async listByRun(runId) {
-        return fetchAll('SELECT event_json FROM runtime_events WHERE run_id = ? ORDER BY id ASC', [runId]).map((row) => parseRuntimeEvent(JSON.parse(String(row.event_json))))
+        return (await fetchAll('SELECT event_json FROM runtime_events WHERE run_id = ? ORDER BY id ASC', [runId])).map((row) => parseRuntimeEvent(JSON.parse(String(row.event_json))))
       }
     },
     modelProviders: {
       async save(provider) {
-        upsert('model_providers', ['id', 'name', 'kind', 'auth_type', 'pi_auth_provider', 'base_url', 'api_key_ref', 'has_api_key', 'enabled', 'default_model_id', 'created_at', 'updated_at', 'sort_seq'], [
+        await upsert('model_providers', ['id', 'name', 'kind', 'auth_type', 'pi_auth_provider', 'base_url', 'api_key_ref', 'has_api_key', 'enabled', 'default_model_id', 'created_at', 'updated_at', 'sort_seq'], [
           provider.id,
           provider.name,
           provider.kind,
@@ -888,19 +889,19 @@ export function createRepositories(db: SqliteAdapter): Persistence {
         ], provider.id)
       },
       async get(id) {
-        const row = fetchAll('SELECT * FROM model_providers WHERE id = ?', [id])[0]
+        const row = (await fetchAll('SELECT * FROM model_providers WHERE id = ?', [id]))[0]
         return row ? toModelProvider(row) : undefined
       },
       async list() {
-        return fetchAll('SELECT * FROM model_providers ORDER BY sort_seq ASC, id ASC').map(toModelProvider)
+        return (await fetchAll('SELECT * FROM model_providers ORDER BY sort_seq ASC, id ASC')).map(toModelProvider)
       },
       async delete(id) {
-        exec('DELETE FROM model_providers WHERE id = ?', [id])
+        await exec('DELETE FROM model_providers WHERE id = ?', [id])
       }
     },
     models: {
       async save(model) {
-        upsert('models', ['id', 'provider_id', 'model_name', 'display_name', 'capabilities_json', 'context_window', 'enabled', 'created_at', 'updated_at', 'sort_seq'], [
+        await upsert('models', ['id', 'provider_id', 'model_name', 'display_name', 'capabilities_json', 'context_window', 'enabled', 'created_at', 'updated_at', 'sort_seq'], [
           model.id,
           model.providerId,
           model.modelName,
@@ -914,22 +915,22 @@ export function createRepositories(db: SqliteAdapter): Persistence {
         ], model.id)
       },
       async get(id) {
-        const row = fetchAll('SELECT * FROM models WHERE id = ?', [id])[0]
+        const row = (await fetchAll('SELECT * FROM models WHERE id = ?', [id]))[0]
         return row ? toModel(row) : undefined
       },
       async list() {
-        return fetchAll('SELECT * FROM models ORDER BY sort_seq ASC, id ASC').map(toModel)
+        return (await fetchAll('SELECT * FROM models ORDER BY sort_seq ASC, id ASC')).map(toModel)
       },
       async listByProvider(providerId) {
-        return fetchAll('SELECT * FROM models WHERE provider_id = ? ORDER BY sort_seq ASC, id ASC', [providerId]).map(toModel)
+        return (await fetchAll('SELECT * FROM models WHERE provider_id = ? ORDER BY sort_seq ASC, id ASC', [providerId])).map(toModel)
       },
       async deleteByProvider(providerId) {
-        exec('DELETE FROM models WHERE provider_id = ?', [providerId])
+        await exec('DELETE FROM models WHERE provider_id = ?', [providerId])
       }
     },
     skills: {
       async save(skill) {
-        upsert('skills', ['id', 'name', 'description', 'source', 'path', 'source_path', 'prompt', 'allowed_tool_ids_json', 'enabled', 'sort_seq'], [
+        await upsert('skills', ['id', 'name', 'description', 'source', 'path', 'source_path', 'prompt', 'allowed_tool_ids_json', 'enabled', 'sort_seq'], [
           skill.id,
           skill.name,
           skill.description,
@@ -943,11 +944,11 @@ export function createRepositories(db: SqliteAdapter): Persistence {
         ], skill.id)
       },
       async get(id) {
-        const row = fetchAll('SELECT * FROM skills WHERE id = ?', [id])[0]
+        const row = (await fetchAll('SELECT * FROM skills WHERE id = ?', [id]))[0]
         return row ? toSkill(row) : undefined
       },
       async list() {
-        return fetchAll('SELECT * FROM skills ORDER BY sort_seq ASC, id ASC').map(toSkill)
+        return (await fetchAll('SELECT * FROM skills ORDER BY sort_seq ASC, id ASC')).map(toSkill)
       }
     },
     roles: {
@@ -974,22 +975,22 @@ export function createRepositories(db: SqliteAdapter): Persistence {
         }
         columns.push('sort_seq')
         values.push(nextSeq())
-        upsert('roles', columns, values, role.id)
+        await upsert('roles', columns, values, role.id)
       },
       async get(id) {
-        const row = fetchAll('SELECT * FROM roles WHERE id = ?', [id])[0]
+        const row = (await fetchAll('SELECT * FROM roles WHERE id = ?', [id]))[0]
         return row ? toRole(row) : undefined
       },
       async list() {
-        return fetchAll('SELECT * FROM roles ORDER BY sort_seq ASC, id ASC').map(toRole)
+        return (await fetchAll('SELECT * FROM roles ORDER BY sort_seq ASC, id ASC')).map(toRole)
       },
       async delete(id) {
-        exec('DELETE FROM roles WHERE id = ?', [id])
+        await exec('DELETE FROM roles WHERE id = ?', [id])
       }
     },
     toolPermissionPolicies: {
       async save(policy) {
-        upsert('tool_permission_policies', ['id', 'tool_id', 'mode', 'scope', 'subject_id', 'risk_level', 'created_at', 'updated_at', 'sort_seq'], [
+        await upsert('tool_permission_policies', ['id', 'tool_id', 'mode', 'scope', 'subject_id', 'risk_level', 'created_at', 'updated_at', 'sort_seq'], [
           policy.id,
           policy.toolId,
           policy.mode,
@@ -1002,23 +1003,23 @@ export function createRepositories(db: SqliteAdapter): Persistence {
         ], policy.id)
       },
       async get(id) {
-        const row = fetchAll('SELECT * FROM tool_permission_policies WHERE id = ?', [id])[0]
+        const row = (await fetchAll('SELECT * FROM tool_permission_policies WHERE id = ?', [id]))[0]
         return row ? toToolPermissionPolicy(row) : undefined
       },
       async list() {
-        return fetchAll('SELECT * FROM tool_permission_policies ORDER BY sort_seq ASC, id ASC').map(toToolPermissionPolicy)
+        return (await fetchAll('SELECT * FROM tool_permission_policies ORDER BY sort_seq ASC, id ASC')).map(toToolPermissionPolicy)
       },
       async listByScope(scope, subjectId) {
         const sql = subjectId === undefined
           ? 'SELECT * FROM tool_permission_policies WHERE scope = ? ORDER BY sort_seq ASC, id ASC'
           : 'SELECT * FROM tool_permission_policies WHERE scope = ? AND subject_id = ? ORDER BY sort_seq ASC, id ASC'
         const params = subjectId === undefined ? [scope] : [scope, subjectId]
-        return fetchAll(sql, params).map(toToolPermissionPolicy)
+        return (await fetchAll(sql, params)).map(toToolPermissionPolicy)
       }
     },
     workerAgentInvocations: {
       async save(invocation) {
-        upsert('worker_agent_invocations', ['id', 'parent_run_id', 'child_run_id', 'parent_step_id', 'parent_tool_call_id', 'task', 'role_id', 'allowed_tool_ids_json', 'model_ref_json', 'role_snapshot_json', 'expected_output', 'context_summary', 'status', 'created_at', 'last_event_at', 'completed_at', 'error_json', 'sort_seq'], [
+        await upsert('worker_agent_invocations', ['id', 'parent_run_id', 'child_run_id', 'parent_step_id', 'parent_tool_call_id', 'task', 'role_id', 'allowed_tool_ids_json', 'model_ref_json', 'role_snapshot_json', 'expected_output', 'context_summary', 'status', 'created_at', 'last_event_at', 'completed_at', 'error_json', 'sort_seq'], [
           invocation.id,
           invocation.parentRunId,
           invocation.childRunId,
@@ -1040,19 +1041,19 @@ export function createRepositories(db: SqliteAdapter): Persistence {
         ], invocation.id)
       },
       async get(id) {
-        const row = fetchAll('SELECT * FROM worker_agent_invocations WHERE id = ?', [id])[0]
+        const row = (await fetchAll('SELECT * FROM worker_agent_invocations WHERE id = ?', [id]))[0]
         return row ? toWorkerAgentInvocation(row) : undefined
       },
       async listByParentRun(parentRunId) {
-        return fetchAll('SELECT * FROM worker_agent_invocations WHERE parent_run_id = ? ORDER BY sort_seq ASC, id ASC', [parentRunId]).map(toWorkerAgentInvocation)
+        return (await fetchAll('SELECT * FROM worker_agent_invocations WHERE parent_run_id = ? ORDER BY sort_seq ASC, id ASC', [parentRunId])).map(toWorkerAgentInvocation)
       },
       async listByChildRun(childRunId) {
-        return fetchAll('SELECT * FROM worker_agent_invocations WHERE child_run_id = ? ORDER BY sort_seq ASC, id ASC', [childRunId]).map(toWorkerAgentInvocation)
+        return (await fetchAll('SELECT * FROM worker_agent_invocations WHERE child_run_id = ? ORDER BY sort_seq ASC, id ASC', [childRunId])).map(toWorkerAgentInvocation)
       }
     },
     sshKeys: {
       async save(key) {
-        upsert('ssh_keys', ['id', 'name', 'public_key', 'note', 'has_passphrase', 'created_at', 'updated_at', 'sort_seq'], [
+        await upsert('ssh_keys', ['id', 'name', 'public_key', 'note', 'has_passphrase', 'created_at', 'updated_at', 'sort_seq'], [
           key.id,
           key.name,
           key.publicKey,
@@ -1064,19 +1065,19 @@ export function createRepositories(db: SqliteAdapter): Persistence {
         ], key.id)
       },
       async get(id) {
-        const row = fetchAll('SELECT * FROM ssh_keys WHERE id = ?', [id])[0]
+        const row = (await fetchAll('SELECT * FROM ssh_keys WHERE id = ?', [id]))[0]
         return row ? toSshKey(row) : undefined
       },
       async list() {
-        return fetchAll('SELECT * FROM ssh_keys ORDER BY sort_seq ASC, id ASC').map(toSshKey)
+        return (await fetchAll('SELECT * FROM ssh_keys ORDER BY sort_seq ASC, id ASC')).map(toSshKey)
       },
       async delete(id) {
-        exec('DELETE FROM ssh_keys WHERE id = ?', [id])
+        await exec('DELETE FROM ssh_keys WHERE id = ?', [id])
       }
     },
     sshServers: {
       async save(server) {
-        upsert('ssh_servers', ['id', 'name', 'host', 'port', 'username', 'key_id', 'note', 'created_at', 'updated_at', 'sort_seq'], [
+        await upsert('ssh_servers', ['id', 'name', 'host', 'port', 'username', 'key_id', 'note', 'created_at', 'updated_at', 'sort_seq'], [
           server.id,
           server.name,
           server.host,
@@ -1090,22 +1091,22 @@ export function createRepositories(db: SqliteAdapter): Persistence {
         ], server.id)
       },
       async get(id) {
-        const row = fetchAll('SELECT * FROM ssh_servers WHERE id = ?', [id])[0]
+        const row = (await fetchAll('SELECT * FROM ssh_servers WHERE id = ?', [id]))[0]
         return row ? toSshServer(row) : undefined
       },
       async list() {
-        return fetchAll('SELECT * FROM ssh_servers ORDER BY sort_seq ASC, id ASC').map(toSshServer)
+        return (await fetchAll('SELECT * FROM ssh_servers ORDER BY sort_seq ASC, id ASC')).map(toSshServer)
       },
       async listByKeyId(keyId) {
-        return fetchAll('SELECT * FROM ssh_servers WHERE key_id = ? ORDER BY sort_seq ASC, id ASC', [keyId]).map(toSshServer)
+        return (await fetchAll('SELECT * FROM ssh_servers WHERE key_id = ? ORDER BY sort_seq ASC, id ASC', [keyId])).map(toSshServer)
       },
       async delete(id) {
-        exec('DELETE FROM ssh_servers WHERE id = ?', [id])
+        await exec('DELETE FROM ssh_servers WHERE id = ?', [id])
       }
     },
     sshExecutions: {
       async save(execution) {
-        upsert('ssh_executions', ['id', 'session_id', 'run_id', 'server_id', 'server_name', 'commands_json', 'stop_on_error', 'timeout_ms', 'status', 'started_at', 'updated_at', 'completed_at', 'error_json', 'sort_seq'], [
+        await upsert('ssh_executions', ['id', 'session_id', 'run_id', 'server_id', 'server_name', 'commands_json', 'stop_on_error', 'timeout_ms', 'status', 'started_at', 'updated_at', 'completed_at', 'error_json', 'sort_seq'], [
           execution.id,
           execution.sessionId,
           execution.runId,
@@ -1123,17 +1124,17 @@ export function createRepositories(db: SqliteAdapter): Persistence {
         ], execution.id)
       },
       async get(id) {
-        const row = fetchAll('SELECT * FROM ssh_executions WHERE id = ?', [id])[0]
+        const row = (await fetchAll('SELECT * FROM ssh_executions WHERE id = ?', [id]))[0]
         return row ? toSshExecution(row) : undefined
       },
       async listBySession(sessionId) {
-        return fetchAll('SELECT * FROM ssh_executions WHERE session_id = ? ORDER BY sort_seq ASC, id ASC', [sessionId]).map(toSshExecution)
+        return (await fetchAll('SELECT * FROM ssh_executions WHERE session_id = ? ORDER BY sort_seq ASC, id ASC', [sessionId])).map(toSshExecution)
       }
     },
     sshCommandResults: {
       async save(result) {
         const id = `${result.executionId}:${result.index}`
-        upsert('ssh_command_results', ['id', 'execution_id', 'command_index', 'command', 'status', 'stdout', 'stderr', 'exit_code', 'signal', 'started_at', 'completed_at', 'duration_ms', 'skipped_reason', 'sort_seq'], [
+        await upsert('ssh_command_results', ['id', 'execution_id', 'command_index', 'command', 'status', 'stdout', 'stderr', 'exit_code', 'signal', 'started_at', 'completed_at', 'duration_ms', 'skipped_reason', 'sort_seq'], [
           id,
           result.executionId,
           result.index,
@@ -1151,12 +1152,12 @@ export function createRepositories(db: SqliteAdapter): Persistence {
         ], id)
       },
       async listByExecution(executionId) {
-        return fetchAll('SELECT * FROM ssh_command_results WHERE execution_id = ? ORDER BY command_index ASC, sort_seq ASC, id ASC', [executionId]).map(toSshCommandResult)
+        return (await fetchAll('SELECT * FROM ssh_command_results WHERE execution_id = ? ORDER BY command_index ASC, sort_seq ASC, id ASC', [executionId])).map(toSshCommandResult)
       }
     },
     credentialRecords: {
       async save(record) {
-        upsert('credential_records', ['id', 'kind', 'subject_id', 'encrypted_value_base64', 'created_at', 'updated_at', 'sort_seq'], [
+        await upsert('credential_records', ['id', 'kind', 'subject_id', 'encrypted_value_base64', 'created_at', 'updated_at', 'sort_seq'], [
           record.id,
           record.kind,
           record.subjectId,
@@ -1167,14 +1168,14 @@ export function createRepositories(db: SqliteAdapter): Persistence {
         ], record.id)
       },
       async get(id) {
-        const row = fetchAll('SELECT * FROM credential_records WHERE id = ?', [id])[0]
+        const row = (await fetchAll('SELECT * FROM credential_records WHERE id = ?', [id]))[0]
         return row ? toCredentialRecord(row) : undefined
       },
       async list() {
-        return fetchAll('SELECT * FROM credential_records ORDER BY sort_seq ASC, id ASC').map(toCredentialRecord)
+        return (await fetchAll('SELECT * FROM credential_records ORDER BY sort_seq ASC, id ASC')).map(toCredentialRecord)
       },
       async delete(id) {
-        exec('DELETE FROM credential_records WHERE id = ?', [id])
+        await exec('DELETE FROM credential_records WHERE id = ?', [id])
       }
     },
     transaction(fn) {

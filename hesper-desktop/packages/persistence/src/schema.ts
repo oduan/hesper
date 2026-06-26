@@ -325,28 +325,28 @@ function columnName(definition: string): string {
   return definition.split(/\s+/, 1)[0] ?? definition
 }
 
-function tableColumns(db: SqliteAdapter, table: string): Set<string> {
+async function tableColumns(db: SqliteAdapter, table: string): Promise<Set<string>> {
   const columns = new Set<string>()
-  for (const row of db.all(`PRAGMA table_info(${table})`)) {
+  for (const row of await db.all(`PRAGMA table_info(${table})`)) {
     if (typeof row.name === 'string') columns.add(row.name)
   }
   return columns
 }
 
-export function migrateDatabaseSchema(db: SqliteAdapter): void {
+export async function migrateDatabaseSchema(db: SqliteAdapter): Promise<void> {
   for (const [table, definitions] of Object.entries(migrationColumns)) {
-    const existing = tableColumns(db, table)
+    const existing = await tableColumns(db, table)
     for (const definition of definitions) {
       const name = columnName(definition)
       if (!existing.has(name)) {
-        db.run(`ALTER TABLE ${table} ADD COLUMN ${definition}`)
+        await db.run(`ALTER TABLE ${table} ADD COLUMN ${definition}`)
         existing.add(name)
       }
     }
   }
 
-  const roleColumns = tableColumns(db, 'roles')
+  const roleColumns = await tableColumns(db, 'roles')
   if (roleColumns.has('can_be_subagent') && roleColumns.has('can_be_worker_agent')) {
-    db.run('UPDATE roles SET can_be_worker_agent = can_be_subagent WHERE can_be_subagent IS NOT NULL')
+    await db.run('UPDATE roles SET can_be_worker_agent = can_be_subagent WHERE can_be_subagent IS NOT NULL')
   }
 }

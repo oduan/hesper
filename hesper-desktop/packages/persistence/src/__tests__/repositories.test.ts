@@ -10,6 +10,16 @@ const require = createRequire(import.meta.url)
 const initSqlJs = require('sql.js') as () => Promise<{ Database: new (data?: Uint8Array) => any }>
 const now = '2026-06-10T03:00:00.000Z'
 
+function deferred<T = void>(): { promise: Promise<T>; resolve(value: T | PromiseLike<T>): void; reject(error: unknown): void } {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (error: unknown) => void
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+  return { promise, resolve, reject }
+}
+
 async function createCorruptConfigDatabaseBytes(): Promise<Uint8Array> {
   const SQL = await initSqlJs()
   const db = new SQL.Database()
@@ -322,6 +332,106 @@ describe('persistence repositories', () => {
       })).rejects.toThrow('fail transaction')
 
       await expect(db.sessions.get('rolled-back-session')).resolves.toBeUndefined()
+      db.close?.()
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it('does not roll back non-transaction operations scheduled during a paused transaction', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hesper-file-transaction-outside-'))
+    const tempFile = path.join(tempDir, 'hesper.sqlite')
+
+    try {
+      const db = await createFilePersistence(tempFile)
+      const paused = deferred()
+      const release = deferred()
+
+      const transaction = db.transaction(async () => {
+        await db.sessions.save({
+          id: 'transaction-session',
+          title: 'Transaction session',
+          status: 'active',
+          outputMode: 'markdown',
+          createdAt: now,
+          updatedAt: now
+        })
+        paused.resolve(undefined)
+        await release.promise
+        throw new Error('rollback transaction')
+      })
+
+      await paused.promise
+      const outsideSave = db.sessions.save({
+        id: 'outside-session',
+        title: 'Outside session',
+        status: 'active',
+        outputMode: 'markdown',
+        createdAt: now,
+        updatedAt: now
+      })
+      await Promise.resolve()
+
+      release.resolve(undefined)
+      await expect(transaction).rejects.toThrow('rollback transaction')
+      await outsideSave
+
+      await expect(db.sessions.get('transaction-session')).resolves.toBeUndefined()
+      await expect(db.sessions.get('outside-session')).resolves.toMatchObject({ id: 'outside-session' })
+      db.close?.()
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it('serializes concurrent file-backed transactions instead of treating them as nested', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hesper-file-transaction-serial-'))
+    const tempFile = path.join(tempDir, 'hesper.sqlite')
+
+    try {
+      const db = await createFilePersistence(tempFile)
+      const paused = deferred()
+      const release = deferred()
+      const events: string[] = []
+
+      const first = db.transaction(async () => {
+        events.push('first-start')
+        await db.sessions.save({
+          id: 'first-transaction-session',
+          title: 'First transaction',
+          status: 'active',
+          outputMode: 'markdown',
+          createdAt: now,
+          updatedAt: now
+        })
+        paused.resolve(undefined)
+        await release.promise
+        events.push('first-end')
+      })
+
+      await paused.promise
+      const second = db.transaction(async () => {
+        events.push('second-start')
+        await db.sessions.save({
+          id: 'second-transaction-session',
+          title: 'Second transaction',
+          status: 'active',
+          outputMode: 'markdown',
+          createdAt: now,
+          updatedAt: now
+        })
+      })
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(events).toEqual(['first-start'])
+
+      release.resolve(undefined)
+      await first
+      await second
+
+      expect(events).toEqual(['first-start', 'first-end', 'second-start'])
+      await expect(db.sessions.get('first-transaction-session')).resolves.toMatchObject({ id: 'first-transaction-session' })
+      await expect(db.sessions.get('second-transaction-session')).resolves.toMatchObject({ id: 'second-transaction-session' })
       db.close?.()
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true })

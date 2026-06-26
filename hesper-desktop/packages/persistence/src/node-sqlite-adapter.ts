@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { DatabaseSync, type SQLInputValue, type StatementSync } from 'node:sqlite'
-import { bindSqliteValues, type SqliteAdapter, type SqliteRow } from './sqlite-adapter'
+import { bindSqliteValues, createSqliteOperationGate, type SqliteAdapter, type SqliteRow } from './sqlite-adapter'
 
 export function createNodeSqliteFileAdapter(filePath: string): SqliteAdapter {
   fs.mkdirSync(path.dirname(filePath), { recursive: true })
@@ -16,7 +16,7 @@ export function createNodeSqliteFileAdapter(filePath: string): SqliteAdapter {
   db.exec('PRAGMA busy_timeout = 5000')
   db.exec('PRAGMA foreign_keys = ON')
 
-  let transactionDepth = 0
+  const gate = createSqliteOperationGate()
 
   const runWithParams = <T>(sql: string, params: unknown[], runner: (statement: StatementSync, bound: SQLInputValue[]) => T): T => {
     const statement = db.prepare(sql)
@@ -25,33 +25,30 @@ export function createNodeSqliteFileAdapter(filePath: string): SqliteAdapter {
 
   return {
     exec(sql) {
-      db.exec(sql)
+      return gate.run(() => {
+        db.exec(sql)
+      })
     },
     run(sql, params = []) {
-      runWithParams(sql, params, (statement, bound) => {
-        statement.run(...bound)
+      return gate.run(() => {
+        runWithParams(sql, params, (statement, bound) => {
+          statement.run(...bound)
+        })
       })
     },
     all(sql, params = []) {
-      return runWithParams(sql, params, (statement, bound) => statement.all(...bound) as SqliteRow[])
+      return gate.run(() => runWithParams(sql, params, (statement, bound) => statement.all(...bound) as SqliteRow[]))
     },
     get(sql, params = []) {
-      return runWithParams(sql, params, (statement, bound) => statement.get(...bound) as SqliteRow | undefined)
+      return gate.run(() => runWithParams(sql, params, (statement, bound) => statement.get(...bound) as SqliteRow | undefined))
     },
-    async transaction(fn) {
-      if (transactionDepth > 0) return fn()
-      transactionDepth += 1
-      db.exec('BEGIN IMMEDIATE')
-      try {
-        const result = await fn()
-        db.exec('COMMIT')
-        return result
-      } catch (error) {
-        db.exec('ROLLBACK')
-        throw error
-      } finally {
-        transactionDepth -= 1
-      }
+    transaction(fn) {
+      return gate.transaction(
+        () => db.exec('BEGIN IMMEDIATE'),
+        () => db.exec('COMMIT'),
+        () => db.exec('ROLLBACK'),
+        fn
+      )
     },
     checkpoint() {
       db.exec('PRAGMA wal_checkpoint(TRUNCATE)')
