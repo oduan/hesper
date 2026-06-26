@@ -2,13 +2,11 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from 'electron'
-import { createFilePersistence, exportDatabaseBytes } from '@hesper/persistence'
+import { createFilePersistence } from '@hesper/persistence'
 import { createAttachmentStorage } from './attachment-storage'
 import { createBeforeQuitHandler } from './before-quit'
 import { createElectronSafeStorageCredentialCodec } from './credential-codec'
 import { registerIpcHandlers } from './ipc-handlers'
-import { createPersistenceSaveQueue } from './persistence-save-queue'
-import { createPersistenceSaveScheduler } from './persistence-save-scheduler'
 import { installNavigationGuards, resolveRendererLoadTarget } from './renderer-security'
 import { resolveAgentMode } from './agent-mode'
 import { createServiceContainer, type ServiceContainer } from './service-container'
@@ -37,41 +35,26 @@ if (configuredUserDataPath) {
 let mainWindow: BrowserWindow | null = null
 let container: ServiceContainer | null = null
 let disposeIpcHandlers: (() => void) | undefined
-let persistencePath = ''
 
 function stopSkillAutoScan(): void {
   (container?.skillService as { stopAutoScan?: () => void } | undefined)?.stopAutoScan?.()
 }
 
-const persistenceSaveQueue = createPersistenceSaveQueue({
-  exportBytes: () => {
-    if (!container) throw new Error('Cannot export persistence before the service container is initialized.')
-    return exportDatabaseBytes(container.persistence)
-  },
-  writeFile: (filePath, snapshot) => fs.promises.writeFile(filePath, snapshot).then(() => undefined),
-  mkdir: (dirPath) => fs.promises.mkdir(dirPath, { recursive: true }).then(() => undefined),
-  dirname: path.dirname
-})
-
 async function savePersistence(): Promise<void> {
-  if (!container || !persistencePath) return
-  await persistenceSaveQueue.save(persistencePath)
+  // Native file-backed SQLite persists repository writes directly.
 }
 
-const persistenceSaveScheduler = createPersistenceSaveScheduler({
-  savePersistence,
-  flushPersistenceQueue: () => persistenceSaveQueue.flush(),
-  logError: (message, error) => {
-    console.error(message, error)
-  }
-})
-
-function schedulePersistenceSave(delayMs = 50): void {
-  persistenceSaveScheduler.schedule(delayMs)
+function schedulePersistenceSave(_delayMs = 50): void {
+  // Native file-backed SQLite does not need delayed full-snapshot saves.
 }
 
 async function flushScheduledPersistence(): Promise<void> {
-  await persistenceSaveScheduler.flushScheduled()
+  // No scheduled full-snapshot saves exist for native file-backed SQLite.
+}
+
+async function closePersistence(): Promise<void> {
+  container?.persistence.checkpoint?.()
+  container?.persistence.close?.()
 }
 
 function createMainWindow(): BrowserWindow {
@@ -111,7 +94,7 @@ async function loadRenderer(window: BrowserWindow): Promise<void> {
 }
 
 async function bootstrap(): Promise<void> {
-  persistencePath = path.join(app.getPath('userData'), 'hesper.sqlite')
+  const persistencePath = path.join(app.getPath('userData'), 'hesper.sqlite')
   const persistence = await createFilePersistence(persistencePath)
   const skillService = createElectronSkillService()
   await startSkillService(skillService)
@@ -139,6 +122,7 @@ app.whenReady().then(async () => {
 const beforeQuitHandler = createBeforeQuitHandler({
   flushScheduledPersistence,
   savePersistence,
+  closePersistence,
   disposeIpcHandlers: () => {
     stopSkillAutoScan()
     disposeIpcHandlers?.()

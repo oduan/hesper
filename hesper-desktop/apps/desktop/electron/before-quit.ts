@@ -5,6 +5,7 @@ export type BeforeQuitEvent = {
 export type BeforeQuitHandlerOptions = {
   flushScheduledPersistence(): Promise<void>
   savePersistence(): Promise<void>
+  closePersistence?: () => Promise<void> | void
   disposeIpcHandlers(): void
   quit(): void
   logError(message: string, error: unknown): void
@@ -29,6 +30,12 @@ export function createBeforeQuitHandler(options: BeforeQuitHandlerOptions) {
         await options.savePersistence()
       } catch (error) {
         options.logError('Failed to flush persistence before quit.', error)
+      }
+
+      try {
+        await options.closePersistence?.()
+      } catch (error) {
+        options.logError('Failed to close persistence before quit.', error)
       } finally {
         if (!disposeCalled) {
           disposeCalled = true
