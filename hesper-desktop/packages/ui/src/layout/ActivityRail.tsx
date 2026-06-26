@@ -24,7 +24,7 @@ export type ActivityRailProps = {
   onDeleteSessionCategory?: (categoryId: string) => void | Promise<void>
 }
 
-type EditingCategoryState = { id: string; name: string; isNew: boolean }
+type EditingCategoryState = { id: string; name: string; isNew: boolean; realId?: string; pendingCreate?: boolean; queuedCommit?: boolean }
 type CategoryMenuState = { kind: 'all' | 'category'; categoryId?: string; x: number; y: number }
 
 type CategoryMenuAction = 'create' | 'rename' | 'delete'
@@ -69,12 +69,18 @@ export function ActivityRail({
   const [editingCategory, setEditingCategory] = useState<EditingCategoryState>()
   const renameInputRef = useRef<HTMLInputElement>(null)
   const categoryMenuFirstItemRef = useRef<HTMLButtonElement>(null)
+  const editingCategoryRef = useRef<EditingCategoryState | undefined>(undefined)
+  const committingCategoryIdRef = useRef<string | undefined>(undefined)
+  const draftCategoryIdRef = useRef(0)
   const isSessionsExpandedControlled = sessionsExpanded !== undefined && onToggleSessionsExpanded !== undefined
   const effectiveSessionsExpanded = isSessionsExpandedControlled ? sessionsExpanded : fallbackSessionsExpanded
+  const sessionCategoriesForDisplay = editingCategory?.isNew && editingCategory.realId
+    ? sessionCategories.filter((category) => category.id !== editingCategory.realId)
+    : sessionCategories
   const visibleCategories =
-    editingCategory?.isNew && !sessionCategories.some((category) => category.id === editingCategory.id)
-      ? [...sessionCategories, { id: editingCategory.id, name: editingCategory.name }]
-      : sessionCategories
+    editingCategory?.isNew && !sessionCategoriesForDisplay.some((category) => category.id === editingCategory.id)
+      ? [...sessionCategoriesForDisplay, { id: editingCategory.id, name: editingCategory.name }]
+      : sessionCategoriesForDisplay
 
   useEffect(() => {
     if (!isSessionsExpandedControlled && sessionsExpanded !== undefined) {
@@ -103,6 +109,10 @@ export function ActivityRail({
       categoryMenuFirstItemRef.current?.focus()
     }
   }, [categoryMenu])
+
+  useEffect(() => {
+    editingCategoryRef.current = editingCategory
+  }, [editingCategory])
 
   useEffect(() => {
     if (!editingCategory) return
@@ -152,27 +162,49 @@ export function ActivityRail({
     const current = editingCategory
     setEditingCategory(undefined)
     if (current?.isNew) {
-      void onDeleteSessionCategory?.(current.id)
+      void onDeleteSessionCategory?.(current.realId ?? current.id)
     }
   }
 
-  const commitEditingCategory = () => {
-    if (!editingCategory) return
+  const commitEditingCategoryFor = async (current: EditingCategoryState, existingNameOverride?: string) => {
+    if (committingCategoryIdRef.current === current.id) return
 
-    const current = editingCategory
+    if (current.pendingCreate) {
+      setEditingCategory((candidate) => (candidate?.id === current.id ? { ...candidate, queuedCommit: true } : candidate))
+      return
+    }
+
+    const targetCategoryId = current.realId ?? current.id
     const nextName = current.name.trim()
-    const existingName = sessionCategories.find((category) => category.id === current.id)?.name
-    setEditingCategory(undefined)
+    const existingName = existingNameOverride ?? sessionCategories.find((category) => category.id === targetCategoryId)?.name
 
     if (!nextName) {
+      setEditingCategory(undefined)
       if (current.isNew) {
-        void onDeleteSessionCategory?.(current.id)
+        await onDeleteSessionCategory?.(targetCategoryId)
       }
       return
     }
 
-    if (!current.isNew && nextName === existingName) return
-    void onRenameSessionCategory?.(current.id, nextName)
+    if (!current.isNew && nextName === existingName) {
+      setEditingCategory(undefined)
+      return
+    }
+
+    committingCategoryIdRef.current = current.id
+    try {
+      await onRenameSessionCategory?.(targetCategoryId, nextName)
+      setEditingCategory((candidate) => (candidate?.id === current.id ? undefined : candidate))
+    } finally {
+      if (committingCategoryIdRef.current === current.id) {
+        committingCategoryIdRef.current = undefined
+      }
+    }
+  }
+
+  const commitEditingCategory = async () => {
+    if (!editingCategory) return
+    await commitEditingCategoryFor(editingCategory)
   }
 
   const handleCategoryMenuAction = async (action: CategoryMenuAction, menuState: CategoryMenuState) => {
@@ -180,12 +212,29 @@ export function ActivityRail({
 
     switch (action) {
       case 'create': {
-        const category = await onCreateSessionCategory?.()
-        if (!category) return
+        const draftId = `category-draft-${++draftCategoryIdRef.current}`
         setSessionsExpanded(true)
         onSelectSection?.('sessions')
+        setEditingCategory({ id: draftId, name: '新分类', isNew: true, pendingCreate: true })
+
+        const category = await onCreateSessionCategory?.()
+        if (!category) {
+          setEditingCategory((candidate) => (candidate?.id === draftId ? undefined : candidate))
+          return
+        }
+
         onSelectSessionCategory?.(category.id)
-        setEditingCategory({ id: category.id, name: category.name, isNew: true })
+        const latestEditingCategory = editingCategoryRef.current
+        const nextEditingCategory: EditingCategoryState | undefined = latestEditingCategory?.id === draftId
+          ? { ...latestEditingCategory, realId: category.id, pendingCreate: false }
+          : undefined
+
+        if (nextEditingCategory) {
+          setEditingCategory(nextEditingCategory)
+          if (nextEditingCategory.queuedCommit) {
+            await commitEditingCategoryFor(nextEditingCategory, category.name)
+          }
+        }
         return
       }
       case 'rename': {
@@ -458,6 +507,7 @@ const allSessionsPrimaryButtonStyle: CSSProperties = {
 }
 
 const sessionCategoryConnectorLeft = 16
+const sessionCategorySurfaceLeft = sessionCategoryConnectorLeft + 4
 const sessionCategoryTextInset = 12
 
 const sessionCategoryListStyle: CSSProperties = {
@@ -503,8 +553,8 @@ const categoryRowStyle: CSSProperties = {
 }
 
 const categorySurfaceStyle: CSSProperties = {
-  marginLeft: sessionCategoryConnectorLeft,
-  width: `calc(100% - ${sessionCategoryConnectorLeft}px)`,
+  marginLeft: sessionCategorySurfaceLeft,
+  width: `calc(100% - ${sessionCategorySurfaceLeft}px)`,
   minHeight: 34,
   display: 'flex',
   alignItems: 'center',

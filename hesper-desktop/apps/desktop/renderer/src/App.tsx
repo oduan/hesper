@@ -1357,9 +1357,7 @@ function AppContent() {
       onSelectSection={(section) => dispatch({ type: 'section.selected', section })}
       onSelectSessionCategory={(categoryId) => dispatch(categoryId ? { type: 'sessionCategory.selected', categoryId } : { type: 'sessionCategory.selected' })}
       onCreateSessionCategory={createSessionCategory}
-      onRenameSessionCategory={(categoryId, name) => {
-        void renameSessionCategory(categoryId, name)
-      }}
+      onRenameSessionCategory={renameSessionCategory}
       onDeleteSessionCategory={(categoryId) => {
         void deleteSessionCategory(categoryId)
       }}

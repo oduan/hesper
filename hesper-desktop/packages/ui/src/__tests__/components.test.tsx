@@ -241,21 +241,20 @@ describe('ui components', () => {
     const avatarRow = screen.getByRole('button', { name: '头像' })
     const avatarSurface = screen.getByTestId('session-category-surface-category-avatar')
     expect(avatarRow).toHaveStyle({ background: 'transparent', padding: '0px' })
-    expect(avatarSurface).toHaveStyle({ marginLeft: '16px' })
+    expect(avatarSurface).toHaveStyle({ marginLeft: '20px' })
 
     await user.click(avatarRow)
     expect(onSelectSection).toHaveBeenLastCalledWith('sessions')
     expect(onSelectSessionCategory).toHaveBeenLastCalledWith('category-avatar')
   })
 
-  it('expands collapsed sessions and focuses editable new category after creating one', async () => {
+  it('expands collapsed sessions and shows an editable draft immediately while creating a category', async () => {
     const user = userEvent.setup()
-    const onCreateSessionCategory = vi.fn(async () => ({
-      id: 'category-new',
-      name: '新分类',
-      createdAt: now,
-      updatedAt: now
-    }))
+    let resolveCreateCategory!: (category: { id: string; name: string; createdAt: string; updatedAt: string }) => void
+    const createCategoryPromise = new Promise<{ id: string; name: string; createdAt: string; updatedAt: string }>((resolve) => {
+      resolveCreateCategory = resolve
+    })
+    const onCreateSessionCategory = vi.fn(() => createCategoryPromise)
     const onRenameSessionCategory = vi.fn()
     const onSelectSessionCategory = vi.fn()
 
@@ -276,17 +275,55 @@ describe('ui components', () => {
     await user.click(within(screen.getByRole('menu', { name: '会话分类操作' })).getByRole('menuitem', { name: '新建分类' }))
 
     expect(onCreateSessionCategory).toHaveBeenCalledTimes(1)
-    expect(onSelectSessionCategory).toHaveBeenLastCalledWith('category-new')
     expect(screen.getByRole('navigation', { name: '会话分类导航' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '收起会话分类' })).toHaveAttribute('aria-expanded', 'true')
 
     const input = (await screen.findByLabelText('重命名分类')) as HTMLInputElement
     expect(input).toHaveFocus()
     expect(input).toHaveValue('新分类')
+    expect(onSelectSessionCategory).not.toHaveBeenCalled()
+
+    resolveCreateCategory({ id: 'category-new', name: '新分类', createdAt: now, updatedAt: now })
+    await waitFor(() => {
+      expect(onSelectSessionCategory).toHaveBeenLastCalledWith('category-new')
+    })
 
     await user.clear(input)
     await user.type(input, '头像{Enter}')
     expect(onRenameSessionCategory).toHaveBeenCalledWith('category-new', '头像')
+  })
+
+  it('keeps the category rename editor visible while rename is pending', async () => {
+    const user = userEvent.setup()
+    let resolveRename!: () => void
+    const onRenameSessionCategory = vi.fn(() => new Promise<void>((resolve) => {
+      resolveRename = resolve
+    }))
+
+    render(
+      <ActivityRail
+        activeSection="sessions"
+        sessionsExpanded
+        sessionCategories={[{ id: 'category-product', name: '产品图', createdAt: now, updatedAt: now }]}
+        onRenameSessionCategory={onRenameSessionCategory}
+      />
+    )
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: '产品图' }))
+    await user.click(within(screen.getByRole('menu', { name: '分类操作' })).getByRole('menuitem', { name: '重命名' }))
+
+    const input = (await screen.findByLabelText('重命名分类')) as HTMLInputElement
+    await user.clear(input)
+    await user.type(input, '商业图{Enter}')
+
+    expect(onRenameSessionCategory).toHaveBeenCalledWith('category-product', '商业图')
+    expect(screen.getByLabelText('重命名分类')).toHaveValue('商业图')
+    expect(screen.queryByRole('button', { name: '产品图' })).not.toBeInTheDocument()
+
+    resolveRename()
+    await waitFor(() => {
+      expect(screen.queryByLabelText('重命名分类')).not.toBeInTheDocument()
+    })
   })
 
   it('opens category context menu for rename and delete', async () => {
