@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event'
 import type { AgentRun, LocalFilePreview, Message, MessageAttachment, RunStep, Session, WorkerAgentInvocation } from '@hesper/shared'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppShell } from '../layout/AppShell'
+import { ActivityRail } from '../layout/ActivityRail'
 import { Composer, type ComposerDraftAttachment, type ComposerSkillMention } from '../conversation/Composer'
 import { ConversationView } from '../conversation/ConversationView'
 import { FullscreenOutput } from '../conversation/FullscreenOutput'
@@ -105,7 +106,7 @@ describe('ui components', () => {
     expect(titleBar).toHaveTextContent('Hesper')
     expect(titleBar).toHaveTextContent('构建 hesper MVP')
     expect(screen.getByLabelText('功能栏')).not.toHaveTextContent('hesper')
-    expect(screen.getByText('所有会话')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '所有会话' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '所有会话' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByLabelText('功能栏')).toHaveStyle({ boxSizing: 'border-box' })
     expect(screen.getByLabelText('实体列表')).toHaveStyle({ boxSizing: 'border-box' })
@@ -166,6 +167,416 @@ describe('ui components', () => {
 
     await user.click(screen.getByRole('button', { name: '工具' }))
     expect(onSelectSection).toHaveBeenCalledWith('tools')
+  })
+
+  it('renders session categories under the activity rail and creates a focused new category from all sessions', async () => {
+    const user = userEvent.setup()
+    const onCreateSessionCategory = vi.fn(async () => ({
+      id: 'category-new',
+      name: '新分类',
+      createdAt: now,
+      updatedAt: now
+    }))
+    const onRenameSessionCategory = vi.fn()
+    const onSelectSessionCategory = vi.fn()
+
+    render(
+      <AppShell
+        sessions={[]}
+        sessionCategories={[{ id: 'category-product', name: '产品图', createdAt: now, updatedAt: now }]}
+        sessionsExpanded
+        activeSection="sessions"
+        title="所有会话"
+        onCreateSessionCategory={onCreateSessionCategory}
+        onRenameSessionCategory={onRenameSessionCategory}
+        onSelectSessionCategory={onSelectSessionCategory}
+      />
+    )
+
+    const disclosureButton = screen.getByRole('button', { name: '收起会话分类' })
+    const allSessionsButton = screen.getByRole('button', { name: '所有会话' })
+    const disclosure = screen.getByTestId('sessions-disclosure-icon')
+    expect(disclosureButton).toHaveAttribute('aria-expanded', 'true')
+    expect(allSessionsButton).toHaveAttribute('aria-current', 'page')
+    expect(disclosure).toHaveAttribute('data-state', 'expanded')
+    expect(disclosure.querySelector('svg')).toHaveAttribute('viewBox', '0 0 16 16')
+    expect(screen.getByRole('navigation', { name: '会话分类导航' })).toBeInTheDocument()
+
+    fireEvent.contextMenu(allSessionsButton)
+    await user.click(within(screen.getByRole('menu', { name: '会话分类操作' })).getByRole('menuitem', { name: '新建分类' }))
+
+    expect(onCreateSessionCategory).toHaveBeenCalledTimes(1)
+    const input = (await screen.findByLabelText('重命名分类')) as HTMLInputElement
+    expect(input).toHaveValue('新分类')
+    expect(input).toHaveFocus()
+    expect(input.selectionStart).toBe(0)
+    expect(input.selectionEnd).toBe(3)
+
+    await user.type(input, '头像{Enter}')
+    expect(onRenameSessionCategory).toHaveBeenCalledWith('category-new', '头像')
+  })
+
+  it('draws a connector from all sessions to clickable category rows', async () => {
+    const user = userEvent.setup()
+    const onSelectSection = vi.fn()
+    const onSelectSessionCategory = vi.fn()
+
+    render(
+      <ActivityRail
+        activeSection="sessions"
+        sessionsExpanded
+        sessionCategories={[
+          { id: 'category-product', name: '产品图', createdAt: now, updatedAt: now },
+          { id: 'category-avatar', name: '头像', createdAt: now, updatedAt: now }
+        ]}
+        onSelectSection={onSelectSection}
+        onSelectSessionCategory={onSelectSessionCategory}
+      />
+    )
+
+    const connector = screen.getByTestId('session-category-connector')
+    expect(connector).toHaveAttribute('aria-hidden', 'true')
+    expect(connector).toHaveStyle({ position: 'absolute', left: '16px' })
+
+    const avatarRow = screen.getByRole('button', { name: '头像' })
+    const avatarSurface = screen.getByTestId('session-category-surface-category-avatar')
+    expect(avatarRow).toHaveStyle({ background: 'transparent', padding: '0px' })
+    expect(avatarSurface).toHaveStyle({ marginLeft: '20px' })
+
+    await user.click(avatarRow)
+    expect(onSelectSection).toHaveBeenLastCalledWith('sessions')
+    expect(onSelectSessionCategory).toHaveBeenLastCalledWith('category-avatar')
+  })
+
+  it('expands collapsed sessions and shows an editable draft immediately while creating a category', async () => {
+    const user = userEvent.setup()
+    let resolveCreateCategory!: (category: { id: string; name: string; createdAt: string; updatedAt: string }) => void
+    const createCategoryPromise = new Promise<{ id: string; name: string; createdAt: string; updatedAt: string }>((resolve) => {
+      resolveCreateCategory = resolve
+    })
+    const onCreateSessionCategory = vi.fn(() => createCategoryPromise)
+    const onRenameSessionCategory = vi.fn()
+    const onSelectSessionCategory = vi.fn()
+
+    render(
+      <ActivityRail
+        activeSection="sessions"
+        sessionsExpanded={false}
+        sessionCategories={[]}
+        onCreateSessionCategory={onCreateSessionCategory}
+        onRenameSessionCategory={onRenameSessionCategory}
+        onSelectSessionCategory={onSelectSessionCategory}
+      />
+    )
+
+    expect(screen.queryByRole('navigation', { name: '会话分类导航' })).not.toBeInTheDocument()
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: '所有会话' }))
+    await user.click(within(screen.getByRole('menu', { name: '会话分类操作' })).getByRole('menuitem', { name: '新建分类' }))
+
+    expect(onCreateSessionCategory).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('navigation', { name: '会话分类导航' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '收起会话分类' })).toHaveAttribute('aria-expanded', 'true')
+
+    const input = (await screen.findByLabelText('重命名分类')) as HTMLInputElement
+    expect(input).toHaveFocus()
+    expect(input).toHaveValue('新分类')
+    expect(onSelectSessionCategory).not.toHaveBeenCalled()
+
+    resolveCreateCategory({ id: 'category-new', name: '新分类', createdAt: now, updatedAt: now })
+    await waitFor(() => {
+      expect(onSelectSessionCategory).toHaveBeenLastCalledWith('category-new')
+    })
+
+    await user.clear(input)
+    await user.type(input, '头像{Enter}')
+    expect(onRenameSessionCategory).toHaveBeenCalledWith('category-new', '头像')
+  })
+
+  it('discards a pending category create when the draft is cancelled before it resolves', async () => {
+    const user = userEvent.setup()
+    let resolveCreateCategory!: (category: { id: string; name: string; createdAt: string; updatedAt: string }) => void
+    const createCategoryPromise = new Promise<{ id: string; name: string; createdAt: string; updatedAt: string }>((resolve) => {
+      resolveCreateCategory = resolve
+    })
+    const onCreateSessionCategory = vi.fn(() => createCategoryPromise)
+    const onDiscardSessionCategory = vi.fn()
+    const onDeleteSessionCategory = vi.fn()
+    const onSelectSessionCategory = vi.fn()
+
+    render(
+      <ActivityRail
+        activeSection="sessions"
+        sessionsExpanded={false}
+        sessionCategories={[]}
+        onCreateSessionCategory={onCreateSessionCategory}
+        onDiscardSessionCategory={onDiscardSessionCategory}
+        onDeleteSessionCategory={onDeleteSessionCategory}
+        onSelectSessionCategory={onSelectSessionCategory}
+      />
+    )
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: '所有会话' }))
+    await user.click(within(screen.getByRole('menu', { name: '会话分类操作' })).getByRole('menuitem', { name: '新建分类' }))
+    await user.type(await screen.findByLabelText('重命名分类'), '{Escape}')
+
+    expect(screen.queryByLabelText('重命名分类')).not.toBeInTheDocument()
+    expect(onDeleteSessionCategory).not.toHaveBeenCalled()
+
+    resolveCreateCategory({ id: 'category-new', name: '新分类', createdAt: now, updatedAt: now })
+    await waitFor(() => {
+      expect(onDiscardSessionCategory).toHaveBeenCalledWith('category-new')
+    })
+    expect(onSelectSessionCategory).not.toHaveBeenCalled()
+  })
+
+  it('keeps the category rename editor visible while rename is pending', async () => {
+    const user = userEvent.setup()
+    let resolveRename!: () => void
+    const onRenameSessionCategory = vi.fn(() => new Promise<void>((resolve) => {
+      resolveRename = resolve
+    }))
+
+    render(
+      <ActivityRail
+        activeSection="sessions"
+        sessionsExpanded
+        sessionCategories={[{ id: 'category-product', name: '产品图', createdAt: now, updatedAt: now }]}
+        onRenameSessionCategory={onRenameSessionCategory}
+      />
+    )
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: '产品图' }))
+    await user.click(within(screen.getByRole('menu', { name: '分类操作' })).getByRole('menuitem', { name: '重命名' }))
+
+    const input = (await screen.findByLabelText('重命名分类')) as HTMLInputElement
+    await user.clear(input)
+    await user.type(input, '商业图{Enter}')
+
+    expect(onRenameSessionCategory).toHaveBeenCalledWith('category-product', '商业图')
+    expect(screen.getByLabelText('重命名分类')).toHaveValue('商业图')
+    expect(screen.queryByRole('button', { name: '产品图' })).not.toBeInTheDocument()
+
+    resolveRename()
+    await waitFor(() => {
+      expect(screen.queryByLabelText('重命名分类')).not.toBeInTheDocument()
+    })
+  })
+
+  it('opens category context menu for rename and delete', async () => {
+    const user = userEvent.setup()
+    const onRenameSessionCategory = vi.fn()
+    const onDeleteSessionCategory = vi.fn()
+
+    render(
+      <AppShell
+        sessions={[]}
+        sessionCategories={[{ id: 'category-product', name: '产品图', createdAt: now, updatedAt: now }]}
+        sessionsExpanded
+        activeSection="sessions"
+        title="所有会话"
+        onRenameSessionCategory={onRenameSessionCategory}
+        onDeleteSessionCategory={onDeleteSessionCategory}
+      />
+    )
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: '产品图' }))
+    const menu = screen.getByRole('menu', { name: '分类操作' })
+    await user.click(within(menu).getByRole('menuitem', { name: '重命名' }))
+
+    const input = (await screen.findByLabelText('重命名分类')) as HTMLInputElement
+    expect(input).toHaveValue('产品图')
+    expect(input).toHaveFocus()
+    expect(input.selectionStart).toBe(0)
+    expect(input.selectionEnd).toBe('产品图'.length)
+    await user.clear(input)
+    await user.type(input, '商业图{Enter}')
+    expect(onRenameSessionCategory).toHaveBeenCalledWith('category-product', '商业图')
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: '产品图' }))
+    await user.click(within(screen.getByRole('menu', { name: '分类操作' })).getByRole('menuitem', { name: '删除' }))
+    expect(onDeleteSessionCategory).toHaveBeenCalledWith('category-product')
+  })
+
+  it('keeps session disclosure icons centered and switches state when collapsed', () => {
+    render(
+      <AppShell
+        sessions={[]}
+        sessionCategories={[{ id: 'category-product', name: '产品图', createdAt: now, updatedAt: now }]}
+        sessionsExpanded={false}
+        activeSection="sessions"
+        title="所有会话"
+      />
+    )
+
+    const disclosureButton = screen.getByRole('button', { name: '展开会话分类' })
+    const allSessionsButton = screen.getByRole('button', { name: '所有会话' })
+    const disclosure = screen.getByTestId('sessions-disclosure-icon')
+    const icon = disclosure.querySelector('svg')
+    expect(disclosureButton).toHaveAttribute('aria-expanded', 'false')
+    expect(allSessionsButton).toHaveAttribute('aria-current', 'page')
+    expect(disclosure).toHaveAttribute('data-state', 'collapsed')
+    expect(disclosure).toHaveStyle({ width: '16px', height: '16px' })
+    expect(icon).toHaveAttribute('viewBox', '0 0 16 16')
+    expect(icon).toHaveAttribute('width', '16')
+    expect(icon).toHaveAttribute('height', '16')
+    expect(screen.queryByRole('navigation', { name: '会话分类导航' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '产品图' })).not.toBeInTheDocument()
+  })
+
+  it('toggles sessions internally when expanded prop is provided without a handler', async () => {
+    const user = userEvent.setup()
+
+    render(
+      <ActivityRail
+        activeSection="sessions"
+        sessionsExpanded={false}
+        sessionCategories={[{ id: 'category-product', name: '产品图', createdAt: now, updatedAt: now }]}
+      />
+    )
+
+    const disclosureButton = screen.getByRole('button', { name: '展开会话分类' })
+    expect(disclosureButton).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByRole('button', { name: '所有会话' })).toBeInTheDocument()
+    expect(screen.getByTestId('sessions-disclosure-icon')).toHaveAttribute('data-state', 'collapsed')
+    expect(screen.queryByRole('navigation', { name: '会话分类导航' })).not.toBeInTheDocument()
+
+    await user.click(disclosureButton)
+    expect(disclosureButton).toHaveAttribute('aria-expanded', 'true')
+    expect(disclosureButton).toHaveAttribute('aria-label', '收起会话分类')
+    expect(screen.getByTestId('sessions-disclosure-icon')).toHaveAttribute('data-state', 'expanded')
+    expect(screen.getByRole('navigation', { name: '会话分类导航' })).toBeInTheDocument()
+
+    await user.click(disclosureButton)
+    expect(disclosureButton).toHaveAttribute('aria-expanded', 'false')
+    expect(disclosureButton).toHaveAttribute('aria-label', '展开会话分类')
+    expect(screen.getByTestId('sessions-disclosure-icon')).toHaveAttribute('data-state', 'collapsed')
+    expect(screen.queryByRole('navigation', { name: '会话分类导航' })).not.toBeInTheDocument()
+  })
+
+  it('commits category rename on blur and exits editing mode', async () => {
+    const user = userEvent.setup()
+    const onRenameSessionCategory = vi.fn()
+
+    render(
+      <ActivityRail
+        activeSection="sessions"
+        sessionsExpanded
+        sessionCategories={[{ id: 'category-product', name: '产品图', createdAt: now, updatedAt: now }]}
+        onRenameSessionCategory={onRenameSessionCategory}
+      />
+    )
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: '产品图' }))
+    await user.click(within(screen.getByRole('menu', { name: '分类操作' })).getByRole('menuitem', { name: '重命名' }))
+
+    const input = (await screen.findByLabelText('重命名分类')) as HTMLInputElement
+    await user.clear(input)
+    await user.type(input, '商业图')
+    fireEvent.blur(input)
+
+    await waitFor(() => {
+      expect(onRenameSessionCategory).toHaveBeenCalledWith('category-product', '商业图')
+    })
+    expect(screen.queryByLabelText('重命名分类')).not.toBeInTheDocument()
+  })
+
+  it('deletes empty new category on blur and Enter, then exits editing mode', async () => {
+    const user = userEvent.setup()
+    const onCreateSessionCategory = vi.fn(async () => ({
+      id: 'category-new',
+      name: '新分类',
+      createdAt: now,
+      updatedAt: now
+    }))
+    const onDeleteSessionCategory = vi.fn()
+
+    render(
+      <ActivityRail
+        activeSection="sessions"
+        sessionsExpanded
+        sessionCategories={[]}
+        onCreateSessionCategory={onCreateSessionCategory}
+        onDeleteSessionCategory={onDeleteSessionCategory}
+      />
+    )
+
+    const createEmptyCategory = async () => {
+      fireEvent.contextMenu(screen.getByRole('button', { name: '所有会话' }))
+      await user.click(within(screen.getByRole('menu', { name: '会话分类操作' })).getByRole('menuitem', { name: '新建分类' }))
+      const input = (await screen.findByLabelText('重命名分类')) as HTMLInputElement
+      await user.clear(input)
+      return input
+    }
+
+    fireEvent.blur(await createEmptyCategory())
+    await waitFor(() => {
+      expect(onDeleteSessionCategory).toHaveBeenCalledWith('category-new')
+    })
+    expect(screen.queryByLabelText('重命名分类')).not.toBeInTheDocument()
+
+    await user.type(await createEmptyCategory(), '{Enter}')
+    await waitFor(() => {
+      expect(onDeleteSessionCategory).toHaveBeenCalledTimes(2)
+    })
+    expect(onDeleteSessionCategory).toHaveBeenLastCalledWith('category-new')
+    expect(screen.queryByLabelText('重命名分类')).not.toBeInTheDocument()
+  })
+
+  it('selects all sessions and categories from the activity rail and marks active rows', async () => {
+    const user = userEvent.setup()
+    const onSelectSection = vi.fn()
+    const onSelectSessionCategory = vi.fn()
+    const category = { id: 'category-product', name: '产品图', createdAt: now, updatedAt: now }
+
+    const { rerender } = render(
+      <ActivityRail
+        activeSection="sessions"
+        sessionsExpanded
+        sessionCategories={[category]}
+        onSelectSection={onSelectSection}
+        onSelectSessionCategory={onSelectSessionCategory}
+      />
+    )
+
+    const allSessionsButton = screen.getByRole('button', { name: '所有会话' })
+    expect(allSessionsButton).toHaveAttribute('aria-current', 'page')
+    expect(allSessionsButton).toHaveClass('is-active')
+
+    const disclosureButton = screen.getByRole('button', { name: '收起会话分类' })
+    await user.click(disclosureButton)
+    expect(onSelectSection).not.toHaveBeenCalled()
+    expect(onSelectSessionCategory).not.toHaveBeenCalled()
+    expect(screen.queryByRole('navigation', { name: '会话分类导航' })).not.toBeInTheDocument()
+
+    await user.click(disclosureButton)
+    expect(screen.getByRole('navigation', { name: '会话分类导航' })).toBeInTheDocument()
+
+    await user.click(allSessionsButton)
+    expect(onSelectSection).toHaveBeenLastCalledWith('sessions')
+    expect(onSelectSessionCategory).toHaveBeenLastCalledWith(undefined)
+
+    const categoryButton = screen.getByRole('button', { name: '产品图' })
+    expect(categoryButton).not.toHaveAttribute('aria-current')
+    await user.click(categoryButton)
+    expect(onSelectSection).toHaveBeenLastCalledWith('sessions')
+    expect(onSelectSessionCategory).toHaveBeenLastCalledWith('category-product')
+
+    rerender(
+      <ActivityRail
+        activeSection="sessions"
+        activeSessionCategoryId="category-product"
+        sessionsExpanded
+        sessionCategories={[category]}
+        onSelectSection={onSelectSection}
+        onSelectSessionCategory={onSelectSessionCategory}
+      />
+    )
+
+    expect(screen.getByRole('button', { name: '所有会话' })).not.toHaveAttribute('aria-current')
+    const activeCategoryButton = screen.getByRole('button', { name: '产品图' })
+    expect(activeCategoryButton).toHaveAttribute('aria-current', 'page')
+    expect(activeCategoryButton).toHaveClass('is-active')
   })
 
   it('renders builtin tools with global enable switches in the entity list', async () => {
@@ -758,6 +1169,71 @@ describe('ui components', () => {
     await user.clear(renameInput)
     await user.type(renameInput, '只改第二个{Enter}')
     expect(onRenameSession).toHaveBeenCalledWith('session-2', '只改第二个')
+  })
+
+  it('moves selected sessions from the session context category submenu', async () => {
+    const user = userEvent.setup()
+    const onSetSessionCategory = vi.fn()
+    const sessions = ['会话一', '会话二', '会话三'].map((title, index) => ({
+      id: `session-${index + 1}`,
+      title,
+      status: 'active' as const,
+      outputMode: 'markdown' as const,
+      createdAt: now,
+      updatedAt: now
+    }))
+
+    render(
+      <AppShell
+        sessions={sessions}
+        sessionCategories={[{ id: 'category-avatar', name: '头像', createdAt: now, updatedAt: now }]}
+        activeSection="sessions"
+        title="所有会话"
+        onSetSessionCategory={onSetSessionCategory}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: '会话一' }))
+    await user.keyboard('{Shift>}')
+    await user.click(screen.getByRole('button', { name: '会话二' }))
+    await user.keyboard('{/Shift}')
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: '会话二' }))
+    fireEvent.mouseEnter(within(screen.getByRole('menu', { name: '会话操作' })).getByRole('menuitem', { name: '分类' }))
+    await user.click(within(screen.getByRole('menu', { name: '会话分类选项' })).getByRole('menuitem', { name: '头像' }))
+
+    expect(onSetSessionCategory).toHaveBeenCalledWith('session-2', ['session-1', 'session-2'], 'category-avatar')
+  })
+
+  it('moves an unselected session to uncategorized from the category submenu', async () => {
+    const user = userEvent.setup()
+    const onSetSessionCategory = vi.fn()
+    const sessions = ['会话一', '会话二', '会话三'].map((title, index) => ({
+      id: `session-${index + 1}`,
+      title,
+      status: 'active' as const,
+      outputMode: 'markdown' as const,
+      createdAt: now,
+      updatedAt: now
+    }))
+
+    render(
+      <AppShell
+        sessions={sessions}
+        sessionCategories={[{ id: 'category-avatar', name: '头像', createdAt: now, updatedAt: now }]}
+        activeSection="sessions"
+        title="所有会话"
+        onSetSessionCategory={onSetSessionCategory}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: '会话一' }))
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: '会话三' }))
+    fireEvent.mouseEnter(within(screen.getByRole('menu', { name: '会话操作' })).getByRole('menuitem', { name: '分类' }))
+    await user.click(within(screen.getByRole('menu', { name: '会话分类选项' })).getByRole('menuitem', { name: '未分类' }))
+
+    expect(onSetSessionCategory).toHaveBeenCalledWith('session-3', ['session-3'], undefined)
   })
 
   it('disables send button when composer is empty and keeps controls visually aligned', async () => {

@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
   status TEXT NOT NULL,
+  category_id TEXT,
   workspace_path TEXT,
   default_model_id TEXT,
   provider_id TEXT,
@@ -18,6 +19,14 @@ CREATE TABLE IF NOT EXISTS sessions (
   max_worker_agents_per_run INTEGER,
   output_mode TEXT NOT NULL,
   unread_completed_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  sort_seq INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS session_categories (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   sort_seq INTEGER NOT NULL
@@ -266,7 +275,8 @@ const migrationColumns: Record<string, string[]> = {
     'allowed_worker_agent_role_ids_json TEXT',
     'max_worker_agent_depth INTEGER',
     'max_worker_agents_per_run INTEGER',
-    'unread_completed_at TEXT'
+    'unread_completed_at TEXT',
+    'category_id TEXT'
   ],
   messages: [
     'attachments_json TEXT'

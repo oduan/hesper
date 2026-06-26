@@ -2,6 +2,7 @@ import type {
   AgentEnqueueInput,
   AgentRunDto,
   AppSettings,
+  CreateSessionCategoryInput,
   CreateSessionInput,
   CreateSshKeyInput,
   CreateSshServerInput,
@@ -13,16 +14,19 @@ import type {
   ModelDto,
   ModelProviderDto,
   RunStepDto,
+  SessionCategoryDto,
   SessionDto,
   SkillDto,
   SshKeyDto,
   SshServerDto,
   WorkerAgentInvocationDto,
+  SetSessionCategoryInput,
   SetSessionModelInput,
   SetSessionOutputModeInput,
   SetSessionWorkspaceInput,
   SetToolEnabledInput,
   ToolDto,
+  UpdateSessionCategoryInput,
   UpdateSessionTitleInput,
   UpdateSettingsInput,
   UpdateSshServerInput
@@ -80,6 +84,7 @@ function createMockSession(input: CreateSessionInput = {}, id = createId('sessio
     status: 'active',
     workspacePath: input.workspacePath,
     defaultModelId: input.defaultModelId,
+    categoryId: input.categoryId,
     outputMode: input.outputMode ?? 'markdown',
     createdAt: timestamp,
     updatedAt: timestamp
@@ -94,9 +99,26 @@ function updateMockSession(session: SessionDto, overrides: Partial<SessionDto> =
   }) as SessionDto
 }
 
+function clearMockSessionCategory(session: SessionDto): SessionDto {
+  const { categoryId: _categoryId, ...uncategorized } = session
+  return updateMockSession(uncategorized)
+}
+
 export function createFallbackHesperApi(): HesperDesktopApi {
   let nextRunNumber = 1
   let sessions: SessionDto[] = []
+  let sessionCategories: SessionCategoryDto[] = []
+  const normalizeMockCategoryId = (categoryId: string | undefined): string | undefined => {
+    const normalized = categoryId?.trim()
+    return normalized ? normalized : undefined
+  }
+  const assertMockSessionCategoryExists = (categoryId: string | undefined) => {
+    const normalized = normalizeMockCategoryId(categoryId)
+    if (!normalized) return
+    if (!sessionCategories.some((category) => category.id === normalized)) {
+      throw new Error(`Session category not found: ${normalized}`)
+    }
+  }
   let tools: ToolDto[] = fallbackBuiltinTools.map((tool) => ({ ...tool }))
   const skills: SkillDto[] = [
     { id: 'Install Skills', name: 'Install Skills', description: 'Install reusable skills into the user skill directory.', source: 'builtin' },
@@ -164,7 +186,9 @@ export function createFallbackHesperApi(): HesperDesktopApi {
     sessions: {
       list: async () => sessions.filter((session) => session.status !== 'deleted'),
       create: async (input) => {
-        const session = createMockSession(input)
+        const categoryId = normalizeMockCategoryId(input.categoryId)
+        assertMockSessionCategoryExists(categoryId)
+        const session = createMockSession({ ...input, categoryId })
         sessions = [session, ...sessions]
         messagesBySession[session.id] = []
         runsBySession[session.id] = []
@@ -185,7 +209,46 @@ export function createFallbackHesperApi(): HesperDesktopApi {
       markViewed: async (id: string) => replaceSession(id, (session) => {
         const { unreadCompletedAt: _unreadCompletedAt, ...viewed } = session
         return viewed
-      })
+      }),
+      setCategory: async (input: SetSessionCategoryInput) => {
+        const categoryId = normalizeMockCategoryId(input.categoryId)
+        assertMockSessionCategoryExists(categoryId)
+        const targetSessions = input.ids.map((id) => {
+          const session = sessions.find((candidate) => candidate.id === id && candidate.status !== 'deleted')
+          if (!session) {
+            throw new Error(`Session not found: ${id}`)
+          }
+          return session
+        })
+        const updatedSessions = targetSessions.map((session) => categoryId ? updateMockSession(session, { categoryId }) : clearMockSessionCategory(session))
+        const updatedById = new Map(updatedSessions.map((session) => [session.id, session]))
+        sessions = sessions.map((session) => updatedById.get(session.id) ?? session)
+        return input.ids.map((id) => updatedById.get(id) as SessionDto)
+      }
+    },
+    sessionCategories: {
+      list: async () => sessionCategories,
+      create: async (input: CreateSessionCategoryInput) => {
+        const timestamp = new Date().toISOString()
+        const category = { id: createId('session-category'), name: input.name.trim() || '新分类', createdAt: timestamp, updatedAt: timestamp }
+        sessionCategories = [...sessionCategories, category]
+        return category
+      },
+      update: async (input: UpdateSessionCategoryInput) => {
+        const category = sessionCategories.find((candidate) => candidate.id === input.id)
+        if (!category) throw new Error(`Session category not found: ${input.id}`)
+        const updated = { ...category, name: input.name.trim() || '新分类', updatedAt: new Date().toISOString() }
+        sessionCategories = sessionCategories.map((candidate) => candidate.id === input.id ? updated : candidate)
+        return updated
+      },
+      delete: async (id: string) => {
+        const category = sessionCategories.find((candidate) => candidate.id === id)
+        if (!category) throw new Error(`Session category not found: ${id}`)
+        const deletedSessionIds = sessions.filter((session) => session.categoryId === id && session.status !== 'deleted').map((session) => session.id)
+        sessions = sessions.map((session) => deletedSessionIds.includes(session.id) ? updateMockSession(session, { status: 'deleted' }) : session)
+        sessionCategories = sessionCategories.filter((candidate) => candidate.id !== id)
+        return { category, deletedSessionIds }
+      }
     },
     conversation: {
       listMessages: async (sessionId: string) => messagesBySession[sessionId] ?? [],

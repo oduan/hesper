@@ -1,4 +1,4 @@
-import { agentRunSchema, agentRuntimeEventSchema, appThemeIds, localFilePreviewSchema, messageSchema, modelConfigSchema, modelProviderConfigSchema, modelRefSchema, modelThinkingLevelSchema, runStepSchema, sessionSchema, skillSchema, sshKeySchema, sshServerSchema, themeModeValues, toolDefinitionBaseSchema, workerAgentInvocationSchema } from '@hesper/shared'
+import { agentRunSchema, agentRuntimeEventSchema, appThemeIds, localFilePreviewSchema, messageSchema, modelConfigSchema, modelProviderConfigSchema, modelRefSchema, modelThinkingLevelSchema, runStepSchema, sessionCategorySchema, sessionSchema, skillSchema, sshKeySchema, sshServerSchema, themeModeValues, toolDefinitionBaseSchema, workerAgentInvocationSchema } from '@hesper/shared'
 import { z } from 'zod'
 
 export const ipcChannels = {
@@ -12,6 +12,11 @@ export const ipcChannels = {
   sessionsSetModel: 'sessions:setModel',
   sessionsSetOutputMode: 'sessions:setOutputMode',
   sessionsMarkViewed: 'sessions:markViewed',
+  sessionsSetCategory: 'sessions:setCategory',
+  sessionCategoriesList: 'sessionCategories:list',
+  sessionCategoriesCreate: 'sessionCategories:create',
+  sessionCategoriesUpdate: 'sessionCategories:update',
+  sessionCategoriesDelete: 'sessionCategories:delete',
   conversationListMessages: 'conversation:listMessages',
   conversationListMessagesByRun: 'conversation:listMessagesByRun',
   conversationListRuns: 'conversation:listRuns',
@@ -72,6 +77,7 @@ export const createSessionInputSchema = z.object({
   title: z.string().optional(),
   workspacePath: z.string().optional(),
   defaultModelId: z.string().optional(),
+  categoryId: z.string().optional(),
   outputMode: z.enum(['markdown', 'html']).optional()
 })
 
@@ -109,6 +115,23 @@ export const conversationMessagesByRunResultSchema = z.array(messageSchema)
 export const conversationRunsResultSchema = z.array(agentRunSchema)
 export const conversationStepsResultSchema = z.array(runStepSchema)
 export const workerInvocationsResultSchema = z.array(workerAgentInvocationSchema)
+
+export const sessionCategoryDtoSchema = sessionCategorySchema
+export const createSessionCategoryInputSchema = z.object({
+  name: z.string()
+}).strict()
+export const updateSessionCategoryInputSchema = z.object({
+  id: nonEmptyStringSchema,
+  name: z.string()
+}).strict()
+export const setSessionCategoryInputSchema = z.object({
+  ids: z.array(nonEmptyStringSchema).min(1),
+  categoryId: z.string().optional()
+}).strict()
+export const deleteSessionCategoryResultSchema = z.object({
+  category: sessionCategoryDtoSchema,
+  deletedSessionIds: z.array(nonEmptyStringSchema)
+}).strict()
 
 export const setSessionWorkspaceInputSchema = z.object({
   id: nonEmptyStringSchema,
@@ -428,6 +451,11 @@ export const agentStopResultSchema = agentRunSchema.optional()
 export type CreateSessionInput = z.infer<typeof createSessionInputSchema>
 export type UpdateSessionTitleInput = z.infer<typeof updateSessionTitleInputSchema>
 export type GenerateSessionTitleInput = z.infer<typeof generateSessionTitleInputSchema>
+export type SessionCategoryDto = z.infer<typeof sessionCategoryDtoSchema>
+export type CreateSessionCategoryInput = z.infer<typeof createSessionCategoryInputSchema>
+export type UpdateSessionCategoryInput = z.infer<typeof updateSessionCategoryInputSchema>
+export type SetSessionCategoryInput = z.infer<typeof setSessionCategoryInputSchema>
+export type DeleteSessionCategoryResult = z.infer<typeof deleteSessionCategoryResultSchema>
 export type SetSessionWorkspaceInput = z.infer<typeof setSessionWorkspaceInputSchema>
 export type SetSessionModelInput = z.infer<typeof setSessionModelInputSchema>
 export type SetSessionOutputModeInput = z.infer<typeof setSessionOutputModeInputSchema>
@@ -496,6 +524,13 @@ export type HesperDesktopApi = {
     setModel(input: SetSessionModelInput): Promise<SessionDto>
     setOutputMode(input: SetSessionOutputModeInput): Promise<SessionDto>
     markViewed(id: string): Promise<SessionDto>
+    setCategory(input: SetSessionCategoryInput): Promise<SessionDto[]>
+  }
+  sessionCategories: {
+    list(): Promise<SessionCategoryDto[]>
+    create(input: CreateSessionCategoryInput): Promise<SessionCategoryDto>
+    update(input: UpdateSessionCategoryInput): Promise<SessionCategoryDto>
+    delete(id: string): Promise<DeleteSessionCategoryResult>
   }
   conversation: {
     listMessages(sessionId: string): Promise<MessageDto[]>

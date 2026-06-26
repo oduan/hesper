@@ -16,6 +16,56 @@ describe('ipc-client fallback', () => {
     expect(first.id).not.toBe(second.id)
   })
 
+  it('manages session categories and moves sessions in fallback mode', async () => {
+    const api = createHesperApi({ allowFallback: true })
+
+    const category = await api.sessionCategories.create({ name: 'Work' })
+    const session = await api.sessions.create({ title: 'Categorized', categoryId: category.id })
+    const [cleared] = await api.sessions.setCategory({ ids: [session.id], categoryId: undefined })
+
+    expect(session.categoryId).toBe(category.id)
+    expect(cleared).not.toHaveProperty('categoryId')
+  })
+
+  it('does not create ghost sessions or partially update fallback categories for missing sessions', async () => {
+    const api = createHesperApi({ allowFallback: true })
+
+    const category = await api.sessionCategories.create({ name: 'Keep' })
+    const first = await api.sessions.create({ title: 'First' })
+    const second = await api.sessions.create({ title: 'Second' })
+    await api.sessions.setCategory({ ids: [first.id], categoryId: category.id })
+
+    await expect(api.sessions.setCategory({ ids: [first.id, 'missing-session'], categoryId: undefined })).rejects.toThrowError('Session not found: missing-session')
+
+    const sessions = await api.sessions.list()
+    expect(sessions.find((session) => session.id === first.id)).toMatchObject({ categoryId: category.id })
+    expect(sessions.find((session) => session.id === second.id)).not.toHaveProperty('categoryId')
+    expect(sessions.some((session) => session.id === 'missing-session')).toBe(false)
+  })
+
+  it('treats blank fallback category ids as uncategorized sessions', async () => {
+    const api = createHesperApi({ allowFallback: true })
+
+    const category = await api.sessionCategories.create({ name: 'Blank' })
+    const session = await api.sessions.create({ title: 'Categorized', categoryId: category.id })
+    const [cleared] = await api.sessions.setCategory({ ids: [session.id], categoryId: '   ' })
+    const listed = (await api.sessions.list()).find((candidate) => candidate.id === session.id)
+    const blankCategory = await api.sessions.create({ title: 'Blank category', categoryId: '   ' })
+
+    expect(cleared).not.toHaveProperty('categoryId')
+    expect(listed).not.toHaveProperty('categoryId')
+    expect(blankCategory).not.toHaveProperty('categoryId')
+  })
+
+  it('rejects unknown fallback session categories', async () => {
+    const api = createHesperApi({ allowFallback: true })
+
+    const session = await api.sessions.create({ title: 'Existing' })
+
+    await expect(api.sessions.create({ title: 'Missing', categoryId: 'missing-category' })).rejects.toThrowError('Session category not found: missing-category')
+    await expect(api.sessions.setCategory({ ids: [session.id], categoryId: 'missing-category' })).rejects.toThrowError('Session category not found: missing-category')
+  })
+
   it('lists and retrieves skills in fallback mode', async () => {
     const api = createHesperApi({ allowFallback: true })
 

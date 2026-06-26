@@ -2,11 +2,11 @@ import { useLayoutEffect, useMemo, type ReactNode } from 'react'
 import type { Session, ToolDefinition } from '@hesper/shared'
 import { createThemeVariables, themeTokens, type ThemeMode } from '../theme'
 import { ActivityRail, type AppSection } from './ActivityRail'
-import { EntityListPane, type RoleListItem, type SettingsCategory, type SkillListItem } from './EntityListPane'
+import { EntityListPane, type RoleListItem, type SessionCategoryListItem, type SettingsCategory, type SkillListItem } from './EntityListPane'
 import { TitleBar, type DesktopPlatform, type WindowControlAction } from './TitleBar'
 
 export type ToolListItem = ToolDefinition & { enabled: boolean }
-export type { RoleListItem, SkillListItem } from './EntityListPane'
+export type { RoleListItem, SessionCategoryListItem, SkillListItem } from './EntityListPane'
 
 export type AppShellProps = {
   sessions: Session[]
@@ -14,7 +14,11 @@ export type AppShellProps = {
   title: string
   platform?: DesktopPlatform
   activeSessionId?: string
+  entityListTitle?: string
   runningSessionIds?: string[]
+  sessionCategories?: SessionCategoryListItem[]
+  activeSessionCategoryId?: string
+  sessionsExpanded?: boolean
   tools?: ToolListItem[]
   activeToolId?: string
   pendingToolIds?: string[]
@@ -27,7 +31,9 @@ export type AppShellProps = {
   appearance?: { themeId?: string; themeMode: ThemeMode; fontSize: number }
   onCreateSession?: () => void | Promise<void>
   onSelectSection?: (section: AppSection) => void
+  onToggleSessionsExpanded?: () => void
   onSelectSession?: (sessionId: string) => void
+  onSelectSessionCategory?: (categoryId?: string) => void
   onSelectTool?: (toolId: string) => void
   onToggleToolEnabled?: (toolId: string, enabled: boolean) => void
   onSelectRole?: (roleId: string) => void
@@ -36,6 +42,11 @@ export type AppShellProps = {
   onRenameSession?: (sessionId: string, title: string) => void
   onRegenerateSessionTitle?: (sessionId: string, sessionIds?: string[]) => void
   onDeleteSession?: (sessionId: string, sessionIds?: string[]) => void
+  onSetSessionCategory?: (sessionId: string, sessionIds: string[] | undefined, categoryId?: string) => void
+  onCreateSessionCategory?: () => Promise<SessionCategoryListItem | undefined>
+  onRenameSessionCategory?: (categoryId: string, name: string) => void | Promise<void>
+  onDeleteSessionCategory?: (categoryId: string) => void | Promise<void>
+  onDiscardSessionCategory?: (categoryId: string) => void | Promise<void>
   onDeleteRole?: (roleId: string, roleIds?: string[]) => void
   onWindowMinimize?: WindowControlAction
   onWindowToggleMaximize?: WindowControlAction
@@ -49,7 +60,11 @@ export function AppShell({
   title,
   platform,
   activeSessionId,
+  entityListTitle,
   runningSessionIds,
+  sessionCategories,
+  activeSessionCategoryId,
+  sessionsExpanded,
   tools,
   activeToolId,
   pendingToolIds,
@@ -62,7 +77,9 @@ export function AppShell({
   appearance,
   onCreateSession,
   onSelectSection,
+  onToggleSessionsExpanded,
   onSelectSession,
+  onSelectSessionCategory,
   onSelectTool,
   onToggleToolEnabled,
   onSelectRole,
@@ -71,6 +88,11 @@ export function AppShell({
   onRenameSession,
   onRegenerateSessionTitle,
   onDeleteSession,
+  onSetSessionCategory,
+  onCreateSessionCategory,
+  onRenameSessionCategory,
+  onDeleteSessionCategory,
+  onDiscardSessionCategory,
   onDeleteRole,
   onWindowMinimize,
   onWindowToggleMaximize,
@@ -161,12 +183,23 @@ export function AppShell({
           activeSection={activeSection}
           {...(onCreateSession ? { onCreateSession } : {})}
           {...(onSelectSection ? { onSelectSection } : {})}
+          {...(sessionCategories ? { sessionCategories } : {})}
+          {...(activeSessionCategoryId ? { activeSessionCategoryId } : {})}
+          {...(sessionsExpanded !== undefined ? { sessionsExpanded } : {})}
+          {...(onToggleSessionsExpanded ? { onToggleSessionsExpanded } : {})}
+          {...(onSelectSessionCategory ? { onSelectSessionCategory } : {})}
+          {...(onCreateSessionCategory ? { onCreateSessionCategory } : {})}
+          {...(onRenameSessionCategory ? { onRenameSessionCategory } : {})}
+          {...(onDeleteSessionCategory ? { onDeleteSessionCategory } : {})}
+          {...(onDiscardSessionCategory ? { onDiscardSessionCategory } : {})}
         />
         <EntityListPane
           activeSection={activeSection}
           sessions={sessions}
+          {...(activeSection === 'sessions' && entityListTitle ? { title: entityListTitle } : {})}
           {...(activeSessionId ? { activeSessionId } : {})}
           {...(runningSessionIds ? { runningSessionIds } : {})}
+          {...(sessionCategories ? { sessionCategories } : {})}
           {...(tools ? { tools } : {})}
           {...(activeToolId ? { activeToolId } : {})}
           {...(pendingToolIds ? { pendingToolIds } : {})}
@@ -185,6 +218,7 @@ export function AppShell({
           {...(onRenameSession ? { onRenameSession } : {})}
           {...(onRegenerateSessionTitle ? { onRegenerateSessionTitle } : {})}
           {...(onDeleteSession ? { onDeleteSession } : {})}
+          {...(onSetSessionCategory ? { onSetSessionCategory } : {})}
           {...(onDeleteRole ? { onDeleteRole } : {})}
         />
         <section

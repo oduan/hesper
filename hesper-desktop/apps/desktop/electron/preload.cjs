@@ -11,6 +11,11 @@ const ipcChannels = {
   sessionsSetModel: 'sessions:setModel',
   sessionsSetOutputMode: 'sessions:setOutputMode',
   sessionsMarkViewed: 'sessions:markViewed',
+  sessionsSetCategory: 'sessions:setCategory',
+  sessionCategoriesList: 'sessionCategories:list',
+  sessionCategoriesCreate: 'sessionCategories:create',
+  sessionCategoriesUpdate: 'sessionCategories:update',
+  sessionCategoriesDelete: 'sessionCategories:delete',
   conversationListMessages: 'conversation:listMessages',
   conversationListMessagesByRun: 'conversation:listMessagesByRun',
   conversationListRuns: 'conversation:listRuns',
@@ -98,7 +103,14 @@ const hesperApi = {
     setWorkspace: (input) => ipcRenderer.invoke(ipcChannels.sessionsSetWorkspace, input),
     setModel: (input) => ipcRenderer.invoke(ipcChannels.sessionsSetModel, input),
     setOutputMode: (input) => ipcRenderer.invoke(ipcChannels.sessionsSetOutputMode, input),
-    markViewed: (id) => ipcRenderer.invoke(ipcChannels.sessionsMarkViewed, id)
+    markViewed: (id) => ipcRenderer.invoke(ipcChannels.sessionsMarkViewed, id),
+    setCategory: (input) => ipcRenderer.invoke(ipcChannels.sessionsSetCategory, input)
+  },
+  sessionCategories: {
+    list: () => ipcRenderer.invoke(ipcChannels.sessionCategoriesList),
+    create: (input) => ipcRenderer.invoke(ipcChannels.sessionCategoriesCreate, input),
+    update: (input) => ipcRenderer.invoke(ipcChannels.sessionCategoriesUpdate, input),
+    delete: (id) => ipcRenderer.invoke(ipcChannels.sessionCategoriesDelete, id)
   },
   conversation: {
     listMessages: (sessionId) => ipcRenderer.invoke(ipcChannels.conversationListMessages, sessionId),

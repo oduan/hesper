@@ -1,4 +1,4 @@
-export type IdPrefix = 'session' | 'message' | 'run' | 'step' | 'skill' | 'role' | 'tool'
+export type IdPrefix = 'session' | 'message' | 'run' | 'step' | 'skill' | 'role' | 'tool' | 'session-category'
 
 export function createId(prefix: IdPrefix): string {
   const random = crypto.randomUUID()

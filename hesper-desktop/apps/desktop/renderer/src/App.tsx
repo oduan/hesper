@@ -528,10 +528,15 @@ function AppContent() {
 
     void (async () => {
       try {
-        const sessions = await hesperApi.sessions.list()
+        const sessionCategoriesApi = (hesperApi as typeof hesperApi & { sessionCategories?: { list: typeof hesperApi.sessionCategories.list } }).sessionCategories
+        const [sessions, categories] = await Promise.all([
+          hesperApi.sessions.list(),
+          sessionCategoriesApi?.list() ?? Promise.resolve([])
+        ])
         if (!cancelled) {
           setLoadError(undefined)
           dispatch({ type: 'sessions.loaded', sessions })
+          dispatch({ type: 'sessionCategories.loaded', categories })
         }
       } catch (error) {
         if (!cancelled) {
@@ -807,16 +812,25 @@ function AppContent() {
     () => state.sessions.map((session) => applySessionSettingsOverride(session, pendingSettingsBySession[session.id])),
     [pendingSettingsBySession, state.sessions]
   )
+  const visibleSessions = useMemo(
+    () => state.activeSessionCategoryId
+      ? effectiveSessions.filter((session) => session.categoryId === state.activeSessionCategoryId)
+      : effectiveSessions,
+    [effectiveSessions, state.activeSessionCategoryId]
+  )
   const activeSession = effectiveSessions.find((session) => session.id === state.activeSessionId)
+  const activeSessionCategory = state.activeSessionCategoryId
+    ? state.sessionCategories.find((category) => category.id === state.activeSessionCategoryId)
+    : undefined
   const activeSendError = activeSession ? sendErrorsBySession[activeSession.id] : undefined
   const activeHistoryError = activeSession ? historyErrorsBySession[activeSession.id] : undefined
   const isSessionsSection = state.activeSection === 'sessions'
   const runningSessionIds = useMemo(() => {
-    const visibleSessionIds = new Set(effectiveSessions.map((session) => session.id))
+    const visibleSessionIds = new Set(visibleSessions.map((session) => session.id))
     return [...new Set(Object.values(state.runsById)
       .filter((run) => run.status === 'running' && visibleSessionIds.has(run.sessionId))
       .map((run) => run.sessionId))]
-  }, [effectiveSessions, state.runsById])
+  }, [state.runsById, visibleSessions])
   const activeRunId = activeSession ? state.latestRunIdBySession[activeSession.id] : undefined
   const activeRunningRunId = activeSession
     ? Object.values(state.runsById).find((run) => run.sessionId === activeSession.id && run.status === 'running')?.id
@@ -1230,8 +1244,69 @@ function AppContent() {
     }
   }
 
+  const createSessionCategory = async () => {
+    try {
+      const category = await hesperApi.sessionCategories.create({ name: '新分类' })
+      dispatch({ type: 'sessionCategory.created', category, select: false })
+      return category
+    } catch (error) {
+      console.warn('Failed to create session category', error)
+      return undefined
+    }
+  }
+
+  const renameSessionCategory = async (categoryId: string, name: string) => {
+    const trimmedName = name.trim()
+    if (!trimmedName) return
+
+    try {
+      const category = await hesperApi.sessionCategories.update({ id: categoryId, name: trimmedName })
+      dispatch({ type: 'sessionCategory.updated', category })
+    } catch (error) {
+      console.warn('Failed to rename session category', error)
+    }
+  }
+
+  const deleteSessionCategory = async (categoryId: string) => {
+    const category = stateRef.current.sessionCategories.find((candidate) => candidate.id === categoryId)
+    if (!category) return
+
+    const sessionCount = stateRef.current.sessions.filter((session) => session.categoryId === categoryId).length
+    const confirmed = window.confirm(`删除分类“${category.name}”？该分类下的 ${sessionCount} 个会话也会被删除，此操作不可撤销。`)
+    if (!confirmed) return
+
+    try {
+      const result = await hesperApi.sessionCategories.delete(categoryId)
+      dispatch({ type: 'sessionCategory.deleted', categoryId, deletedSessionIds: result.deletedSessionIds })
+    } catch (error) {
+      console.warn('Failed to delete session category', error)
+    }
+  }
+
+  const discardSessionCategory = async (categoryId: string) => {
+    try {
+      const result = await hesperApi.sessionCategories.delete(categoryId)
+      dispatch({ type: 'sessionCategory.deleted', categoryId, deletedSessionIds: result.deletedSessionIds })
+    } catch (error) {
+      console.warn('Failed to discard session category', error)
+    }
+  }
+
+  const setSessionCategory = async (_sessionId: string, sessionIds: string[] | undefined, categoryId?: string) => {
+    const ids = sessionIds?.length ? sessionIds : [_sessionId]
+
+    try {
+      const updatedSessions = await hesperApi.sessions.setCategory({ ids, categoryId })
+      for (const session of updatedSessions) {
+        dispatch({ type: 'session.updated', session })
+      }
+    } catch (error) {
+      console.warn('Failed to set session category', error)
+    }
+  }
+
   const createTrackedSession = async () => {
-    const session = await createSession(dispatch, sessionModelCatalog.preferredModelId)
+    const session = await createSession(dispatch, sessionModelCatalog.preferredModelId, stateRef.current.activeSessionCategoryId)
     createdNewSessionIdsRef.current.add(session.id)
   }
 
@@ -1269,13 +1344,16 @@ function AppContent() {
 
   return (
     <AppShell
-      sessions={effectiveSessions}
+      sessions={visibleSessions}
       activeSection={state.activeSection}
-      title={isSessionsSection ? activeSession?.title ?? '新建会话' : getSectionTitle(state.activeSection)}
+      title={isSessionsSection ? activeSessionCategory?.name ?? activeSession?.title ?? '新建会话' : getSectionTitle(state.activeSection)}
+      {...(isSessionsSection ? { entityListTitle: activeSessionCategory?.name ?? '所有会话' } : {})}
       platform={hesperApi.window.platform}
       appearance={{ themeId: appSettings.themeId, themeMode: requestedThemeMode, fontSize: appSettings.fontSize }}
       activeSettingsCategory={activeSettingsCategory}
       runningSessionIds={runningSessionIds}
+      sessionCategories={state.sessionCategories}
+      sessionsExpanded
       tools={tools}
       pendingToolIds={pendingToolIdList}
       roles={roles.map((role) => ({ id: role.id, name: role.name, description: role.description }))}
@@ -1289,11 +1367,24 @@ function AppContent() {
       {...(activeRoleId ? { activeRoleId } : {})}
       {...(activeSkillId ? { activeSkillId } : {})}
       {...(state.activeSessionId ? { activeSessionId: state.activeSessionId } : {})}
+      {...(state.activeSessionCategoryId ? { activeSessionCategoryId: state.activeSessionCategoryId } : {})}
       onCreateSession={async () => {
         dispatch({ type: 'section.selected', section: 'sessions' })
         await createTrackedSession()
       }}
       onSelectSection={(section) => dispatch({ type: 'section.selected', section })}
+      onSelectSessionCategory={(categoryId) => dispatch(categoryId ? { type: 'sessionCategory.selected', categoryId } : { type: 'sessionCategory.selected' })}
+      onCreateSessionCategory={createSessionCategory}
+      onRenameSessionCategory={renameSessionCategory}
+      onDeleteSessionCategory={(categoryId) => {
+        void deleteSessionCategory(categoryId)
+      }}
+      onDiscardSessionCategory={(categoryId) => {
+        void discardSessionCategory(categoryId)
+      }}
+      onSetSessionCategory={(sessionId, sessionIds, categoryId) => {
+        void setSessionCategory(sessionId, sessionIds, categoryId)
+      }}
       onSelectSettingsCategory={setActiveSettingsCategory}
       onSelectTool={setActiveToolId}
       onToggleToolEnabled={(toolId, enabled) => {
@@ -1678,10 +1769,11 @@ function EmptyConversationState({
   )
 }
 
-async function createSession(dispatch: ReturnType<typeof useAppStore>['dispatch'], defaultModelId = defaultFallbackModelId): Promise<Session> {
+async function createSession(dispatch: ReturnType<typeof useAppStore>['dispatch'], defaultModelId = defaultFallbackModelId, categoryId?: string): Promise<Session> {
   const session = await hesperApi.sessions.create({
     title: 'New chat',
-    ...(defaultModelId !== defaultFallbackModelId ? { defaultModelId } : {})
+    ...(defaultModelId !== defaultFallbackModelId ? { defaultModelId } : {}),
+    ...(categoryId ? { categoryId } : {})
   })
   dispatch({ type: 'session.created', session })
   return session

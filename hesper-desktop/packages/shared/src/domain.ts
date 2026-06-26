@@ -83,10 +83,18 @@ export type ModelConfig = {
   updatedAt: string
 }
 
+export type SessionCategory = {
+  id: string
+  name: string
+  createdAt: string
+  updatedAt: string
+}
+
 export type Session = {
   id: string
   title: string
   status: SessionStatus
+  categoryId?: string
   workspacePath?: string
   defaultModelId?: string
   providerId?: string

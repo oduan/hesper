@@ -8,6 +8,7 @@ import {
   createModelProviderService,
   createPromptAssemblyService,
   createRoleManagementService,
+  createSessionCategoryService,
   createSessionService,
   createSettingsService,
   createSsh2ClientAdapter,
@@ -190,6 +191,7 @@ function withMainAgentSoulTools(role: Role | undefined): Role | undefined {
 
 export function createServiceContainer(options: ServiceContainerOptions) {
   const sessionService = createSessionService(options.persistence)
+  const sessionCategoryService = createSessionCategoryService(options.persistence)
   const conversationService = createConversationService(options.persistence)
   const settingsService = createSettingsService({ persistence: options.persistence })
   const baseRoleService = createDefaultRoleService()
@@ -382,6 +384,7 @@ export function createServiceContainer(options: ServiceContainerOptions) {
   return {
     persistence: options.persistence,
     sessionService,
+    sessionCategoryService,
     conversationService,
     settingsService,
     roleService,
