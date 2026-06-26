@@ -224,6 +224,19 @@ describe('GitService', () => {
     })
   })
 
+  it('allows slash-separated branch names', async () => {
+    await withTempDir(async (workspacePath) => {
+      const { firstCommit } = await initGitRepo(workspacePath)
+      const service = createGitService({ id: 'session-1', workspacePath })
+
+      const result = await service.createBranch({ sessionId: 'session-1', branchName: 'feature/login', commit: firstCommit })
+
+      expect(result.success).toBe(true)
+      expect(result.state?.currentBranch).toBe('main')
+      expect((await git(workspacePath, ['rev-parse', 'feature/login'])).stdout.trim()).toBe(firstCommit)
+    })
+  })
+
   it('creates a branch and checks it out when requested', async () => {
     await withTempDir(async (workspacePath) => {
       const { firstCommit } = await initGitRepo(workspacePath)
@@ -250,12 +263,54 @@ describe('GitService', () => {
     })
   })
 
+  it('allows slash-separated tag names', async () => {
+    await withTempDir(async (workspacePath) => {
+      const { firstCommit } = await initGitRepo(workspacePath)
+      const service = createGitService({ id: 'session-1', workspacePath })
+
+      const result = await service.createTag({ sessionId: 'session-1', tagName: 'release/v1.2.0', commit: firstCommit })
+
+      expect(result.success).toBe(true)
+      expect((await git(workspacePath, ['rev-parse', 'release/v1.2.0'])).stdout.trim()).toBe(firstCommit)
+    })
+  })
+
   it('checks out a historical commit hash in a clean workspace', async () => {
     await withTempDir(async (workspacePath) => {
       const { firstCommit } = await initGitRepo(workspacePath)
       const service = createGitService({ id: 'session-1', workspacePath })
 
       const result = await service.checkout({ sessionId: 'session-1', ref: firstCommit })
+
+      expect(result.success).toBe(true)
+      expect(result.state?.headCommit).toBe(firstCommit)
+      expect((await git(workspacePath, ['rev-parse', 'HEAD'])).stdout.trim()).toBe(firstCommit)
+      expect((await git(workspacePath, ['branch', '--show-current'])).stdout.trim()).toBe('')
+    })
+  })
+
+  it('checks out a slash-separated local branch', async () => {
+    await withTempDir(async (workspacePath) => {
+      const { firstCommit } = await initGitRepo(workspacePath)
+      await git(workspacePath, ['branch', 'feature/login', firstCommit])
+      const service = createGitService({ id: 'session-1', workspacePath })
+
+      const result = await service.checkout({ sessionId: 'session-1', ref: 'feature/login' })
+
+      expect(result.success).toBe(true)
+      expect(result.state?.currentBranch).toBe('feature/login')
+      expect((await git(workspacePath, ['branch', '--show-current'])).stdout.trim()).toBe('feature/login')
+      expect((await git(workspacePath, ['rev-parse', 'HEAD'])).stdout.trim()).toBe(firstCommit)
+    })
+  })
+
+  it('allows checkout of slash-separated remote refs', async () => {
+    await withTempDir(async (workspacePath) => {
+      const { firstCommit } = await initGitRepo(workspacePath)
+      await git(workspacePath, ['update-ref', 'refs/remotes/origin/main', firstCommit])
+      const service = createGitService({ id: 'session-1', workspacePath })
+
+      const result = await service.checkout({ sessionId: 'session-1', ref: 'origin/main' })
 
       expect(result.success).toBe(true)
       expect(result.state?.headCommit).toBe(firstCommit)
@@ -281,11 +336,15 @@ describe('GitService', () => {
       const service = createGitService({ id: 'session-1', workspacePath })
 
       await expect(service.createBranch({ sessionId: 'session-1', branchName: '../escape', commit: secondCommit })).rejects.toThrow(/invalid branch name/i)
+      await expect(service.createBranch({ sessionId: 'session-1', branchName: 'feature..bad', commit: secondCommit })).rejects.toThrow(/invalid branch name/i)
       await expect(service.createBranch({ sessionId: 'session-1', branchName: '-bad', commit: secondCommit })).rejects.toThrow(/invalid branch name/i)
       await expect(service.createBranch({ sessionId: 'session-1', branchName: 'bad name', commit: secondCommit })).rejects.toThrow(/invalid branch name/i)
       await expect(service.createBranch({ sessionId: 'session-1', branchName: 'bad@{name', commit: secondCommit })).rejects.toThrow(/invalid branch name/i)
-      await expect(service.createTag({ sessionId: 'session-1', tagName: 'bad/tag', commit: secondCommit })).rejects.toThrow(/invalid tag name/i)
+      await expect(service.createBranch({ sessionId: 'session-1', branchName: 'bad\\name', commit: secondCommit })).rejects.toThrow(/invalid branch name/i)
+      await expect(service.createTag({ sessionId: 'session-1', tagName: '../escape', commit: secondCommit })).rejects.toThrow(/invalid tag name/i)
+      await expect(service.createTag({ sessionId: 'session-1', tagName: 'bad\\tag', commit: secondCommit })).rejects.toThrow(/invalid tag name/i)
       await expect(service.checkout({ sessionId: 'session-1', ref: 'main..stable' })).rejects.toThrow(/invalid ref/i)
+      await expect(service.checkout({ sessionId: 'session-1', ref: 'bad\\ref' })).rejects.toThrow(/invalid ref/i)
     })
   })
 

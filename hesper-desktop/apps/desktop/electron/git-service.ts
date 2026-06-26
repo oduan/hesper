@@ -572,14 +572,16 @@ function toFileStatus(statusCode: string): GitCommitFileChangeDto['status'] {
 
 function validateRefName(value: string, label: string): void {
   validateCommonGitToken(value, label)
-  if (!/^[A-Za-z0-9._-]+$/.test(value)) {
+  validateGitRefSegments(value, label)
+  if (!/^[A-Za-z0-9._/-]+$/.test(value)) {
     throw new Error(`Invalid ${label}: contains unsupported characters`)
   }
 }
 
 function validateRevision(value: string, label: string): void {
   validateCommonGitToken(value, label)
-  if (!/^[A-Za-z0-9._~^-]+$/.test(value)) {
+  validateGitRefSegments(value, label)
+  if (!/^[A-Za-z0-9._/~^-]+$/.test(value)) {
     throw new Error(`Invalid ${label}: contains unsupported characters`)
   }
 }
@@ -597,13 +599,30 @@ function validateCommonGitToken(value: string, label: string): void {
   if (value.includes('..')) {
     throw new Error(`Invalid ${label}: '..' is not allowed`)
   }
-  if (value.includes('/') || value.includes('\\')) {
-    throw new Error(`Invalid ${label}: path separators are not allowed`)
+  if (value.includes('\\')) {
+    throw new Error(`Invalid ${label}: backslashes are not allowed`)
   }
   if (value.startsWith('-')) {
     throw new Error(`Invalid ${label}: must not start with '-'`)
   }
   if (value.includes('@{')) {
     throw new Error(`Invalid ${label}: '@{' is not allowed`)
+  }
+}
+
+function validateGitRefSegments(value: string, label: string): void {
+  if (value.startsWith('/') || value.endsWith('/') || value.includes('//')) {
+    throw new Error(`Invalid ${label}: empty ref path segments are not allowed`)
+  }
+  for (const segment of value.split('/')) {
+    if (segment === '.' || segment === '..') {
+      throw new Error(`Invalid ${label}: path traversal segments are not allowed`)
+    }
+    if (segment.endsWith('.lock')) {
+      throw new Error(`Invalid ${label}: segments must not end with .lock`)
+    }
+  }
+  if (value.endsWith('.')) {
+    throw new Error(`Invalid ${label}: must not end with '.'`)
   }
 }
