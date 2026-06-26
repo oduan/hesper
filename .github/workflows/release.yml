@@ -64,18 +64,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          version="${GITHUB_REF_NAME#v}"
-          node - "$version" <<'NODE'
+          raw_version="${GITHUB_REF_NAME#v}"
+          node - "$raw_version" <<'NODE'
           const fs = require('node:fs')
-          const version = process.argv[2]
-          if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(version)) {
+          const rawVersion = process.argv[2]
+          const match = rawVersion.match(/^(\d+)\.(\d+)(?:\.(\d+))?((?:[-+][0-9A-Za-z.-]+)?)$/)
+          if (!match) {
             throw new Error(`Release tag ${process.env.GITHUB_REF_NAME} does not map to a valid package version.`)
           }
+          const [, major, minor, patch = '0', suffix = ''] = match
+          const version = `${major}.${minor}.${patch}${suffix}`
           const packagePath = 'apps/desktop/package.json'
           const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf8'))
           packageJson.version = version
           fs.writeFileSync(packagePath, `${JSON.stringify(packageJson, null, 2)}\n`)
-          console.log(`desktop package version set to ${version}`)
+          console.log(`desktop package version set to ${version} from ${process.env.GITHUB_REF_NAME}`)
           NODE
 
       - name: Build desktop package
