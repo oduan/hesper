@@ -1,5 +1,4 @@
-/// <reference path="./sqljs.d.ts" />
-import type { Database } from 'sql.js'
+import type { SqliteAdapter } from './sqlite-adapter'
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS sessions (
@@ -326,21 +325,15 @@ function columnName(definition: string): string {
   return definition.split(/\s+/, 1)[0] ?? definition
 }
 
-function tableColumns(db: Database, table: string): Set<string> {
-  const stmt = db.prepare(`PRAGMA table_info(${table})`)
-  try {
-    const columns = new Set<string>()
-    while (stmt.step()) {
-      const row = stmt.getAsObject() as { name?: unknown }
-      if (typeof row.name === 'string') columns.add(row.name)
-    }
-    return columns
-  } finally {
-    stmt.free()
+function tableColumns(db: SqliteAdapter, table: string): Set<string> {
+  const columns = new Set<string>()
+  for (const row of db.all(`PRAGMA table_info(${table})`)) {
+    if (typeof row.name === 'string') columns.add(row.name)
   }
+  return columns
 }
 
-export function migrateDatabaseSchema(db: Database): void {
+export function migrateDatabaseSchema(db: SqliteAdapter): void {
   for (const [table, definitions] of Object.entries(migrationColumns)) {
     const existing = tableColumns(db, table)
     for (const definition of definitions) {

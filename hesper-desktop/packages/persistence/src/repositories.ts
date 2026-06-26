@@ -1,4 +1,3 @@
-/// <reference path="./sqljs.d.ts" />
 import {
   agentRuntimeEventSchema,
   defaultAppThemeId,
@@ -35,7 +34,7 @@ import {
   type ToolPermissionScope,
   type ThemeMode
 } from '@hesper/shared'
-import type { Database } from 'sql.js'
+import type { SqliteAdapter } from './sqlite-adapter'
 
 export type RuntimeEventRecord = AgentRuntimeEvent
 
@@ -201,6 +200,8 @@ export type Persistence = {
   sshCommandResults: SshCommandResultRepository
   credentialRecords: CredentialRecordRepository
   exportDatabaseBytes(): Uint8Array
+  checkpoint?(): void
+  close?(): void
 }
 
 function stripUndefined<T extends Record<string, unknown>>(value: T): Record<string, unknown> {
@@ -600,7 +601,7 @@ function parseRuntimeEvent(value: unknown): RuntimeEventRecord {
   return agentRuntimeEventSchema.parse(value)
 }
 
-export function createRepositories(db: Database): Persistence {
+export function createRepositories(db: SqliteAdapter): Persistence {
   const sequencedTables = [
     'sessions',
     'session_categories',
@@ -620,28 +621,13 @@ export function createRepositories(db: Database): Persistence {
     'ssh_command_results',
     'credential_records'
   ]
-  const bindValues = (values: unknown[]) => values.map((value) => (value === undefined ? null : value))
-  const exec = (sql: string, params: unknown[] = []) => db.run(sql, bindValues(params))
-  const fetchAll = (sql: string, params: unknown[] = []) => {
-    const stmt = db.prepare(sql)
-    try {
-      stmt.bind(params)
-      const rows: Record<string, unknown>[] = []
-      while (stmt.step()) rows.push(stmt.getAsObject())
-      return rows
-    } finally {
-      stmt.free()
-    }
-  }
+  const exec = (sql: string, params: unknown[] = []) => db.run(sql, params)
+  const fetchAll = (sql: string, params: unknown[] = []) => db.all(sql, params)
+  const fetchOne = (sql: string, params: unknown[] = []) => db.get(sql, params)
 
   const maxSequence = sequencedTables.reduce((max, table) => {
-    const stmt = db.prepare(`SELECT MAX(sort_seq) AS max_sort_seq FROM ${table}`)
-    try {
-      const value = stmt.step() ? Number((stmt.getAsObject() as { max_sort_seq?: unknown }).max_sort_seq ?? 0) : 0
-      return Number.isFinite(value) ? Math.max(max, value) : max
-    } finally {
-      stmt.free()
-    }
+    const value = Number((fetchOne(`SELECT MAX(sort_seq) AS max_sort_seq FROM ${table}`) as { max_sort_seq?: unknown } | undefined)?.max_sort_seq ?? 0)
+    return Number.isFinite(value) ? Math.max(max, value) : max
   }, 0)
   let sequence = maxSequence
   const nextSeq = () => ++sequence
@@ -658,17 +644,11 @@ export function createRepositories(db: Database): Persistence {
     )
   }
   const tableColumns = (table: string): Set<string> => {
-    const stmt = db.prepare(`PRAGMA table_info(${table})`)
-    try {
-      const columns = new Set<string>()
-      while (stmt.step()) {
-        const row = stmt.getAsObject() as { name?: unknown }
-        if (typeof row.name === 'string') columns.add(row.name)
-      }
-      return columns
-    } finally {
-      stmt.free()
+    const columns = new Set<string>()
+    for (const row of fetchAll(`PRAGMA table_info(${table})`)) {
+      if (typeof row.name === 'string') columns.add(row.name)
     }
+    return columns
   }
   const roleColumns = tableColumns('roles')
   const hasLegacyRoleSubagentColumn = roleColumns.has('can_be_subagent')
@@ -1003,7 +983,7 @@ export function createRepositories(db: Database): Persistence {
         return fetchAll('SELECT * FROM roles ORDER BY sort_seq ASC, id ASC').map(toRole)
       },
       async delete(id) {
-        db.run('DELETE FROM roles WHERE id = ?', [id])
+        exec('DELETE FROM roles WHERE id = ?', [id])
       }
     },
     toolPermissionPolicies: {
@@ -1197,7 +1177,16 @@ export function createRepositories(db: Database): Persistence {
       }
     },
     exportDatabaseBytes() {
-      return db.export()
+      if (!db.exportDatabaseBytes) {
+        throw new Error('Database byte export is not available for this persistence backend.')
+      }
+      return db.exportDatabaseBytes()
+    },
+    checkpoint() {
+      db.checkpoint?.()
+    },
+    close() {
+      db.close?.()
     }
   }
 }

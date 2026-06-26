@@ -226,6 +226,70 @@ describe('persistence repositories', () => {
     expect(visible[1]!.unreadCompletedAt).toBe('2026-06-10T03:01:00.000Z')
   })
 
+  it('writes file-backed session changes directly to disk without explicit export', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hesper-file-persistence-'))
+    const tempFile = path.join(tempDir, 'hesper.sqlite')
+
+    try {
+      const db = await createFilePersistence(tempFile)
+      await db.sessions.save({
+        id: 'file-session',
+        title: 'File backed',
+        status: 'active',
+        outputMode: 'markdown',
+        createdAt: now,
+        updatedAt: now
+      })
+      db.close?.()
+
+      const reopened = await createFilePersistence(tempFile)
+      await expect(reopened.sessions.get('file-session')).resolves.toMatchObject({
+        id: 'file-session',
+        title: 'File backed',
+        status: 'active'
+      })
+      reopened.close?.()
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it('opens and migrates legacy sql.js database files with native file persistence', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hesper-legacy-file-persistence-'))
+    const tempFile = path.join(tempDir, 'hesper.sqlite')
+
+    try {
+      fs.writeFileSync(tempFile, await createLegacyDatabaseBytes())
+
+      const db = await createFilePersistence(tempFile)
+      await expect(db.sessions.get('legacy-session')).resolves.toMatchObject({
+        id: 'legacy-session',
+        title: 'Legacy',
+        status: 'active'
+      })
+
+      await db.sessions.save({
+        id: 'native-after-legacy',
+        title: 'Native after legacy',
+        status: 'active',
+        isMarked: true,
+        outputMode: 'markdown',
+        createdAt: now,
+        updatedAt: now
+      })
+      db.close?.()
+
+      const reopened = await createFilePersistence(tempFile)
+      await expect(reopened.sessions.get('native-after-legacy')).resolves.toMatchObject({
+        id: 'native-after-legacy',
+        isMarked: true
+      })
+      reopened.close?.()
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it('persists session categories and session category ids', async () => {
     const db = await createInMemoryPersistence()
     await db.sessionCategories.save({
@@ -385,6 +449,7 @@ describe('persistence repositories', () => {
         soul: 'Helpful, calm, and precise.',
         updatedAt: now
       })
+      reopened.close?.()
     } finally {
       fs.rmSync(tempFile, { force: true })
     }
@@ -405,6 +470,7 @@ describe('persistence repositories', () => {
         soul: '',
         updatedAt: now
       })
+      migrated.close?.()
     } finally {
       fs.rmSync(tempFile, { force: true })
     }
@@ -425,6 +491,7 @@ describe('persistence repositories', () => {
         soul: '',
         updatedAt: now
       })
+      migrated.close?.()
     } finally {
       fs.rmSync(tempFile, { force: true })
     }
@@ -442,6 +509,7 @@ describe('persistence repositories', () => {
       const reopened = await createFilePersistence(tempFile)
       await reopened.runs.save({ id: 'run-3', sessionId: 'session-1', status: 'queued', modelId: 'm3', retryCount: 0, maxRetries: 5 })
       expect((await reopened.runs.listBySession('session-1')).map((run) => run.id)).toEqual(['run-1', 'run-2', 'run-3'])
+      reopened.close?.()
     } finally {
       fs.rmSync(tempFile, { force: true })
     }
@@ -589,7 +657,7 @@ describe('persistence repositories', () => {
         createdAt: now,
         updatedAt: now
       })
-      fs.writeFileSync(tempFile, exportDatabaseBytes(db))
+      db.close?.()
 
       const reopened = await createFilePersistence(tempFile)
       expect(await reopened.modelProviders.get('chatgpt-codex')).toMatchObject({
@@ -600,6 +668,7 @@ describe('persistence repositories', () => {
         defaultModelId: 'pi/gpt-5.5',
         hasApiKey: true
       })
+      reopened.close?.()
     } finally {
       fs.rmSync(tempFile, { force: true })
     }
@@ -798,6 +867,7 @@ describe('persistence repositories', () => {
         allowedToolIds: ['filesystem.read-file']
       })
       expect(invocation?.roleSnapshot).toBeUndefined()
+      migrated.close?.()
     } finally {
       fs.rmSync(tempFile, { force: true })
     }
@@ -839,6 +909,7 @@ describe('persistence repositories', () => {
       await expect(corrupted.models.get('bad-model-capability')).rejects.toThrow(/Invalid model capability/)
       await expect(corrupted.roles.get('bad-role-array')).rejects.toThrow(/roles\.allowed_skill_ids_json/)
       await expect(corrupted.roles.get('bad-role-ref')).rejects.toThrow()
+      corrupted.close?.()
     } finally {
       fs.rmSync(tempFile, { force: true })
     }
@@ -879,6 +950,7 @@ describe('persistence repositories', () => {
         canBeWorkerAgent: false,
         canBeAssignedToWorkerAgent: false
       })
+      migrated.close?.()
     } finally {
       fs.rmSync(tempFile, { force: true })
     }
@@ -914,6 +986,7 @@ describe('persistence repositories', () => {
         name: 'Subagent Compatible Role',
         canBeWorkerAgent: true
       })
+      migrated.close?.()
     } finally {
       fs.rmSync(tempFile, { force: true })
     }
@@ -971,6 +1044,7 @@ describe('persistence repositories', () => {
       await migrated.runs.save({ id: 'legacy-child-run', sessionId: 'legacy-session', parentRunId: 'legacy-run', status: 'queued', modelId: 'mock/hesper-fast', retryCount: 0, maxRetries: 3, depth: 1 })
       expect(await migrated.sessions.get('legacy-session')).toMatchObject({ providerId: 'provider-mock', enabledToolIds: ['workspace.info'] })
       expect(await migrated.runs.get('legacy-child-run')).toMatchObject({ parentRunId: 'legacy-run', depth: 1 })
+      migrated.close?.()
     } finally {
       fs.rmSync(tempFile, { force: true })
     }

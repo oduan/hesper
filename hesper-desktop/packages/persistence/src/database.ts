@@ -1,26 +1,30 @@
-import * as fs from 'fs'
 import { createRequire } from 'node:module'
+import { createNodeSqliteFileAdapter } from './node-sqlite-adapter'
+import { createRepositories, type Persistence } from './repositories'
+import { migrateDatabaseSchema, schemaSql } from './schema'
+import { createSqlJsAdapter } from './sqljs-adapter'
 
 const require = createRequire(import.meta.url)
 const initSqlJs = require('sql.js') as () => Promise<{ Database: new (data?: Uint8Array) => any }>
-import { migrateDatabaseSchema, schemaSql } from './schema'
-import { createRepositories, type Persistence } from './repositories'
 
-async function createDatabase(data?: Uint8Array): Promise<Persistence> {
+async function createSqlJsPersistence(data?: Uint8Array): Promise<Persistence> {
   const SQL = await initSqlJs()
   const db = new SQL.Database(data)
-  db.run(schemaSql)
-  migrateDatabaseSchema(db)
-  return createRepositories(db)
+  const adapter = createSqlJsAdapter(db)
+  adapter.exec(schemaSql)
+  migrateDatabaseSchema(adapter)
+  return createRepositories(adapter)
 }
 
 export async function createInMemoryPersistence(data?: Uint8Array): Promise<Persistence> {
-  return createDatabase(data)
+  return createSqlJsPersistence(data)
 }
 
 export async function createFilePersistence(path: string): Promise<Persistence> {
-  const bytes = fs.existsSync(path) ? fs.readFileSync(path) : undefined
-  return createDatabase(bytes)
+  const adapter = createNodeSqliteFileAdapter(path)
+  adapter.exec(schemaSql)
+  migrateDatabaseSchema(adapter)
+  return createRepositories(adapter)
 }
 
 export function exportDatabaseBytes(persistence: Persistence): Uint8Array {

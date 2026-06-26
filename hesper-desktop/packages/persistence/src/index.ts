@@ -1,3 +1,5 @@
 export * from './database'
+export * from './node-sqlite-adapter'
 export * from './repositories'
 export * from './schema'
+export * from './sqlite-adapter'
