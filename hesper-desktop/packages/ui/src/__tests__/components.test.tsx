@@ -366,7 +366,9 @@ describe('ui components', () => {
   it('opens category context menu for rename and delete', async () => {
     const user = userEvent.setup()
     const onRenameSessionCategory = vi.fn()
-    const onDeleteSessionCategory = vi.fn()
+    const onDeleteSessionCategory = vi.fn(() => {
+      expect(screen.queryByRole('menu', { name: '分类操作' })).not.toBeInTheDocument()
+    })
 
     render(
       <AppShell
@@ -395,7 +397,10 @@ describe('ui components', () => {
 
     fireEvent.contextMenu(screen.getByRole('button', { name: '产品图' }))
     await user.click(within(screen.getByRole('menu', { name: '分类操作' })).getByRole('menuitem', { name: '删除' }))
-    expect(onDeleteSessionCategory).toHaveBeenCalledWith('category-product')
+    expect(screen.queryByRole('menu', { name: '分类操作' })).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(onDeleteSessionCategory).toHaveBeenCalledWith('category-product')
+    })
   })
 
   it('keeps session disclosure icons centered and switches state when collapsed', () => {

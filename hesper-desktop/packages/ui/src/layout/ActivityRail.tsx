@@ -251,7 +251,10 @@ export function ActivityRail({
       }
       case 'delete': {
         if (!menuState.categoryId) return
-        void onDeleteSessionCategory?.(menuState.categoryId)
+        const categoryId = menuState.categoryId
+        window.setTimeout(() => {
+          void onDeleteSessionCategory?.(categoryId)
+        }, 0)
         return
       }
     }
