@@ -224,7 +224,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case 'sessionCategories.loaded':
       return { ...state, sessionCategories: action.categories }
     case 'sessionCategory.created':
-      return { ...state, sessionCategories: [...state.sessionCategories, action.category], activeSessionCategoryId: action.category.id }
+      return withActiveSessionForCurrentCategory({ ...state, sessionCategories: [...state.sessionCategories, action.category], activeSessionCategoryId: action.category.id })
     case 'sessionCategory.updated':
       return { ...state, sessionCategories: mergeById(state.sessionCategories, action.category) }
     case 'sessionCategory.deleted': {
@@ -241,7 +241,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return withActiveSessionForCurrentCategory(withActiveSessionCategoryId(state, action.categoryId))
     case 'session.created': {
       const sessions = sortSessions([action.session, ...state.sessions.filter((session) => session.id !== action.session.id)])
-      return {
+      return withActiveSessionForCurrentCategory({
         ...state,
         sessions,
         activeSessionId: action.session.id,
@@ -249,7 +249,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           ...state.messagesBySession,
           [action.session.id]: state.messagesBySession[action.session.id] ?? []
         }
-      }
+      })
     }
     case 'session.updated': {
       if (action.session.status === 'deleted') {

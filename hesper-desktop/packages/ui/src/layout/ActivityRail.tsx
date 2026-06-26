@@ -19,7 +19,7 @@ export type ActivityRailProps = {
   sessionsExpanded?: boolean
   onToggleSessionsExpanded?: () => void
   onSelectSessionCategory?: (categoryId?: string) => void
-  onCreateSessionCategory?: () => Promise<SessionCategoryListItem>
+  onCreateSessionCategory?: () => Promise<SessionCategoryListItem | undefined>
   onRenameSessionCategory?: (categoryId: string, name: string) => void | Promise<void>
   onDeleteSessionCategory?: (categoryId: string) => void | Promise<void>
 }

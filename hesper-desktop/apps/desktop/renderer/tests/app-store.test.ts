@@ -1,8 +1,30 @@
 import { describe, expect, it } from 'vitest'
-import type { Message, RunStep, WorkerAgentInvocation } from '@hesper/shared'
+import type { Message, RunStep, Session, SessionCategory, WorkerAgentInvocation } from '@hesper/shared'
 import { appReducer, initialAppState } from '../src/app-store'
 
 const now = '2026-06-10T03:00:00.000Z'
+
+function createSessionFixture({ id, title, status, outputMode, createdAt, updatedAt, ...overrides }: Partial<Session> & { id: string }): Session {
+  return {
+    id,
+    title: title ?? id,
+    status: status ?? 'active',
+    outputMode: outputMode ?? 'markdown',
+    createdAt: createdAt ?? now,
+    updatedAt: updatedAt ?? now,
+    ...overrides
+  }
+}
+
+function createSessionCategoryFixture({ id, name, createdAt, updatedAt, ...overrides }: Partial<SessionCategory> & { id: string }): SessionCategory {
+  return {
+    id,
+    name: name ?? id,
+    createdAt: createdAt ?? now,
+    updatedAt: updatedAt ?? now,
+    ...overrides
+  }
+}
 
 describe('app-store reducer', () => {
   it('prefers the latest active session when restoring loaded sessions', () => {
@@ -172,6 +194,119 @@ describe('app-store reducer', () => {
 
     expect(nextState.sessions.map((session) => session.id)).toEqual(['session-2'])
     expect(nextState.activeSessionId).toBe('session-2')
+  })
+
+  it('selects a visible session when switching to a session category', () => {
+    const selectedState = appReducer({
+      ...initialAppState,
+      sessions: [
+        createSessionFixture({ id: 'session-plain', title: 'Plain chat', updatedAt: '2026-06-10T03:05:00.000Z' }),
+        createSessionFixture({ id: 'session-product-archived', title: 'Archived product chat', status: 'archived', categoryId: 'category-product', updatedAt: '2026-06-10T03:04:00.000Z' }),
+        createSessionFixture({ id: 'session-product-active', title: 'Active product chat', categoryId: 'category-product', updatedAt: '2026-06-10T03:03:00.000Z' })
+      ],
+      sessionCategories: [createSessionCategoryFixture({ id: 'category-product', name: '产品图' })],
+      activeSessionId: 'session-plain'
+    }, {
+      type: 'sessionCategory.selected',
+      categoryId: 'category-product'
+    })
+
+    expect(selectedState.activeSessionCategoryId).toBe('category-product')
+    expect(selectedState.activeSessionId).toBe('session-product-active')
+  })
+
+  it('reassigns active session when the current active session leaves the active category', () => {
+    const categorizedState = {
+      ...initialAppState,
+      sessions: [
+        createSessionFixture({ id: 'session-product-current', title: 'Current product chat', categoryId: 'category-product', updatedAt: '2026-06-10T03:05:00.000Z' }),
+        createSessionFixture({ id: 'session-product-next', title: 'Next product chat', categoryId: 'category-product', updatedAt: '2026-06-10T03:04:00.000Z' }),
+        createSessionFixture({ id: 'session-plain', title: 'Plain chat', updatedAt: '2026-06-10T03:03:00.000Z' })
+      ],
+      sessionCategories: [createSessionCategoryFixture({ id: 'category-product', name: '产品图' })],
+      activeSessionCategoryId: 'category-product',
+      activeSessionId: 'session-product-current'
+    }
+
+    const currentMovedOut = appReducer(categorizedState, {
+      type: 'session.updated',
+      session: createSessionFixture({ id: 'session-product-current', title: 'Moved product chat', updatedAt: '2026-06-10T03:06:00.000Z' })
+    })
+
+    expect(currentMovedOut.activeSessionId).toBe('session-product-next')
+    expect(currentMovedOut.sessions.find((session) => session.id === 'session-product-current')?.categoryId).toBeUndefined()
+
+    const lastVisibleMovedOut = appReducer(currentMovedOut, {
+      type: 'session.updated',
+      session: createSessionFixture({ id: 'session-product-next', title: 'Moved next chat', updatedAt: '2026-06-10T03:07:00.000Z' })
+    })
+
+    expect(lastVisibleMovedOut.activeSessionId).toBeUndefined()
+  })
+
+  it('returns to all sessions and keeps a valid active session after deleting the active category', () => {
+    const nextState = appReducer({
+      ...initialAppState,
+      sessions: [
+        createSessionFixture({ id: 'session-product-current', title: 'Current product chat', categoryId: 'category-product', updatedAt: '2026-06-10T03:05:00.000Z' }),
+        createSessionFixture({ id: 'session-product-other', title: 'Other product chat', categoryId: 'category-product', updatedAt: '2026-06-10T03:04:00.000Z' }),
+        createSessionFixture({ id: 'session-plain', title: 'Plain chat', updatedAt: '2026-06-10T03:03:00.000Z' })
+      ],
+      sessionCategories: [
+        createSessionCategoryFixture({ id: 'category-product', name: '产品图' }),
+        createSessionCategoryFixture({ id: 'category-research', name: '研究' })
+      ],
+      activeSessionCategoryId: 'category-product',
+      activeSessionId: 'session-product-current'
+    }, {
+      type: 'sessionCategory.deleted',
+      categoryId: 'category-product',
+      deletedSessionIds: ['session-product-current', 'session-product-other']
+    })
+
+    expect(nextState.activeSessionCategoryId).toBeUndefined()
+    expect(nextState.sessions.map((session) => session.id)).toEqual(['session-plain'])
+    expect(nextState.sessionCategories.map((category) => category.id)).toEqual(['category-research'])
+    expect(nextState.activeSessionId).toBe('session-plain')
+  })
+
+  it('keeps active session visible when sessions are created while a category is active', () => {
+    const categorizedState = {
+      ...initialAppState,
+      sessions: [createSessionFixture({ id: 'session-product', title: 'Product chat', categoryId: 'category-product' })],
+      sessionCategories: [createSessionCategoryFixture({ id: 'category-product', name: '产品图' })],
+      activeSessionCategoryId: 'category-product',
+      activeSessionId: 'session-product'
+    }
+
+    const outsideCreated = appReducer(categorizedState, {
+      type: 'session.created',
+      session: createSessionFixture({ id: 'session-plain', title: 'Plain chat', updatedAt: '2026-06-10T03:06:00.000Z' })
+    })
+
+    expect(outsideCreated.activeSessionId).toBe('session-product')
+    expect(outsideCreated.messagesBySession['session-plain']).toEqual([])
+
+    const categoryCreated = appReducer(outsideCreated, {
+      type: 'session.created',
+      session: createSessionFixture({ id: 'session-product-new', title: 'New product chat', categoryId: 'category-product', updatedAt: '2026-06-10T03:07:00.000Z' })
+    })
+
+    expect(categoryCreated.activeSessionId).toBe('session-product-new')
+  })
+
+  it('clears the active session when creating a new empty category', () => {
+    const nextState = appReducer({
+      ...initialAppState,
+      sessions: [createSessionFixture({ id: 'session-plain', title: 'Plain chat' })],
+      activeSessionId: 'session-plain'
+    }, {
+      type: 'sessionCategory.created',
+      category: createSessionCategoryFixture({ id: 'category-empty', name: '空分类' })
+    })
+
+    expect(nextState.activeSessionCategoryId).toBe('category-empty')
+    expect(nextState.activeSessionId).toBeUndefined()
   })
 
   it('stores optimistic user messages locally', () => {

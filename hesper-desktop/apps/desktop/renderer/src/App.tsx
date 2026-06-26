@@ -1238,16 +1238,26 @@ function AppContent() {
   }
 
   const createSessionCategory = async () => {
-    const category = await hesperApi.sessionCategories.create({ name: '新分类' })
-    dispatch({ type: 'sessionCategory.created', category })
-    return category
+    try {
+      const category = await hesperApi.sessionCategories.create({ name: '新分类' })
+      dispatch({ type: 'sessionCategory.created', category })
+      return category
+    } catch (error) {
+      console.warn('Failed to create session category', error)
+      return undefined
+    }
   }
 
   const renameSessionCategory = async (categoryId: string, name: string) => {
     const trimmedName = name.trim()
     if (!trimmedName) return
-    const category = await hesperApi.sessionCategories.update({ id: categoryId, name: trimmedName })
-    dispatch({ type: 'sessionCategory.updated', category })
+
+    try {
+      const category = await hesperApi.sessionCategories.update({ id: categoryId, name: trimmedName })
+      dispatch({ type: 'sessionCategory.updated', category })
+    } catch (error) {
+      console.warn('Failed to rename session category', error)
+    }
   }
 
   const deleteSessionCategory = async (categoryId: string) => {
@@ -1258,15 +1268,24 @@ function AppContent() {
     const confirmed = window.confirm(`删除分类“${category.name}”？该分类下的 ${sessionCount} 个会话也会被删除，此操作不可撤销。`)
     if (!confirmed) return
 
-    const result = await hesperApi.sessionCategories.delete(categoryId)
-    dispatch({ type: 'sessionCategory.deleted', categoryId, deletedSessionIds: result.deletedSessionIds })
+    try {
+      const result = await hesperApi.sessionCategories.delete(categoryId)
+      dispatch({ type: 'sessionCategory.deleted', categoryId, deletedSessionIds: result.deletedSessionIds })
+    } catch (error) {
+      console.warn('Failed to delete session category', error)
+    }
   }
 
   const setSessionCategory = async (_sessionId: string, sessionIds: string[] | undefined, categoryId?: string) => {
     const ids = sessionIds?.length ? sessionIds : [_sessionId]
-    const updatedSessions = await hesperApi.sessions.setCategory({ ids, categoryId })
-    for (const session of updatedSessions) {
-      dispatch({ type: 'session.updated', session })
+
+    try {
+      const updatedSessions = await hesperApi.sessions.setCategory({ ids, categoryId })
+      for (const session of updatedSessions) {
+        dispatch({ type: 'session.updated', session })
+      }
+    } catch (error) {
+      console.warn('Failed to set session category', error)
     }
   }
 

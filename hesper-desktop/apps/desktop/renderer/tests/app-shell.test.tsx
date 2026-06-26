@@ -604,6 +604,26 @@ describe('renderer App', () => {
     await waitFor(() => expect(screen.queryByRole('button', { name: '产品图' })).not.toBeInTheDocument())
   })
 
+  it('keeps a category when deletion confirmation is cancelled', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(window, 'confirm').mockReturnValueOnce(false)
+    listSessionCategories.mockResolvedValueOnce([
+      { id: 'category-product', name: '产品图', createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:00.000Z' }
+    ])
+    listSessions.mockResolvedValueOnce([
+      { id: 'session-product', title: 'Product chat', status: 'active', categoryId: 'category-product', outputMode: 'markdown', createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:00.000Z' }
+    ] as any)
+
+    render(<App />)
+
+    fireEvent.contextMenu(await screen.findByRole('button', { name: '产品图' }))
+    await user.click(within(screen.getByRole('menu', { name: '分类操作' })).getByRole('menuitem', { name: '删除' }))
+
+    expect(window.confirm).toHaveBeenCalledWith('删除分类“产品图”？该分类下的 1 个会话也会被删除，此操作不可撤销。')
+    expect(deleteSessionCategory).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: '产品图' })).toBeInTheDocument()
+  })
+
   it('moves the selected session row to a newly-created session', async () => {
     const user = userEvent.setup()
     listSessions.mockResolvedValueOnce([
