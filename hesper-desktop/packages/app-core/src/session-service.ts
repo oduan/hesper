@@ -33,6 +33,9 @@ export type SessionService = {
   setDefaultModel(id: string, defaultModelId?: string): Promise<Session>
   setOutputMode(id: string, outputMode: OutputMode): Promise<Session>
   archiveSession(id: string): Promise<Session>
+  restoreSession(id: string): Promise<Session>
+  setMarked(id: string, isMarked: boolean): Promise<Session>
+  setMarkedForSessions(ids: string[], isMarked: boolean): Promise<Session[]>
   deleteSession(id: string): Promise<Session>
 }
 
@@ -161,6 +164,32 @@ export function createSessionService(persistence: Persistence): SessionService {
     async archiveSession(id) {
       const session = await loadSession(persistence, id)
       return saveSession(persistence, session, 'archived')
+    },
+    async restoreSession(id) {
+      const session = await loadSession(persistence, id)
+      return saveSession(persistence, session, 'active')
+    },
+    async setMarked(id, isMarked) {
+      const session = await loadSession(persistence, id)
+      const candidate = { ...session, isMarked: isMarked ? true : undefined, updatedAt: nowIso() }
+      const updated = stripUndefined(candidate) as Session
+      await persistence.sessions.save(updated)
+      return updated
+    },
+    async setMarkedForSessions(ids, isMarked) {
+      const loadedSessions: Session[] = []
+      for (const id of ids) {
+        loadedSessions.push(await loadSession(persistence, id))
+      }
+      const updated = loadedSessions.map((session) => stripUndefined({
+        ...session,
+        isMarked: isMarked ? true : undefined,
+        updatedAt: nowIso()
+      }) as Session)
+      for (const session of updated) {
+        await persistence.sessions.save(session)
+      }
+      return updated
     },
     async deleteSession(id) {
       const session = await loadSession(persistence, id)

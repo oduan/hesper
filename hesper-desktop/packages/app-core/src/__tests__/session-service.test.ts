@@ -231,6 +231,28 @@ describe('createSessionService', () => {
     })
   })
 
+  it('marks sessions and restores archived sessions', async () => {
+    const persistence = await createInMemoryPersistence()
+    const sessions = createSessionService(persistence)
+
+    const first = await sessions.createSession({ title: 'First', now })
+    const second = await sessions.createSession({ title: 'Second', now })
+
+    await expect(sessions.setMarked(first.id, true)).resolves.toMatchObject({ id: first.id, isMarked: true })
+    await expect(persistence.sessions.get(first.id)).resolves.toMatchObject({ isMarked: true })
+
+    const markedBatch = await sessions.setMarkedForSessions([first.id, second.id], true)
+    expect(markedBatch.map((session) => session.isMarked)).toEqual([true, true])
+
+    const unmarkedBatch = await sessions.setMarkedForSessions([first.id, second.id], false)
+    expect(unmarkedBatch.map((session) => session.isMarked)).toEqual([undefined, undefined])
+    await expect(persistence.sessions.get(first.id)).resolves.not.toHaveProperty('isMarked')
+
+    const archived = await sessions.archiveSession(first.id)
+    expect(archived.status).toBe('archived')
+    await expect(sessions.restoreSession(first.id)).resolves.toMatchObject({ id: first.id, status: 'active' })
+  })
+
   it('creates, updates, archives and deletes sessions', async () => {
     const persistence = await createInMemoryPersistence()
     const service = createSessionService(persistence)

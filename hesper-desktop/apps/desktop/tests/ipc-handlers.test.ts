@@ -144,6 +144,28 @@ describe('desktop service container', () => {
     expect(moved[0]).not.toHaveProperty('categoryId')
   })
 
+  it('marks and restores sessions through ipc', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock' })
+    const savePersistence = vi.fn(async () => {})
+    const { handles } = registerTestIpcHandlers(container, { savePersistence })
+
+    const session = await handles.get(ipcChannels.sessionsCreate)?.({ sender: { id: 1 } }, { title: 'IPC mark' }) as { id: string }
+    const marked = await handles.get(ipcChannels.sessionsSetMarked)?.({ sender: { id: 1 } }, { ids: [session.id], isMarked: true }) as Array<{ id: string; isMarked?: boolean }>
+    expect(marked[0]).toMatchObject({ id: session.id, isMarked: true })
+    await expect(persistence.sessions.get(session.id)).resolves.toMatchObject({ isMarked: true })
+
+    const unmarked = await handles.get(ipcChannels.sessionsSetMarked)?.({ sender: { id: 1 } }, { ids: [session.id], isMarked: false }) as Array<{ id: string; isMarked?: boolean }>
+    expect(unmarked[0]?.isMarked).toBeUndefined()
+    await expect(persistence.sessions.get(session.id)).resolves.not.toHaveProperty('isMarked')
+
+    const archived = await handles.get(ipcChannels.sessionsArchive)?.({ sender: { id: 1 } }, session.id) as { id: string; status: string }
+    expect(archived.status).toBe('archived')
+    const restored = await handles.get(ipcChannels.sessionsRestore)?.({ sender: { id: 1 } }, session.id) as { id: string; status: string }
+    expect(restored.status).toBe('active')
+    expect(savePersistence).toHaveBeenCalled()
+  })
+
   it('supports injecting a skill service for desktop runtime and tools', async () => {
     const persistence = await createInMemoryPersistence()
     const researchSkill = { id: 'Research', name: 'Research', description: 'Find references', source: 'user' as const, prompt: 'Research carefully.' }

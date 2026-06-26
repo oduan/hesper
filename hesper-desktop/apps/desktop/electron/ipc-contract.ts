@@ -7,6 +7,8 @@ export const ipcChannels = {
   sessionsUpdateTitle: 'sessions:updateTitle',
   sessionsGenerateTitle: 'sessions:generateTitle',
   sessionsArchive: 'sessions:archive',
+  sessionsRestore: 'sessions:restore',
+  sessionsSetMarked: 'sessions:setMarked',
   sessionsDelete: 'sessions:delete',
   sessionsSetWorkspace: 'sessions:setWorkspace',
   sessionsSetModel: 'sessions:setModel',
@@ -127,6 +129,10 @@ export const updateSessionCategoryInputSchema = z.object({
 export const setSessionCategoryInputSchema = z.object({
   ids: z.array(nonEmptyStringSchema).min(1),
   categoryId: z.string().optional()
+}).strict()
+export const setSessionMarkedInputSchema = z.object({
+  ids: z.array(nonEmptyStringSchema).min(1),
+  isMarked: z.boolean()
 }).strict()
 export const deleteSessionCategoryResultSchema = z.object({
   category: sessionCategoryDtoSchema,
@@ -455,6 +461,7 @@ export type SessionCategoryDto = z.infer<typeof sessionCategoryDtoSchema>
 export type CreateSessionCategoryInput = z.infer<typeof createSessionCategoryInputSchema>
 export type UpdateSessionCategoryInput = z.infer<typeof updateSessionCategoryInputSchema>
 export type SetSessionCategoryInput = z.infer<typeof setSessionCategoryInputSchema>
+export type SetSessionMarkedInput = z.infer<typeof setSessionMarkedInputSchema>
 export type DeleteSessionCategoryResult = z.infer<typeof deleteSessionCategoryResultSchema>
 export type SetSessionWorkspaceInput = z.infer<typeof setSessionWorkspaceInputSchema>
 export type SetSessionModelInput = z.infer<typeof setSessionModelInputSchema>
@@ -519,6 +526,8 @@ export type HesperDesktopApi = {
     updateTitle(input: UpdateSessionTitleInput): Promise<SessionDto>
     generateTitle(input: GenerateSessionTitleInput): Promise<SessionDto>
     archive(id: string): Promise<SessionDto>
+    restore(id: string): Promise<SessionDto>
+    setMarked(input: SetSessionMarkedInput): Promise<SessionDto[]>
     delete(id: string): Promise<SessionDto>
     setWorkspace(input: SetSessionWorkspaceInput): Promise<SessionDto>
     setModel(input: SetSessionModelInput): Promise<SessionDto>

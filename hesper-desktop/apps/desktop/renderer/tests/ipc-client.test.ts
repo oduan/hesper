@@ -66,6 +66,19 @@ describe('ipc-client fallback', () => {
     await expect(api.sessions.setCategory({ ids: [session.id], categoryId: 'missing-category' })).rejects.toThrowError('Session category not found: missing-category')
   })
 
+  it('marks and restores sessions in fallback mode', async () => {
+    const api = createHesperApi({ allowFallback: true })
+    const session = await api.sessions.create({ title: 'Flag me' })
+
+    await expect(api.sessions.setMarked({ ids: [session.id], isMarked: true })).resolves.toMatchObject([{ id: session.id, isMarked: true }])
+    await expect(api.sessions.setMarked({ ids: [session.id], isMarked: false })).resolves.toMatchObject([{ id: session.id }])
+
+    const archived = await api.sessions.archive(session.id)
+    expect(archived.status).toBe('archived')
+    const restored = await api.sessions.restore(session.id)
+    expect(restored.status).toBe('active')
+  })
+
   it('lists and retrieves skills in fallback mode', async () => {
     const api = createHesperApi({ allowFallback: true })
 

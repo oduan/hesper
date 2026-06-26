@@ -21,6 +21,7 @@ import type {
   SshServerDto,
   WorkerAgentInvocationDto,
   SetSessionCategoryInput,
+  SetSessionMarkedInput,
   SetSessionModelInput,
   SetSessionOutputModeInput,
   SetSessionWorkspaceInput,
@@ -102,6 +103,11 @@ function updateMockSession(session: SessionDto, overrides: Partial<SessionDto> =
 function clearMockSessionCategory(session: SessionDto): SessionDto {
   const { categoryId: _categoryId, ...uncategorized } = session
   return updateMockSession(uncategorized)
+}
+
+function clearMockSessionMarked(session: SessionDto): SessionDto {
+  const { isMarked: _isMarked, ...unmarked } = session
+  return updateMockSession(unmarked)
 }
 
 export function createFallbackHesperApi(): HesperDesktopApi {
@@ -200,6 +206,20 @@ export function createFallbackHesperApi(): HesperDesktopApi {
         return replaceSession(input.id, (session) => updateMockSession(session, { title: words || '新会话' }))
       },
       archive: async (id: string) => replaceSession(id, (session) => updateMockSession(session, { status: 'archived' })),
+      restore: async (id: string) => replaceSession(id, (session) => updateMockSession(session, { status: 'active' })),
+      setMarked: async (input: SetSessionMarkedInput) => {
+        const targetSessions = input.ids.map((id) => {
+          const session = sessions.find((candidate) => candidate.id === id && candidate.status !== 'deleted')
+          if (!session) {
+            throw new Error(`Session not found: ${id}`)
+          }
+          return session
+        })
+        const updatedSessions = targetSessions.map((session) => input.isMarked ? updateMockSession(session, { isMarked: true }) : clearMockSessionMarked(session))
+        const updatedById = new Map(updatedSessions.map((session) => [session.id, session]))
+        sessions = sessions.map((session) => updatedById.get(session.id) ?? session)
+        return input.ids.map((id) => updatedById.get(id) as SessionDto)
+      },
       delete: async (id: string) => replaceSession(id, (session) => updateMockSession(session, { status: 'deleted' })),
       setWorkspace: async (input: SetSessionWorkspaceInput) =>
         replaceSession(input.id, (session) => updateMockSession(session, input.workspacePath ? { workspacePath: input.workspacePath } : {})),

@@ -48,6 +48,7 @@ import {
   sessionCategoryDtoSchema,
   sessionIdInputSchema,
   setSessionCategoryInputSchema,
+  setSessionMarkedInputSchema,
   setSessionModelInputSchema,
   setSessionOutputModeInputSchema,
   setSessionWorkspaceInputSchema,
@@ -90,6 +91,8 @@ const mutatingChannels = [
   ipcChannels.sessionsUpdateTitle,
   ipcChannels.sessionsGenerateTitle,
   ipcChannels.sessionsArchive,
+  ipcChannels.sessionsRestore,
+  ipcChannels.sessionsSetMarked,
   ipcChannels.sessionsDelete,
   ipcChannels.sessionsSetWorkspace,
   ipcChannels.sessionsSetModel,
@@ -319,7 +322,18 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
     [ipcChannels.sessionsArchive]: async (_event, payload) => {
       const session = await options.container.sessionService.archiveSession(sessionIdInputSchema.parse(payload))
       await savePersistence()
-      return session
+      return sessionSchema.parse(session)
+    },
+    [ipcChannels.sessionsRestore]: async (_event, payload) => {
+      const session = await options.container.sessionService.restoreSession(sessionIdInputSchema.parse(payload))
+      await savePersistence()
+      return sessionSchema.parse(session)
+    },
+    [ipcChannels.sessionsSetMarked]: async (_event, payload) => {
+      const input = setSessionMarkedInputSchema.parse(payload)
+      const sessions = await options.container.sessionService.setMarkedForSessions(input.ids, input.isMarked)
+      await savePersistence()
+      return sessions.map((session) => sessionSchema.parse(session))
     },
     [ipcChannels.sessionsDelete]: async (_event, payload) => {
       const session = await options.container.sessionService.deleteSession(sessionIdInputSchema.parse(payload))
