@@ -3,6 +3,7 @@ productName: Hesper
 copyright: Copyright © 2026 Oisin Duan
 
 asar: true
+npmRebuild: false
 
 directories:
   buildResources: assets
