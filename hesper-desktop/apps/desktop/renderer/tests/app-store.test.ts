@@ -53,6 +53,55 @@ describe('app-store reducer', () => {
     expect(nextState.activeSessionId).toBe('session-active')
   })
 
+  it('keeps archived sessions out of all sessions selection', () => {
+    const nextState = appReducer(initialAppState, {
+      type: 'sessions.loaded',
+      sessions: [
+        createSessionFixture({ id: 'session-archived-newer', status: 'archived', updatedAt: '2026-06-10T03:10:00.000Z' }),
+        createSessionFixture({ id: 'session-active', updatedAt: '2026-06-10T03:09:00.000Z' })
+      ]
+    })
+
+    expect(nextState.activeSessionId).toBe('session-active')
+  })
+
+  it('selects marked sessions from the special marked view', () => {
+    const nextState = appReducer({
+      ...initialAppState,
+      sessions: [
+        createSessionFixture({ id: 'session-marked', isMarked: true, updatedAt: '2026-06-10T03:05:00.000Z' }),
+        createSessionFixture({ id: 'session-unmarked', updatedAt: '2026-06-10T03:04:00.000Z' }),
+        createSessionFixture({ id: 'session-marked-archived', status: 'archived', isMarked: true, updatedAt: '2026-06-10T03:06:00.000Z' })
+      ],
+      activeSessionId: 'session-unmarked'
+    }, {
+      type: 'sessionSpecialView.selected',
+      view: 'marked'
+    })
+
+    expect(nextState.activeSessionSpecialView).toBe('marked')
+    expect(nextState.activeSessionCategoryId).toBeUndefined()
+    expect(nextState.activeSessionId).toBe('session-marked')
+  })
+
+  it('selects archived sessions from the special archive view', () => {
+    const nextState = appReducer({
+      ...initialAppState,
+      sessions: [
+        createSessionFixture({ id: 'session-active', updatedAt: '2026-06-10T03:05:00.000Z' }),
+        createSessionFixture({ id: 'session-archived', status: 'archived', updatedAt: '2026-06-10T03:04:00.000Z' })
+      ],
+      activeSessionId: 'session-active'
+    }, {
+      type: 'sessionSpecialView.selected',
+      view: 'archived'
+    })
+
+    expect(nextState.activeSessionSpecialView).toBe('archived')
+    expect(nextState.activeSessionCategoryId).toBeUndefined()
+    expect(nextState.activeSessionId).toBe('session-archived')
+  })
+
   it('moves touched sessions to the top and safely reverts failed optimistic touches', () => {
     const loaded = appReducer(initialAppState, {
       type: 'sessions.loaded',

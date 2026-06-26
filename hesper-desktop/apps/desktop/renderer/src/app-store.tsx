@@ -2,11 +2,14 @@ import { createContext, useContext, useMemo, useReducer, type Dispatch, type Rea
 import type { AgentRun, AgentRuntimeEvent, Message, RunStep, Session, SessionCategory, WorkerAgentInvocation } from '@hesper/shared'
 import type { AppSection } from '@hesper/ui'
 
+export type SessionSpecialView = 'marked' | 'archived'
+
 export type AppState = {
   sessions: Session[]
   sessionCategories: SessionCategory[]
   activeSessionId?: string
   activeSessionCategoryId?: string
+  activeSessionSpecialView?: SessionSpecialView
   messagesBySession: Record<string, Message[]>
   stepsByRun: Record<string, RunStep[]>
   streamingByRun: Record<string, string>
@@ -27,6 +30,7 @@ export type AppAction =
   | { type: 'sessionCategory.updated'; category: SessionCategory }
   | { type: 'sessionCategory.deleted'; categoryId: string; deletedSessionIds: string[] }
   | { type: 'sessionCategory.selected'; categoryId?: string }
+  | { type: 'sessionSpecialView.selected'; view: SessionSpecialView }
   | { type: 'session.created'; session: Session }
   | { type: 'session.updated'; session: Session }
   | { type: 'sessions.deleted'; sessionIds: string[] }
@@ -148,16 +152,24 @@ function withActiveSessionId(state: AppState, activeSessionId: string | undefine
 }
 
 function withActiveSessionCategoryId(state: AppState, activeSessionCategoryId: string | undefined): AppState {
-  const { activeSessionCategoryId: _previousActiveSessionCategoryId, ...rest } = state
+  const { activeSessionCategoryId: _previousActiveSessionCategoryId, activeSessionSpecialView: _previousSpecialView, ...rest } = state
   return activeSessionCategoryId ? { ...rest, activeSessionCategoryId } : rest
 }
 
-function visibleSessionsForCategory(sessions: Session[], categoryId: string | undefined): Session[] {
-  return categoryId ? sessions.filter((session) => session.categoryId === categoryId) : sessions
+function withActiveSessionSpecialView(state: AppState, activeSessionSpecialView: SessionSpecialView): AppState {
+  const { activeSessionCategoryId: _previousActiveSessionCategoryId, activeSessionSpecialView: _previousSpecialView, ...rest } = state
+  return { ...rest, activeSessionSpecialView }
 }
 
-function withActiveSessionForCurrentCategory(state: AppState): AppState {
-  const visible = visibleSessionsForCategory(state.sessions, state.activeSessionCategoryId)
+function visibleSessionsForScope(sessions: Session[], categoryId: string | undefined, specialView: SessionSpecialView | undefined): Session[] {
+  if (specialView === 'archived') return sessions.filter((session) => session.status === 'archived')
+  if (specialView === 'marked') return sessions.filter((session) => session.status === 'active' && session.isMarked)
+  if (categoryId) return sessions.filter((session) => session.status === 'active' && session.categoryId === categoryId)
+  return sessions.filter((session) => session.status === 'active')
+}
+
+function withActiveSessionForCurrentScope(state: AppState): AppState {
+  const visible = visibleSessionsForScope(state.sessions, state.activeSessionCategoryId, state.activeSessionSpecialView)
   return withActiveSessionId(state, pickActiveSessionId(state.activeSessionId, visible))
 }
 
@@ -219,7 +231,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
     case 'sessions.loaded': {
       const sessions = sortSessions(action.sessions)
-      return withActiveSessionForCurrentCategory({ ...state, sessions })
+      return withActiveSessionForCurrentScope({ ...state, sessions })
     }
     case 'sessionCategories.loaded':
       return { ...state, sessionCategories: action.categories }
@@ -227,7 +239,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const nextState = { ...state, sessionCategories: [...state.sessionCategories, action.category] }
       return action.select === false
         ? nextState
-        : withActiveSessionForCurrentCategory({ ...nextState, activeSessionCategoryId: action.category.id })
+        : withActiveSessionForCurrentScope(withActiveSessionCategoryId(nextState, action.category.id))
     }
     case 'sessionCategory.updated':
       return { ...state, sessionCategories: mergeById(state.sessionCategories, action.category) }
@@ -239,13 +251,15 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         sessions,
         sessionCategories: state.sessionCategories.filter((category) => category.id !== action.categoryId)
       }, state.activeSessionCategoryId === action.categoryId ? undefined : state.activeSessionCategoryId)
-      return withActiveSessionForCurrentCategory(nextState)
+      return withActiveSessionForCurrentScope(nextState)
     }
     case 'sessionCategory.selected':
-      return withActiveSessionForCurrentCategory(withActiveSessionCategoryId(state, action.categoryId))
+      return withActiveSessionForCurrentScope(withActiveSessionCategoryId(state, action.categoryId))
+    case 'sessionSpecialView.selected':
+      return withActiveSessionForCurrentScope(withActiveSessionSpecialView(state, action.view))
     case 'session.created': {
       const sessions = sortSessions([action.session, ...state.sessions.filter((session) => session.id !== action.session.id)])
-      return withActiveSessionForCurrentCategory({
+      return withActiveSessionForCurrentScope({
         ...state,
         sessions,
         activeSessionId: action.session.id,
@@ -258,11 +272,11 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case 'session.updated': {
       if (action.session.status === 'deleted') {
         const sessions = sortSessions(removeById(state.sessions, action.session.id))
-        return withActiveSessionForCurrentCategory(withActiveSessionId({ ...state, sessions }, state.activeSessionId === action.session.id ? undefined : state.activeSessionId))
+        return withActiveSessionForCurrentScope(withActiveSessionId({ ...state, sessions }, state.activeSessionId === action.session.id ? undefined : state.activeSessionId))
       }
 
       const sessions = sortSessions(mergeById(state.sessions, action.session))
-      return withActiveSessionForCurrentCategory({
+      return withActiveSessionForCurrentScope({
         ...state,
         sessions,
         messagesBySession: {
@@ -274,7 +288,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case 'sessions.deleted': {
       const deletedSessionIds = new Set(action.sessionIds)
       const sessions = state.sessions.filter((session) => !deletedSessionIds.has(session.id))
-      return withActiveSessionForCurrentCategory({ ...state, sessions })
+      return withActiveSessionForCurrentScope({ ...state, sessions })
     }
     case 'session.touched': {
       return {
@@ -289,16 +303,12 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       }
     }
     case 'session.selected': {
-      if (!state.activeSessionCategoryId) {
+      const visible = visibleSessionsForScope(state.sessions, state.activeSessionCategoryId, state.activeSessionSpecialView)
+      if (visible.some((session) => session.id === action.sessionId)) {
         return { ...state, activeSessionId: action.sessionId }
       }
 
-      const session = state.sessions.find((candidate) => candidate.id === action.sessionId)
-      if (session?.categoryId === state.activeSessionCategoryId) {
-        return { ...state, activeSessionId: action.sessionId }
-      }
-
-      return withActiveSessionForCurrentCategory(state)
+      return withActiveSessionForCurrentScope(state)
     }
     case 'history.loaded': {
       const childRunIds = new Set(action.runs.filter((run) => run.parentRunId).map((run) => run.id))
