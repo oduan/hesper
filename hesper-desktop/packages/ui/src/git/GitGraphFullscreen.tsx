@@ -42,11 +42,8 @@ export function GitGraphFullscreen({
   loadingMore,
   error,
   repositoryName,
-  currentBranch,
   commitCount,
-  loadedCount,
   hasMore,
-  dirty,
   onClose,
   onSelectCommit,
   onLoadCommitDetail,
@@ -62,11 +59,8 @@ export function GitGraphFullscreen({
   const [detailCommitHash, setDetailCommitHash] = useState<string | undefined>()
 
   const detailOpen = Boolean(detailCommitHash)
-  const displayedLoadedCount = loadedCount ?? rows.length
   const repositoryTitle = repositoryName?.trim() || 'Git 仓库'
-  const commitCountLabel = commitCount !== undefined ? `${formatCount(commitCount)} 次提交` : `${formatCount(displayedLoadedCount)} 条已加载`
-  const loadedCountLabel = commitCount !== undefined ? `已加载 ${formatCount(displayedLoadedCount)}` : undefined
-  const historyStatusLabel = loading && rows.length === 0 ? '正在加载历史' : hasMore ? '可继续加载' : '历史已加载完'
+  const commitCountLabel = commitCount !== undefined ? `${formatCount(commitCount)} 次提交` : undefined
   const selectedRow = useMemo(
     () => rows.find((row) => row.commitHash === (detailCommitHash ?? selectedCommit)) ?? rows[0],
     [detailCommitHash, rows, selectedCommit]
@@ -97,6 +91,14 @@ export function GitGraphFullscreen({
   const openDetail = (commitHash: string) => {
     setDetailCommitHash(commitHash)
     onLoadCommitDetail(commitHash)
+  }
+
+  const handleSelectCommit = (commitHash: string) => {
+    onSelectCommit(commitHash)
+    if (detailOpen && detailCommitHash !== commitHash) {
+      setDetailCommitHash(commitHash)
+      onLoadCommitDetail(commitHash)
+    }
   }
 
   const maybeLoadMore = (element: HTMLElement | null) => {
@@ -158,13 +160,7 @@ export function GitGraphFullscreen({
       <header style={headerStyle}>
         <div style={repositorySummaryStyle}>
           <h1 style={titleStyle}>{repositoryTitle}</h1>
-          <div aria-label="仓库 Git 信息" style={repositoryMetaStyle}>
-            <span style={metaPillStyle}>{commitCountLabel}</span>
-            {loadedCountLabel ? <span style={metaPillStyle}>{loadedCountLabel}</span> : null}
-            {currentBranch ? <span style={metaPillStyle}>分支 {currentBranch}</span> : null}
-            {dirty ? <span style={metaPillStyle}>工作区有更改</span> : null}
-            <span style={metaPillStyle}>{historyStatusLabel}</span>
-          </div>
+          {commitCountLabel ? <span aria-label="提交次数" style={commitCountStyle}>{commitCountLabel}</span> : null}
         </div>
         <button type="button" aria-label="关闭 Git 提交图谱" style={closeButtonStyle} onClick={onClose}>
           <svg aria-hidden="true" viewBox="0 0 24 24" style={iconStyle}>
@@ -180,16 +176,14 @@ export function GitGraphFullscreen({
         <GitGraphTable
           rows={rows}
           selectedCommit={selectedCommit}
-          onSelectCommit={onSelectCommit}
+          onSelectCommit={handleSelectCommit}
           onOpenContextMenu={setMenuRequest}
           onOpenDetail={openDetail}
         />
         {hasMore || loadingMore ? (
           <div role="status" style={loadMoreStatusStyle}>
-            {loadingMore ? '正在加载更多提交…' : `已加载 ${formatCount(displayedLoadedCount)} 条，继续向下滚动加载更多`}
+            {loadingMore ? '正在加载更多提交…' : '继续向下滚动加载更多'}
           </div>
-        ) : rows.length > 0 ? (
-          <div style={loadMoreStatusStyle}>已加载全部提交</div>
         ) : null}
       </main>
 
@@ -215,10 +209,6 @@ export function GitGraphFullscreen({
         loading={loading}
         error={error}
         onClose={closeDetail}
-        onCreateBranch={onCreateBranch}
-        onCreateTag={onCreateTag}
-        onCheckout={onCheckout}
-        onCopyCommitId={onCopyCommitId}
       />
     </div>
   )
@@ -244,51 +234,39 @@ const headerStyle: CSSProperties = {
   alignItems: 'center',
   justifyContent: 'space-between',
   gap: themeTokens.spacing.md,
-  padding: `${themeTokens.spacing.md} ${themeTokens.spacing.lg}`,
+  minHeight: 44,
+  padding: `${themeTokens.spacing.sm} ${themeTokens.spacing.lg}`,
   borderBottom: `1px solid ${themeTokens.color.borderSubtle}`,
   background: themeTokens.color.surfaceMuted
 }
 
 const repositorySummaryStyle: CSSProperties = {
   minWidth: 0,
-  display: 'grid',
-  gap: themeTokens.spacing.xs
-}
-
-const repositoryMetaStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  flexWrap: 'wrap',
-  gap: themeTokens.spacing.xs,
-  color: themeTokens.color.textMuted,
-  fontSize: 12
-}
-
-const metaPillStyle: CSSProperties = {
   display: 'inline-flex',
-  alignItems: 'center',
-  minWidth: 0,
-  maxWidth: 240,
-  padding: `2px ${themeTokens.spacing.sm}`,
-  border: `1px solid ${themeTokens.color.borderSubtle}`,
-  borderRadius: 999,
-  background: themeTokens.color.surface,
-  color: themeTokens.color.textMuted,
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap'
+  alignItems: 'baseline',
+  gap: themeTokens.spacing.sm
 }
 
 const titleStyle: CSSProperties = {
   margin: 0,
   color: themeTokens.color.text,
-  fontSize: 18,
-  lineHeight: 1.25
+  fontSize: 16,
+  lineHeight: 1.2,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap'
+}
+
+const commitCountStyle: CSSProperties = {
+  flex: '0 0 auto',
+  color: themeTokens.color.textMuted,
+  fontSize: 12,
+  fontVariantNumeric: 'tabular-nums'
 }
 
 const closeButtonStyle: CSSProperties = {
-  width: 34,
-  height: 34,
+  width: 30,
+  height: 30,
   border: 0,
   borderRadius: themeTokens.radius.md,
   background: themeTokens.color.surfaceMuted,

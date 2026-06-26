@@ -660,7 +660,7 @@ describe('renderer App', () => {
     await waitFor(() => expect(listGitLog).toHaveBeenCalledWith({ sessionId: 'session-git', limit: 60, offset: 0 }))
     expect(await screen.findByRole('dialog', { name: 'Git 提交图谱' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'workspace' })).toBeInTheDocument()
-    expect(screen.getByLabelText('仓库 Git 信息')).toHaveTextContent('123 次提交')
+    expect(screen.getByLabelText('提交次数')).toHaveTextContent('123 次提交')
     expect(screen.getByText('Head row')).toBeInTheDocument()
     expect(screen.getByRole('row', { name: /Head row aaaaaaa/ })).toHaveAttribute('aria-selected', 'true')
   })

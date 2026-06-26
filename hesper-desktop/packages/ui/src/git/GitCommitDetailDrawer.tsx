@@ -11,10 +11,6 @@ export type GitCommitDetailDrawerProps = {
   loading?: boolean | undefined
   error?: string | undefined
   onClose: () => void
-  onCreateBranch: (commitHash: string) => void
-  onCreateTag: (commitHash: string) => void
-  onCheckout: (ref: string) => void
-  onCopyCommitId?: ((commitHash: string) => void) | undefined
 }
 
 export function GitCommitDetailDrawer({
@@ -24,11 +20,7 @@ export function GitCommitDetailDrawer({
   row,
   loading,
   error,
-  onClose,
-  onCreateBranch,
-  onCreateTag,
-  onCheckout,
-  onCopyCommitId
+  onClose
 }: GitCommitDetailDrawerProps) {
   const closeButtonRef = useRef<HTMLButtonElement | null>(null)
   const effectiveHash = detail?.commitHash ?? commitHash ?? row?.commitHash ?? ''
@@ -45,20 +37,10 @@ export function GitCommitDetailDrawer({
 
   if (!open) return null
 
-  const copyCommitId = () => {
-    if (!effectiveHash) return
-    if (onCopyCommitId) {
-      onCopyCommitId(effectiveHash)
-      return
-    }
-    void navigator.clipboard?.writeText(effectiveHash)
-  }
-
   return (
     <aside role="dialog" aria-label="提交详情" aria-modal="false" style={drawerStyle}>
       <header style={drawerHeaderStyle}>
         <div style={titleGroupStyle}>
-          <p style={eyebrowStyle}>Commit detail</p>
           <h2 style={titleStyle}>{subject}</h2>
         </div>
         <button ref={closeButtonRef} type="button" aria-label="关闭提交详情" onClick={onClose} style={iconButtonStyle}>
@@ -67,13 +49,6 @@ export function GitCommitDetailDrawer({
           </svg>
         </button>
       </header>
-
-      <div style={actionsStyle}>
-        <button type="button" style={actionButtonStyle} onClick={() => onCreateBranch(effectiveHash)} disabled={!effectiveHash}>新建分支</button>
-        <button type="button" style={actionButtonStyle} onClick={() => onCreateTag(effectiveHash)} disabled={!effectiveHash}>创建标签</button>
-        <button type="button" style={actionButtonStyle} onClick={() => onCheckout(effectiveHash)} disabled={!effectiveHash}>检出</button>
-        <button type="button" style={actionButtonStyle} onClick={copyCommitId} disabled={!effectiveHash}>复制 ID</button>
-      </div>
 
       <div className="hesper-theme-scrollbar" style={contentStyle}>
         {loading ? <p style={mutedStyle}>正在加载提交详情…</p> : null}
@@ -173,13 +148,12 @@ const drawerHeaderStyle: CSSProperties = {
   alignItems: 'flex-start',
   justifyContent: 'space-between',
   gap: themeTokens.spacing.md,
-  padding: themeTokens.spacing.lg,
+  padding: `${themeTokens.spacing.md} ${themeTokens.spacing.lg}`,
   borderBottom: `1px solid ${themeTokens.color.borderSubtle}`
 }
 
 const titleGroupStyle: CSSProperties = { minWidth: 0 }
-const eyebrowStyle: CSSProperties = { margin: 0, color: themeTokens.color.textMuted, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.7 }
-const titleStyle: CSSProperties = { margin: `${themeTokens.spacing.xs} 0 0`, fontSize: 18, lineHeight: 1.35, color: themeTokens.color.text }
+const titleStyle: CSSProperties = { margin: 0, fontSize: 18, lineHeight: 1.35, color: themeTokens.color.text }
 
 const iconButtonStyle: CSSProperties = {
   width: 32,
@@ -194,25 +168,6 @@ const iconButtonStyle: CSSProperties = {
 }
 
 const iconStyle: CSSProperties = { width: 18, height: 18 }
-
-const actionsStyle: CSSProperties = {
-  display: 'flex',
-  flexWrap: 'wrap',
-  gap: themeTokens.spacing.sm,
-  padding: `${themeTokens.spacing.md} ${themeTokens.spacing.lg}`,
-  borderBottom: `1px solid ${themeTokens.color.borderSubtle}`,
-  background: themeTokens.color.surfaceMuted
-}
-
-const actionButtonStyle: CSSProperties = {
-  border: `1px solid ${themeTokens.color.borderSubtle}`,
-  borderRadius: themeTokens.radius.sm,
-  background: themeTokens.color.surface,
-  color: themeTokens.color.text,
-  cursor: 'pointer',
-  padding: `${themeTokens.spacing.xs} ${themeTokens.spacing.sm}`,
-  font: 'inherit'
-}
 
 const contentStyle: CSSProperties = {
   flex: 1,

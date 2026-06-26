@@ -115,9 +115,9 @@ describe('GitGraphFullscreen', () => {
     renderGraph({ repositoryName: 'hesper-desktop', currentBranch: 'feature/git-log-panel', commitCount: 1234, loadedCount: 60, hasMore: true })
 
     expect(screen.getByRole('heading', { name: 'hesper-desktop' })).toBeInTheDocument()
-    expect(screen.getByLabelText('仓库 Git 信息')).toHaveTextContent('1,234 次提交')
-    expect(screen.getByLabelText('仓库 Git 信息')).toHaveTextContent('已加载 60')
-    expect(screen.getByLabelText('仓库 Git 信息')).toHaveTextContent('分支 feature/git-log-panel')
+    expect(screen.getByLabelText('提交次数')).toHaveTextContent('1,234 次提交')
+    expect(screen.queryByText(/已加载/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/历史已加载完|正在加载历史|可继续加载/)).not.toBeInTheDocument()
     expect(screen.queryByText('Repository history')).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Git 提交图谱' })).not.toBeInTheDocument()
   })
@@ -125,10 +125,9 @@ describe('GitGraphFullscreen', () => {
   it('draws continuous graph lanes and smooth branch curves', () => {
     renderGraph()
 
-    const row = screen.getByRole('row', { name: /Add git graph panel/ })
-    const lane = within(row).getByTestId('git-graph-lane-feature')
-    const node = within(row).getByTestId('git-graph-node-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
-    const edge = within(row).getByTestId('git-graph-edge-main-feature')
+    const lane = screen.getByTestId('git-graph-lane-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-feature')
+    const node = screen.getByTestId('git-graph-node-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+    const edge = screen.getByTestId('git-graph-edge-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-main-feature')
 
     expect(lane).toHaveAttribute('x1', node.getAttribute('cx'))
     expect(lane).toHaveAttribute('x2', node.getAttribute('cx'))
@@ -248,6 +247,21 @@ describe('GitGraphFullscreen', () => {
 
     expect(callbacks.onLoadCommitDetail).toHaveBeenCalledTimes(2)
     expect(screen.getByRole('dialog', { name: '提交详情' })).toBeInTheDocument()
+  })
+
+  it('updates the open detail drawer when selecting another commit on the left', async () => {
+    const callbacks = renderGraph()
+    const user = userEvent.setup()
+
+    fireEvent.contextMenu(screen.getByRole('row', { name: /Add git graph panel/ }))
+    await user.click(screen.getByRole('menuitem', { name: '查看提交详情' }))
+    expect(screen.getByRole('dialog', { name: '提交详情' })).toHaveTextContent('Add git graph panel')
+
+    await user.click(screen.getByRole('row', { name: /Prepare base history/ }))
+
+    expect(callbacks.onSelectCommit).toHaveBeenCalledWith(secondRow.commitHash)
+    expect(callbacks.onLoadCommitDetail).toHaveBeenLastCalledWith(secondRow.commitHash)
+    expect(screen.getByRole('dialog', { name: '提交详情' })).toHaveTextContent('Prepare base history')
   })
 
   it('closes Escape in menu, detail drawer, fullscreen order', async () => {
@@ -490,7 +504,11 @@ describe('GitGraphFullscreen', () => {
     const drawer = screen.getByRole('dialog', { name: '提交详情' })
     expect(drawer).toHaveStyle({ background: themeTokens.color.surface, color: themeTokens.color.text })
     expect(drawer.style.borderColor).toBe(themeTokens.color.borderSubtle)
-    expect(within(drawer).getByRole('button', { name: '新建分支' })).toHaveStyle({ background: themeTokens.color.surface, color: themeTokens.color.text })
+    expect(within(drawer).queryByText('Commit detail')).not.toBeInTheDocument()
+    expect(within(drawer).queryByRole('button', { name: '新建分支' })).not.toBeInTheDocument()
+    expect(within(drawer).queryByRole('button', { name: '创建标签' })).not.toBeInTheDocument()
+    expect(within(drawer).queryByRole('button', { name: '检出' })).not.toBeInTheDocument()
+    expect(within(drawer).queryByRole('button', { name: '复制 ID' })).not.toBeInTheDocument()
   })
 
 })
