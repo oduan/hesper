@@ -105,7 +105,7 @@ describe('ui components', () => {
     expect(titleBar).toHaveTextContent('Hesper')
     expect(titleBar).toHaveTextContent('构建 hesper MVP')
     expect(screen.getByLabelText('功能栏')).not.toHaveTextContent('hesper')
-    expect(screen.getByText('所有会话')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '所有会话' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '所有会话' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByLabelText('功能栏')).toHaveStyle({ boxSizing: 'border-box' })
     expect(screen.getByLabelText('实体列表')).toHaveStyle({ boxSizing: 'border-box' })
@@ -166,6 +166,101 @@ describe('ui components', () => {
 
     await user.click(screen.getByRole('button', { name: '工具' }))
     expect(onSelectSection).toHaveBeenCalledWith('tools')
+  })
+
+  it('renders session categories under the activity rail and creates a focused new category from all sessions', async () => {
+    const user = userEvent.setup()
+    const onCreateSessionCategory = vi.fn(async () => ({
+      id: 'category-new',
+      name: '新分类',
+      createdAt: now,
+      updatedAt: now
+    }))
+    const onRenameSessionCategory = vi.fn()
+    const onSelectSessionCategory = vi.fn()
+
+    render(
+      <AppShell
+        sessions={[]}
+        sessionCategories={[{ id: 'category-product', name: '产品图', createdAt: now, updatedAt: now }]}
+        sessionsExpanded
+        activeSection="sessions"
+        title="所有会话"
+        onCreateSessionCategory={onCreateSessionCategory}
+        onRenameSessionCategory={onRenameSessionCategory}
+        onSelectSessionCategory={onSelectSessionCategory}
+      />
+    )
+
+    const disclosure = screen.getByTestId('sessions-disclosure-icon')
+    expect(disclosure).toHaveAttribute('data-state', 'expanded')
+    expect(disclosure.querySelector('svg')).toHaveAttribute('viewBox', '0 0 16 16')
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: '所有会话' }))
+    await user.click(within(screen.getByRole('menu', { name: '会话分类操作' })).getByRole('menuitem', { name: '新建分类' }))
+
+    expect(onCreateSessionCategory).toHaveBeenCalledTimes(1)
+    const input = (await screen.findByLabelText('重命名分类')) as HTMLInputElement
+    expect(input).toHaveValue('新分类')
+    expect(input.selectionStart).toBe(0)
+    expect(input.selectionEnd).toBe(3)
+
+    await user.type(input, '头像{Enter}')
+    expect(onRenameSessionCategory).toHaveBeenCalledWith('category-new', '头像')
+  })
+
+  it('opens category context menu for rename and delete', async () => {
+    const user = userEvent.setup()
+    const onRenameSessionCategory = vi.fn()
+    const onDeleteSessionCategory = vi.fn()
+
+    render(
+      <AppShell
+        sessions={[]}
+        sessionCategories={[{ id: 'category-product', name: '产品图', createdAt: now, updatedAt: now }]}
+        sessionsExpanded
+        activeSection="sessions"
+        title="所有会话"
+        onRenameSessionCategory={onRenameSessionCategory}
+        onDeleteSessionCategory={onDeleteSessionCategory}
+      />
+    )
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: '产品图' }))
+    const menu = screen.getByRole('menu', { name: '分类操作' })
+    await user.click(within(menu).getByRole('menuitem', { name: '重命名' }))
+
+    const input = await screen.findByLabelText('重命名分类')
+    expect(input).toHaveValue('产品图')
+    await user.clear(input)
+    await user.type(input, '商业图{Enter}')
+    expect(onRenameSessionCategory).toHaveBeenCalledWith('category-product', '商业图')
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: '产品图' }))
+    await user.click(within(screen.getByRole('menu', { name: '分类操作' })).getByRole('menuitem', { name: '删除' }))
+    expect(onDeleteSessionCategory).toHaveBeenCalledWith('category-product')
+  })
+
+  it('keeps session disclosure icons centered and switches state when collapsed', () => {
+    render(
+      <AppShell
+        sessions={[]}
+        sessionCategories={[{ id: 'category-product', name: '产品图', createdAt: now, updatedAt: now }]}
+        sessionsExpanded={false}
+        activeSection="sessions"
+        title="所有会话"
+      />
+    )
+
+    const disclosure = screen.getByTestId('sessions-disclosure-icon')
+    const icon = disclosure.querySelector('svg')
+    expect(disclosure).toHaveAttribute('data-state', 'collapsed')
+    expect(disclosure).toHaveStyle({ width: '16px', height: '16px' })
+    expect(icon).toHaveAttribute('viewBox', '0 0 16 16')
+    expect(icon).toHaveAttribute('width', '16')
+    expect(icon).toHaveAttribute('height', '16')
+    expect(screen.queryByRole('button', { name: '所有会话' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '产品图' })).not.toBeInTheDocument()
   })
 
   it('renders builtin tools with global enable switches in the entity list', async () => {
