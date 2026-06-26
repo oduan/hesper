@@ -108,14 +108,25 @@ function cloneGitRefs(refs: GitRefDto[]): GitRefDto[] {
   return refs.map((ref) => ({ ...ref }))
 }
 
-function createFallbackGitRefs(headCommit = fallbackGitHeadCommit): GitRefDto[] {
+function createFallbackGitRefs(): GitRefDto[] {
   return [
-    { name: 'HEAD', shortName: 'HEAD', type: 'head', targetCommit: headCommit },
-    { name: 'refs/heads/main', shortName: 'main', type: 'local-branch', targetCommit: headCommit },
+    { name: 'HEAD', shortName: 'HEAD', type: 'head', targetCommit: fallbackGitHeadCommit },
+    { name: 'refs/heads/main', shortName: 'main', type: 'local-branch', targetCommit: fallbackGitHeadCommit },
     { name: 'refs/heads/feature/git-log-panel', shortName: 'feature/git-log-panel', type: 'local-branch', targetCommit: fallbackGitSecondCommit },
-    { name: 'refs/remotes/origin/main', shortName: 'origin/main', type: 'remote-branch', targetCommit: headCommit },
+    { name: 'refs/remotes/origin/main', shortName: 'origin/main', type: 'remote-branch', targetCommit: fallbackGitHeadCommit },
     { name: 'refs/tags/v0.1.0', shortName: 'v0.1.0', type: 'tag', targetCommit: fallbackGitThirdCommit }
   ]
+}
+
+function getFallbackGitRefsForCommit(commitHash: string): GitRefDto[] {
+  return cloneGitRefs(createFallbackGitRefs().filter((ref) => ref.targetCommit === commitHash))
+}
+
+function clampFallbackGitLogLimit(limit: number | undefined): number {
+  if (limit === undefined || !Number.isFinite(limit)) {
+    return 3
+  }
+  return Math.min(500, Math.max(1, Math.trunc(limit)))
 }
 
 function createFallbackGitRows(limit: number): GitGraphRowDto[] {
@@ -172,6 +183,84 @@ function createFallbackGitRows(limit: number): GitGraphRowDto[] {
       ...(row.graph.edges ? { edges: row.graph.edges.map((edge) => ({ ...edge })) } : {})
     }
   }))
+}
+
+const fallbackGitCommitDetails: Record<string, Omit<GitCommitDetailDto, 'refs'>> = {
+  [fallbackGitHeadCommit]: {
+    commitHash: fallbackGitHeadCommit,
+    shortHash: '1111111',
+    parents: [fallbackGitSecondCommit],
+    subject: 'Wire Git IPC fallback data',
+    body: 'Wire Git IPC fallback data\n\nThis deterministic commit detail is used when the Electron preload API is unavailable.',
+    authorName: 'Hesper Desktop',
+    authorEmail: 'desktop@example.com',
+    authoredAt: '2026-06-26T04:00:00.000Z',
+    committerName: 'Hesper Desktop',
+    committerEmail: 'desktop@example.com',
+    committedAt: '2026-06-26T04:05:00.000Z',
+    files: [
+      { path: 'apps/desktop/electron/ipc-handlers.ts', status: 'modified', additions: 42, deletions: 0 },
+      { path: 'apps/desktop/electron/preload.ts', status: 'modified', additions: 8, deletions: 0 },
+      { path: 'apps/desktop/renderer/src/ipc-client.ts', status: 'modified', additions: 64, deletions: 0 }
+    ]
+  },
+  [fallbackGitSecondCommit]: {
+    commitHash: fallbackGitSecondCommit,
+    shortHash: '2222222',
+    parents: [fallbackGitThirdCommit],
+    subject: 'Add Git graph service contracts',
+    body: 'Add Git graph service contracts\n\nFallback fixture commit for branch ref testing.',
+    authorName: 'Hesper Desktop',
+    authorEmail: 'desktop@example.com',
+    authoredAt: '2026-06-25T09:30:00.000Z',
+    committerName: 'Hesper Desktop',
+    committerEmail: 'desktop@example.com',
+    committedAt: '2026-06-25T09:35:00.000Z',
+    files: [{ path: 'apps/desktop/electron/ipc-contract.ts', status: 'modified', additions: 80, deletions: 0 }]
+  },
+  [fallbackGitThirdCommit]: {
+    commitHash: fallbackGitThirdCommit,
+    shortHash: '3333333',
+    parents: [],
+    subject: 'Initial desktop repository state',
+    body: 'Initial desktop repository state',
+    authorName: 'Hesper Desktop',
+    authorEmail: 'desktop@example.com',
+    authoredAt: '2026-06-24T08:15:00.000Z',
+    committerName: 'Hesper Desktop',
+    committerEmail: 'desktop@example.com',
+    committedAt: '2026-06-24T08:20:00.000Z',
+    files: [{ path: 'README.md', status: 'added', additions: 12, deletions: 0 }]
+  }
+}
+
+function createFallbackGitCommitDetail(commit: string): GitCommitDetailDto {
+  const knownDetail = fallbackGitCommitDetails[commit]
+  if (knownDetail) {
+    return {
+      ...knownDetail,
+      parents: [...knownDetail.parents],
+      refs: getFallbackGitRefsForCommit(knownDetail.commitHash),
+      files: knownDetail.files.map((file) => ({ ...file }))
+    }
+  }
+
+  const commitHash = commit.length === 40 ? commit : fallbackGitHeadCommit
+  return {
+    commitHash,
+    shortHash: commitHash.slice(0, 7),
+    parents: [],
+    subject: 'Fallback commit detail',
+    body: 'Fallback commit detail\n\nNo matching fallback fixture exists for this commit.',
+    authorName: 'Hesper Desktop',
+    authorEmail: 'desktop@example.com',
+    authoredAt: '2026-06-26T04:00:00.000Z',
+    committerName: 'Hesper Desktop',
+    committerEmail: 'desktop@example.com',
+    committedAt: '2026-06-26T04:05:00.000Z',
+    refs: [],
+    files: []
+  }
 }
 
 export function createFallbackHesperApi(): HesperDesktopApi {
@@ -302,7 +391,7 @@ export function createFallbackHesperApi(): HesperDesktopApi {
     git: {
       getState: async (input): Promise<GitRepositoryStateDto> => createFallbackGitState(input.sessionId),
       listLog: async (input): Promise<GitLogResultDto> => {
-        const limit = input.limit ?? 3
+        const limit = clampFallbackGitLogLimit(input.limit)
         const totalRows = createFallbackGitRows(3)
         return {
           rows: totalRows.slice(0, limit),
@@ -310,28 +399,7 @@ export function createFallbackHesperApi(): HesperDesktopApi {
           hasMore: totalRows.length > limit
         }
       },
-      getCommit: async (input): Promise<GitCommitDetailDto> => {
-        const commitHash = input.commit.length === 40 ? input.commit : fallbackGitHeadCommit
-        return {
-          commitHash,
-          shortHash: commitHash.slice(0, 7),
-          parents: [fallbackGitSecondCommit],
-          subject: 'Wire Git IPC fallback data',
-          body: 'Wire Git IPC fallback data\n\nThis deterministic commit detail is used when the Electron preload API is unavailable.',
-          authorName: 'Hesper Desktop',
-          authorEmail: 'desktop@example.com',
-          authoredAt: '2026-06-26T04:00:00.000Z',
-          committerName: 'Hesper Desktop',
-          committerEmail: 'desktop@example.com',
-          committedAt: '2026-06-26T04:05:00.000Z',
-          refs: cloneGitRefs(createFallbackGitRefs(commitHash).filter((ref) => ref.targetCommit === commitHash || ref.type === 'head')),
-          files: [
-            { path: 'apps/desktop/electron/ipc-handlers.ts', status: 'modified', additions: 42, deletions: 0 },
-            { path: 'apps/desktop/electron/preload.ts', status: 'modified', additions: 8, deletions: 0 },
-            { path: 'apps/desktop/renderer/src/ipc-client.ts', status: 'modified', additions: 64, deletions: 0 }
-          ]
-        }
-      },
+      getCommit: async (input): Promise<GitCommitDetailDto> => createFallbackGitCommitDetail(input.commit),
       createBranch: async (input) => createFallbackGitActionResult(`Created branch ${input.branchName}${input.checkout ? ' and checked it out' : ''}`, input.sessionId),
       createTag: async (input) => createFallbackGitActionResult(`Created tag ${input.tagName}`, input.sessionId),
       checkout: async (input) => createFallbackGitActionResult(`Checked out ${input.ref}`, input.sessionId)

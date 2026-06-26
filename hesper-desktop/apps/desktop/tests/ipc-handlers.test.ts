@@ -760,9 +760,22 @@ describe('registerIpcHandlers', () => {
 
     await expect(handles.get(ipcChannels.gitListLog)?.(event, { sessionId: 'session-git', limit: 0 })).rejects.toThrow()
     await expect(handles.get(ipcChannels.gitGetCommit)?.(event, { sessionId: 'session-git' })).rejects.toThrow()
+    await expect(handles.get(ipcChannels.gitCreateBranch)?.(event, {
+      sessionId: 'session-git',
+      commit: '1111111111111111111111111111111111111111',
+      branchName: '',
+      unexpected: true
+    })).rejects.toThrow()
 
     vi.spyOn(container.gitService, 'getState').mockResolvedValue({ sessionId: 'session-git' } as Awaited<ReturnType<typeof container.gitService.getState>>)
     await expect(handles.get(ipcChannels.gitGetState)?.(event, { sessionId: 'session-git' })).rejects.toThrow()
+
+    vi.spyOn(container.gitService, 'createBranch').mockResolvedValue({ success: 'yes' } as unknown as Awaited<ReturnType<typeof container.gitService.createBranch>>)
+    await expect(handles.get(ipcChannels.gitCreateBranch)?.(event, {
+      sessionId: 'session-git',
+      commit: '1111111111111111111111111111111111111111',
+      branchName: 'feature/schema-output'
+    })).rejects.toThrow()
   })
 
   it('schedules persistence for high-frequency session and role deletes without awaiting full saves', async () => {
