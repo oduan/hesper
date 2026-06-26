@@ -1,0 +1,42 @@
+appId: com.oduan.hesper
+productName: Hesper
+copyright: Copyright © 2026 Oisin Duan
+
+asar: true
+
+directories:
+  buildResources: assets
+  output: release
+
+files:
+  - package.json
+  - dist/**/*
+  - assets/**/*
+
+mac:
+  category: public.app-category.developer-tools
+  icon: assets/hesper-icon.icns
+  identity: null
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+    - target: zip
+      arch:
+        - x64
+        - arm64
+  artifactName: ${productName}-${version}-mac-${arch}.${ext}
+
+win:
+  icon: assets/hesper-icon.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: ${productName}-Setup-${version}-win-${arch}.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true

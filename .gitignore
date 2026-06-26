@@ -30,3 +30,6 @@ Thumbs.db
 
 # Playwright local test artifacts
 hesper-desktop/apps/desktop/test-results/
+
+# Electron Builder release outputs
+hesper-desktop/apps/desktop/release/

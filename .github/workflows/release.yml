@@ -1,0 +1,129 @@
+name: Release desktop clients
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            package_script: dist:win
+            artifact_name: hesper-windows
+            artifact_paths: |
+              hesper-desktop/apps/desktop/release/*.exe
+          - name: macOS
+            os: macos-latest
+            package_script: dist:mac
+            artifact_name: hesper-macos
+            artifact_paths: |
+              hesper-desktop/apps/desktop/release/*.dmg
+              hesper-desktop/apps/desktop/release/*.zip
+
+    defaults:
+      run:
+        working-directory: hesper-desktop
+
+    env:
+      CI: true
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.5.2
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.19.0
+          cache: pnpm
+          cache-dependency-path: hesper-desktop/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply release version from tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          node - "$version" <<'NODE'
+          const fs = require('node:fs')
+          const version = process.argv[2]
+          if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(version)) {
+            throw new Error(`Release tag ${process.env.GITHUB_REF_NAME} does not map to a valid package version.`)
+          }
+          const packagePath = 'apps/desktop/package.json'
+          const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf8'))
+          packageJson.version = version
+          fs.writeFileSync(packagePath, `${JSON.stringify(packageJson, null, 2)}\n`)
+          console.log(`desktop package version set to ${version}`)
+          NODE
+
+      - name: Build desktop package
+        run: pnpm --filter @hesper/desktop ${{ matrix.package_script }}
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_paths }}
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    needs: build
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Download package artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Publish release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          assets=(release-assets/*)
+          if [ ${#assets[@]} -eq 0 ]; then
+            echo 'No release assets were downloaded.' >&2
+            exit 1
+          fi
+
+          prerelease_args=()
+          if [[ "${GITHUB_REF_NAME}" == *-* ]]; then
+            prerelease_args+=(--prerelease)
+          fi
+
+          if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" "${assets[@]}" --repo "${GITHUB_REPOSITORY}" --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" "${assets[@]}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "Hesper ${GITHUB_REF_NAME}" \
+              --generate-notes \
+              "${prerelease_args[@]}"
+          fi
