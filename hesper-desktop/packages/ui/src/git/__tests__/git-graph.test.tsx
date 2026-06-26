@@ -103,6 +103,30 @@ describe('GitGraphFullscreen', () => {
     expect(screen.getByRole('columnheader', { name: '提交' })).toBeInTheDocument()
   })
 
+  it('allocates a wider graph column for many lanes and lets users resize data columns', () => {
+    const manyLaneRow: GitGraphRowView = {
+      ...firstRow,
+      graph: {
+        lanes: Array.from({ length: 12 }, (_, index) => ({ id: `lane-${index}`, active: true, topActive: true, bottomActive: true })),
+        nodeLaneId: 'lane-11'
+      }
+    }
+    renderGraph({ rows: [manyLaneRow] })
+
+    const overlay = screen.getByTestId('git-graph-overlay')
+    const graphCol = screen.getByTestId('git-graph-col')
+    expect(Number.parseFloat(graphCol.style.width)).toBeGreaterThanOrEqual(244)
+    expect(overlay.getAttribute('viewBox')).toContain(`0 0 ${graphCol.style.width.replace('px', '')}`)
+
+    const descriptionCol = screen.getByTestId('git-graph-description-col')
+    const initialWidth = Number.parseFloat(descriptionCol.style.width)
+    fireEvent.mouseDown(screen.getByRole('button', { name: '调整描述列宽' }), { clientX: 100 })
+    fireEvent.mouseMove(window, { clientX: 180 })
+    fireEvent.mouseUp(window)
+
+    expect(Number.parseFloat(descriptionCol.style.width)).toBeGreaterThan(initialWidth)
+  })
+
   it('renders branch and tag refs before the commit message with graph-colored branch badges', () => {
     renderGraph()
 
@@ -445,6 +469,28 @@ describe('GitGraphFullscreen', () => {
 
     await waitFor(() => expect(row).toHaveFocus())
     expect(externalButton).not.toHaveFocus()
+  })
+
+  it('keeps file change status, path, and diff stats in separate non-overlapping columns', () => {
+    renderGraph({
+      detail: {
+        ...detail,
+        files: [{
+          path: 'hesper-desktop/packages/app-core/src/__tests__/settings-service.test.ts',
+          status: 'modified',
+          additions: 17,
+          deletions: 11
+        }]
+      }
+    })
+
+    screen.getByRole('row', { name: /Add git graph panel/ }).focus()
+    fireEvent.keyDown(document.activeElement ?? window, { key: 'Enter' })
+
+    const status = screen.getByText('modified')
+    const fileItem = status.closest('li')
+    expect(fileItem).toHaveStyle({ gridTemplateColumns: '72px minmax(0, 1fr) max-content' })
+    expect(status).toHaveStyle({ minWidth: '72px' })
   })
 
   it('keeps dt and dd inside a description list in the drawer', () => {

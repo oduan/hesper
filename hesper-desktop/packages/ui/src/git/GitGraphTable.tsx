@@ -1,4 +1,4 @@
-import type { CSSProperties, KeyboardEvent, MouseEvent } from 'react'
+import { useState, type CSSProperties, type KeyboardEvent, type MouseEvent } from 'react'
 import { themeTokens } from '../theme'
 import { GitRefBadge } from './GitRefBadge'
 import type { GitGraphLaneView, GitGraphRowView } from './git-graph-types'
@@ -18,25 +18,102 @@ export type GitGraphTableProps = {
   onOpenDetail: (commitHash: string) => void
 }
 
-const graphColumnWidth = 104
+const graphColumnMinWidth = 192
 const laneGap = 18
 const laneInset = 18
 const rowHeight = 42
 const headerHeight = 36
 const nodeRadius = 6
 
+type ResizableColumnKey = 'description' | 'date' | 'author' | 'commit'
+
+const defaultColumnWidths: Record<ResizableColumnKey, number> = {
+  description: 560,
+  date: 150,
+  author: 180,
+  commit: 120
+}
+
+const minColumnWidths: Record<ResizableColumnKey, number> = {
+  description: 260,
+  date: 112,
+  author: 120,
+  commit: 88
+}
+
+const columnLabels: Record<ResizableColumnKey, string> = {
+  description: '描述',
+  date: '日期',
+  author: '作者',
+  commit: '提交'
+}
+
 export function GitGraphTable({ rows, selectedCommit, onSelectCommit, onOpenContextMenu, onOpenDetail }: GitGraphTableProps) {
+  const [columnWidths, setColumnWidths] = useState(defaultColumnWidths)
+  const graphWidth = graphColumnWidthForRows(rows)
+  const totalTableWidth = graphWidth + Object.values(columnWidths).reduce((sum, width) => sum + width, 0)
+
+  const startColumnResize = (column: ResizableColumnKey, event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    const startX = event.clientX
+    const startWidth = columnWidths[column]
+
+    const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
+      const nextWidth = Math.max(minColumnWidths[column], startWidth + moveEvent.clientX - startX)
+      setColumnWidths((current) => ({ ...current, [column]: nextWidth }))
+    }
+
+    const handleMouseUp = () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+  }
+
+  const resizeColumnByKeyboard = (column: ResizableColumnKey, event: KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+    event.preventDefault()
+    const delta = event.key === 'ArrowRight' ? 24 : -24
+    setColumnWidths((current) => ({
+      ...current,
+      [column]: Math.max(minColumnWidths[column], current[column] + delta)
+    }))
+  }
+
+  const renderResizableHeader = (column: ResizableColumnKey) => (
+    <th scope="col" aria-label={columnLabels[column]} style={headerCellStyle}>
+      <span>{columnLabels[column]}</span>
+      <button
+        type="button"
+        aria-label={`调整${columnLabels[column]}列宽`}
+        style={resizeHandleStyle}
+        onMouseDown={(event) => startColumnResize(column, event)}
+        onKeyDown={(event) => resizeColumnByKeyboard(column, event)}
+      />
+    </th>
+  )
+
   return (
     <div style={tableFrameStyle}>
-      <GraphOverlay rows={rows} />
-      <table role="table" aria-label="Git 提交图谱表格" style={tableStyle}>
+      <GraphOverlay rows={rows} graphWidth={graphWidth} />
+      <table role="table" aria-label="Git 提交图谱表格" style={{ ...tableStyle, minWidth: totalTableWidth }}>
+        <colgroup>
+          <col data-testid="git-graph-col" style={{ width: graphWidth }} />
+          <col data-testid="git-graph-description-col" style={{ width: columnWidths.description }} />
+          <col data-testid="git-graph-date-col" style={{ width: columnWidths.date }} />
+          <col data-testid="git-graph-author-col" style={{ width: columnWidths.author }} />
+          <col data-testid="git-graph-commit-col" style={{ width: columnWidths.commit }} />
+        </colgroup>
         <thead style={tableHeadStyle}>
           <tr>
-            <th scope="col" style={{ ...headerCellStyle, ...graphHeaderCellStyle }}>图谱</th>
-            <th scope="col" style={headerCellStyle}>描述</th>
-            <th scope="col" style={dateHeaderCellStyle}>日期</th>
-            <th scope="col" style={authorHeaderCellStyle}>作者</th>
-            <th scope="col" style={commitHeaderCellStyle}>提交</th>
+            <th scope="col" style={{ ...headerCellStyle, ...graphHeaderCellStyle(graphWidth) }}>图谱</th>
+            {renderResizableHeader('description')}
+            {renderResizableHeader('date')}
+            {renderResizableHeader('author')}
+            {renderResizableHeader('commit')}
           </tr>
         </thead>
         <tbody>
@@ -74,17 +151,18 @@ export function GitGraphTable({ rows, selectedCommit, onSelectCommit, onOpenCont
   )
 }
 
-function GraphOverlay({ rows }: { rows: GitGraphRowView[] }) {
+function GraphOverlay({ rows, graphWidth }: { rows: GitGraphRowView[]; graphWidth: number }) {
   if (rows.length === 0) return null
 
   const svgHeight = rows.length * rowHeight
 
   return (
     <svg
+      data-testid="git-graph-overlay"
       aria-hidden="true"
-      viewBox={`0 0 ${graphColumnWidth} ${svgHeight}`}
+      viewBox={`0 0 ${graphWidth} ${svgHeight}`}
       preserveAspectRatio="none"
-      style={{ ...graphOverlayStyle, height: svgHeight }}
+      style={{ ...graphOverlayStyle(graphWidth), height: svgHeight }}
     >
       {rows.flatMap((row, rowIndex) => normalizedLanes(row).flatMap((lane, lanePosition) => {
         const segment = laneSegment(rowIndex, lane, row.graph.nodeLaneId)
@@ -150,6 +228,11 @@ function GraphOverlay({ rows }: { rows: GitGraphRowView[] }) {
 const normalizedLanes = (row: GitGraphRowView): GitGraphLaneView[] => (
   row.graph.lanes.length > 0 ? row.graph.lanes : [{ id: 'default', active: true }]
 )
+
+const graphColumnWidthForRows = (rows: GitGraphRowView[]) => {
+  const laneCount = Math.max(1, ...rows.map((row) => normalizedLanes(row).length))
+  return Math.max(graphColumnMinWidth, laneInset * 2 + (laneCount - 1) * laneGap + nodeRadius * 4)
+}
 
 const rowCenterY = (rowIndex: number) => rowIndex * rowHeight + rowHeight / 2
 
@@ -310,15 +393,15 @@ const tableFrameStyle: CSSProperties = {
   width: '100%'
 }
 
-const graphOverlayStyle: CSSProperties = {
+const graphOverlayStyle = (graphWidth: number): CSSProperties => ({
   position: 'absolute',
   top: headerHeight,
   left: 0,
-  width: graphColumnWidth,
+  width: graphWidth,
   pointerEvents: 'none',
   overflow: 'visible',
   zIndex: 1
-}
+})
 
 const tableStyle: CSSProperties = {
   width: '100%',
@@ -338,18 +421,30 @@ const tableHeadStyle: CSSProperties = {
 }
 
 const headerCellStyle: CSSProperties = {
+  position: 'relative',
   height: headerHeight,
   padding: `0 ${themeTokens.spacing.md}`,
   borderBottom: `1px solid ${themeTokens.color.borderSubtle}`,
   fontSize: 12,
   fontWeight: 600,
-  textAlign: 'left'
+  textAlign: 'left',
+  userSelect: 'none'
 }
 
-const graphHeaderCellStyle: CSSProperties = { width: graphColumnWidth }
-const dateHeaderCellStyle: CSSProperties = { ...headerCellStyle, width: 132 }
-const authorHeaderCellStyle: CSSProperties = { ...headerCellStyle, width: 160 }
-const commitHeaderCellStyle: CSSProperties = { ...headerCellStyle, width: 108 }
+const graphHeaderCellStyle = (graphWidth: number): CSSProperties => ({ width: graphWidth })
+
+const resizeHandleStyle: CSSProperties = {
+  position: 'absolute',
+  top: 0,
+  right: -4,
+  width: 8,
+  height: '100%',
+  border: 0,
+  padding: 0,
+  background: 'transparent',
+  cursor: 'col-resize',
+  zIndex: 4
+}
 
 const rowStyle: CSSProperties = {
   background: themeTokens.color.surface,

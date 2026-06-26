@@ -197,7 +197,7 @@ const infoValueStyle: CSSProperties = { color: themeTokens.color.text, margin: 0
 const refListStyle: CSSProperties = { display: 'flex', flexWrap: 'wrap', gap: themeTokens.spacing.xs }
 
 const fileListStyle: CSSProperties = { listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: themeTokens.spacing.xs }
-const fileItemStyle: CSSProperties = { display: 'grid', gridTemplateColumns: '36px minmax(0, 1fr) auto', gap: themeTokens.spacing.sm, alignItems: 'center', color: themeTokens.color.text }
-const fileStatusStyle: CSSProperties = { color: themeTokens.color.accent, fontVariantNumeric: 'tabular-nums' }
-const filePathStyle: CSSProperties = { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
-const diffStatStyle: CSSProperties = { color: themeTokens.color.textMuted, fontVariantNumeric: 'tabular-nums' }
+const fileItemStyle: CSSProperties = { display: 'grid', gridTemplateColumns: '72px minmax(0, 1fr) max-content', gap: themeTokens.spacing.sm, alignItems: 'center', color: themeTokens.color.text }
+const fileStatusStyle: CSSProperties = { minWidth: 72, color: themeTokens.color.accent, fontVariantNumeric: 'tabular-nums', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
+const filePathStyle: CSSProperties = { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
+const diffStatStyle: CSSProperties = { color: themeTokens.color.textMuted, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }
