@@ -2,18 +2,11 @@ import { useLayoutEffect, useMemo, type ReactNode } from 'react'
 import type { Session, ToolDefinition } from '@hesper/shared'
 import { createThemeVariables, themeTokens, type ThemeMode } from '../theme'
 import { ActivityRail, type AppSection } from './ActivityRail'
-import { EntityListPane, type RoleListItem, type SettingsCategory, type SkillListItem } from './EntityListPane'
+import { EntityListPane, type RoleListItem, type SessionCategoryListItem, type SettingsCategory, type SkillListItem } from './EntityListPane'
 import { TitleBar, type DesktopPlatform, type WindowControlAction } from './TitleBar'
 
 export type ToolListItem = ToolDefinition & { enabled: boolean }
-export type { RoleListItem, SkillListItem } from './EntityListPane'
-
-export type SessionCategoryListItem = {
-  id: string
-  name: string
-  createdAt?: string
-  updatedAt?: string
-}
+export type { RoleListItem, SessionCategoryListItem, SkillListItem } from './EntityListPane'
 
 export type AppShellProps = {
   sessions: Session[]
@@ -48,6 +41,7 @@ export type AppShellProps = {
   onRenameSession?: (sessionId: string, title: string) => void
   onRegenerateSessionTitle?: (sessionId: string, sessionIds?: string[]) => void
   onDeleteSession?: (sessionId: string, sessionIds?: string[]) => void
+  onSetSessionCategory?: (sessionId: string, sessionIds: string[] | undefined, categoryId?: string) => void
   onCreateSessionCategory?: () => Promise<SessionCategoryListItem>
   onRenameSessionCategory?: (categoryId: string, name: string) => void | Promise<void>
   onDeleteSessionCategory?: (categoryId: string) => void | Promise<void>
@@ -91,6 +85,7 @@ export function AppShell({
   onRenameSession,
   onRegenerateSessionTitle,
   onDeleteSession,
+  onSetSessionCategory,
   onCreateSessionCategory,
   onRenameSessionCategory,
   onDeleteSessionCategory,
@@ -198,6 +193,7 @@ export function AppShell({
           sessions={sessions}
           {...(activeSessionId ? { activeSessionId } : {})}
           {...(runningSessionIds ? { runningSessionIds } : {})}
+          {...(sessionCategories ? { sessionCategories } : {})}
           {...(tools ? { tools } : {})}
           {...(activeToolId ? { activeToolId } : {})}
           {...(pendingToolIds ? { pendingToolIds } : {})}
@@ -216,6 +212,7 @@ export function AppShell({
           {...(onRenameSession ? { onRenameSession } : {})}
           {...(onRegenerateSessionTitle ? { onRegenerateSessionTitle } : {})}
           {...(onDeleteSession ? { onDeleteSession } : {})}
+          {...(onSetSessionCategory ? { onSetSessionCategory } : {})}
           {...(onDeleteRole ? { onDeleteRole } : {})}
         />
         <section

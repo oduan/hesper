@@ -1009,6 +1009,71 @@ describe('ui components', () => {
     expect(onRenameSession).toHaveBeenCalledWith('session-2', '只改第二个')
   })
 
+  it('moves selected sessions from the session context category submenu', async () => {
+    const user = userEvent.setup()
+    const onSetSessionCategory = vi.fn()
+    const sessions = ['会话一', '会话二', '会话三'].map((title, index) => ({
+      id: `session-${index + 1}`,
+      title,
+      status: 'active' as const,
+      outputMode: 'markdown' as const,
+      createdAt: now,
+      updatedAt: now
+    }))
+
+    render(
+      <AppShell
+        sessions={sessions}
+        sessionCategories={[{ id: 'category-avatar', name: '头像', createdAt: now, updatedAt: now }]}
+        activeSection="sessions"
+        title="所有会话"
+        onSetSessionCategory={onSetSessionCategory}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: '会话一' }))
+    await user.keyboard('{Shift>}')
+    await user.click(screen.getByRole('button', { name: '会话二' }))
+    await user.keyboard('{/Shift}')
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: '会话二' }))
+    fireEvent.mouseEnter(within(screen.getByRole('menu', { name: '会话操作' })).getByRole('menuitem', { name: '分类' }))
+    await user.click(within(screen.getByRole('menu', { name: '会话分类选项' })).getByRole('menuitem', { name: '头像' }))
+
+    expect(onSetSessionCategory).toHaveBeenCalledWith('session-2', ['session-1', 'session-2'], 'category-avatar')
+  })
+
+  it('moves an unselected session to uncategorized from the category submenu', async () => {
+    const user = userEvent.setup()
+    const onSetSessionCategory = vi.fn()
+    const sessions = ['会话一', '会话二', '会话三'].map((title, index) => ({
+      id: `session-${index + 1}`,
+      title,
+      status: 'active' as const,
+      outputMode: 'markdown' as const,
+      createdAt: now,
+      updatedAt: now
+    }))
+
+    render(
+      <AppShell
+        sessions={sessions}
+        sessionCategories={[{ id: 'category-avatar', name: '头像', createdAt: now, updatedAt: now }]}
+        activeSection="sessions"
+        title="所有会话"
+        onSetSessionCategory={onSetSessionCategory}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: '会话一' }))
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: '会话三' }))
+    fireEvent.mouseEnter(within(screen.getByRole('menu', { name: '会话操作' })).getByRole('menuitem', { name: '分类' }))
+    await user.click(within(screen.getByRole('menu', { name: '会话分类选项' })).getByRole('menuitem', { name: '未分类' }))
+
+    expect(onSetSessionCategory).toHaveBeenCalledWith('session-3', ['session-3'], undefined)
+  })
+
   it('disables send button when composer is empty and keeps controls visually aligned', async () => {
     const user = userEvent.setup()
     render(<Composer workspacePath="C:/dev/hesper" modelId="mock/hesper-fast" onSend={() => undefined} />)

@@ -18,6 +18,13 @@ export type SkillListItem = {
   description?: string
 }
 
+export type SessionCategoryListItem = {
+  id: string
+  name: string
+  createdAt?: string
+  updatedAt?: string
+}
+
 export type SettingsCategory = 'ai' | 'appearance' | 'ssh' | 'soul'
 
 export type EntityListPaneProps = {
@@ -26,6 +33,7 @@ export type EntityListPaneProps = {
   sessions: Session[]
   activeSessionId?: string
   runningSessionIds?: string[]
+  sessionCategories?: SessionCategoryListItem[]
   tools?: ToolListItem[]
   activeToolId?: string
   pendingToolIds?: string[]
@@ -44,6 +52,7 @@ export type EntityListPaneProps = {
   onRenameSession?: (sessionId: string, title: string) => void
   onRegenerateSessionTitle?: (sessionId: string, sessionIds?: string[]) => void
   onDeleteSession?: (sessionId: string, sessionIds?: string[]) => void
+  onSetSessionCategory?: (sessionId: string, sessionIds: string[] | undefined, categoryId?: string) => void
   onDeleteRole?: (roleId: string, roleIds?: string[]) => void
 }
 
@@ -67,9 +76,10 @@ type EditingSessionState = {
 }
 
 type SessionMenuItem = {
-  key: 'rename' | 'regenerate-title' | 'delete'
+  key: 'rename' | 'regenerate-title' | 'category' | 'delete'
   label: string
   danger?: boolean
+  hasSubmenu?: boolean
 }
 
 type RoleMenuItem = {
@@ -81,6 +91,7 @@ type RoleMenuItem = {
 const sessionMenuItems: SessionMenuItem[] = [
   { key: 'rename', label: '重命名' },
   { key: 'regenerate-title', label: '重新生成标题' },
+  { key: 'category', label: '分类', hasSubmenu: true },
   { key: 'delete', label: '删除', danger: true }
 ]
 
@@ -127,6 +138,7 @@ export function EntityListPane({
   sessions,
   activeSessionId,
   runningSessionIds = [],
+  sessionCategories = [],
   tools = [],
   activeToolId,
   pendingToolIds = [],
@@ -145,10 +157,12 @@ export function EntityListPane({
   onRenameSession,
   onRegenerateSessionTitle,
   onDeleteSession,
+  onSetSessionCategory,
   onDeleteRole
 }: EntityListPaneProps) {
   const heading = title ?? (activeSection === 'sessions' ? '所有会话' : activeSection === 'settings' ? '设置' : activeSection === 'tools' ? '工具' : activeSection === 'roles' ? '角色' : activeSection === 'skills' ? '技能' : '列表')
   const [sessionMenu, setSessionMenu] = useState<SessionMenuState>()
+  const [sessionCategorySubmenuOpen, setSessionCategorySubmenuOpen] = useState(false)
   const [roleMenu, setRoleMenu] = useState<RoleMenuState>()
   const [editingSession, setEditingSession] = useState<EditingSessionState>()
   const [selectedSessionIds, setSelectedSessionIds] = useState<string[]>([])
@@ -182,6 +196,7 @@ export function EntityListPane({
 
     const close = () => {
       setSessionMenu(undefined)
+      setSessionCategorySubmenuOpen(false)
       setRoleMenu(undefined)
     }
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -295,6 +310,7 @@ export function EntityListPane({
     const sessionIds = isSelectedTarget ? selectedTargets : [sessionId]
 
     setRoleMenu(undefined)
+    setSessionCategorySubmenuOpen(false)
     setSessionMenu({ sessionId, sessionIds, x, y })
   }
 
@@ -312,6 +328,7 @@ export function EntityListPane({
     }
 
     setSessionMenu(undefined)
+    setSessionCategorySubmenuOpen(false)
     setRoleMenu({ roleId, roleIds, x, y })
   }
 
@@ -341,7 +358,13 @@ export function EntityListPane({
   }
 
   const handleMenuAction = (action: typeof sessionMenuItems[number]['key'], menuState: SessionMenuState) => {
+    if (action === 'category') {
+      setSessionCategorySubmenuOpen(true)
+      return
+    }
+
     setSessionMenu(undefined)
+    setSessionCategorySubmenuOpen(false)
     switch (action) {
       case 'rename':
         startRenameSession(menuState.sessionId)
@@ -592,7 +615,8 @@ export function EntityListPane({
           style={{
             ...sessionMenuStyle,
             left: sessionMenu.x,
-            top: sessionMenu.y
+            top: sessionMenu.y,
+            overflow: sessionCategorySubmenuOpen ? 'visible' : sessionMenuStyle.overflow
           }}
           onClick={(event) => event.stopPropagation()}
         >
@@ -602,16 +626,54 @@ export function EntityListPane({
               key={item.key}
               type="button"
               role="menuitem"
+              aria-haspopup={item.hasSubmenu ? 'menu' : undefined}
+              aria-expanded={item.hasSubmenu ? sessionCategorySubmenuOpen : undefined}
               className="hesper-session-menu-item"
               onClick={() => handleMenuAction(item.key, sessionMenu)}
+              onMouseEnter={() => item.key === 'category' ? setSessionCategorySubmenuOpen(true) : setSessionCategorySubmenuOpen(false)}
+              onFocus={() => item.key === 'category' ? setSessionCategorySubmenuOpen(true) : setSessionCategorySubmenuOpen(false)}
               style={{
                 ...sessionMenuItemStyle,
                 ...(item.danger ? { color: themeTokens.color.danger } : {})
               }}
             >
               <span>{item.label}</span>
+              {item.hasSubmenu ? <span aria-hidden="true" style={{ marginLeft: 'auto' }}>›</span> : null}
             </button>
           ))}
+          {sessionCategorySubmenuOpen ? (
+            <div role="menu" aria-label="会话分类选项" style={sessionCategorySubmenuStyle}>
+              <button
+                type="button"
+                role="menuitem"
+                className="hesper-session-menu-item"
+                style={sessionMenuItemStyle}
+                onClick={() => {
+                  onSetSessionCategory?.(sessionMenu.sessionId, sessionMenu.sessionIds, undefined)
+                  setSessionMenu(undefined)
+                  setSessionCategorySubmenuOpen(false)
+                }}
+              >
+                未分类
+              </button>
+              {sessionCategories.map((category) => (
+                <button
+                  key={category.id}
+                  type="button"
+                  role="menuitem"
+                  className="hesper-session-menu-item"
+                  style={sessionMenuItemStyle}
+                  onClick={() => {
+                    onSetSessionCategory?.(sessionMenu.sessionId, sessionMenu.sessionIds, category.id)
+                    setSessionMenu(undefined)
+                    setSessionCategorySubmenuOpen(false)
+                  }}
+                >
+                  {category.name}
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
       ) : null}
       {roleMenu ? (
@@ -842,6 +904,14 @@ const sessionMenuStyle: CSSProperties = {
   background: themeTokens.color.surfaceMuted,
   boxShadow: `0 18px 50px ${themeTokens.color.shadow}`,
   overflow: 'hidden'
+}
+
+const sessionCategorySubmenuStyle: CSSProperties = {
+  ...sessionMenuStyle,
+  position: 'absolute',
+  left: 'calc(100% + 4px)',
+  top: 0,
+  minWidth: 148
 }
 
 const sessionMenuItemStyle: CSSProperties = {
