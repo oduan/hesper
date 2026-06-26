@@ -22,6 +22,7 @@ import type { Persistence } from '@hesper/persistence'
 import type { ModelConfig, ModelProviderConfig, Role, SshExecutionStatus } from '@hesper/shared'
 import { Notification } from 'electron'
 import { createAllowlistPermissionPolicy, createBuiltinToolDefinitions, createBuiltinToolExecutor, createToolRunner } from '@hesper/tools'
+import { GitService } from './git-service'
 
 export type AgentMode = 'mock' | 'pi-core'
 
@@ -190,6 +191,7 @@ function withMainAgentSoulTools(role: Role | undefined): Role | undefined {
 
 export function createServiceContainer(options: ServiceContainerOptions) {
   const sessionService = createSessionService(options.persistence)
+  const gitService = new GitService({ sessionService })
   const conversationService = createConversationService(options.persistence)
   const settingsService = createSettingsService({ persistence: options.persistence })
   const baseRoleService = createDefaultRoleService()
@@ -382,6 +384,7 @@ export function createServiceContainer(options: ServiceContainerOptions) {
   return {
     persistence: options.persistence,
     sessionService,
+    gitService,
     conversationService,
     settingsService,
     roleService,
