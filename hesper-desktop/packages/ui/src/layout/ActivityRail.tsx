@@ -232,6 +232,7 @@ export function ActivityRail({
                   className={`hesper-nav-item${isCollapsedActive ? ' is-active' : ''}`}
                   aria-current={isCollapsedActive ? 'page' : undefined}
                   aria-label={section.label}
+                  aria-expanded={effectiveSessionsExpanded}
                   onClick={handleToggleSessionsExpanded}
                   style={sessionsToggleStyle}
                 >
@@ -239,7 +240,7 @@ export function ActivityRail({
                   <span>{section.visibleLabel}</span>
                 </button>
                 {effectiveSessionsExpanded ? (
-                  <div aria-label="会话分类导航" style={sessionCategoryListStyle}>
+                  <nav aria-label="会话分类导航" style={sessionCategoryListStyle}>
                     <button
                       type="button"
                       className={`hesper-nav-item${isAllSessionsActive ? ' is-active' : ''}`}
@@ -308,7 +309,7 @@ export function ActivityRail({
                         </div>
                       )
                     })}
-                  </div>
+                  </nav>
                 ) : null}
               </div>
             )

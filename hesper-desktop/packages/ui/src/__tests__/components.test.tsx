@@ -193,9 +193,12 @@ describe('ui components', () => {
       />
     )
 
+    const sessionsButton = screen.getByRole('button', { name: '会话' })
     const disclosure = screen.getByTestId('sessions-disclosure-icon')
+    expect(sessionsButton).toHaveAttribute('aria-expanded', 'true')
     expect(disclosure).toHaveAttribute('data-state', 'expanded')
     expect(disclosure.querySelector('svg')).toHaveAttribute('viewBox', '0 0 16 16')
+    expect(screen.getByRole('navigation', { name: '会话分类导航' })).toBeInTheDocument()
 
     fireEvent.contextMenu(screen.getByRole('button', { name: '所有会话' }))
     await user.click(within(screen.getByRole('menu', { name: '会话分类操作' })).getByRole('menuitem', { name: '新建分类' }))
@@ -257,8 +260,10 @@ describe('ui components', () => {
       />
     )
 
+    const sessionsButton = screen.getByRole('button', { name: '会话' })
     const disclosure = screen.getByTestId('sessions-disclosure-icon')
     const icon = disclosure.querySelector('svg')
+    expect(sessionsButton).toHaveAttribute('aria-expanded', 'false')
     expect(disclosure).toHaveAttribute('data-state', 'collapsed')
     expect(disclosure).toHaveStyle({ width: '16px', height: '16px' })
     expect(icon).toHaveAttribute('viewBox', '0 0 16 16')
@@ -280,14 +285,18 @@ describe('ui components', () => {
     )
 
     const sessionsButton = screen.getByRole('button', { name: '会话' })
+    expect(sessionsButton).toHaveAttribute('aria-expanded', 'false')
     expect(screen.getByTestId('sessions-disclosure-icon')).toHaveAttribute('data-state', 'collapsed')
     expect(screen.queryByRole('button', { name: '所有会话' })).not.toBeInTheDocument()
 
     await user.click(sessionsButton)
+    expect(sessionsButton).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByTestId('sessions-disclosure-icon')).toHaveAttribute('data-state', 'expanded')
     expect(screen.getByRole('button', { name: '所有会话' })).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: '会话分类导航' })).toBeInTheDocument()
 
     await user.click(sessionsButton)
+    expect(sessionsButton).toHaveAttribute('aria-expanded', 'false')
     expect(screen.getByTestId('sessions-disclosure-icon')).toHaveAttribute('data-state', 'collapsed')
     expect(screen.queryByRole('button', { name: '所有会话' })).not.toBeInTheDocument()
   })
