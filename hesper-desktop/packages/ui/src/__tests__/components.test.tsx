@@ -236,9 +236,14 @@ describe('ui components', () => {
 
     const connector = screen.getByTestId('session-category-connector')
     expect(connector).toHaveAttribute('aria-hidden', 'true')
-    expect(connector).toHaveStyle({ position: 'absolute' })
+    expect(connector).toHaveStyle({ position: 'absolute', left: '16px' })
 
-    await user.click(screen.getByRole('button', { name: '头像' }))
+    const avatarRow = screen.getByRole('button', { name: '头像' })
+    const avatarSurface = screen.getByTestId('session-category-surface-category-avatar')
+    expect(avatarRow).toHaveStyle({ background: 'transparent', padding: '0px' })
+    expect(avatarSurface).toHaveStyle({ marginLeft: '16px' })
+
+    await user.click(avatarRow)
     expect(onSelectSection).toHaveBeenLastCalledWith('sessions')
     expect(onSelectSessionCategory).toHaveBeenLastCalledWith('category-avatar')
   })

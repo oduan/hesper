@@ -269,39 +269,41 @@ export function ActivityRail({
                       return (
                         <div key={category.id} style={categoryItemWrapperStyle}>
                           {isEditing ? (
-                            <div className="hesper-nav-item is-active" style={categoryEditingRowStyle}>
-                              <input
-                                ref={renameInputRef}
-                                aria-label="重命名分类"
-                                value={editingCategory.name}
-                                onClick={(event) => {
-                                  if (editingCategory.isNew) {
-                                    event.currentTarget.select()
-                                  }
-                                }}
-                                onChange={(event) => {
-                                  const nextName = event.currentTarget.value
-                                  setEditingCategory((current) => (current?.id === category.id ? { ...current, name: nextName } : current))
-                                }}
-                                onKeyDown={(event) => {
-                                  if (event.key === 'Enter') {
-                                    event.preventDefault()
+                            <div className="hesper-session-category-row is-active" style={{ ...categoryRowStyle, cursor: 'text' }}>
+                              <span data-testid={`session-category-surface-${category.id}`} className="hesper-session-category-surface" style={categorySurfaceStyle}>
+                                <input
+                                  ref={renameInputRef}
+                                  aria-label="重命名分类"
+                                  value={editingCategory.name}
+                                  onClick={(event) => {
+                                    if (editingCategory.isNew) {
+                                      event.currentTarget.select()
+                                    }
+                                  }}
+                                  onChange={(event) => {
+                                    const nextName = event.currentTarget.value
+                                    setEditingCategory((current) => (current?.id === category.id ? { ...current, name: nextName } : current))
+                                  }}
+                                  onKeyDown={(event) => {
+                                    if (event.key === 'Enter') {
+                                      event.preventDefault()
+                                      commitEditingCategory()
+                                    } else if (event.key === 'Escape') {
+                                      event.preventDefault()
+                                      cancelEditingCategory()
+                                    }
+                                  }}
+                                  onBlur={() => {
                                     commitEditingCategory()
-                                  } else if (event.key === 'Escape') {
-                                    event.preventDefault()
-                                    cancelEditingCategory()
-                                  }
-                                }}
-                                onBlur={() => {
-                                  commitEditingCategory()
-                                }}
-                                style={categoryRenameInputStyle}
-                              />
+                                  }}
+                                  style={categoryRenameInputStyle}
+                                />
+                              </span>
                             </div>
                           ) : (
                             <button
                               type="button"
-                              className={`hesper-nav-item${isActive ? ' is-active' : ''}`}
+                              className={`hesper-session-category-row${isActive ? ' is-active' : ''}`}
                               aria-current={isActive ? 'page' : undefined}
                               aria-label={category.name}
                               onClick={() => handleSelectCategory(category.id)}
@@ -311,7 +313,9 @@ export function ActivityRail({
                               }}
                               style={categoryRowStyle}
                             >
-                              {category.name}
+                              <span data-testid={`session-category-surface-${category.id}`} className="hesper-session-category-surface" style={categorySurfaceStyle}>
+                                {category.name}
+                              </span>
                             </button>
                           )}
                         </div>
@@ -453,8 +457,8 @@ const allSessionsPrimaryButtonStyle: CSSProperties = {
   textAlign: 'left'
 }
 
-const sessionCategoryConnectorLeft = 32
-const sessionCategoryTextInset = sessionCategoryConnectorLeft + 12
+const sessionCategoryConnectorLeft = 16
+const sessionCategoryTextInset = 12
 
 const sessionCategoryListStyle: CSSProperties = {
   position: 'relative',
@@ -481,24 +485,35 @@ const categoryItemWrapperStyle: CSSProperties = {
 }
 
 const categoryRowStyle: CSSProperties = {
+  width: '100%',
+  minHeight: 34,
   display: 'flex',
   alignItems: 'center',
   minWidth: 0,
-  width: '100%',
-  textAlign: 'left',
-  paddingLeft: sessionCategoryTextInset
+  border: 0,
+  outline: 0,
+  borderRadius: 0,
+  background: 'transparent',
+  color: themeTokens.color.textMuted,
+  padding: 0,
+  font: 'inherit',
+  fontWeight: 600,
+  cursor: 'pointer',
+  textAlign: 'left'
 }
 
-const categoryEditingRowStyle: CSSProperties = {
+const categorySurfaceStyle: CSSProperties = {
+  marginLeft: sessionCategoryConnectorLeft,
+  width: `calc(100% - ${sessionCategoryConnectorLeft}px)`,
+  minHeight: 34,
   display: 'flex',
   alignItems: 'center',
   minWidth: 0,
-  width: '100%',
-  textAlign: 'left',
+  boxSizing: 'border-box',
+  borderRadius: 10,
   paddingLeft: sessionCategoryTextInset,
   paddingRight: 10,
-  cursor: 'text',
-  boxSizing: 'border-box'
+  transition: 'background 120ms ease, color 120ms ease'
 }
 
 const categoryRenameInputStyle: CSSProperties = {
