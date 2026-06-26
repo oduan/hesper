@@ -216,6 +216,74 @@ describe('ui components', () => {
     expect(onRenameSessionCategory).toHaveBeenCalledWith('category-new', '头像')
   })
 
+  it('draws a connector from all sessions to clickable category rows', async () => {
+    const user = userEvent.setup()
+    const onSelectSection = vi.fn()
+    const onSelectSessionCategory = vi.fn()
+
+    render(
+      <ActivityRail
+        activeSection="sessions"
+        sessionsExpanded
+        sessionCategories={[
+          { id: 'category-product', name: '产品图', createdAt: now, updatedAt: now },
+          { id: 'category-avatar', name: '头像', createdAt: now, updatedAt: now }
+        ]}
+        onSelectSection={onSelectSection}
+        onSelectSessionCategory={onSelectSessionCategory}
+      />
+    )
+
+    const connector = screen.getByTestId('session-category-connector')
+    expect(connector).toHaveAttribute('aria-hidden', 'true')
+    expect(connector).toHaveStyle({ position: 'absolute' })
+
+    await user.click(screen.getByRole('button', { name: '头像' }))
+    expect(onSelectSection).toHaveBeenLastCalledWith('sessions')
+    expect(onSelectSessionCategory).toHaveBeenLastCalledWith('category-avatar')
+  })
+
+  it('expands collapsed sessions and focuses editable new category after creating one', async () => {
+    const user = userEvent.setup()
+    const onCreateSessionCategory = vi.fn(async () => ({
+      id: 'category-new',
+      name: '新分类',
+      createdAt: now,
+      updatedAt: now
+    }))
+    const onRenameSessionCategory = vi.fn()
+    const onSelectSessionCategory = vi.fn()
+
+    render(
+      <ActivityRail
+        activeSection="sessions"
+        sessionsExpanded={false}
+        sessionCategories={[]}
+        onCreateSessionCategory={onCreateSessionCategory}
+        onRenameSessionCategory={onRenameSessionCategory}
+        onSelectSessionCategory={onSelectSessionCategory}
+      />
+    )
+
+    expect(screen.queryByRole('navigation', { name: '会话分类导航' })).not.toBeInTheDocument()
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: '所有会话' }))
+    await user.click(within(screen.getByRole('menu', { name: '会话分类操作' })).getByRole('menuitem', { name: '新建分类' }))
+
+    expect(onCreateSessionCategory).toHaveBeenCalledTimes(1)
+    expect(onSelectSessionCategory).toHaveBeenLastCalledWith('category-new')
+    expect(screen.getByRole('navigation', { name: '会话分类导航' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '收起会话分类' })).toHaveAttribute('aria-expanded', 'true')
+
+    const input = (await screen.findByLabelText('重命名分类')) as HTMLInputElement
+    expect(input).toHaveFocus()
+    expect(input).toHaveValue('新分类')
+
+    await user.clear(input)
+    await user.type(input, '头像{Enter}')
+    expect(onRenameSessionCategory).toHaveBeenCalledWith('category-new', '头像')
+  })
+
   it('opens category context menu for rename and delete', async () => {
     const user = userEvent.setup()
     const onRenameSessionCategory = vi.fn()

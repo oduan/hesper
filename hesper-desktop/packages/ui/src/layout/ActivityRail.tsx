@@ -110,13 +110,18 @@ export function ActivityRail({
     renameInputRef.current?.select()
   }, [editingCategory?.id])
 
-  const handleToggleSessionsExpanded = () => {
-    setCategoryMenu(undefined)
+  const setSessionsExpanded = (expanded: boolean) => {
+    if (effectiveSessionsExpanded === expanded) return
     if (isSessionsExpandedControlled) {
       onToggleSessionsExpanded()
       return
     }
-    setFallbackSessionsExpanded((expanded) => !expanded)
+    setFallbackSessionsExpanded(expanded)
+  }
+
+  const handleToggleSessionsExpanded = () => {
+    setCategoryMenu(undefined)
+    setSessionsExpanded(!effectiveSessionsExpanded)
   }
 
   const handleSelectAllSessions = () => {
@@ -177,6 +182,7 @@ export function ActivityRail({
       case 'create': {
         const category = await onCreateSessionCategory?.()
         if (!category) return
+        setSessionsExpanded(true)
         onSelectSection?.('sessions')
         onSelectSessionCategory?.(category.id)
         setEditingCategory({ id: category.id, name: category.name, isNew: true })
@@ -256,13 +262,14 @@ export function ActivityRail({
                 </div>
                 {effectiveSessionsExpanded ? (
                   <nav aria-label="会话分类导航" style={sessionCategoryListStyle}>
+                    {visibleCategories.length > 0 ? <span aria-hidden="true" data-testid="session-category-connector" style={sessionCategoryConnectorStyle} /> : null}
                     {visibleCategories.map((category) => {
                       const isEditing = editingCategory?.id === category.id
                       const isActive = activeSection === 'sessions' && activeSessionCategoryId === category.id
                       return (
-                        <div key={category.id}>
+                        <div key={category.id} style={categoryItemWrapperStyle}>
                           {isEditing ? (
-                            <div style={categoryEditingRowStyle}>
+                            <div className="hesper-nav-item is-active" style={categoryEditingRowStyle}>
                               <input
                                 ref={renameInputRef}
                                 aria-label="重命名分类"
@@ -446,10 +453,31 @@ const allSessionsPrimaryButtonStyle: CSSProperties = {
   textAlign: 'left'
 }
 
+const sessionCategoryConnectorLeft = 32
+const sessionCategoryTextInset = sessionCategoryConnectorLeft + 12
+
 const sessionCategoryListStyle: CSSProperties = {
+  position: 'relative',
   display: 'grid',
   gap: 2,
   minWidth: 0
+}
+
+const sessionCategoryConnectorStyle: CSSProperties = {
+  position: 'absolute',
+  left: sessionCategoryConnectorLeft,
+  top: -2,
+  bottom: 6,
+  width: 1,
+  borderRadius: 1,
+  background: themeTokens.color.border,
+  pointerEvents: 'none',
+  zIndex: 2
+}
+
+const categoryItemWrapperStyle: CSSProperties = {
+  position: 'relative',
+  zIndex: 1
 }
 
 const categoryRowStyle: CSSProperties = {
@@ -458,28 +486,31 @@ const categoryRowStyle: CSSProperties = {
   minWidth: 0,
   width: '100%',
   textAlign: 'left',
-  paddingLeft: 40
+  paddingLeft: sessionCategoryTextInset
 }
 
 const categoryEditingRowStyle: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   minWidth: 0,
-  paddingLeft: 40,
-  paddingRight: 8
+  width: '100%',
+  textAlign: 'left',
+  paddingLeft: sessionCategoryTextInset,
+  paddingRight: 10,
+  cursor: 'text',
+  boxSizing: 'border-box'
 }
 
 const categoryRenameInputStyle: CSSProperties = {
   width: '100%',
   minWidth: 0,
   border: 0,
-  outline: `1px solid ${themeTokens.color.accent}`,
-  borderRadius: 6,
-  background: themeTokens.color.softControl,
-  color: themeTokens.color.text,
+  outline: 0,
+  background: 'transparent',
+  color: 'inherit',
   font: 'inherit',
   fontWeight: 600,
-  padding: '4px 6px'
+  padding: 0
 }
 
 const categoryMenuStyle: CSSProperties = {
