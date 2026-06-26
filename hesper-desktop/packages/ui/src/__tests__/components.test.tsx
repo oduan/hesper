@@ -216,6 +216,31 @@ describe('ui components', () => {
     expect(onRenameSessionCategory).toHaveBeenCalledWith('category-new', '头像')
   })
 
+  it('renders marked and archive entries below session categories', async () => {
+    const user = userEvent.setup()
+    const onSelectSessionSpecialView = vi.fn()
+    render(
+      <AppShell
+        sessions={[]}
+        activeSection="sessions"
+        title="Hesper"
+        sessionCategories={[{ id: 'category-product', name: '产品图' }]}
+        sessionsExpanded
+        onSelectSessionSpecialView={onSelectSessionSpecialView}
+      />
+    )
+
+    const nav = screen.getByRole('navigation', { name: '会话分类导航' })
+    expect(within(nav).getByRole('button', { name: '产品图' })).toBeInTheDocument()
+    expect(within(nav).getByTestId('session-special-separator')).toBeInTheDocument()
+
+    await user.click(within(nav).getByRole('button', { name: '已标记' }))
+    expect(onSelectSessionSpecialView).toHaveBeenCalledWith('marked')
+
+    await user.click(within(nav).getByRole('button', { name: '归档' }))
+    expect(onSelectSessionSpecialView).toHaveBeenCalledWith('archived')
+  })
+
   it('draws a connector from all sessions to clickable category rows', async () => {
     const user = userEvent.setup()
     const onSelectSection = vi.fn()

@@ -18,6 +18,7 @@ export type AppShellProps = {
   runningSessionIds?: string[]
   sessionCategories?: SessionCategoryListItem[]
   activeSessionCategoryId?: string
+  activeSessionSpecialView?: 'marked' | 'archived'
   sessionsExpanded?: boolean
   tools?: ToolListItem[]
   activeToolId?: string
@@ -34,6 +35,7 @@ export type AppShellProps = {
   onToggleSessionsExpanded?: () => void
   onSelectSession?: (sessionId: string) => void
   onSelectSessionCategory?: (categoryId?: string) => void
+  onSelectSessionSpecialView?: (view: 'marked' | 'archived') => void
   onSelectTool?: (toolId: string) => void
   onToggleToolEnabled?: (toolId: string, enabled: boolean) => void
   onSelectRole?: (roleId: string) => void
@@ -64,6 +66,7 @@ export function AppShell({
   runningSessionIds,
   sessionCategories,
   activeSessionCategoryId,
+  activeSessionSpecialView,
   sessionsExpanded,
   tools,
   activeToolId,
@@ -80,6 +83,7 @@ export function AppShell({
   onToggleSessionsExpanded,
   onSelectSession,
   onSelectSessionCategory,
+  onSelectSessionSpecialView,
   onSelectTool,
   onToggleToolEnabled,
   onSelectRole,
@@ -185,9 +189,11 @@ export function AppShell({
           {...(onSelectSection ? { onSelectSection } : {})}
           {...(sessionCategories ? { sessionCategories } : {})}
           {...(activeSessionCategoryId ? { activeSessionCategoryId } : {})}
+          {...(activeSessionSpecialView ? { activeSessionSpecialView } : {})}
           {...(sessionsExpanded !== undefined ? { sessionsExpanded } : {})}
           {...(onToggleSessionsExpanded ? { onToggleSessionsExpanded } : {})}
           {...(onSelectSessionCategory ? { onSelectSessionCategory } : {})}
+          {...(onSelectSessionSpecialView ? { onSelectSessionSpecialView } : {})}
           {...(onCreateSessionCategory ? { onCreateSessionCategory } : {})}
           {...(onRenameSessionCategory ? { onRenameSessionCategory } : {})}
           {...(onDeleteSessionCategory ? { onDeleteSessionCategory } : {})}

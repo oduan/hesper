@@ -16,9 +16,11 @@ export type ActivityRailProps = {
   onSelectSection?: (section: AppSection) => void
   sessionCategories?: SessionCategoryListItem[]
   activeSessionCategoryId?: string
+  activeSessionSpecialView?: 'marked' | 'archived'
   sessionsExpanded?: boolean
   onToggleSessionsExpanded?: () => void
   onSelectSessionCategory?: (categoryId?: string) => void
+  onSelectSessionSpecialView?: (view: 'marked' | 'archived') => void
   onCreateSessionCategory?: () => Promise<SessionCategoryListItem | undefined>
   onRenameSessionCategory?: (categoryId: string, name: string) => void | Promise<void>
   onDeleteSessionCategory?: (categoryId: string) => void | Promise<void>
@@ -58,9 +60,11 @@ export function ActivityRail({
   onSelectSection,
   sessionCategories = [],
   activeSessionCategoryId,
+  activeSessionSpecialView,
   sessionsExpanded,
   onToggleSessionsExpanded,
   onSelectSessionCategory,
+  onSelectSessionSpecialView,
   onCreateSessionCategory,
   onRenameSessionCategory,
   onDeleteSessionCategory,
@@ -145,6 +149,11 @@ export function ActivityRail({
   const handleSelectCategory = (categoryId: string) => {
     onSelectSection?.('sessions')
     onSelectSessionCategory?.(categoryId)
+  }
+
+  const handleSelectSpecialView = (view: 'marked' | 'archived') => {
+    onSelectSection?.('sessions')
+    onSelectSessionSpecialView?.(view)
   }
 
   const openAllCategoriesMenu = (x: number, y: number) => {
@@ -287,7 +296,7 @@ export function ActivityRail({
       <nav aria-label="主导航" style={{ display: 'grid', gap: 2 }}>
         {sections.map((section) => {
           if (section.id === 'sessions') {
-            const isAllSessionsActive = activeSection === 'sessions' && !activeSessionCategoryId
+            const isAllSessionsActive = activeSection === 'sessions' && !activeSessionCategoryId && !activeSessionSpecialView
             const disclosureLabel = effectiveSessionsExpanded ? '收起会话分类' : '展开会话分类'
             return (
               <div key={section.id} style={sessionsGroupStyle}>
@@ -380,6 +389,27 @@ export function ActivityRail({
                         </div>
                       )
                     })}
+                    <span aria-hidden="true" data-testid="session-special-separator" style={sessionSpecialSeparatorStyle} />
+                    <button
+                      type="button"
+                      className={`hesper-session-category-row${activeSection === 'sessions' && activeSessionSpecialView === 'marked' ? ' is-active' : ''}`}
+                      aria-current={activeSection === 'sessions' && activeSessionSpecialView === 'marked' ? 'page' : undefined}
+                      aria-label="已标记"
+                      onClick={() => handleSelectSpecialView('marked')}
+                      style={categoryRowStyle}
+                    >
+                      <span className="hesper-session-category-surface" style={categorySurfaceStyle}>已标记</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`hesper-session-category-row${activeSection === 'sessions' && activeSessionSpecialView === 'archived' ? ' is-active' : ''}`}
+                      aria-current={activeSection === 'sessions' && activeSessionSpecialView === 'archived' ? 'page' : undefined}
+                      aria-label="归档"
+                      onClick={() => handleSelectSpecialView('archived')}
+                      style={categoryRowStyle}
+                    >
+                      <span className="hesper-session-category-surface" style={categorySurfaceStyle}>归档</span>
+                    </button>
                   </nav>
                 ) : null}
               </div>
@@ -542,6 +572,13 @@ const sessionCategoryConnectorStyle: CSSProperties = {
 const categoryItemWrapperStyle: CSSProperties = {
   position: 'relative',
   zIndex: 1
+}
+
+const sessionSpecialSeparatorStyle: CSSProperties = {
+  margin: `6px 10px 6px ${sessionCategorySurfaceLeft}px`,
+  height: 1,
+  background: themeTokens.color.border,
+  borderRadius: 1
 }
 
 const categoryRowStyle: CSSProperties = {
