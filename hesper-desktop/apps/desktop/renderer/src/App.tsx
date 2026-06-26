@@ -1329,7 +1329,7 @@ function AppContent() {
       sessions={visibleSessions}
       activeSection={state.activeSection}
       title={isSessionsSection ? activeSessionCategory?.name ?? activeSession?.title ?? '新建会话' : getSectionTitle(state.activeSection)}
-      entityListTitle={activeSessionCategory?.name ?? '所有会话'}
+      {...(isSessionsSection ? { entityListTitle: activeSessionCategory?.name ?? '所有会话' } : {})}
       platform={hesperApi.window.platform}
       appearance={{ themeId: appSettings.themeId, themeMode: requestedThemeMode, fontSize: appSettings.fontSize }}
       activeSettingsCategory={activeSettingsCategory}

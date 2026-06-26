@@ -556,6 +556,28 @@ describe('renderer App', () => {
     expect(screen.queryByRole('button', { name: 'Plain chat' })).not.toBeInTheDocument()
   })
 
+  it('restores the entity list title when leaving a selected session category', async () => {
+    const user = userEvent.setup()
+    listSessionCategories.mockResolvedValueOnce([
+      { id: 'category-product', name: '产品图', createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:00.000Z' }
+    ])
+    listSessions.mockResolvedValueOnce([
+      { id: 'session-product', title: 'Product chat', status: 'active', categoryId: 'category-product', outputMode: 'markdown', createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:00.000Z' }
+    ] as any)
+
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: '产品图' }))
+    expect(within(screen.getByLabelText('实体列表')).getByRole('heading', { name: '产品图' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '工具' }))
+
+    await waitFor(() => expect(within(screen.getByLabelText('实体列表')).getByRole('heading', { name: '工具' })).toBeInTheDocument())
+    const entityList = within(screen.getByLabelText('实体列表'))
+    expect(entityList.queryByRole('heading', { name: '产品图' })).not.toBeInTheDocument()
+    expect(entityList.queryByRole('heading', { name: '所有会话' })).not.toBeInTheDocument()
+  })
+
   it('creates new sessions in the active category', async () => {
     const user = userEvent.setup()
     listSessionCategories.mockResolvedValueOnce([

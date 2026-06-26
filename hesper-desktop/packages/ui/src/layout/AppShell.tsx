@@ -193,7 +193,7 @@ export function AppShell({
         <EntityListPane
           activeSection={activeSection}
           sessions={sessions}
-          {...(entityListTitle ? { title: entityListTitle } : {})}
+          {...(activeSection === 'sessions' && entityListTitle ? { title: entityListTitle } : {})}
           {...(activeSessionId ? { activeSessionId } : {})}
           {...(runningSessionIds ? { runningSessionIds } : {})}
           {...(sessionCategories ? { sessionCategories } : {})}
