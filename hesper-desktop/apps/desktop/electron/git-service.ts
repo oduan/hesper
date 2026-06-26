@@ -431,16 +431,21 @@ function attachGraph(rows: GitGraphRowWithoutGraph[], primaryBranchCommit?: stri
     available: BRANCH_LINE_COLORS.map((_, index) => index),
     overflowCursor: 0
   }
-  if (primaryBranchCommit) {
-    activeLanes[0] = { commit: primaryBranchCommit, colorSlot: claimColorSlot(claimedColorSlots) }
-  }
+  const primaryBranchColorSlot = primaryBranchCommit ? claimColorSlot(claimedColorSlots) : undefined
+  let primaryBranchSeen = false
 
   return rows.map((row) => {
     const lanesBefore = [...activeLanes]
     let currentPositions = lanePositions(lanesBefore, row.commitHash)
     if (currentPositions.length === 0) {
-      const newLaneIndex = findFreeLane(activeLanes, activeLanes.length)
-      activeLanes[newLaneIndex] = { commit: row.commitHash, colorSlot: claimColorSlot(claimedColorSlots) }
+      const isPrimaryBranchRow = row.commitHash === primaryBranchCommit
+      const newLaneIndex = isPrimaryBranchRow
+        ? 0
+        : findFreeLane(activeLanes, primaryBranchCommit && !primaryBranchSeen ? Math.max(activeLanes.length, 1) : activeLanes.length)
+      activeLanes[newLaneIndex] = {
+        commit: row.commitHash,
+        colorSlot: isPrimaryBranchRow && primaryBranchColorSlot !== undefined ? primaryBranchColorSlot : claimColorSlot(claimedColorSlots)
+      }
       currentPositions = [newLaneIndex]
     }
 
@@ -502,7 +507,12 @@ function attachGraph(rows: GitGraphRowWithoutGraph[], primaryBranchCommit?: stri
     }
 
     activeLanes = lanesAfter
-    recycleInactiveColorSlots(claimedColorSlots, activeLanes)
+    if (row.commitHash === primaryBranchCommit) primaryBranchSeen = true
+    recycleInactiveColorSlots(
+      claimedColorSlots,
+      activeLanes,
+      primaryBranchColorSlot !== undefined && !primaryBranchSeen ? [primaryBranchColorSlot] : []
+    )
 
     return { ...row, graph }
   })
@@ -520,7 +530,7 @@ function findFreeLane(activeLanes: ActiveGitLane[], preferredIndex: number): num
   for (let index = preferredIndex; index < activeLanes.length; index += 1) {
     if (activeLanes[index] === undefined) return index
   }
-  return activeLanes.length
+  return Math.max(activeLanes.length, preferredIndex)
 }
 
 function placeParentLane(activeLanes: ActiveGitLane[], parent: string, preferredIndex: number, colorSlot: number): number {
@@ -535,8 +545,11 @@ function trimTrailingEmptyLanes(activeLanes: ActiveGitLane[]): void {
   }
 }
 
-function recycleInactiveColorSlots(claimedColorSlots: ClaimedColorSlots, activeLanes: ActiveGitLane[]): void {
-  const activeColorSlots = new Set(activeLanes.flatMap((lane) => lane ? [lane.colorSlot % BRANCH_LINE_COLORS.length] : []))
+function recycleInactiveColorSlots(claimedColorSlots: ClaimedColorSlots, activeLanes: ActiveGitLane[], reservedColorSlots: number[] = []): void {
+  const activeColorSlots = new Set([
+    ...reservedColorSlots.map((slot) => slot % BRANCH_LINE_COLORS.length),
+    ...activeLanes.flatMap((lane) => lane ? [lane.colorSlot % BRANCH_LINE_COLORS.length] : [])
+  ])
   claimedColorSlots.available.splice(
     0,
     claimedColorSlots.available.length,

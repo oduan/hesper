@@ -332,6 +332,8 @@ describe('GitService', () => {
         return row?.graph.lanes.find((lane) => lane.id === row.graph.nodeLaneId)?.color
       }
 
+      const sideRow = rowByHash.get(history.side)
+      expect(sideRow?.graph.lanes[0]).toMatchObject({ active: false, topActive: false, bottomActive: false })
       expect(nodeLane(history.postMerge)).toBe('lane-0')
       expect(nodeLane(history.merge)).toBe('lane-0')
       expect(nodeLane(history.mainTwo)).toBe('lane-0')
