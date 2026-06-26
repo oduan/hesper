@@ -349,6 +349,35 @@ describe('ui components', () => {
     expect(sessionList.scrollTop).toBe(480)
   })
 
+  it('leaves native wheel events inside the session list untouched', () => {
+    render(
+      <AppShell
+        sessions={Array.from({ length: 24 }, (_, index) => ({
+          id: `session-native-wheel-${index}`,
+          title: `原生滚动会话 ${index + 1}`,
+          status: 'active',
+          outputMode: 'markdown',
+          createdAt: now,
+          updatedAt: now
+        } satisfies Session))}
+        activeSection="sessions"
+        activeSessionId="session-native-wheel-0"
+        title="原生滚轮测试"
+      />
+    )
+
+    const sessionList = screen.getByLabelText('会话列表')
+    Object.defineProperty(sessionList, 'scrollHeight', { configurable: true, value: 800 })
+    Object.defineProperty(sessionList, 'clientHeight', { configurable: true, value: 320 })
+    sessionList.scrollTop = 120
+
+    const nativeWheel = new WheelEvent('wheel', { deltaY: 96, bubbles: true, cancelable: true })
+    sessionList.dispatchEvent(nativeWheel)
+
+    expect(nativeWheel.defaultPrevented).toBe(false)
+    expect(sessionList.scrollTop).toBe(120)
+  })
+
   it('renders session categories under the activity rail and creates a focused new category from all sessions', async () => {
     const user = userEvent.setup()
     const onCreateSessionCategory = vi.fn(async () => ({
