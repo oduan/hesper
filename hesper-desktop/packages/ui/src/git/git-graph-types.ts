@@ -16,6 +16,8 @@ export type GitGraphLaneView = {
 export type GitGraphEdgeView = {
   fromLaneId: string
   toLaneId: string
+  fromPosition?: 'top' | 'center' | 'bottom' | undefined
+  toPosition?: 'top' | 'center' | 'bottom' | undefined
 }
 
 export type GitGraphRowView = {

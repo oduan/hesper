@@ -406,11 +406,19 @@ function attachGraph(rows: GitGraphRowWithoutGraph[]): GitGraphRowDto[] {
 
     const lanesAfter = nextActiveLanes(activeLanes, nodeLaneIndex, row.parents)
     const laneCount = Math.max(lanesBefore.length, activeLanes.length, lanesAfter.length, nodeLaneIndex + 1)
-    const edges = row.parents.flatMap((parent) => {
-      const targetIndex = lanesAfter.indexOf(parent)
-      if (targetIndex === -1 || targetIndex === nodeLaneIndex) return []
-      return [{ fromLaneId: laneId(nodeLaneIndex), toLaneId: laneId(targetIndex) }]
-    })
+    const edges = [
+      ...row.parents.flatMap((parent) => {
+        const targetIndex = lanesAfter.indexOf(parent)
+        if (targetIndex === -1 || targetIndex === nodeLaneIndex) return []
+        return [{ fromLaneId: laneId(nodeLaneIndex), toLaneId: laneId(targetIndex), fromPosition: 'center' as const, toPosition: 'bottom' as const }]
+      }),
+      ...lanesBefore.flatMap((commit, fromIndex) => {
+        if (commit === row.commitHash) return []
+        const toIndex = lanesAfter.indexOf(commit)
+        if (toIndex === -1 || toIndex === fromIndex) return []
+        return [{ fromLaneId: laneId(fromIndex), toLaneId: laneId(toIndex), fromPosition: 'top' as const, toPosition: 'bottom' as const }]
+      })
+    ]
 
     activeLanes = lanesAfter
 

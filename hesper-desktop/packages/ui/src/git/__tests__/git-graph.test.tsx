@@ -18,11 +18,11 @@ const firstRow: GitGraphRowView = {
   ],
   graph: {
     lanes: [
-      { id: 'main', active: true },
-      { id: 'feature', active: true }
+      { id: 'main', active: true, topActive: true, bottomActive: true },
+      { id: 'feature', active: true, topActive: false, bottomActive: true }
     ],
-    nodeLaneId: 'feature',
-    edges: [{ fromLaneId: 'main', toLaneId: 'feature' }]
+    nodeLaneId: 'main',
+    edges: [{ fromLaneId: 'main', toLaneId: 'feature', fromPosition: 'center', toPosition: 'bottom' }]
   }
 }
 
@@ -125,16 +125,18 @@ describe('GitGraphFullscreen', () => {
   it('draws continuous graph lanes and smooth branch curves', () => {
     renderGraph()
 
-    const lane = screen.getByTestId('git-graph-lane-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-feature')
-    const node = screen.getByTestId('git-graph-node-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+    const mainLane = screen.getByTestId('git-graph-lane-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-main')
+    const featureNode = screen.getByTestId('git-graph-node-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
     const edge = screen.getByTestId('git-graph-edge-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-main-feature')
 
-    expect(lane).toHaveAttribute('x1', node.getAttribute('cx'))
-    expect(lane).toHaveAttribute('x2', node.getAttribute('cx'))
-    expect(lane).toHaveAttribute('y1', '0')
-    expect(Number(lane.getAttribute('y2'))).toBe(42)
+    expect(mainLane).toHaveAttribute('x1', featureNode.getAttribute('cx'))
+    expect(mainLane).toHaveAttribute('x2', featureNode.getAttribute('cx'))
+    expect(mainLane).toHaveAttribute('y1', '0')
+    expect(Number(mainLane.getAttribute('y2'))).toBe(42)
+    expect(screen.queryByTestId('git-graph-lane-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-feature')).not.toBeInTheDocument()
     expect(edge.getAttribute('d')).toContain(' L ')
     expect(edge.getAttribute('d')).not.toContain(' C ')
+    expect(edge.getAttribute('d')).toMatch(/21 L \d+ 42$/)
     expect(edge.style.fill).toBe('none')
   })
 

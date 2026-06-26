@@ -128,7 +128,9 @@ export const gitGraphLaneSchema = z.object({
 
 export const gitGraphEdgeSchema = z.object({
   fromLaneId: nonEmptyStringSchema,
-  toLaneId: nonEmptyStringSchema
+  toLaneId: nonEmptyStringSchema,
+  fromPosition: z.enum(['top', 'center', 'bottom']).optional(),
+  toPosition: z.enum(['top', 'center', 'bottom']).optional()
 }).strict()
 
 export const gitGraphRowSchema = z.object({

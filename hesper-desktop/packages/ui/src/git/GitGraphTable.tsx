@@ -86,7 +86,7 @@ function GraphOverlay({ rows }: { rows: GitGraphRowView[] }) {
       style={{ ...graphOverlayStyle, height: svgHeight }}
     >
       {rows.flatMap((row, rowIndex) => normalizedLanes(row).flatMap((lane, lanePosition) => {
-        const segment = laneSegment(rowIndex, lane)
+        const segment = laneSegment(rowIndex, lane, row.graph.nodeLaneId)
         if (!segment) return []
         const x = laneInset + lanePosition * laneGap
         return [
@@ -110,8 +110,7 @@ function GraphOverlay({ rows }: { rows: GitGraphRowView[] }) {
 
         const fromX = laneInset + fromIndex * laneGap
         const toX = laneInset + toIndex * laneGap
-        const path = edgePath(rowIndex, fromX, toX, rows.length)
-        if (!path) return []
+        const path = edgePath(rowIndex, fromX, toX, edge.fromPosition ?? 'center', edge.toPosition ?? 'bottom')
         return [
           <path
             key={`edge-${row.commitHash}-${edge.fromLaneId}-${edge.toLaneId}-${edgeIndex}`}
@@ -150,7 +149,7 @@ const normalizedLanes = (row: GitGraphRowView): GitGraphLaneView[] => (
 
 const rowCenterY = (rowIndex: number) => rowIndex * rowHeight + rowHeight / 2
 
-const laneSegment = (rowIndex: number, lane: GitGraphLaneView): { y1: number; y2: number } | undefined => {
+const laneSegment = (rowIndex: number, lane: GitGraphLaneView, nodeLaneId?: string): { y1: number; y2: number } | undefined => {
   const topActive = lane.topActive ?? lane.active
   const bottomActive = lane.bottomActive ?? lane.active
   if (!topActive && !bottomActive) return undefined
@@ -158,10 +157,12 @@ const laneSegment = (rowIndex: number, lane: GitGraphLaneView): { y1: number; y2
   const rowTop = rowIndex * rowHeight
   const rowBottom = (rowIndex + 1) * rowHeight
   const center = rowCenterY(rowIndex)
+  const isNodeLane = lane.id === nodeLaneId
 
   if (topActive && bottomActive) return { y1: rowTop, y2: rowBottom }
-  if (topActive) return { y1: rowTop, y2: center }
-  return { y1: center, y2: rowBottom }
+  if (topActive && isNodeLane) return { y1: rowTop, y2: center }
+  if (bottomActive && isNodeLane) return { y1: center, y2: rowBottom }
+  return undefined
 }
 
 const laneIndex = (lanes: GitGraphLaneView[], laneId: string) => {
@@ -203,10 +204,17 @@ const edgeSvgStyle = (lane: GitGraphLaneView | undefined, index: number): CSSPro
   opacity: 1
 })
 
-const edgePath = (rowIndex: number, fromX: number, toX: number, rowCount: number) => {
-  if (rowIndex >= rowCount - 1) return undefined
-  return `M ${fromX} ${rowCenterY(rowIndex)} L ${toX} ${rowCenterY(rowIndex + 1)}`
+type EdgePosition = 'top' | 'center' | 'bottom'
+
+const edgeY = (rowIndex: number, position: EdgePosition) => {
+  if (position === 'top') return rowIndex * rowHeight
+  if (position === 'bottom') return (rowIndex + 1) * rowHeight
+  return rowCenterY(rowIndex)
 }
+
+const edgePath = (rowIndex: number, fromX: number, toX: number, fromPosition: EdgePosition, toPosition: EdgePosition) => (
+  `M ${fromX} ${edgeY(rowIndex, fromPosition)} L ${toX} ${edgeY(rowIndex, toPosition)}`
+)
 
 const handleContextMenu = (
   event: MouseEvent<HTMLTableRowElement>,
