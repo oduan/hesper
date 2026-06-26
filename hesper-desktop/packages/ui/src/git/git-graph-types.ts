@@ -9,6 +9,8 @@ export type GitGraphLaneView = {
   id: string
   color?: string
   active: boolean
+  topActive?: boolean | undefined
+  bottomActive?: boolean | undefined
 }
 
 export type GitGraphEdgeView = {

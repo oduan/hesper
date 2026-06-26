@@ -132,8 +132,9 @@ describe('GitGraphFullscreen', () => {
     expect(lane).toHaveAttribute('x1', node.getAttribute('cx'))
     expect(lane).toHaveAttribute('x2', node.getAttribute('cx'))
     expect(lane).toHaveAttribute('y1', '0')
-    expect(Number(lane.getAttribute('y2'))).toBeGreaterThan(42)
-    expect(edge.getAttribute('d')).toContain(' C ')
+    expect(Number(lane.getAttribute('y2'))).toBe(42)
+    expect(edge.getAttribute('d')).toContain(' L ')
+    expect(edge.getAttribute('d')).not.toContain(' C ')
     expect(edge.style.fill).toBe('none')
   })
 

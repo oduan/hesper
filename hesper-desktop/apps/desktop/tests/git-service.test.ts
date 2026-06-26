@@ -221,6 +221,7 @@ describe('GitService', () => {
       expect(Math.max(...result.rows.map((row) => row.graph.lanes.length))).toBeGreaterThan(1)
       expect(new Set(result.rows.map((row) => row.graph.nodeLaneId)).size).toBeGreaterThan(1)
       expect(result.rows.some((row) => (row.graph.edges ?? []).length > 0)).toBe(true)
+      expect(result.rows.some((row) => row.graph.lanes.some((lane) => lane.topActive !== undefined || lane.bottomActive !== undefined))).toBe(true)
       expect(result.rows.find((row) => row.commitHash === mergeCommit)?.graph.edges).toEqual(expect.arrayContaining([
         expect.objectContaining({ fromLaneId: expect.any(String), toLaneId: expect.any(String) })
       ]))

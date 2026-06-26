@@ -121,7 +121,9 @@ export const gitRefSchema = z.object({
 export const gitGraphLaneSchema = z.object({
   id: nonEmptyStringSchema,
   color: nonEmptyStringSchema,
-  active: z.boolean()
+  active: z.boolean(),
+  topActive: z.boolean().optional(),
+  bottomActive: z.boolean().optional()
 }).strict()
 
 export const gitGraphEdgeSchema = z.object({

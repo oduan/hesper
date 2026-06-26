@@ -75,7 +75,7 @@ export class GitService {
     const [currentBranch, headCommit, commitCountOutput, statusOutput, refs] = await Promise.all([
       this.optionalGit(workspace.workspacePath, ['branch', '--show-current']),
       this.optionalGit(workspace.workspacePath, ['rev-parse', 'HEAD']),
-      this.optionalGit(workspace.workspacePath, ['rev-list', '--count', 'HEAD']),
+      this.optionalGit(workspace.workspacePath, ['rev-list', '--count', '--all']),
       this.git(workspace.workspacePath, ['status', '--porcelain=v1']),
       this.listRepositoryRefs(workspace.workspacePath)
     ])
@@ -115,6 +115,8 @@ export class GitService {
     const requestedCount = offset + limit + 1
     const output = await this.git(workspacePath, [
       'log',
+      '--all',
+      '--topo-order',
       `--max-count=${requestedCount}`,
       '--date=iso-strict',
       '--decorate=full',
@@ -392,43 +394,57 @@ function parseLogRows(output: string): GitGraphRowDto[] {
 }
 
 function attachGraph(rows: GitGraphRowWithoutGraph[]): GitGraphRowDto[] {
-  const activeLanes: string[] = []
+  let activeLanes: string[] = []
 
   return rows.map((row) => {
-    let nodeLaneIndex = activeLanes.indexOf(row.commitHash)
+    const lanesBefore = [...activeLanes]
+    let nodeLaneIndex = lanesBefore.indexOf(row.commitHash)
     if (nodeLaneIndex === -1) {
-      activeLanes.push(row.commitHash)
-      nodeLaneIndex = activeLanes.length - 1
+      nodeLaneIndex = activeLanes.length
+      activeLanes = [...activeLanes, row.commitHash]
     }
 
-    const laneCount = Math.max(activeLanes.length, nodeLaneIndex + Math.max(row.parents.length, 1))
-    const edges = row.parents
-      .map((_, parentIndex) => ({
-        fromLaneId: laneId(nodeLaneIndex),
-        toLaneId: laneId(parentIndex === 0 ? nodeLaneIndex : nodeLaneIndex + parentIndex)
-      }))
-      .filter((edge, index) => row.parents.length > 1 || index > 0 || edge.fromLaneId !== edge.toLaneId)
+    const lanesAfter = nextActiveLanes(activeLanes, nodeLaneIndex, row.parents)
+    const laneCount = Math.max(lanesBefore.length, activeLanes.length, lanesAfter.length, nodeLaneIndex + 1)
+    const edges = row.parents.flatMap((parent) => {
+      const targetIndex = lanesAfter.indexOf(parent)
+      if (targetIndex === -1 || targetIndex === nodeLaneIndex) return []
+      return [{ fromLaneId: laneId(nodeLaneIndex), toLaneId: laneId(targetIndex) }]
+    })
 
-    if (row.parents.length === 0) {
-      activeLanes.splice(nodeLaneIndex, 1)
-    } else {
-      activeLanes.splice(nodeLaneIndex, 1, ...row.parents)
-      dedupeActiveLanes(activeLanes)
-    }
+    activeLanes = lanesAfter
 
     return {
       ...row,
       graph: {
-        lanes: Array.from({ length: laneCount }, (_, index) => ({
-          id: laneId(index),
-          color: laneColor(index),
-          active: index < laneCount
-        })),
+        lanes: Array.from({ length: laneCount }, (_, index) => {
+          const topActive = lanesBefore[index] !== undefined
+          const bottomActive = lanesAfter[index] !== undefined
+          const active = topActive || bottomActive || index === nodeLaneIndex
+          return {
+            id: laneId(index),
+            color: laneColor(index),
+            active,
+            topActive,
+            bottomActive
+          }
+        }),
         nodeLaneId: laneId(nodeLaneIndex),
         edges
       }
     }
   })
+}
+
+function nextActiveLanes(activeLanes: string[], nodeLaneIndex: number, parents: string[]): string[] {
+  if (parents.length === 0) {
+    return activeLanes.filter((_, index) => index !== nodeLaneIndex)
+  }
+
+  const next = [...activeLanes]
+  next.splice(nodeLaneIndex, 1, ...parents)
+  dedupeActiveLanes(next)
+  return next
 }
 
 function dedupeActiveLanes(activeLanes: string[]): void {
