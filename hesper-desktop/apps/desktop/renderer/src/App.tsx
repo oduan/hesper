@@ -1809,6 +1809,43 @@ function retryFailedRun({
   })
 }
 
+const persistedMessageRefreshRetryDelaysMs = [0, 25, 100] as const
+
+function waitForRetryDelay(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms))
+}
+
+async function replaceOptimisticMessageWithPersistedMessage({
+  sessionId,
+  messageId,
+  dispatch
+}: {
+  sessionId: string
+  messageId: string
+  dispatch: ReturnType<typeof useAppStore>['dispatch']
+}) {
+  let lastError: unknown
+
+  for (const delayMs of persistedMessageRefreshRetryDelaysMs) {
+    if (delayMs > 0) {
+      await waitForRetryDelay(delayMs)
+    }
+
+    try {
+      const messages = await hesperApi.conversation.listMessages(sessionId)
+      const persistedMessage = messages.find((candidate) => candidate.id === messageId)
+      if (persistedMessage) {
+        dispatch({ type: 'message.optimistic', message: persistedMessage })
+        return
+      }
+    } catch (error) {
+      lastError = error
+    }
+  }
+
+  console.warn('Failed to refresh persisted message after attachment send', lastError ?? { sessionId, messageId })
+}
+
 async function sendMessage({
   session,
   modelId,
@@ -1848,6 +1885,13 @@ async function sendMessage({
       ...(session.workspacePath ? { workspacePath: session.workspacePath } : {})
     })
     dispatch({ type: 'message.run-linked', sessionId: session.id, messageId: message.id, runId: result.runId })
+    if (draftAttachments.length > 0) {
+      await replaceOptimisticMessageWithPersistedMessage({
+        sessionId: session.id,
+        messageId: message.id,
+        dispatch
+      })
+    }
     clearSentDraftAttachments(session.id, draftAttachments, setDraftAttachmentsBySession)
   } catch (error) {
     dispatch({ type: 'message.removed', sessionId: session.id, messageId: message.id })

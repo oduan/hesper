@@ -1618,6 +1618,37 @@ describe('ui components', () => {
     expect(loadAttachmentDataUrl).toHaveBeenCalledTimes(1)
   })
 
+  it('renders attachment-only user messages without an empty text bubble', async () => {
+    const dataUrl = 'data:image/png;base64,b25seQ=='
+    render(
+      <MessageBubble
+        message={{
+          id: 'message-user-image-only',
+          sessionId: 'session-1',
+          role: 'user',
+          content: '',
+          contentType: 'plain',
+          attachments: [
+            {
+              id: 'attachment-image-only',
+              kind: 'image',
+              name: 'image-only.png',
+              mimeType: 'image/png',
+              bytes: 128,
+              relativePath: 'attachments/image-only.png'
+            }
+          ],
+          createdAt: now
+        }}
+        loadAttachmentDataUrl={async () => dataUrl}
+      />
+    )
+
+    expect(await screen.findByAltText('图片附件')).toHaveAttribute('src', dataUrl)
+    expect(screen.queryByLabelText('用户消息')).not.toBeInTheDocument()
+    expect(screen.queryByText('image-only.png')).not.toBeInTheDocument()
+  })
+
   it('keeps loaded image attachments when rerendered with a new loader reference', async () => {
     const firstDataUrl = 'data:image/png;base64,Zmlyc3Q='
     const secondDataUrl = 'data:image/png;base64,c2Vjb25k'

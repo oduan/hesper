@@ -10,6 +10,7 @@ export type MessageBubbleProps = {
 export function MessageBubble({ message, loadAttachmentDataUrl }: MessageBubbleProps) {
   const isUser = message.role === 'user'
   const timestamp = isUser ? formatMessageTimestamp(message.createdAt) : undefined
+  const shouldRenderContentBubble = message.content.trim().length > 0
 
   return (
     <div
@@ -23,23 +24,25 @@ export function MessageBubble({ message, loadAttachmentDataUrl }: MessageBubbleP
           message={message}
           {...(loadAttachmentDataUrl ? { loadAttachmentDataUrl } : {})}
         />
-        <article
-          aria-label={isUser ? '用户消息' : '助手消息'}
-          style={{
-            maxWidth: '100%',
-            padding: `${themeTokens.spacing.sm} ${themeTokens.spacing.md}`,
-            borderRadius: themeTokens.radius.lg,
-            border: 0,
-            background: isUser ? themeTokens.color.softControl : themeTokens.color.surfaceMuted,
-            color: themeTokens.color.text,
-            whiteSpace: 'pre-wrap',
-            overflowWrap: 'anywhere',
-            lineHeight: 1.5,
-            fontSize: themeTokens.typography.body
-          }}
-        >
-          {message.content}
-        </article>
+        {shouldRenderContentBubble ? (
+          <article
+            aria-label={isUser ? '用户消息' : '助手消息'}
+            style={{
+              maxWidth: '100%',
+              padding: `${themeTokens.spacing.sm} ${themeTokens.spacing.md}`,
+              borderRadius: themeTokens.radius.lg,
+              border: 0,
+              background: isUser ? themeTokens.color.softControl : themeTokens.color.surfaceMuted,
+              color: themeTokens.color.text,
+              whiteSpace: 'pre-wrap',
+              overflowWrap: 'anywhere',
+              lineHeight: 1.5,
+              fontSize: themeTokens.typography.body
+            }}
+          >
+            {message.content}
+          </article>
+        ) : null}
         {timestamp ? (
           <time
             dateTime={message.createdAt}

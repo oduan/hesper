@@ -18,7 +18,7 @@ function createDeferred<T>() {
   return { promise, resolve, reject }
 }
 
-const { listSessions, createSession, updateTitle, deleteSession, setModel, generateTitle, markViewed, listRoles, createRole, updateRole, deleteRole, listSkills, refreshSkills, listMessages, listMessagesByRun, listRuns, listSteps, listWorkerInvocationsByParentRun, filesPreview, enqueue, stopRun, onEvent, getSettings, updateSettings, listProviders, listModels, listTools, setToolEnabled, toolCredentialStatus, saveToolApiKey, deleteToolApiKey, sshKeysList, sshKeysCreate, sshKeysDelete, sshServersList, sshServersCreate, sshServersUpdate, sshServersDelete, minimizeWindow, toggleMaximizeWindow, closeWindow } = vi.hoisted(() => ({
+const { listSessions, createSession, updateTitle, deleteSession, setModel, generateTitle, markViewed, listRoles, createRole, updateRole, deleteRole, listSkills, refreshSkills, listMessages, listMessagesByRun, listRuns, listSteps, listWorkerInvocationsByParentRun, filesPreview, readAttachmentDataUrl, enqueue, stopRun, onEvent, getSettings, updateSettings, listProviders, listModels, listTools, setToolEnabled, toolCredentialStatus, saveToolApiKey, deleteToolApiKey, sshKeysList, sshKeysCreate, sshKeysDelete, sshServersList, sshServersCreate, sshServersUpdate, sshServersDelete, minimizeWindow, toggleMaximizeWindow, closeWindow } = vi.hoisted(() => ({
   listSessions: vi.fn(async () => []),
   createSession: vi.fn(async () => ({
     id: 'session-1',
@@ -88,6 +88,7 @@ const { listSessions, createSession, updateTitle, deleteSession, setModel, gener
     bytes: 18,
     content: '# Fallback preview'
   })),
+  readAttachmentDataUrl: vi.fn(async () => ({ dataUrl: 'data:image/png;base64,ZmFsbGJhY2s=' })),
   enqueue: vi.fn(async () => ({ runId: 'run-1' })),
   stopRun: vi.fn(async (runId: string) => ({
     id: runId,
@@ -227,6 +228,7 @@ vi.mock('../src/ipc-client', () => ({
     conversation: { listMessages, listMessagesByRun, listRuns, listSteps },
     workerAgents: { listByParentRun: listWorkerInvocationsByParentRun },
     files: { preview: filesPreview },
+    attachments: { readDataUrl: readAttachmentDataUrl },
     agent: { enqueue, stop: stopRun, onEvent },
     dialog: { selectDirectory: vi.fn() },
     settings: { get: getSettings, update: updateSettings },
@@ -307,6 +309,7 @@ describe('renderer App', () => {
     listSteps.mockReset()
     listWorkerInvocationsByParentRun.mockReset()
     filesPreview.mockReset()
+    readAttachmentDataUrl.mockReset()
     enqueue.mockReset()
     stopRun.mockReset()
     onEvent.mockReset()
@@ -346,6 +349,7 @@ describe('renderer App', () => {
       bytes: 18,
       content: '# Fallback preview'
     }))
+    readAttachmentDataUrl.mockResolvedValue({ dataUrl: 'data:image/png;base64,ZmFsbGJhY2s=' })
     listProviders.mockResolvedValue([])
     listModels.mockResolvedValue([])
     listTools.mockResolvedValue([
@@ -2195,6 +2199,41 @@ describe('renderer App', () => {
         updatedAt: '2026-06-10T03:00:00.000Z'
       }
     ] as any)
+    const historicalImageDataUrl = 'data:image/png;base64,aGlzdG9yeQ=='
+    let persistedMessages: any[] = []
+    let attachmentRefreshReads = 0
+    listMessages.mockImplementation(async () => {
+      if (persistedMessages.length === 0) {
+        return [] as never[]
+      }
+      attachmentRefreshReads += 1
+      return (attachmentRefreshReads === 1 ? [] : persistedMessages) as never[]
+    })
+    readAttachmentDataUrl.mockResolvedValue({ dataUrl: historicalImageDataUrl })
+    enqueue.mockImplementation(async (...args: any[]) => {
+      const payload = args[0]
+      if (payload.draftAttachments?.some((attachment: any) => attachment.kind === 'image')) {
+        persistedMessages = [{
+          id: payload.messageId,
+          sessionId: payload.sessionId,
+          role: 'user',
+          content: payload.prompt,
+          contentType: 'plain',
+          runId: 'run-image',
+          attachments: [{
+            id: 'attachment-persisted-image',
+            kind: 'image',
+            name: payload.draftAttachments[0].name,
+            mimeType: payload.draftAttachments[0].mimeType,
+            bytes: payload.draftAttachments[0].bytes,
+            relativePath: 'attachments/session-1/message-1/attachment-persisted-image.png'
+          }],
+          createdAt: payload.messageCreatedAt
+        }]
+        return { runId: 'run-image' }
+      }
+      return { runId: 'run-text' }
+    })
 
     render(<App />)
 
@@ -2256,6 +2295,8 @@ describe('renderer App', () => {
       ]
     }))
     expect(imageCapablePayload.draftAttachments[0]).not.toHaveProperty('id')
+    expect(await screen.findByAltText('图片附件')).toHaveAttribute('src', historicalImageDataUrl)
+    expect(screen.queryByText('hidden.png')).not.toBeInTheDocument()
   })
 
   it('passes the selected thinking intensity when enqueueing a run', async () => {
