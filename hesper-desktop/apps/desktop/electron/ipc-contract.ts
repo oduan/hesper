@@ -114,7 +114,8 @@ export const localFilePreviewResultSchema = localFilePreviewSchema
 export const gitRefSchema = z.object({
   name: nonEmptyStringSchema,
   shortName: nonEmptyStringSchema,
-  type: z.enum(['local-branch', 'remote-branch', 'tag', 'head'])
+  type: z.enum(['local-branch', 'remote-branch', 'tag', 'head']),
+  targetCommit: nonEmptyStringSchema.optional()
 }).strict()
 
 export const gitGraphLaneSchema = z.object({
@@ -148,7 +149,7 @@ export const gitRepositoryStateSchema = z.object({
   sessionId: nonEmptyStringSchema,
   workspacePath: nonEmptyStringSchema.optional(),
   isGitRepository: z.boolean(),
-  currentBranch: z.string().optional(),
+  currentBranch: nonEmptyStringSchema.optional(),
   headCommit: nonEmptyStringSchema.optional(),
   dirty: z.boolean(),
   changedFiles: z.number().int().nonnegative(),
@@ -157,7 +158,7 @@ export const gitRepositoryStateSchema = z.object({
 
 export const gitCommitFileChangeSchema = z.object({
   path: nonEmptyStringSchema,
-  oldPath: z.string().optional(),
+  oldPath: nonEmptyStringSchema.optional(),
   status: z.enum(['added', 'modified', 'deleted', 'renamed', 'copied', 'type-change', 'unmerged', 'unknown']),
   additions: z.number().int().nonnegative().optional(),
   deletions: z.number().int().nonnegative().optional()
