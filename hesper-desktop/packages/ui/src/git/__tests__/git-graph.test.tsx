@@ -25,7 +25,25 @@ const firstRow: GitGraphRowView = {
   }
 }
 
-const rows: GitGraphRowView[] = [firstRow]
+const secondRow: GitGraphRowView = {
+  commitHash: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+  shortHash: 'bbbbbbb',
+  parents: [],
+  subject: 'Prepare base history',
+  authorName: 'Morgan',
+  authorEmail: 'morgan@example.com',
+  authoredAt: '2026-06-26T03:00:00.000Z',
+  refs: [{ name: 'refs/heads/main', shortName: 'main', type: 'local-branch' }],
+  graph: {
+    lanes: [
+      { id: 'main', active: true },
+      { id: 'feature', active: false }
+    ],
+    nodeLaneId: 'main'
+  }
+}
+
+const rows: GitGraphRowView[] = [firstRow, secondRow]
 
 const detail: GitCommitDetailView = {
   commitHash: firstRow.commitHash,
@@ -87,15 +105,17 @@ describe('GitGraphFullscreen', () => {
   it('renders branch and tag refs before the commit message', () => {
     renderGraph()
 
-    const description = screen.getByLabelText('提交描述')
+    const row = screen.getByRole('row', { name: /Add git graph panel/ })
+    const description = within(row).getByLabelText('提交描述')
     expect(description.textContent).toMatch(/^feature\/git-log-panelv1\.2\.3Add git graph panel/)
   })
 
   it('centers graph lanes and nodes on the same lane x coordinate', () => {
     renderGraph()
 
-    const lane = screen.getByTestId('git-graph-lane-feature')
-    const node = screen.getByTestId('git-graph-node-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+    const row = screen.getByRole('row', { name: /Add git graph panel/ })
+    const lane = within(row).getByTestId('git-graph-lane-feature')
+    const node = within(row).getByTestId('git-graph-node-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
 
     expect(lane.style.left).toBe('var(--git-graph-lane-x)')
     expect(node.style.left).toBe('var(--git-graph-lane-x)')
@@ -236,6 +256,23 @@ describe('GitGraphFullscreen', () => {
     expect(closedCallbacks.onClose).not.toHaveBeenCalled()
   })
 
+  it('uses ArrowDown and ArrowUp to select adjacent commits and move row focus', async () => {
+    const callbacks = renderGraph()
+    const first = screen.getByRole('row', { name: /Add git graph panel/ })
+    const second = screen.getByRole('row', { name: /Prepare base history/ })
+
+    await waitFor(() => expect(first).toHaveFocus())
+    fireEvent.keyDown(first, { key: 'ArrowDown' })
+
+    expect(callbacks.onSelectCommit).toHaveBeenCalledWith(secondRow.commitHash)
+    expect(second).toHaveFocus()
+
+    fireEvent.keyDown(second, { key: 'ArrowUp' })
+
+    expect(callbacks.onSelectCommit).toHaveBeenLastCalledWith(firstRow.commitHash)
+    expect(first).toHaveFocus()
+  })
+
   it('moves focus from an external opener into the fullscreen dialog on open', async () => {
     const callbacks = {
       onClose: vi.fn(),
@@ -316,19 +353,27 @@ describe('GitGraphFullscreen', () => {
 
     const fullscreen = screen.getByRole('dialog', { name: 'Git 提交图谱' })
     expect(fullscreen).toHaveStyle({ background: themeTokens.color.surface, color: themeTokens.color.text })
-    expect(screen.getByRole('table', { name: 'Git 提交图谱表格' })).toHaveStyle({ background: themeTokens.color.surface })
-    expect(screen.getByRole('row', { name: /Add git graph panel/ })).toHaveStyle({ background: themeTokens.color.hover })
+    const table = screen.getByRole('table', { name: 'Git 提交图谱表格' })
+    expect(table).toHaveStyle({ background: themeTokens.color.surface, color: themeTokens.color.text })
+    expect(screen.getByRole('columnheader', { name: '描述' }).closest('thead')).toHaveStyle({ background: themeTokens.color.surfaceMuted, color: themeTokens.color.textMuted })
+    expect(screen.getByRole('columnheader', { name: '描述' }).style.borderBottom).toContain(themeTokens.color.borderSubtle)
+    expect(screen.getByRole('row', { name: /Add git graph panel/ })).toHaveStyle({ background: themeTokens.color.hover, color: themeTokens.color.text })
+    expect(screen.getByRole('cell', { name: firstRow.shortHash })).toHaveStyle({ color: themeTokens.color.textMuted })
 
     fireEvent.contextMenu(screen.getByRole('row', { name: /Add git graph panel/ }))
     const menu = screen.getByRole('menu', { name: '提交操作' })
-    expect(menu).toHaveStyle({ background: themeTokens.color.surfaceMuted })
-    expect(menu.style.borderColor).toBe(themeTokens.color.border)
+    expect(menu).toHaveStyle({ background: themeTokens.color.surfaceMuted, color: themeTokens.color.text })
+    expect(menu.style.borderColor).toBe(themeTokens.color.borderSubtle)
+    fireEvent.mouseEnter(screen.getByRole('menuitem', { name: '从选中提交新建分支' }))
+    expect(screen.getByRole('menuitem', { name: '从选中提交新建分支' })).toHaveStyle({ background: themeTokens.color.hover })
 
     fireEvent.keyDown(window, { key: 'Escape' })
     screen.getByRole('row', { name: /Add git graph panel/ }).focus()
     fireEvent.keyDown(document.activeElement ?? window, { key: 'Enter' })
     const drawer = screen.getByRole('dialog', { name: '提交详情' })
-    expect(drawer).toHaveStyle({ background: themeTokens.color.surface })
-    expect(drawer.style.borderColor).toBe(themeTokens.color.border)
+    expect(drawer).toHaveStyle({ background: themeTokens.color.surface, color: themeTokens.color.text })
+    expect(drawer.style.borderColor).toBe(themeTokens.color.borderSubtle)
+    expect(within(drawer).getByRole('button', { name: '新建分支' })).toHaveStyle({ background: themeTokens.color.surface, color: themeTokens.color.text })
   })
+
 })

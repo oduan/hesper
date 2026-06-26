@@ -34,7 +34,7 @@ export function GitGraphTable({ rows, selectedCommit, onSelectCommit, onOpenCont
         </tr>
       </thead>
       <tbody>
-        {rows.map((row) => {
+        {rows.map((row, rowIndex) => {
           const selected = selectedCommit === row.commitHash
           return (
             <tr
@@ -46,7 +46,7 @@ export function GitGraphTable({ rows, selectedCommit, onSelectCommit, onOpenCont
               style={selected ? selectedRowStyle : rowStyle}
               onClick={() => onSelectCommit(row.commitHash)}
               onContextMenu={(event) => handleContextMenu(event, row.commitHash, onSelectCommit, onOpenContextMenu)}
-              onKeyDown={(event) => handleRowKeyDown(event, row.commitHash, onSelectCommit, onOpenDetail, onOpenContextMenu)}
+              onKeyDown={(event) => handleRowKeyDown(event, rowIndex, rows, onSelectCommit, onOpenDetail, onOpenContextMenu)}
             >
               <td style={{ ...cellStyle, ...graphCellStyle }}>
                 <CommitGraph row={row} />
@@ -157,7 +157,7 @@ const edgeStyle = (fromX: number, toX: number): CSSProperties => ({
   width: Math.max(2, Math.abs(toX - fromX)),
   height: 2,
   borderRadius: 999,
-  background: themeTokens.color.border,
+  background: themeTokens.color.borderSubtle,
   transform: fromX <= toX ? 'rotate(28deg)' : 'rotate(-28deg)',
   transformOrigin: fromX <= toX ? 'left center' : 'right center',
   opacity: 0.8
@@ -176,11 +176,27 @@ const handleContextMenu = (
 
 const handleRowKeyDown = (
   event: KeyboardEvent<HTMLTableRowElement>,
-  commitHash: string,
+  rowIndex: number,
+  rows: GitGraphRowView[],
   onSelectCommit: (commitHash: string) => void,
   onOpenDetail: (commitHash: string) => void,
   onOpenContextMenu: (request: GitCommitMenuRequest) => void
 ) => {
+  const commitHash = rows[rowIndex]?.commitHash
+  if (!commitHash) return
+
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault()
+    const nextIndex = event.key === 'ArrowDown'
+      ? Math.min(rows.length - 1, rowIndex + 1)
+      : Math.max(0, rowIndex - 1)
+    const nextHash = rows[nextIndex]?.commitHash
+    if (!nextHash) return
+
+    onSelectCommit(nextHash)
+    focusRowByIndex(event.currentTarget, nextIndex)
+    return
+  }
   if (event.key === 'Enter') {
     event.preventDefault()
     onOpenDetail(commitHash)
@@ -204,6 +220,11 @@ const handleRowKeyDown = (
       triggerElement: event.currentTarget
     })
   }
+}
+
+const focusRowByIndex = (currentRow: HTMLTableRowElement, rowIndex: number) => {
+  const row = currentRow.parentElement?.querySelectorAll<HTMLTableRowElement>('[data-git-commit-hash]').item(rowIndex)
+  row?.focus()
 }
 
 const formatDate = (value: string) => {
@@ -233,7 +254,7 @@ const tableHeadStyle: CSSProperties = {
 const headerCellStyle: CSSProperties = {
   height: 36,
   padding: `0 ${themeTokens.spacing.md}`,
-  borderBottom: `1px solid ${themeTokens.color.border}`,
+  borderBottom: `1px solid ${themeTokens.color.borderSubtle}`,
   fontSize: 12,
   fontWeight: 600,
   textAlign: 'left'
@@ -245,7 +266,7 @@ const authorHeaderCellStyle: CSSProperties = { ...headerCellStyle, width: 160 }
 const commitHeaderCellStyle: CSSProperties = { ...headerCellStyle, width: 108 }
 
 const rowStyle: CSSProperties = {
-  background: 'transparent',
+  background: themeTokens.color.surface,
   color: themeTokens.color.text,
   cursor: 'default'
 }

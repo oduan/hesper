@@ -195,7 +195,7 @@ const headerStyle: CSSProperties = {
   justifyContent: 'space-between',
   gap: themeTokens.spacing.md,
   padding: `${themeTokens.spacing.md} ${themeTokens.spacing.lg}`,
-  borderBottom: `1px solid ${themeTokens.color.border}`,
+  borderBottom: `1px solid ${themeTokens.color.borderSubtle}`,
   background: themeTokens.color.surfaceMuted
 }
 
@@ -219,7 +219,7 @@ const closeButtonStyle: CSSProperties = {
   height: 34,
   border: 0,
   borderRadius: themeTokens.radius.md,
-  background: 'transparent',
+  background: themeTokens.color.surfaceMuted,
   color: themeTokens.color.text,
   cursor: 'pointer',
   display: 'grid',
@@ -230,7 +230,7 @@ const iconStyle: CSSProperties = { width: 18, height: 18 }
 
 const bannerStyle: CSSProperties = {
   padding: `${themeTokens.spacing.sm} ${themeTokens.spacing.lg}`,
-  borderBottom: `1px solid ${themeTokens.color.border}`,
+  borderBottom: `1px solid ${themeTokens.color.borderSubtle}`,
   background: themeTokens.color.surfaceMuted,
   color: themeTokens.color.textMuted
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, type CSSProperties, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
 import { themeTokens } from '../theme'
 
 const menuWidth = 220
@@ -93,8 +93,19 @@ type MenuItemProps = {
 }
 
 function MenuItem({ children, onClick }: MenuItemProps) {
+  const [highlighted, setHighlighted] = useState(false)
+
   return (
-    <button type="button" role="menuitem" style={menuItemStyle} onClick={onClick}>
+    <button
+      type="button"
+      role="menuitem"
+      style={{ ...menuItemStyle, ...(highlighted ? menuItemHighlightedStyle : {}) }}
+      onClick={onClick}
+      onFocus={() => setHighlighted(true)}
+      onBlur={() => setHighlighted(false)}
+      onMouseEnter={() => setHighlighted(true)}
+      onMouseLeave={() => setHighlighted(false)}
+    >
       {children}
     </button>
   )
@@ -136,7 +147,7 @@ const menuStyle: CSSProperties = {
   padding: themeTokens.spacing.xs,
   borderWidth: 1,
   borderStyle: 'solid',
-  borderColor: themeTokens.color.border,
+  borderColor: themeTokens.color.borderSubtle,
   borderRadius: themeTokens.radius.md,
   background: themeTokens.color.surfaceMuted,
   color: themeTokens.color.text,
@@ -149,10 +160,15 @@ const menuItemStyle: CSSProperties = {
   width: '100%',
   border: 0,
   borderRadius: themeTokens.radius.sm,
-  background: 'transparent',
+  background: themeTokens.color.surfaceMuted,
   color: themeTokens.color.text,
   cursor: 'pointer',
   font: 'inherit',
   padding: `${themeTokens.spacing.sm} ${themeTokens.spacing.md}`,
   textAlign: 'left'
+}
+
+const menuItemHighlightedStyle: CSSProperties = {
+  background: themeTokens.color.hover,
+  color: themeTokens.color.text
 }

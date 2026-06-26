@@ -162,7 +162,7 @@ const drawerStyle: CSSProperties = {
   flexDirection: 'column',
   borderLeftWidth: 1,
   borderLeftStyle: 'solid',
-  borderColor: themeTokens.color.border,
+  borderColor: themeTokens.color.borderSubtle,
   background: themeTokens.color.surface,
   color: themeTokens.color.text,
   boxShadow: `-18px 0 48px ${themeTokens.color.shadow}`
@@ -174,7 +174,7 @@ const drawerHeaderStyle: CSSProperties = {
   justifyContent: 'space-between',
   gap: themeTokens.spacing.md,
   padding: themeTokens.spacing.lg,
-  borderBottom: `1px solid ${themeTokens.color.border}`
+  borderBottom: `1px solid ${themeTokens.color.borderSubtle}`
 }
 
 const titleGroupStyle: CSSProperties = { minWidth: 0 }
@@ -200,12 +200,12 @@ const actionsStyle: CSSProperties = {
   flexWrap: 'wrap',
   gap: themeTokens.spacing.sm,
   padding: `${themeTokens.spacing.md} ${themeTokens.spacing.lg}`,
-  borderBottom: `1px solid ${themeTokens.color.border}`,
+  borderBottom: `1px solid ${themeTokens.color.borderSubtle}`,
   background: themeTokens.color.surfaceMuted
 }
 
 const actionButtonStyle: CSSProperties = {
-  border: `1px solid ${themeTokens.color.border}`,
+  border: `1px solid ${themeTokens.color.borderSubtle}`,
   borderRadius: themeTokens.radius.sm,
   background: themeTokens.color.surface,
   color: themeTokens.color.text,
@@ -224,7 +224,7 @@ const contentStyle: CSSProperties = {
 }
 
 const sectionStyle: CSSProperties = {
-  border: `1px solid ${themeTokens.color.border}`,
+  border: `1px solid ${themeTokens.color.borderSubtle}`,
   borderRadius: themeTokens.radius.md,
   background: themeTokens.color.surfaceMuted,
   padding: themeTokens.spacing.md
