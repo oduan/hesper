@@ -190,6 +190,8 @@ const handleRowKeyDown = (
     const nextIndex = event.key === 'ArrowDown'
       ? Math.min(rows.length - 1, rowIndex + 1)
       : Math.max(0, rowIndex - 1)
+    if (nextIndex === rowIndex) return
+
     const nextHash = rows[nextIndex]?.commitHash
     if (!nextHash) return
 

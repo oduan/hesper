@@ -93,7 +93,9 @@ type MenuItemProps = {
 }
 
 function MenuItem({ children, onClick }: MenuItemProps) {
-  const [highlighted, setHighlighted] = useState(false)
+  const [focused, setFocused] = useState(false)
+  const [hovered, setHovered] = useState(false)
+  const highlighted = focused || hovered
 
   return (
     <button
@@ -101,10 +103,10 @@ function MenuItem({ children, onClick }: MenuItemProps) {
       role="menuitem"
       style={{ ...menuItemStyle, ...(highlighted ? menuItemHighlightedStyle : {}) }}
       onClick={onClick}
-      onFocus={() => setHighlighted(true)}
-      onBlur={() => setHighlighted(false)}
-      onMouseEnter={() => setHighlighted(true)}
-      onMouseLeave={() => setHighlighted(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
       {children}
     </button>

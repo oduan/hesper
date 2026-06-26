@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -174,6 +175,23 @@ describe('GitGraphFullscreen', () => {
     expect(items[0]).toHaveFocus()
   })
 
+  it('keeps context menu item highlighted after mouse leaves while it remains focused', async () => {
+    renderGraph()
+    const row = screen.getByRole('row', { name: /Add git graph panel/ })
+
+    row.focus()
+    fireEvent.keyDown(row, { key: 'ContextMenu' })
+
+    const firstItem = screen.getByRole('menuitem', { name: '从选中提交新建分支' })
+    await waitFor(() => expect(firstItem).toHaveFocus())
+
+    fireEvent.mouseEnter(firstItem)
+    fireEvent.mouseLeave(firstItem)
+
+    expect(firstItem).toHaveFocus()
+    expect(firstItem).toHaveStyle({ background: themeTokens.color.hover })
+  })
+
   it('clamps the context menu inside the viewport', () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 800 })
     Object.defineProperty(window, 'innerHeight', { configurable: true, value: 600 })
@@ -271,6 +289,60 @@ describe('GitGraphFullscreen', () => {
 
     expect(callbacks.onSelectCommit).toHaveBeenLastCalledWith(firstRow.commitHash)
     expect(first).toHaveFocus()
+  })
+
+  it('does not re-select the current commit at ArrowUp or ArrowDown boundaries', async () => {
+    const callbacks = renderGraph()
+    const first = screen.getByRole('row', { name: /Add git graph panel/ })
+    const second = screen.getByRole('row', { name: /Prepare base history/ })
+
+    await waitFor(() => expect(first).toHaveFocus())
+    fireEvent.keyDown(first, { key: 'ArrowUp' })
+
+    expect(callbacks.onSelectCommit).not.toHaveBeenCalled()
+    expect(first).toHaveFocus()
+
+    second.focus()
+    callbacks.onSelectCommit.mockClear()
+    fireEvent.keyDown(second, { key: 'ArrowDown' })
+
+    expect(callbacks.onSelectCommit).not.toHaveBeenCalled()
+    expect(second).toHaveFocus()
+  })
+
+  it('updates aria-selected and selected styling when parent controls ArrowDown selection', async () => {
+    const ControlledGraph = () => {
+      const [selectedCommit, setSelectedCommit] = useState(firstRow.commitHash)
+      return (
+        <GitGraphFullscreen
+          open
+          rows={rows}
+          selectedCommit={selectedCommit}
+          detail={detail}
+          onClose={vi.fn()}
+          onSelectCommit={setSelectedCommit}
+          onLoadCommitDetail={vi.fn()}
+          onCreateBranch={vi.fn()}
+          onCreateTag={vi.fn()}
+          onCheckout={vi.fn()}
+          onCopyCommitId={vi.fn()}
+        />
+      )
+    }
+
+    render(<ControlledGraph />)
+    const first = screen.getByRole('row', { name: /Add git graph panel/ })
+    const second = screen.getByRole('row', { name: /Prepare base history/ })
+
+    await waitFor(() => expect(first).toHaveFocus())
+    expect(first).toHaveAttribute('aria-selected', 'true')
+    expect(second).toHaveAttribute('aria-selected', 'false')
+
+    fireEvent.keyDown(first, { key: 'ArrowDown' })
+
+    await waitFor(() => expect(second).toHaveAttribute('aria-selected', 'true'))
+    expect(first).toHaveAttribute('aria-selected', 'false')
+    expect(second).toHaveStyle({ background: themeTokens.color.hover })
   })
 
   it('moves focus from an external opener into the fullscreen dialog on open', async () => {
