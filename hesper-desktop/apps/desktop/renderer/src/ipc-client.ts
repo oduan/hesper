@@ -108,10 +108,15 @@ export function createFallbackHesperApi(): HesperDesktopApi {
   let nextRunNumber = 1
   let sessions: SessionDto[] = []
   let sessionCategories: SessionCategoryDto[] = []
+  const normalizeMockCategoryId = (categoryId: string | undefined): string | undefined => {
+    const normalized = categoryId?.trim()
+    return normalized ? normalized : undefined
+  }
   const assertMockSessionCategoryExists = (categoryId: string | undefined) => {
-    if (!categoryId) return
-    if (!sessionCategories.some((category) => category.id === categoryId)) {
-      throw new Error(`Session category not found: ${categoryId}`)
+    const normalized = normalizeMockCategoryId(categoryId)
+    if (!normalized) return
+    if (!sessionCategories.some((category) => category.id === normalized)) {
+      throw new Error(`Session category not found: ${normalized}`)
     }
   }
   let tools: ToolDto[] = fallbackBuiltinTools.map((tool) => ({ ...tool }))
@@ -181,8 +186,9 @@ export function createFallbackHesperApi(): HesperDesktopApi {
     sessions: {
       list: async () => sessions.filter((session) => session.status !== 'deleted'),
       create: async (input) => {
-        assertMockSessionCategoryExists(input.categoryId)
-        const session = createMockSession(input)
+        const categoryId = normalizeMockCategoryId(input.categoryId)
+        assertMockSessionCategoryExists(categoryId)
+        const session = createMockSession({ ...input, categoryId })
         sessions = [session, ...sessions]
         messagesBySession[session.id] = []
         runsBySession[session.id] = []
@@ -205,8 +211,19 @@ export function createFallbackHesperApi(): HesperDesktopApi {
         return viewed
       }),
       setCategory: async (input: SetSessionCategoryInput) => {
-        assertMockSessionCategoryExists(input.categoryId)
-        return input.ids.map((id) => replaceSession(id, (session) => input.categoryId ? updateMockSession(session, { categoryId: input.categoryId }) : clearMockSessionCategory(session)))
+        const categoryId = normalizeMockCategoryId(input.categoryId)
+        assertMockSessionCategoryExists(categoryId)
+        const targetSessions = input.ids.map((id) => {
+          const session = sessions.find((candidate) => candidate.id === id && candidate.status !== 'deleted')
+          if (!session) {
+            throw new Error(`Session not found: ${id}`)
+          }
+          return session
+        })
+        const updatedSessions = targetSessions.map((session) => categoryId ? updateMockSession(session, { categoryId }) : clearMockSessionCategory(session))
+        const updatedById = new Map(updatedSessions.map((session) => [session.id, session]))
+        sessions = sessions.map((session) => updatedById.get(session.id) ?? session)
+        return input.ids.map((id) => updatedById.get(id) as SessionDto)
       }
     },
     sessionCategories: {
