@@ -18,7 +18,7 @@ function createDeferred<T>() {
   return { promise, resolve, reject }
 }
 
-const { listSessions, createSession, updateTitle, deleteSession, setModel, generateTitle, markViewed, listRoles, createRole, updateRole, deleteRole, listSkills, refreshSkills, listMessages, listMessagesByRun, listRuns, listSteps, listWorkerInvocationsByParentRun, filesPreview, readAttachmentDataUrl, getGitState, listGitLog, getGitCommit, createGitBranch, createGitTag, checkoutGit, enqueue, stopRun, onEvent, getSettings, updateSettings, listProviders, listModels, listTools, setToolEnabled, toolCredentialStatus, saveToolApiKey, deleteToolApiKey, sshKeysList, sshKeysCreate, sshKeysDelete, sshServersList, sshServersCreate, sshServersUpdate, sshServersDelete, minimizeWindow, toggleMaximizeWindow, closeWindow } = vi.hoisted(() => ({
+const { listSessions, createSession, updateTitle, deleteSession, setWorkspace, setModel, generateTitle, markViewed, listRoles, createRole, updateRole, deleteRole, listSkills, refreshSkills, listMessages, listMessagesByRun, listRuns, listSteps, listWorkerInvocationsByParentRun, filesPreview, readAttachmentDataUrl, getGitState, listGitLog, getGitCommit, createGitBranch, createGitTag, checkoutGit, selectDirectory, enqueue, stopRun, onEvent, getSettings, updateSettings, listProviders, listModels, listTools, setToolEnabled, toolCredentialStatus, saveToolApiKey, deleteToolApiKey, sshKeysList, sshKeysCreate, sshKeysDelete, sshServersList, sshServersCreate, sshServersUpdate, sshServersDelete, minimizeWindow, toggleMaximizeWindow, closeWindow } = vi.hoisted(() => ({
   listSessions: vi.fn(async () => []),
   createSession: vi.fn(async () => ({
     id: 'session-1',
@@ -40,6 +40,15 @@ const { listSessions, createSession, updateTitle, deleteSession, setModel, gener
     id,
     title: 'Deleted chat',
     status: 'deleted',
+    outputMode: 'markdown',
+    createdAt: '2026-06-10T03:00:00.000Z',
+    updatedAt: '2026-06-10T03:00:12.000Z'
+  })),
+  setWorkspace: vi.fn(async (input: { id: string; workspacePath?: string }) => ({
+    id: input.id,
+    title: 'Git workspace',
+    status: 'active',
+    ...(input.workspacePath ? { workspacePath: input.workspacePath } : {}),
     outputMode: 'markdown',
     createdAt: '2026-06-10T03:00:00.000Z',
     updatedAt: '2026-06-10T03:00:12.000Z'
@@ -115,6 +124,7 @@ const { listSessions, createSession, updateTitle, deleteSession, setModel, gener
   createGitBranch: vi.fn(async () => ({ success: true })) as any,
   createGitTag: vi.fn(async () => ({ success: true })) as any,
   checkoutGit: vi.fn(async () => ({ success: true })) as any,
+  selectDirectory: vi.fn(async () => ({ canceled: true })) as any,
   enqueue: vi.fn(async () => ({ runId: 'run-1' })),
   stopRun: vi.fn(async (runId: string) => ({
     id: runId,
@@ -247,6 +257,7 @@ vi.mock('../src/ipc-client', () => ({
       create: createSession,
       updateTitle,
       delete: deleteSession,
+      setWorkspace,
       setModel,
       generateTitle,
       markViewed
@@ -264,7 +275,7 @@ vi.mock('../src/ipc-client', () => ({
     },
     attachments: { readDataUrl: readAttachmentDataUrl },
     agent: { enqueue, stop: stopRun, onEvent },
-    dialog: { selectDirectory: vi.fn() },
+    dialog: { selectDirectory },
     settings: { get: getSettings, update: updateSettings },
     providers: { list: listProviders },
     models: { list: listModels },
@@ -328,6 +339,7 @@ describe('renderer App', () => {
     createSession.mockClear()
     updateTitle.mockClear()
     deleteSession.mockClear()
+    setWorkspace.mockReset()
     setModel.mockClear()
     generateTitle.mockClear()
     markViewed.mockClear()
@@ -416,6 +428,16 @@ describe('renderer App', () => {
     createGitBranch.mockResolvedValue({ success: true })
     createGitTag.mockResolvedValue({ success: true })
     checkoutGit.mockResolvedValue({ success: true })
+    selectDirectory.mockResolvedValue({ canceled: true })
+    setWorkspace.mockImplementation(async (input: { id: string; workspacePath?: string }) => ({
+      id: input.id,
+      title: 'Git workspace',
+      status: 'active',
+      ...(input.workspacePath ? { workspacePath: input.workspacePath } : {}),
+      outputMode: 'markdown',
+      createdAt: '2026-06-10T03:00:00.000Z',
+      updatedAt: '2026-06-10T03:00:12.000Z'
+    }))
     listProviders.mockResolvedValue([])
     listModels.mockResolvedValue([])
     listTools.mockResolvedValue([
@@ -742,6 +764,109 @@ describe('renderer App', () => {
     expect(screen.queryByText('First session commit')).not.toBeInTheDocument()
     expect(screen.queryByText('First detail')).not.toBeInTheDocument()
     expect(listGitLog).toHaveBeenLastCalledWith({ sessionId: 'session-two', limit: 200 })
+  })
+
+  it('clears Git cache when the same session workspace changes and reloads the new workspace log', async () => {
+    const user = userEvent.setup()
+    let activeWorkspace = 'C:/repo-a'
+    const repoACommit = '1111111111111111111111111111111111111111'
+    const repoBCommit = '2222222222222222222222222222222222222222'
+    listSessions.mockResolvedValueOnce([
+      sessionFixture('session-git', 'Git workspace', activeWorkspace)
+    ] as any)
+    selectDirectory.mockResolvedValueOnce({ canceled: false, path: 'C:/repo-b' })
+    setWorkspace.mockImplementationOnce(async (input: { id: string; workspacePath?: string }) => {
+      activeWorkspace = input.workspacePath ?? ''
+      return sessionFixture(input.id, 'Git workspace', input.workspacePath)
+    })
+    getGitState.mockImplementation(async () => gitStateFixture('session-git', activeWorkspace, activeWorkspace === 'C:/repo-a' ? repoACommit : repoBCommit))
+    listGitLog.mockImplementation(async () => ({
+      rows: activeWorkspace === 'C:/repo-a'
+        ? [gitRowFixture(repoACommit, 'Repo A commit')]
+        : [gitRowFixture(repoBCommit, 'Repo B commit')],
+      limit: 200,
+      hasMore: false
+    }))
+
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: /打开 Git 图谱/ }))
+    expect(await screen.findByText('Repo A commit')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /^选择文件夹/ }))
+    await waitFor(() => expect(setWorkspace).toHaveBeenCalledWith({ id: 'session-git', workspacePath: 'C:/repo-b' }))
+    await waitFor(() => expect(screen.queryByText('Repo A commit')).not.toBeInTheDocument())
+
+    await user.click(await screen.findByRole('button', { name: /打开 Git 图谱/ }))
+
+    expect(await screen.findByText('Repo B commit')).toBeInTheDocument()
+    expect(screen.queryByText('Repo A commit')).not.toBeInTheDocument()
+    expect(listGitLog).toHaveBeenLastCalledWith({ sessionId: 'session-git', limit: 200 })
+  })
+
+  it('does not checkout when the checkout prompt is cancelled', async () => {
+    const user = userEvent.setup()
+    const commit = '3333333333333333333333333333333333333333'
+    vi.spyOn(window, 'prompt').mockReturnValue(null)
+    listSessions.mockResolvedValueOnce([
+      sessionFixture('session-git', 'Git workspace', 'C:/workspace')
+    ] as any)
+    getGitState.mockResolvedValue(gitStateFixture('session-git', 'C:/workspace', commit))
+    listGitLog.mockResolvedValue({ rows: [gitRowFixture(commit, 'Checkout row')], limit: 200, hasMore: false })
+
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: /打开 Git 图谱/ }))
+    const row = await screen.findByRole('row', { name: /Checkout row 3333333/ })
+    fireEvent.contextMenu(row, { clientX: 120, clientY: 160 })
+    await user.click(await screen.findByRole('menuitem', { name: '检出此提交' }))
+
+    await waitFor(() => expect(window.prompt).toHaveBeenCalled())
+    expect(checkoutGit).not.toHaveBeenCalled()
+  })
+
+  it('ignores stale commit detail results after the same session workspace changes', async () => {
+    const user = userEvent.setup()
+    let activeWorkspace = 'C:/repo-a'
+    const repoACommit = '4444444444444444444444444444444444444444'
+    const repoBCommit = '5555555555555555555555555555555555555555'
+    const staleDetail = createDeferred<any>()
+    listSessions.mockResolvedValueOnce([
+      sessionFixture('session-git', 'Git workspace', activeWorkspace)
+    ] as any)
+    selectDirectory.mockResolvedValueOnce({ canceled: false, path: 'C:/repo-b' })
+    setWorkspace.mockImplementationOnce(async (input: { id: string; workspacePath?: string }) => {
+      activeWorkspace = input.workspacePath ?? ''
+      return sessionFixture(input.id, 'Git workspace', input.workspacePath)
+    })
+    getGitState.mockImplementation(async () => gitStateFixture('session-git', activeWorkspace, activeWorkspace === 'C:/repo-a' ? repoACommit : repoBCommit))
+    listGitLog.mockImplementation(async () => ({
+      rows: activeWorkspace === 'C:/repo-a'
+        ? [gitRowFixture(repoACommit, 'Repo A stale row')]
+        : [gitRowFixture(repoBCommit, 'Repo B fresh row')],
+      limit: 200,
+      hasMore: false
+    }))
+    getGitCommit.mockReturnValueOnce(staleDetail.promise)
+
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: /打开 Git 图谱/ }))
+    const staleRow = await screen.findByRole('row', { name: /Repo A stale row 4444444/ })
+    staleRow.focus()
+    fireEvent.keyDown(staleRow, { key: 'Enter' })
+    await waitFor(() => expect(getGitCommit).toHaveBeenCalledWith({ sessionId: 'session-git', commit: repoACommit }))
+
+    await user.click(screen.getByRole('button', { name: /^选择文件夹/ }))
+    await waitFor(() => expect(setWorkspace).toHaveBeenCalledWith({ id: 'session-git', workspacePath: 'C:/repo-b' }))
+
+    staleDetail.resolve(gitDetailFixture(repoACommit, 'Stale detail should not render'))
+    await act(async () => { await staleDetail.promise })
+
+    await user.click(await screen.findByRole('button', { name: /打开 Git 图谱/ }))
+    expect(await screen.findByText('Repo B fresh row')).toBeInTheDocument()
+    expect(screen.queryByText('Stale detail should not render')).not.toBeInTheDocument()
+    expect(screen.queryByText('Repo A stale row')).not.toBeInTheDocument()
   })
 
   it('renders the high-density shell, native titlebar controls, and empty conversation state', async () => {

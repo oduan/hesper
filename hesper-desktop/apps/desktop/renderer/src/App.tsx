@@ -32,6 +32,7 @@ type SessionSettingsField = keyof SessionSettingsOverride
 type RequestTokensBySession = Record<string, Partial<Record<SessionSettingsField, number>>>
 
 type GitUiStateBySession = Record<string, {
+  workspacePath?: string | undefined
   repository?: GitRepositoryStateDto | undefined
   rows?: GitGraphRowDto[] | undefined
   logLimit?: number | undefined
@@ -136,7 +137,13 @@ function pruneRequestTokens(tokens: RequestTokensBySession, visibleSessionIds: s
 }
 
 function getErrorMessage(error: unknown, fallback: string): string {
-  return error instanceof Error ? error.message : fallback
+  if (error instanceof Error) return error.message
+  if (typeof error === 'string' && error.trim()) return error
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = (error as { message?: unknown }).message
+    if (typeof message === 'string' && message.trim()) return message
+  }
+  return fallback
 }
 
 function selectDefaultGitCommit(repository?: GitRepositoryStateDto, rows: GitGraphRowDto[] = [], currentSelection?: string): string | undefined {
@@ -273,18 +280,21 @@ function AppContent() {
   const effectiveThemeMode = resolveThemeVariant(appSettings.themeId, requestedThemeMode).colorScheme
   const loadedHistorySessionIdsRef = useRef<Set<string>>(new Set())
   const loadingHistorySessionIdsRef = useRef<Set<string>>(new Set())
+  const gitUiStateRef = useRef(gitUiStateBySession)
   const createdNewSessionIdsRef = useRef<Set<string>>(new Set())
   const explicitModelSelectionSessionIdsRef = useRef<Set<string>>(new Set())
   const runModelIdsRef = useRef<Record<string, string>>({})
   const pendingTitlePromptsBySessionRef = useRef<Record<string, string>>({})
   const titleGeneratedRunIdsRef = useRef<Set<string>>(new Set())
   const stateRef = useRef(state)
+  gitUiStateRef.current = gitUiStateBySession
   const nextRenameRequestIdRef = useRef(0)
   const latestRenameRequestIdBySessionRef = useRef<Record<string, number>>({})
   const nextSettingsRequestIdRef = useRef(0)
   const latestSettingsRequestIdRef = useRef<RequestTokensBySession>({})
   const latestGitStateRequestIdRef = useRef<Record<string, number>>({})
   const latestGitLogRequestIdRef = useRef<Record<string, number>>({})
+  const latestGitDetailRequestIdRef = useRef<Record<string, Record<string, number>>>({})
   const latestAppSettingsRequestIdRef = useRef(0)
   const nextRolesRequestIdRef = useRef(0)
   const latestRolesRequestIdRef = useRef(0)
@@ -856,6 +866,9 @@ function AppContent() {
     latestGitLogRequestIdRef.current = Object.fromEntries(
       Object.entries(latestGitLogRequestIdRef.current).filter(([sessionId]) => visible.has(sessionId))
     )
+    latestGitDetailRequestIdRef.current = Object.fromEntries(
+      Object.entries(latestGitDetailRequestIdRef.current).filter(([sessionId]) => visible.has(sessionId))
+    )
     pendingTitlePromptsBySessionRef.current = Object.fromEntries(
       Object.entries(pendingTitlePromptsBySessionRef.current).filter(([sessionId]) => visible.has(sessionId))
     )
@@ -949,35 +962,58 @@ function AppContent() {
   const activeModelCapabilities = activeModelConfig?.capabilities ?? []
   const activeModelOptions = activeSession?.defaultModelId ? mergeModelOptions(sessionModelCatalog.options, [activeModelId, activeSession.defaultModelId]) : mergeModelOptions(sessionModelCatalog.options, [activeModelId])
 
-  const loadGitRepositoryState = useCallback(async (sessionId: string): Promise<GitRepositoryStateDto | undefined> => {
+  const loadGitRepositoryState = useCallback(async (sessionId: string, workspacePath: string): Promise<GitRepositoryStateDto | undefined> => {
     const requestId = (latestGitStateRequestIdRef.current[sessionId] ?? 0) + 1
     latestGitStateRequestIdRef.current = { ...latestGitStateRequestIdRef.current, [sessionId]: requestId }
-    setGitUiStateBySession((current) => mergeGitUiState(current, sessionId, { loadingState: true, error: undefined }))
+    setGitUiStateBySession((current) => mergeGitUiState(current, sessionId, {
+      workspacePath,
+      ...(current[sessionId]?.workspacePath === workspacePath ? {} : {
+        repository: undefined,
+        rows: undefined,
+        hasMore: undefined,
+        logLimit: undefined,
+        open: false,
+        loadingLog: false,
+        loadingDetailByCommit: undefined,
+        selectedCommit: undefined,
+        detailsByCommit: undefined
+      }),
+      loadingState: true,
+      error: undefined
+    }))
 
     try {
       const repository = await hesperApi.git.getState({ sessionId })
-      if (latestGitStateRequestIdRef.current[sessionId] === requestId) {
-        setGitUiStateBySession((current) => mergeGitUiState(current, sessionId, repository.isGitRepository
-          ? { repository, loadingState: false, error: undefined }
-          : {
-              repository,
-              rows: undefined,
-              hasMore: undefined,
-              logLimit: undefined,
-              open: false,
-              loadingState: false,
-              selectedCommit: undefined,
-              detailsByCommit: undefined,
-              error: undefined
-            }))
+      if (latestGitStateRequestIdRef.current[sessionId] === requestId && repository.workspacePath === workspacePath) {
+        setGitUiStateBySession((current) => {
+          if (current[sessionId]?.workspacePath !== workspacePath) return current
+          return mergeGitUiState(current, sessionId, repository.isGitRepository
+            ? { repository, loadingState: false, error: undefined }
+            : {
+                repository,
+                rows: undefined,
+                hasMore: undefined,
+                logLimit: undefined,
+                open: false,
+                loadingState: false,
+                loadingLog: false,
+                loadingDetailByCommit: undefined,
+                selectedCommit: undefined,
+                detailsByCommit: undefined,
+                error: undefined
+              })
+        })
       }
-      return repository
+      return repository.workspacePath === workspacePath ? repository : undefined
     } catch (error) {
       if (latestGitStateRequestIdRef.current[sessionId] === requestId) {
-        setGitUiStateBySession((current) => mergeGitUiState(current, sessionId, {
-          loadingState: false,
-          error: getErrorMessage(error, 'Git 状态加载失败')
-        }))
+        setGitUiStateBySession((current) => {
+          if (current[sessionId]?.workspacePath !== workspacePath) return current
+          return mergeGitUiState(current, sessionId, {
+            loadingState: false,
+            error: getErrorMessage(error, 'Git 状态加载失败')
+          })
+        })
       }
       return undefined
     }
@@ -986,24 +1022,33 @@ function AppContent() {
   const loadGitLog = useCallback(async (
     sessionId: string,
     limit = 200,
-    repositoryOverride?: GitRepositoryStateDto
+    repositoryOverride?: GitRepositoryStateDto,
+    workspacePath?: string
   ): Promise<GitGraphRowDto[] | undefined> => {
+    const expectedWorkspacePath = workspacePath ?? repositoryOverride?.workspacePath
+    if (!expectedWorkspacePath) return undefined
+
     const requestId = (latestGitLogRequestIdRef.current[sessionId] ?? 0) + 1
     latestGitLogRequestIdRef.current = { ...latestGitLogRequestIdRef.current, [sessionId]: requestId }
-    setGitUiStateBySession((current) => mergeGitUiState(current, sessionId, { loadingLog: true, error: undefined }))
+    setGitUiStateBySession((current) => {
+      if (current[sessionId]?.workspacePath !== expectedWorkspacePath) return current
+      return mergeGitUiState(current, sessionId, { loadingLog: true, error: undefined })
+    })
 
     try {
       const result = await hesperApi.git.listLog({ sessionId, limit })
       if (latestGitLogRequestIdRef.current[sessionId] === requestId) {
         setGitUiStateBySession((current) => {
           const currentSessionState = current[sessionId]
-          const repository = repositoryOverride ?? currentSessionState?.repository
+          if (currentSessionState?.workspacePath !== expectedWorkspacePath) return current
+          const repository = repositoryOverride ?? currentSessionState.repository
+          if (repository?.workspacePath !== expectedWorkspacePath) return current
           return mergeGitUiState(current, sessionId, {
             rows: result.rows,
             logLimit: result.limit,
             hasMore: result.hasMore,
             loadingLog: false,
-            selectedCommit: selectDefaultGitCommit(repository, result.rows, currentSessionState?.selectedCommit),
+            selectedCommit: selectDefaultGitCommit(repository, result.rows, currentSessionState.selectedCommit),
             error: undefined
           })
         })
@@ -1011,19 +1056,22 @@ function AppContent() {
       return result.rows
     } catch (error) {
       if (latestGitLogRequestIdRef.current[sessionId] === requestId) {
-        setGitUiStateBySession((current) => mergeGitUiState(current, sessionId, {
-          loadingLog: false,
-          error: getErrorMessage(error, 'Git 日志加载失败')
-        }))
+        setGitUiStateBySession((current) => {
+          if (current[sessionId]?.workspacePath !== expectedWorkspacePath) return current
+          return mergeGitUiState(current, sessionId, {
+            loadingLog: false,
+            error: getErrorMessage(error, 'Git 日志加载失败')
+          })
+        })
       }
       return undefined
     }
   }, [])
 
-  const refreshGitPanel = useCallback(async (sessionId: string) => {
-    const repository = await loadGitRepositoryState(sessionId)
-    if (repository?.isGitRepository) {
-      await loadGitLog(sessionId, 200, repository)
+  const refreshGitPanel = useCallback(async (sessionId: string, workspacePath: string) => {
+    const repository = await loadGitRepositoryState(sessionId, workspacePath)
+    if (repository?.isGitRepository && repository.workspacePath === workspacePath) {
+      await loadGitLog(sessionId, 200, repository, workspacePath)
     }
   }, [loadGitLog, loadGitRepositoryState])
 
@@ -1033,6 +1081,7 @@ function AppContent() {
 
     if (!activeSession.workspacePath) {
       setGitUiStateBySession((current) => mergeGitUiState(current, sessionId, {
+        workspacePath: undefined,
         repository: undefined,
         rows: undefined,
         hasMore: undefined,
@@ -1040,6 +1089,7 @@ function AppContent() {
         open: false,
         loadingState: false,
         loadingLog: false,
+        loadingDetailByCommit: undefined,
         selectedCommit: undefined,
         detailsByCommit: undefined,
         error: undefined
@@ -1047,13 +1097,37 @@ function AppContent() {
       return
     }
 
-    void loadGitRepositoryState(sessionId)
+    setGitUiStateBySession((current) => {
+      if (current[sessionId]?.workspacePath === activeSession.workspacePath) return current
+      return mergeGitUiState(current, sessionId, {
+        workspacePath: activeSession.workspacePath,
+        repository: undefined,
+        rows: undefined,
+        hasMore: undefined,
+        logLimit: undefined,
+        open: false,
+        loadingState: false,
+        loadingLog: false,
+        loadingDetailByCommit: undefined,
+        selectedCommit: undefined,
+        detailsByCommit: undefined,
+        error: undefined
+      })
+    })
+    void loadGitRepositoryState(sessionId, activeSession.workspacePath)
   }, [activeSession?.id, activeSession?.workspacePath, loadGitRepositoryState])
 
   const activeGitUiState = activeSession ? gitUiStateBySession[activeSession.id] : undefined
-  const activeGitSelectedCommit = activeGitUiState?.selectedCommit
+  const activeWorkspacePath = activeSession?.workspacePath
+  const activeGitRepositoryMatches = Boolean(
+    activeWorkspacePath &&
+    activeGitUiState?.workspacePath === activeWorkspacePath &&
+    activeGitUiState.repository?.isGitRepository &&
+    activeGitUiState.repository.workspacePath === activeWorkspacePath
+  )
+  const activeGitSelectedCommit = activeGitRepositoryMatches ? activeGitUiState?.selectedCommit : undefined
   const activeGitDetail = activeGitSelectedCommit ? activeGitUiState?.detailsByCommit?.[activeGitSelectedCommit] : undefined
-  const activeGitPanel = activeSession?.workspacePath && activeGitUiState?.repository?.isGitRepository
+  const activeGitPanel = activeSession && activeWorkspacePath && activeGitUiState?.repository && activeGitRepositoryMatches
     ? {
         visible: true,
         open: Boolean(activeGitUiState.open),
@@ -1066,9 +1140,10 @@ function AppContent() {
         ...(activeGitDetail ? { detail: toGitCommitDetailView(activeGitDetail) } : {}),
         onOpen: () => {
           const sessionId = activeSession.id
-          const shouldLoad = !gitUiStateBySession[sessionId]?.rows
-          setGitUiStateBySession((current) => mergeGitUiState(current, sessionId, { open: true }))
-          if (shouldLoad) void loadGitLog(sessionId, 200)
+          const workspacePath = activeWorkspacePath
+          const shouldLoad = gitUiStateBySession[sessionId]?.workspacePath !== workspacePath || !gitUiStateBySession[sessionId]?.rows
+          setGitUiStateBySession((current) => mergeGitUiState(current, sessionId, { workspacePath, open: true }))
+          if (shouldLoad) void loadGitLog(sessionId, 200, undefined, workspacePath)
         },
         onClose: () => {
           const sessionId = activeSession.id
@@ -1080,68 +1155,115 @@ function AppContent() {
         },
         onLoadCommitDetail: (commit: string) => {
           const sessionId = activeSession.id
+          const workspacePath = activeWorkspacePath
+          const currentDetail = gitUiStateBySession[sessionId]?.workspacePath === workspacePath
+            ? gitUiStateBySession[sessionId]?.detailsByCommit?.[commit]
+            : undefined
           setGitUiStateBySession((current) => {
+            if (current[sessionId]?.workspacePath !== workspacePath) return current
             const existingDetail = current[sessionId]?.detailsByCommit?.[commit]
             return mergeGitUiState(current, sessionId, {
               selectedCommit: commit,
               ...(existingDetail ? {} : { loadingDetailByCommit: { ...current[sessionId]?.loadingDetailByCommit, [commit]: true }, error: undefined })
             })
           })
-          if (gitUiStateBySession[sessionId]?.detailsByCommit?.[commit]) return
+          if (currentDetail) return
+
+          const detailRequestId = ((latestGitDetailRequestIdRef.current[sessionId]?.[commit] ?? 0) + 1)
+          latestGitDetailRequestIdRef.current = {
+            ...latestGitDetailRequestIdRef.current,
+            [sessionId]: {
+              ...latestGitDetailRequestIdRef.current[sessionId],
+              [commit]: detailRequestId
+            }
+          }
 
           void hesperApi.git.getCommit({ sessionId, commit }).then((detail) => {
-            setGitUiStateBySession((current) => mergeGitUiState(current, sessionId, {
-              detailsByCommit: { ...current[sessionId]?.detailsByCommit, [commit]: detail },
-              loadingDetailByCommit: clearGitDetailLoading(current[sessionId]?.loadingDetailByCommit, commit),
-              error: undefined
-            }))
+            if (latestGitDetailRequestIdRef.current[sessionId]?.[commit] !== detailRequestId) return
+            setGitUiStateBySession((current) => {
+              const currentSessionState = current[sessionId]
+              if (currentSessionState?.workspacePath !== workspacePath || currentSessionState.repository?.workspacePath !== workspacePath) return current
+              return mergeGitUiState(current, sessionId, {
+                detailsByCommit: { ...currentSessionState.detailsByCommit, [commit]: detail },
+                loadingDetailByCommit: clearGitDetailLoading(currentSessionState.loadingDetailByCommit, commit),
+                error: undefined
+              })
+            })
           }).catch((error) => {
-            setGitUiStateBySession((current) => mergeGitUiState(current, sessionId, {
-              loadingDetailByCommit: clearGitDetailLoading(current[sessionId]?.loadingDetailByCommit, commit),
-              error: getErrorMessage(error, 'Git 提交详情加载失败')
-            }))
+            if (latestGitDetailRequestIdRef.current[sessionId]?.[commit] !== detailRequestId) return
+            setGitUiStateBySession((current) => {
+              const currentSessionState = current[sessionId]
+              if (currentSessionState?.workspacePath !== workspacePath || currentSessionState.repository?.workspacePath !== workspacePath) return current
+              return mergeGitUiState(current, sessionId, {
+                loadingDetailByCommit: clearGitDetailLoading(currentSessionState.loadingDetailByCommit, commit),
+                error: getErrorMessage(error, 'Git 提交详情加载失败')
+              })
+            })
           })
         },
         onCreateBranch: (commit: string) => {
           const sessionId = activeSession.id
+          const workspacePath = activeWorkspacePath
           const branchName = window.prompt?.('输入新分支名称', '')?.trim()
           if (!branchName) return
           void hesperApi.git.createBranch({ sessionId, commit, branchName }).then(async (result) => {
             if (!result.success) {
-              setGitUiStateBySession((current) => mergeGitUiState(current, sessionId, { error: result.message ?? 'Git 分支创建失败' }))
+              setGitUiStateBySession((current) => current[sessionId]?.workspacePath === workspacePath
+                ? mergeGitUiState(current, sessionId, { error: result.message ?? 'Git 分支创建失败' })
+                : current)
               return
             }
-            await refreshGitPanel(sessionId)
+            if (gitUiStateRef.current[sessionId]?.workspacePath === workspacePath) {
+              await refreshGitPanel(sessionId, workspacePath)
+            }
           }).catch((error) => {
-            setGitUiStateBySession((current) => mergeGitUiState(current, sessionId, { error: getErrorMessage(error, 'Git 分支创建失败') }))
+            setGitUiStateBySession((current) => current[sessionId]?.workspacePath === workspacePath
+              ? mergeGitUiState(current, sessionId, { error: getErrorMessage(error, 'Git 分支创建失败') })
+              : current)
           })
         },
         onCreateTag: (commit: string) => {
           const sessionId = activeSession.id
+          const workspacePath = activeWorkspacePath
           const tagName = window.prompt?.('输入标签名称', '')?.trim()
           if (!tagName) return
           void hesperApi.git.createTag({ sessionId, commit, tagName }).then(async (result) => {
             if (!result.success) {
-              setGitUiStateBySession((current) => mergeGitUiState(current, sessionId, { error: result.message ?? 'Git 标签创建失败' }))
+              setGitUiStateBySession((current) => current[sessionId]?.workspacePath === workspacePath
+                ? mergeGitUiState(current, sessionId, { error: result.message ?? 'Git 标签创建失败' })
+                : current)
               return
             }
-            await refreshGitPanel(sessionId)
+            if (gitUiStateRef.current[sessionId]?.workspacePath === workspacePath) {
+              await refreshGitPanel(sessionId, workspacePath)
+            }
           }).catch((error) => {
-            setGitUiStateBySession((current) => mergeGitUiState(current, sessionId, { error: getErrorMessage(error, 'Git 标签创建失败') }))
+            setGitUiStateBySession((current) => current[sessionId]?.workspacePath === workspacePath
+              ? mergeGitUiState(current, sessionId, { error: getErrorMessage(error, 'Git 标签创建失败') })
+              : current)
           })
         },
         onCheckout: (ref: string) => {
           const sessionId = activeSession.id
-          const checkoutRef = window.prompt?.('输入要检出的 ref', ref)?.trim() || ref
+          const workspacePath = activeWorkspacePath
+          const promptValue = window.prompt?.('输入要检出的 ref', ref)
+          if (promptValue == null) return
+          const checkoutRef = promptValue.trim()
           if (!checkoutRef) return
           void hesperApi.git.checkout({ sessionId, ref: checkoutRef }).then(async (result) => {
             if (!result.success) {
-              setGitUiStateBySession((current) => mergeGitUiState(current, sessionId, { error: result.message ?? 'Git 检出失败' }))
+              setGitUiStateBySession((current) => current[sessionId]?.workspacePath === workspacePath
+                ? mergeGitUiState(current, sessionId, { error: result.message ?? 'Git 检出失败' })
+                : current)
               return
             }
-            await refreshGitPanel(sessionId)
+            if (gitUiStateRef.current[sessionId]?.workspacePath === workspacePath) {
+              await refreshGitPanel(sessionId, workspacePath)
+            }
           }).catch((error) => {
-            setGitUiStateBySession((current) => mergeGitUiState(current, sessionId, { error: getErrorMessage(error, 'Git 检出失败') }))
+            setGitUiStateBySession((current) => current[sessionId]?.workspacePath === workspacePath
+              ? mergeGitUiState(current, sessionId, { error: getErrorMessage(error, 'Git 检出失败') })
+              : current)
           })
         },
         onCopyCommitId: (commitHash: string) => {
