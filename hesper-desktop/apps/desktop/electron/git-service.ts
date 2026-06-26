@@ -395,6 +395,16 @@ function parseLogRows(output: string): GitGraphRowDto[] {
 
 function attachGraph(rows: GitGraphRowWithoutGraph[]): GitGraphRowDto[] {
   let activeLanes: string[] = []
+  const lineColorsByCommit = new Map<string, string>()
+  let nextColorIndex = 0
+
+  const assignColor = (commit: string, preferredColor?: string): string => {
+    const existing = lineColorsByCommit.get(commit)
+    if (existing) return existing
+    const color = preferredColor ?? laneColor(nextColorIndex++)
+    lineColorsByCommit.set(commit, color)
+    return color
+  }
 
   return rows.map((row) => {
     const lanesBefore = [...activeLanes]
@@ -403,6 +413,11 @@ function attachGraph(rows: GitGraphRowWithoutGraph[]): GitGraphRowDto[] {
       nodeLaneIndex = activeLanes.length
       activeLanes = [...activeLanes, row.commitHash]
     }
+
+    const nodeColor = assignColor(row.commitHash)
+    row.parents.forEach((parent, parentIndex) => {
+      assignColor(parent, parentIndex === 0 ? nodeColor : undefined)
+    })
 
     const lanesAfter = nextActiveLanes(activeLanes, nodeLaneIndex, row.parents)
     const laneCount = Math.max(lanesBefore.length, activeLanes.length, lanesAfter.length, nodeLaneIndex + 1)
@@ -426,12 +441,15 @@ function attachGraph(rows: GitGraphRowWithoutGraph[]): GitGraphRowDto[] {
       ...row,
       graph: {
         lanes: Array.from({ length: laneCount }, (_, index) => {
-          const topActive = lanesBefore[index] !== undefined
-          const bottomActive = lanesAfter[index] !== undefined
+          const topCommit = lanesBefore[index]
+          const bottomCommit = lanesAfter[index]
+          const laneCommit = bottomCommit ?? topCommit ?? (index === nodeLaneIndex ? row.commitHash : undefined)
+          const topActive = topCommit !== undefined
+          const bottomActive = bottomCommit !== undefined
           const active = topActive || bottomActive || index === nodeLaneIndex
           return {
             id: laneId(index),
-            color: laneColor(index),
+            color: laneCommit ? assignColor(laneCommit) : laneColor(index),
             active,
             topActive,
             bottomActive
