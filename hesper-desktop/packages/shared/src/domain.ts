@@ -95,6 +95,7 @@ export type Session = {
   title: string
   status: SessionStatus
   categoryId?: string
+  isMarked?: boolean
   workspacePath?: string
   defaultModelId?: string
   providerId?: string

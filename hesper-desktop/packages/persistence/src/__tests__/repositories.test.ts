@@ -251,6 +251,29 @@ describe('persistence repositories', () => {
     await expect(db.sessions.get('session-product')).resolves.toMatchObject({ categoryId: 'category-product' })
   })
 
+  it('persists session marked state', async () => {
+    const db = await createInMemoryPersistence()
+    await db.sessions.save({
+      id: 'session-marked',
+      title: 'Marked chat',
+      status: 'active',
+      isMarked: true,
+      outputMode: 'markdown',
+      createdAt: now,
+      updatedAt: now
+    })
+
+    await expect(db.sessions.get('session-marked')).resolves.toMatchObject({ isMarked: true })
+  })
+
+  it('migrates legacy databases with unmarked sessions by default', async () => {
+    const bytes = await createLegacyDatabaseBytes()
+    const migrated = await createInMemoryPersistence(bytes)
+
+    const session = await migrated.sessions.get('legacy-session')
+    expect(session?.isMarked).toBeUndefined()
+  })
+
   it('clears session category ids when deleting a session category', async () => {
     const db = await createInMemoryPersistence()
     await db.sessionCategories.save({

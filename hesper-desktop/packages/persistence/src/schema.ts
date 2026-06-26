@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   title TEXT NOT NULL,
   status TEXT NOT NULL,
   category_id TEXT,
+  is_marked INTEGER NOT NULL DEFAULT 0,
   workspace_path TEXT,
   default_model_id TEXT,
   provider_id TEXT,
@@ -276,7 +277,8 @@ const migrationColumns: Record<string, string[]> = {
     'max_worker_agent_depth INTEGER',
     'max_worker_agents_per_run INTEGER',
     'unread_completed_at TEXT',
-    'category_id TEXT'
+    'category_id TEXT',
+    'is_marked INTEGER NOT NULL DEFAULT 0'
   ],
   messages: [
     'attachments_json TEXT'

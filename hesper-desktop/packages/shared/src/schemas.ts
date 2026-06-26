@@ -131,6 +131,7 @@ const sessionBaseSchema = z.object({
   title: z.string().min(1),
   status: z.enum(['active', 'archived', 'deleted']),
   categoryId: z.string().min(1).optional(),
+  isMarked: z.boolean().optional(),
   workspacePath: z.string().optional(),
   defaultModelId: z.string().optional(),
   providerId: z.string().min(1).optional(),

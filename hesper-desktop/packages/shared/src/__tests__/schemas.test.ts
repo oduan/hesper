@@ -134,6 +134,20 @@ describe('shared schemas', () => {
     expect(parsed.unreadCompletedAt).toBe(now)
   })
 
+  it('parses session marked state', () => {
+    const parsed = sessionSchema.parse({
+      id: 'session-marked',
+      title: 'Marked chat',
+      status: 'active',
+      isMarked: true,
+      outputMode: 'markdown',
+      createdAt: now,
+      updatedAt: now
+    })
+
+    expect(parsed.isMarked).toBe(true)
+  })
+
   it('parses session categories and session category ids', () => {
     const parsedCategory = sessionCategorySchema.parse({
       id: 'category-product',
