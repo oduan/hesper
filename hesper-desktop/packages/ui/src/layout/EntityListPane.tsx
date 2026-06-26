@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type WheelEvent as ReactWheelEvent } from 'react'
 import type { Session, ToolDefinition } from '@hesper/shared'
 import { RunningStatusIcon } from '../conversation/RunningStatusIcon'
 import { themeTokens } from '../theme'
@@ -188,6 +188,25 @@ export function EntityListPane({
   const selectedRoleIdSet = useMemo(() => new Set(selectedRoleIds), [selectedRoleIds])
   const renameInputRef = useRef<HTMLInputElement>(null)
   const roleMenuFirstItemRef = useRef<HTMLButtonElement>(null)
+  const sessionListRef = useRef<HTMLUListElement>(null)
+
+  const handleEntityPaneWheelCapture = (event: ReactWheelEvent<HTMLElement>) => {
+    if (activeSection !== 'sessions') return
+    const sessionList = sessionListRef.current
+    if (!sessionList) return
+
+    const target = event.target
+    if (target instanceof Node && sessionList.contains(target)) return
+
+    const maxScrollTop = Math.max(0, sessionList.scrollHeight - sessionList.clientHeight)
+    if (maxScrollTop <= 0 || event.deltaY === 0) return
+
+    const nextScrollTop = Math.max(0, Math.min(maxScrollTop, sessionList.scrollTop + event.deltaY))
+    if (nextScrollTop === sessionList.scrollTop) return
+
+    event.preventDefault()
+    sessionList.scrollTop = nextScrollTop
+  }
 
   useEffect(() => {
     if (activeSection !== 'sessions') return undefined
@@ -431,6 +450,7 @@ export function EntityListPane({
   return (
     <aside
       aria-label="实体列表"
+      onWheelCapture={handleEntityPaneWheelCapture}
       style={{
         width: '100%',
         minWidth: 0,
@@ -450,7 +470,7 @@ export function EntityListPane({
       </header>
       {activeSection === 'sessions' ? (
         sessions.length > 0 ? (
-          <ul aria-label="会话列表" className="hesper-theme-scrollbar" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 2, overflow: 'auto', minHeight: 0 }}>
+          <ul ref={sessionListRef} aria-label="会话列表" className="hesper-theme-scrollbar" style={sessionListStyle}>
             {sessions.map((session) => {
               const isActive = session.id === activeSessionId
               const isSelected = selectedSessionIdSet.has(session.id)
@@ -791,6 +811,17 @@ const settingsCategories: Array<{ id: SettingsCategory; title: string; label: st
   { id: 'soul', title: 'SOUL', label: 'SOUL 设置', description: '身份设定' },
   { id: 'appearance', title: '外观', label: '外观设置', description: '字体大小、亮色与暗色' }
 ]
+
+const sessionListStyle: CSSProperties = {
+  listStyle: 'none',
+  margin: 0,
+  marginRight: `-${themeTokens.spacing.lg}`,
+  padding: `0 ${themeTokens.spacing.lg} 0 0`,
+  display: 'grid',
+  gap: 2,
+  overflow: 'auto',
+  minHeight: 0
+}
 
 const sessionRowStyle: CSSProperties = {
   gridTemplateColumns: 'minmax(0, 1fr) minmax(0, auto) auto',

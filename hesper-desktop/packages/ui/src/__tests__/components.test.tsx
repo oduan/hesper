@@ -256,7 +256,12 @@ describe('ui components', () => {
     expect(screen.getByRole('button', { name: '所有会话' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByLabelText('功能栏')).toHaveStyle({ boxSizing: 'border-box' })
     expect(screen.getByLabelText('实体列表')).toHaveStyle({ boxSizing: 'border-box' })
-    expect(screen.getByLabelText('会话列表')).toHaveClass('hesper-theme-scrollbar')
+    const sessionList = screen.getByLabelText('会话列表')
+    expect(sessionList).toHaveClass('hesper-theme-scrollbar')
+    expect(sessionList).toHaveStyle({
+      marginRight: '-16px',
+      paddingRight: '16px'
+    })
     expect(screen.getByLabelText('主工作区')).toHaveStyle({ gridTemplateColumns: '204px 427px minmax(0, 1fr)' })
     expect(screen.getByLabelText('详情区域').firstElementChild).toHaveStyle({ padding: '0px' })
     const sessionRow = screen.getByRole('button', { name: '视频脚本生成' })
@@ -313,6 +318,35 @@ describe('ui components', () => {
 
     await user.click(screen.getByRole('button', { name: '工具' }))
     expect(onSelectSection).toHaveBeenCalledWith('tools')
+  })
+
+  it('routes wheel events from the session pane chrome into the session list', () => {
+    render(
+      <AppShell
+        sessions={Array.from({ length: 24 }, (_, index) => ({
+          id: `session-wheel-${index}`,
+          title: `滚动会话 ${index + 1}`,
+          status: 'active',
+          outputMode: 'markdown',
+          createdAt: now,
+          updatedAt: now
+        } satisfies Session))}
+        activeSection="sessions"
+        activeSessionId="session-wheel-0"
+        title="滚轮测试"
+      />
+    )
+
+    const entityList = screen.getByLabelText('实体列表')
+    const sessionList = screen.getByLabelText('会话列表')
+    Object.defineProperty(sessionList, 'scrollHeight', { configurable: true, value: 800 })
+    Object.defineProperty(sessionList, 'clientHeight', { configurable: true, value: 320 })
+
+    fireEvent.wheel(entityList, { deltaY: 96 })
+    expect(sessionList.scrollTop).toBe(96)
+
+    fireEvent.wheel(entityList, { deltaY: 999 })
+    expect(sessionList.scrollTop).toBe(480)
   })
 
   it('renders session categories under the activity rail and creates a focused new category from all sessions', async () => {
