@@ -50,6 +50,8 @@ type RequiredWorkspace = {
   workspacePath: string
 }
 
+type GitGraphRowWithoutGraph = Omit<GitGraphRowDto, 'graph'>
+
 export class GitService {
   private readonly sessionService: SessionServiceLike
 
@@ -193,7 +195,11 @@ export class GitService {
       throw new Error('Cannot checkout ref with a dirty workspace. Commit, stash, or discard changes first.')
     }
 
-    await this.git(workspacePath, ['switch', input.ref])
+    if (await this.isLocalBranch(workspacePath, input.ref)) {
+      await this.git(workspacePath, ['switch', input.ref])
+    } else {
+      await this.git(workspacePath, ['checkout', input.ref])
+    }
     return {
       success: true,
       message: `Checked out ${input.ref}`,
@@ -244,6 +250,11 @@ export class GitService {
     } catch {
       return false
     }
+  }
+
+  private async isLocalBranch(workspacePath: string, ref: string): Promise<boolean> {
+    const result = await this.optionalGit(workspacePath, ['show-ref', '--verify', `refs/heads/${ref}`])
+    return result.stdout.trim().length > 0
   }
 
   private async listRepositoryRefs(workspacePath: string): Promise<GitRefDto[]> {
@@ -337,11 +348,11 @@ function countChangedFiles(statusOutput: string): number {
 }
 
 function parseLogRows(output: string): GitGraphRowDto[] {
-  return output
+  const rows = output
     .split(RECORD_SEPARATOR)
     .map((record) => record.trim())
     .filter(Boolean)
-    .map((record) => {
+    .map((record): GitGraphRowWithoutGraph => {
       const fields = record.split(FIELD_SEPARATOR)
       const commitHash = fields[0]!.trim()
       return {
@@ -352,14 +363,72 @@ function parseLogRows(output: string): GitGraphRowDto[] {
         authorName: fields[4] ?? '',
         authorEmail: fields[5] ?? '',
         authoredAt: toIsoString(fields[6] ?? ''),
-        refs: parseDecorations(fields[7] ?? '', commitHash),
-        graph: {
-          lanes: [{ id: 'lane-0', color: '#7c3aed', active: true }],
-          nodeLaneId: 'lane-0',
-          edges: []
-        }
+        refs: parseDecorations(fields[7] ?? '', commitHash)
       }
     })
+
+  return attachGraph(rows)
+}
+
+function attachGraph(rows: GitGraphRowWithoutGraph[]): GitGraphRowDto[] {
+  const activeLanes: string[] = []
+
+  return rows.map((row) => {
+    let nodeLaneIndex = activeLanes.indexOf(row.commitHash)
+    if (nodeLaneIndex === -1) {
+      activeLanes.push(row.commitHash)
+      nodeLaneIndex = activeLanes.length - 1
+    }
+
+    const laneCount = Math.max(activeLanes.length, nodeLaneIndex + Math.max(row.parents.length, 1))
+    const edges = row.parents
+      .map((_, parentIndex) => ({
+        fromLaneId: laneId(nodeLaneIndex),
+        toLaneId: laneId(parentIndex === 0 ? nodeLaneIndex : nodeLaneIndex + parentIndex)
+      }))
+      .filter((edge, index) => row.parents.length > 1 || index > 0 || edge.fromLaneId !== edge.toLaneId)
+
+    if (row.parents.length === 0) {
+      activeLanes.splice(nodeLaneIndex, 1)
+    } else {
+      activeLanes.splice(nodeLaneIndex, 1, ...row.parents)
+      dedupeActiveLanes(activeLanes)
+    }
+
+    return {
+      ...row,
+      graph: {
+        lanes: Array.from({ length: laneCount }, (_, index) => ({
+          id: laneId(index),
+          color: laneColor(index),
+          active: index < laneCount
+        })),
+        nodeLaneId: laneId(nodeLaneIndex),
+        edges
+      }
+    }
+  })
+}
+
+function dedupeActiveLanes(activeLanes: string[]): void {
+  const seen = new Set<string>()
+  for (let index = activeLanes.length - 1; index >= 0; index -= 1) {
+    const commit = activeLanes[index]
+    if (seen.has(commit)) {
+      activeLanes.splice(index, 1)
+      continue
+    }
+    seen.add(commit)
+  }
+}
+
+function laneId(index: number): string {
+  return `lane-${index}`
+}
+
+function laneColor(index: number): string {
+  const colors = ['#7c3aed', '#2563eb', '#16a34a', '#dc2626', '#ea580c', '#0891b2', '#9333ea', '#4b5563']
+  return colors[index % colors.length]!
 }
 
 function splitParents(value: string): string[] {

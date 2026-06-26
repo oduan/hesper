@@ -58,6 +58,35 @@ async function initGitRepo(workspacePath: string) {
   return { firstCommit, secondCommit }
 }
 
+async function initBranchingRepo(workspacePath: string) {
+  await execFileAsync('git', ['init', workspacePath], { encoding: 'utf8' })
+  await git(workspacePath, ['config', 'user.name', 'Test User'])
+  await git(workspacePath, ['config', 'user.email', 'test@example.com'])
+
+  await fs.writeFile(path.join(workspacePath, 'base.txt'), 'base\n')
+  await git(workspacePath, ['add', 'base.txt'])
+  await git(workspacePath, ['commit', '-m', 'Base commit'])
+  await git(workspacePath, ['branch', '-M', 'main'])
+  const baseCommit = (await git(workspacePath, ['rev-parse', 'HEAD'])).stdout.trim()
+
+  await git(workspacePath, ['switch', '-c', 'feature'])
+  await fs.writeFile(path.join(workspacePath, 'feature.txt'), 'feature\n')
+  await git(workspacePath, ['add', 'feature.txt'])
+  await git(workspacePath, ['commit', '-m', 'Feature commit'])
+  const featureCommit = (await git(workspacePath, ['rev-parse', 'HEAD'])).stdout.trim()
+
+  await git(workspacePath, ['switch', 'main'])
+  await fs.writeFile(path.join(workspacePath, 'main.txt'), 'main\n')
+  await git(workspacePath, ['add', 'main.txt'])
+  await git(workspacePath, ['commit', '-m', 'Main commit'])
+  const mainCommit = (await git(workspacePath, ['rev-parse', 'HEAD'])).stdout.trim()
+
+  await git(workspacePath, ['merge', '--no-ff', 'feature', '-m', 'Merge feature'])
+  const mergeCommit = (await git(workspacePath, ['rev-parse', 'HEAD'])).stdout.trim()
+
+  return { baseCommit, featureCommit, mainCommit, mergeCommit }
+}
+
 function createGitService(session: TestSession) {
   return new GitService({ sessionService: createSessionService(session) })
 }
@@ -132,6 +161,23 @@ describe('GitService', () => {
     })
   })
 
+  it('builds graph lanes and edges from branching history', async () => {
+    await withTempDir(async (workspacePath) => {
+      const { mergeCommit } = await initBranchingRepo(workspacePath)
+      const service = createGitService({ id: 'session-1', workspacePath })
+
+      const result = await service.listLog({ sessionId: 'session-1', limit: 10 })
+
+      expect(result.rows.map((row) => row.commitHash)).toContain(mergeCommit)
+      expect(Math.max(...result.rows.map((row) => row.graph.lanes.length))).toBeGreaterThan(1)
+      expect(new Set(result.rows.map((row) => row.graph.nodeLaneId)).size).toBeGreaterThan(1)
+      expect(result.rows.some((row) => (row.graph.edges ?? []).length > 0)).toBe(true)
+      expect(result.rows.find((row) => row.commitHash === mergeCommit)?.graph.edges).toEqual(expect.arrayContaining([
+        expect.objectContaining({ fromLaneId: expect.any(String), toLaneId: expect.any(String) })
+      ]))
+    })
+  })
+
   it('returns commit details with full hash, parents, full message, and file changes', async () => {
     await withTempDir(async (workspacePath) => {
       const { firstCommit, secondCommit } = await initGitRepo(workspacePath)
@@ -201,6 +247,20 @@ describe('GitService', () => {
 
       expect(result.success).toBe(true)
       expect((await git(workspacePath, ['rev-parse', 'v0.1.0'])).stdout.trim()).toBe(firstCommit)
+    })
+  })
+
+  it('checks out a historical commit hash in a clean workspace', async () => {
+    await withTempDir(async (workspacePath) => {
+      const { firstCommit } = await initGitRepo(workspacePath)
+      const service = createGitService({ id: 'session-1', workspacePath })
+
+      const result = await service.checkout({ sessionId: 'session-1', ref: firstCommit })
+
+      expect(result.success).toBe(true)
+      expect(result.state?.headCommit).toBe(firstCommit)
+      expect((await git(workspacePath, ['rev-parse', 'HEAD'])).stdout.trim()).toBe(firstCommit)
+      expect((await git(workspacePath, ['branch', '--show-current'])).stdout.trim()).toBe('')
     })
   })
 
