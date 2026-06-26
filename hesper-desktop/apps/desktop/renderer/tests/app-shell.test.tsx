@@ -471,7 +471,7 @@ describe('renderer App', () => {
     render(<App />)
 
     expect((await screen.findAllByText('Hesper')).length).toBeGreaterThan(0)
-    expect(screen.getByText('所有会话')).toBeInTheDocument()
+    expect(within(screen.getByLabelText('实体列表')).getByRole('heading', { name: '所有会话' })).toBeInTheDocument()
     const appRoot = screen.getByLabelText('主工作区').parentElement
     expect(appRoot).toHaveStyle({ background: themeTokens.color.background, color: themeTokens.color.text })
 
