@@ -53,8 +53,14 @@ async function flushScheduledPersistence(): Promise<void> {
 }
 
 async function closePersistence(): Promise<void> {
-  container?.persistence.checkpoint?.()
-  container?.persistence.close?.()
+  const persistence = container?.persistence
+  try {
+    persistence?.checkpoint?.()
+  } catch (error) {
+    console.error('Failed to checkpoint persistence before quit.', error)
+  } finally {
+    persistence?.close?.()
+  }
 }
 
 function createMainWindow(): BrowserWindow {
