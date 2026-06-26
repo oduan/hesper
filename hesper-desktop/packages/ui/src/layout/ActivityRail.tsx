@@ -504,8 +504,10 @@ const sessionsGroupStyle: CSSProperties = {
   minWidth: 0
 }
 
+const activityRailItemHeight = 32
+
 const allSessionsPrimaryRowStyle: CSSProperties = {
-  minHeight: 34,
+  minHeight: activityRailItemHeight,
   display: 'flex',
   alignItems: 'center',
   minWidth: 0,
@@ -517,7 +519,7 @@ const allSessionsPrimaryRowStyle: CSSProperties = {
 
 const sessionsDisclosureButtonStyle: CSSProperties = {
   width: 24,
-  height: 34,
+  height: activityRailItemHeight,
   flex: '0 0 24px',
   display: 'inline-flex',
   alignItems: 'center',
@@ -575,7 +577,7 @@ const categoryItemWrapperStyle: CSSProperties = {
 }
 
 const sessionSpecialSeparatorStyle: CSSProperties = {
-  margin: `3px 0 3px ${sessionCategorySurfaceLeft + sessionCategoryTextInset + 8}px`,
+  margin: `3px 0 3px ${sessionCategorySurfaceLeft + sessionCategoryTextInset}px`,
   height: 1,
   background: themeTokens.color.border,
   borderRadius: 1
@@ -583,7 +585,7 @@ const sessionSpecialSeparatorStyle: CSSProperties = {
 
 const categoryRowStyle: CSSProperties = {
   width: '100%',
-  minHeight: 34,
+  minHeight: activityRailItemHeight,
   display: 'flex',
   alignItems: 'center',
   minWidth: 0,
@@ -602,7 +604,7 @@ const categoryRowStyle: CSSProperties = {
 const categorySurfaceStyle: CSSProperties = {
   marginLeft: sessionCategorySurfaceLeft,
   width: `calc(100% - ${sessionCategorySurfaceLeft}px)`,
-  minHeight: 34,
+  minHeight: activityRailItemHeight,
   display: 'flex',
   alignItems: 'center',
   minWidth: 0,

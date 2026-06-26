@@ -234,7 +234,7 @@ describe('ui components', () => {
     expect(within(nav).getByRole('button', { name: '产品图' })).toBeInTheDocument()
     const separator = within(nav).getByTestId('session-special-separator')
     expect(separator).toBeInTheDocument()
-    expect(separator).toHaveStyle({ margin: '3px 0px 3px 40px' })
+    expect(separator).toHaveStyle({ margin: '3px 0px 3px 32px' })
 
     await user.click(within(nav).getByRole('button', { name: '已标记' }))
     expect(onSelectSessionSpecialView).toHaveBeenCalledWith('marked')
