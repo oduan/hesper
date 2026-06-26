@@ -799,6 +799,32 @@ describe('ui components', () => {
     expect(sendButton).toBeEnabled()
   })
 
+  it('grows the composer textarea up to fifteen rows before showing its own scrollbar', () => {
+    render(<Composer workspacePath="C:/dev/hesper" modelId="mock/hesper-fast" onSend={() => undefined} />)
+    const textarea = screen.getByLabelText('消息输入框') as HTMLTextAreaElement
+    const editorWrapper = textarea.parentElement as HTMLElement
+
+    Object.defineProperty(textarea, 'clientHeight', { configurable: true, value: 0 })
+    Object.defineProperty(textarea, 'offsetHeight', { configurable: true, value: 0 })
+
+    Object.defineProperty(textarea, 'scrollHeight', { configurable: true, value: 126 })
+    fireEvent.change(textarea, {
+      target: { value: Array.from({ length: 6 }, (_, index) => `第 ${index + 1} 行`).join('\n') }
+    })
+
+    expect(textarea.style.height).toBe('126px')
+    expect(textarea.style.overflowY).toBe('hidden')
+    expect(editorWrapper.style.maxHeight).toBe('')
+
+    Object.defineProperty(textarea, 'scrollHeight', { configurable: true, value: 420 })
+    fireEvent.change(textarea, {
+      target: { value: Array.from({ length: 20 }, (_, index) => `第 ${index + 1} 行`).join('\n') }
+    })
+
+    expect(textarea.style.height).toBe('315px')
+    expect(textarea.style.overflowY).toBe('auto')
+  })
+
   it('adds pasted text drafts, renders file chips, and sends attachment-only messages', async () => {
     const user = userEvent.setup()
     const onAttachmentsChange = vi.fn()

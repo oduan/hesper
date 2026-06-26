@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent, type CSSProperties, type DragEvent, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent, type CSSProperties, type DragEvent, type KeyboardEvent } from 'react'
 import { createId, type ModelCapability, type ModelThinkingLevel } from '@hesper/shared'
 import { themeTokens } from '../theme'
 import { ThemedSelect, type ThemedSelectOptionGroup } from './ThemedSelect'
@@ -76,6 +76,11 @@ const maxComposerAttachmentBatchSize = 10
 const maxComposerImageAttachmentBytes = 10 * 1024 * 1024
 const maxComposerTextAttachmentBytes = 1024 * 1024
 const clipboardItemMimeTypes = new WeakMap<File, string>()
+const composerTextareaMinRows = 4
+const composerTextareaMaxRows = 15
+const composerTextareaFallbackFontSize = 14
+const composerTextareaFallbackLineHeight = 1.5
+const composerTextareaFallbackMinHeight = 96
 
 export function Composer({
   workspacePath,
@@ -128,6 +133,19 @@ export function Composer({
   const showSkillMenu = Boolean(mentionToken && mentionToken.start !== dismissedMentionStart && filteredSkills.length > 0)
   const selectedThinkingLevelLabel = composerThinkingLevelOptions.find((option) => option.value === thinkingLevel)?.label ?? '高'
   const workspaceDisplayName = useMemo(() => formatWorkspaceDisplayName(workspacePath), [workspacePath])
+
+  const syncTextareaHeight = useCallback(() => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+
+    textarea.style.height = 'auto'
+    const minHeight = resolveComposerTextareaMinHeight(textarea)
+    const maxHeight = resolveComposerTextareaMaxHeight(textarea)
+    const nextHeight = Math.max(minHeight, Math.min(textarea.scrollHeight, maxHeight))
+
+    textarea.style.height = `${nextHeight}px`
+    textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden'
+  }, [])
 
   const setComposerValue = useCallback((nextValue: string, nextSkillMentions?: SkillMentionRange[]) => {
     if (controlledValue === undefined) {
@@ -290,6 +308,15 @@ export function Composer({
     }
     setActiveSkillIndex(0)
   }, [imageInputSupported, onSend, onStop, replaceAttachmentsAfterDestructiveMutation, running, setComposerValue, skillOptions, thinkingLevel, value])
+
+  useLayoutEffect(() => {
+    syncTextareaHeight()
+  }, [syncTextareaHeight, value])
+
+  useEffect(() => {
+    window.addEventListener('resize', syncTextareaHeight)
+    return () => window.removeEventListener('resize', syncTextareaHeight)
+  }, [syncTextareaHeight])
 
   useEffect(() => {
     attachmentsRef.current = attachments
@@ -666,6 +693,38 @@ function formatWorkspaceDisplayName(workspacePath?: string): string {
   return segments.at(-1) ?? normalized
 }
 
+function resolveComposerTextareaMinHeight(textarea: HTMLTextAreaElement): number {
+  const computedStyle = window.getComputedStyle(textarea)
+  const cssMinHeight = parseCssPixelValue(computedStyle.minHeight, composerTextareaFallbackMinHeight)
+  const rowMinHeight = resolveComposerTextareaLineHeight(computedStyle) * composerTextareaMinRows
+  return Math.max(composerTextareaFallbackMinHeight, cssMinHeight, rowMinHeight)
+}
+
+function resolveComposerTextareaMaxHeight(textarea: HTMLTextAreaElement): number {
+  const computedStyle = window.getComputedStyle(textarea)
+  const lineHeight = resolveComposerTextareaLineHeight(computedStyle)
+  const verticalPadding = parseCssPixelValue(computedStyle.paddingTop) + parseCssPixelValue(computedStyle.paddingBottom)
+  const borderBoxExtra = Math.max(0, textarea.offsetHeight - textarea.clientHeight)
+  return Math.ceil(lineHeight * composerTextareaMaxRows + verticalPadding + borderBoxExtra)
+}
+
+function resolveComposerTextareaLineHeight(computedStyle: CSSStyleDeclaration): number {
+  const fontSize = parseCssPixelValue(computedStyle.fontSize, composerTextareaFallbackFontSize)
+  const rawLineHeight = computedStyle.lineHeight.trim()
+  const parsedLineHeight = Number.parseFloat(rawLineHeight)
+
+  if (!Number.isFinite(parsedLineHeight) || parsedLineHeight <= 0) {
+    return fontSize * composerTextareaFallbackLineHeight
+  }
+
+  return rawLineHeight.endsWith('px') ? parsedLineHeight : parsedLineHeight * fontSize
+}
+
+function parseCssPixelValue(value: string, fallback = 0): number {
+  const parsed = Number.parseFloat(value)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
 function isComposerThinkingLevel(value: string): value is ComposerThinkingLevel {
   return composerThinkingLevelOptions.some((option) => option.value === value)
 }
@@ -1027,7 +1086,6 @@ const textAttachmentRemoveButtonStyle = {
 const editorWrapperStyle = {
   position: 'relative',
   minHeight: 96,
-  maxHeight: 210,
   overflow: 'hidden'
 } satisfies CSSProperties
 
@@ -1089,8 +1147,7 @@ const textareaStyle = {
   zIndex: 1,
   resize: 'none',
   minHeight: 96,
-  maxHeight: 210,
-  overflow: 'auto',
+  overflow: 'hidden',
   borderRadius: 0,
   border: 0,
   outline: 0,
