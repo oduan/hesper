@@ -18,8 +18,9 @@ function createDeferred<T>() {
   return { promise, resolve, reject }
 }
 
-const { listSessions, createSession, updateTitle, deleteSession, generateTitle, markViewed, listRoles, createRole, updateRole, deleteRole, listSkills, refreshSkills, listMessages, listMessagesByRun, listRuns, listSteps, listWorkerInvocationsByParentRun, filesPreview, enqueue, stopRun, onEvent, getSettings, updateSettings, listProviders, listModels, listTools, setToolEnabled, toolCredentialStatus, saveToolApiKey, deleteToolApiKey, sshKeysList, sshKeysCreate, sshKeysDelete, sshServersList, sshServersCreate, sshServersUpdate, sshServersDelete, minimizeWindow, toggleMaximizeWindow, closeWindow } = vi.hoisted(() => ({
+const { listSessions, listSessionCategories, createSession, createSessionCategory, updateSessionCategory, deleteSessionCategory, setSessionCategory, updateTitle, deleteSession, generateTitle, markViewed, listRoles, createRole, updateRole, deleteRole, listSkills, refreshSkills, listMessages, listMessagesByRun, listRuns, listSteps, listWorkerInvocationsByParentRun, filesPreview, enqueue, stopRun, onEvent, getSettings, updateSettings, listProviders, listModels, listTools, setToolEnabled, toolCredentialStatus, saveToolApiKey, deleteToolApiKey, sshKeysList, sshKeysCreate, sshKeysDelete, sshServersList, sshServersCreate, sshServersUpdate, sshServersDelete, minimizeWindow, toggleMaximizeWindow, closeWindow } = vi.hoisted(() => ({
   listSessions: vi.fn(async () => []),
+  listSessionCategories: vi.fn(async (): Promise<any[]> => []),
   createSession: vi.fn(async () => ({
     id: 'session-1',
     title: 'New chat',
@@ -36,6 +37,31 @@ const { listSessions, createSession, updateTitle, deleteSession, generateTitle, 
     createdAt: '2026-06-10T03:00:00.000Z',
     updatedAt: '2026-06-10T03:00:12.000Z'
   })),
+  createSessionCategory: vi.fn(async (input: { name: string }) => ({
+    id: 'category-created',
+    name: input.name,
+    createdAt: '2026-06-10T03:00:00.000Z',
+    updatedAt: '2026-06-10T03:00:00.000Z'
+  })),
+  updateSessionCategory: vi.fn(async (input: { id: string; name: string }) => ({
+    id: input.id,
+    name: input.name,
+    createdAt: '2026-06-10T03:00:00.000Z',
+    updatedAt: '2026-06-10T03:00:12.000Z'
+  })),
+  deleteSessionCategory: vi.fn(async (id: string): Promise<any> => ({
+    category: { id, name: 'Deleted category', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:12.000Z' },
+    deletedSessionIds: []
+  })),
+  setSessionCategory: vi.fn(async (input: { ids: string[]; categoryId?: string }) => input.ids.map((id) => ({
+    id,
+    title: id,
+    status: 'active',
+    ...(input.categoryId ? { categoryId: input.categoryId } : {}),
+    outputMode: 'markdown',
+    createdAt: '2026-06-10T03:00:00.000Z',
+    updatedAt: '2026-06-10T03:00:12.000Z'
+  }))),
   deleteSession: vi.fn(async (id: string) => ({
     id,
     title: 'Deleted chat',
@@ -212,7 +238,14 @@ vi.mock('../src/ipc-client', () => ({
       updateTitle,
       delete: deleteSession,
       generateTitle,
-      markViewed
+      markViewed,
+      setCategory: setSessionCategory
+    },
+    sessionCategories: {
+      list: listSessionCategories,
+      create: createSessionCategory,
+      update: updateSessionCategory,
+      delete: deleteSessionCategory
     },
     conversation: { listMessages, listMessagesByRun, listRuns, listSteps },
     workerAgents: { listByParentRun: listWorkerInvocationsByParentRun },
@@ -279,7 +312,12 @@ describe('renderer App', () => {
 
   beforeEach(() => {
     listSessions.mockReset()
+    listSessionCategories.mockReset()
     createSession.mockClear()
+    createSessionCategory.mockClear()
+    updateSessionCategory.mockClear()
+    deleteSessionCategory.mockClear()
+    setSessionCategory.mockClear()
     updateTitle.mockClear()
     deleteSession.mockClear()
     generateTitle.mockClear()
@@ -319,6 +357,7 @@ describe('renderer App', () => {
     toggleMaximizeWindow.mockClear()
     closeWindow.mockClear()
     listSessions.mockResolvedValue([])
+    listSessionCategories.mockResolvedValue([])
     listRoles.mockResolvedValue([])
     listSkills.mockResolvedValue([])
     refreshSkills.mockResolvedValue([])
@@ -495,6 +534,74 @@ describe('renderer App', () => {
 
     expect(createSession).toHaveBeenCalledWith({ title: 'New chat' })
     expect(await screen.findAllByText('New chat')).not.toHaveLength(0)
+  })
+
+  it('filters sessions when selecting a session category', async () => {
+    const user = userEvent.setup()
+    listSessionCategories.mockResolvedValueOnce([
+      { id: 'category-product', name: '产品图', createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:00.000Z' }
+    ])
+    listSessions.mockResolvedValueOnce([
+      { id: 'session-product', title: 'Product chat', status: 'active', categoryId: 'category-product', outputMode: 'markdown', createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:00.000Z' },
+      { id: 'session-plain', title: 'Plain chat', status: 'active', outputMode: 'markdown', createdAt: '2026-06-26T00:00:01.000Z', updatedAt: '2026-06-26T00:00:01.000Z' }
+    ] as any)
+
+    render(<App />)
+
+    await screen.findByRole('button', { name: '产品图' })
+    await user.click(screen.getByRole('button', { name: '产品图' }))
+
+    expect(screen.getByRole('heading', { name: '产品图' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Product chat' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Plain chat' })).not.toBeInTheDocument()
+  })
+
+  it('creates new sessions in the active category', async () => {
+    const user = userEvent.setup()
+    listSessionCategories.mockResolvedValueOnce([
+      { id: 'category-product', name: '产品图', createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:00.000Z' }
+    ])
+    listSessions.mockResolvedValueOnce([])
+    createSession.mockResolvedValueOnce({
+      id: 'session-new-product',
+      title: 'New chat',
+      status: 'active',
+      categoryId: 'category-product',
+      outputMode: 'markdown',
+      createdAt: '2026-06-26T00:00:10.000Z',
+      updatedAt: '2026-06-26T00:00:10.000Z'
+    } as any)
+
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: '产品图' }))
+    await user.click((await screen.findAllByRole('button', { name: '新建会话' }))[0]!)
+
+    expect(createSession).toHaveBeenCalledWith({ title: 'New chat', categoryId: 'category-product' })
+  })
+
+  it('confirms and deletes a category with its sessions', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
+    listSessionCategories.mockResolvedValueOnce([
+      { id: 'category-product', name: '产品图', createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:00.000Z' }
+    ])
+    listSessions.mockResolvedValueOnce([
+      { id: 'session-product', title: 'Product chat', status: 'active', categoryId: 'category-product', outputMode: 'markdown', createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:00.000Z' }
+    ] as any)
+    deleteSessionCategory.mockResolvedValueOnce({
+      category: { id: 'category-product', name: '产品图', createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:00.000Z' },
+      deletedSessionIds: ['session-product']
+    })
+
+    render(<App />)
+
+    fireEvent.contextMenu(await screen.findByRole('button', { name: '产品图' }))
+    await user.click(within(screen.getByRole('menu', { name: '分类操作' })).getByRole('menuitem', { name: '删除' }))
+
+    expect(window.confirm).toHaveBeenCalledWith('删除分类“产品图”？该分类下的 1 个会话也会被删除，此操作不可撤销。')
+    expect(deleteSessionCategory).toHaveBeenCalledWith('category-product')
+    await waitFor(() => expect(screen.queryByRole('button', { name: '产品图' })).not.toBeInTheDocument())
   })
 
   it('moves the selected session row to a newly-created session', async () => {

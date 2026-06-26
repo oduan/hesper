@@ -1,10 +1,12 @@
 import { createContext, useContext, useMemo, useReducer, type Dispatch, type ReactNode } from 'react'
-import type { AgentRun, AgentRuntimeEvent, Message, RunStep, Session, WorkerAgentInvocation } from '@hesper/shared'
+import type { AgentRun, AgentRuntimeEvent, Message, RunStep, Session, SessionCategory, WorkerAgentInvocation } from '@hesper/shared'
 import type { AppSection } from '@hesper/ui'
 
 export type AppState = {
   sessions: Session[]
+  sessionCategories: SessionCategory[]
   activeSessionId?: string
+  activeSessionCategoryId?: string
   messagesBySession: Record<string, Message[]>
   stepsByRun: Record<string, RunStep[]>
   streamingByRun: Record<string, string>
@@ -20,6 +22,11 @@ export type AppState = {
 
 export type AppAction =
   | { type: 'sessions.loaded'; sessions: Session[] }
+  | { type: 'sessionCategories.loaded'; categories: SessionCategory[] }
+  | { type: 'sessionCategory.created'; category: SessionCategory }
+  | { type: 'sessionCategory.updated'; category: SessionCategory }
+  | { type: 'sessionCategory.deleted'; categoryId: string; deletedSessionIds: string[] }
+  | { type: 'sessionCategory.selected'; categoryId?: string }
   | { type: 'session.created'; session: Session }
   | { type: 'session.updated'; session: Session }
   | { type: 'sessions.deleted'; sessionIds: string[] }
@@ -36,6 +43,7 @@ export type AppAction =
 
 export const initialAppState: AppState = {
   sessions: [],
+  sessionCategories: [],
   messagesBySession: {},
   stepsByRun: {},
   streamingByRun: {},
@@ -139,6 +147,20 @@ function withActiveSessionId(state: AppState, activeSessionId: string | undefine
   return activeSessionId ? { ...rest, activeSessionId } : rest
 }
 
+function withActiveSessionCategoryId(state: AppState, activeSessionCategoryId: string | undefined): AppState {
+  const { activeSessionCategoryId: _previousActiveSessionCategoryId, ...rest } = state
+  return activeSessionCategoryId ? { ...rest, activeSessionCategoryId } : rest
+}
+
+function visibleSessionsForCategory(sessions: Session[], categoryId: string | undefined): Session[] {
+  return categoryId ? sessions.filter((session) => session.categoryId === categoryId) : sessions
+}
+
+function withActiveSessionForCurrentCategory(state: AppState): AppState {
+  const visible = visibleSessionsForCategory(state.sessions, state.activeSessionCategoryId)
+  return withActiveSessionId(state, pickActiveSessionId(state.activeSessionId, visible))
+}
+
 function clearStreamingByRun(streamingByRun: Record<string, string>, runId: string): Record<string, string> {
   if (!(runId in streamingByRun)) {
     return streamingByRun
@@ -197,9 +219,26 @@ export function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
     case 'sessions.loaded': {
       const sessions = sortSessions(action.sessions)
-      const activeSessionId = pickActiveSessionId(state.activeSessionId, sessions)
-      return withActiveSessionId({ ...state, sessions }, activeSessionId)
+      return withActiveSessionForCurrentCategory({ ...state, sessions })
     }
+    case 'sessionCategories.loaded':
+      return { ...state, sessionCategories: action.categories }
+    case 'sessionCategory.created':
+      return { ...state, sessionCategories: [...state.sessionCategories, action.category], activeSessionCategoryId: action.category.id }
+    case 'sessionCategory.updated':
+      return { ...state, sessionCategories: mergeById(state.sessionCategories, action.category) }
+    case 'sessionCategory.deleted': {
+      const deletedIds = new Set(action.deletedSessionIds)
+      const sessions = state.sessions.filter((session) => !deletedIds.has(session.id))
+      const nextState = withActiveSessionCategoryId({
+        ...state,
+        sessions,
+        sessionCategories: state.sessionCategories.filter((category) => category.id !== action.categoryId)
+      }, state.activeSessionCategoryId === action.categoryId ? undefined : state.activeSessionCategoryId)
+      return withActiveSessionForCurrentCategory(nextState)
+    }
+    case 'sessionCategory.selected':
+      return withActiveSessionForCurrentCategory(withActiveSessionCategoryId(state, action.categoryId))
     case 'session.created': {
       const sessions = sortSessions([action.session, ...state.sessions.filter((session) => session.id !== action.session.id)])
       return {
@@ -215,30 +254,23 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case 'session.updated': {
       if (action.session.status === 'deleted') {
         const sessions = sortSessions(removeById(state.sessions, action.session.id))
-        return withActiveSessionId({ ...state, sessions }, pickActiveSessionId(state.activeSessionId === action.session.id ? undefined : state.activeSessionId, sessions))
+        return withActiveSessionForCurrentCategory(withActiveSessionId({ ...state, sessions }, state.activeSessionId === action.session.id ? undefined : state.activeSessionId))
       }
 
       const sessions = sortSessions(mergeById(state.sessions, action.session))
-      return {
+      return withActiveSessionForCurrentCategory({
         ...state,
         sessions,
         messagesBySession: {
           ...state.messagesBySession,
           [action.session.id]: state.messagesBySession[action.session.id] ?? []
         }
-      }
+      })
     }
     case 'sessions.deleted': {
       const deletedSessionIds = new Set(action.sessionIds)
       const sessions = state.sessions.filter((session) => !deletedSessionIds.has(session.id))
-      if (!state.activeSessionId || !deletedSessionIds.has(state.activeSessionId)) {
-        return {
-          ...state,
-          sessions
-        }
-      }
-
-      return withActiveSessionId({ ...state, sessions }, pickActiveSessionId(undefined, sessions))
+      return withActiveSessionForCurrentCategory({ ...state, sessions })
     }
     case 'session.touched': {
       return {

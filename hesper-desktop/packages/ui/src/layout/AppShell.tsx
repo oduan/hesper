@@ -14,6 +14,7 @@ export type AppShellProps = {
   title: string
   platform?: DesktopPlatform
   activeSessionId?: string
+  entityListTitle?: string
   runningSessionIds?: string[]
   sessionCategories?: SessionCategoryListItem[]
   activeSessionCategoryId?: string
@@ -58,6 +59,7 @@ export function AppShell({
   title,
   platform,
   activeSessionId,
+  entityListTitle,
   runningSessionIds,
   sessionCategories,
   activeSessionCategoryId,
@@ -191,6 +193,7 @@ export function AppShell({
         <EntityListPane
           activeSection={activeSection}
           sessions={sessions}
+          {...(entityListTitle ? { title: entityListTitle } : {})}
           {...(activeSessionId ? { activeSessionId } : {})}
           {...(runningSessionIds ? { runningSessionIds } : {})}
           {...(sessionCategories ? { sessionCategories } : {})}
