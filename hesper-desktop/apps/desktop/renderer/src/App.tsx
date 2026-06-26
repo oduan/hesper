@@ -1240,7 +1240,7 @@ function AppContent() {
   const createSessionCategory = async () => {
     try {
       const category = await hesperApi.sessionCategories.create({ name: '新分类' })
-      dispatch({ type: 'sessionCategory.created', category })
+      dispatch({ type: 'sessionCategory.created', category, select: false })
       return category
     } catch (error) {
       console.warn('Failed to create session category', error)

@@ -646,6 +646,37 @@ describe('renderer App', () => {
     expect(screen.getByRole('button', { name: '产品图' })).toBeInTheDocument()
   })
 
+  it('discards a cancelled pending category create without selecting it', async () => {
+    const user = userEvent.setup()
+    const confirmSpy = vi.spyOn(window, 'confirm')
+    const createCategoryDeferred = createDeferred<any>()
+    listSessionCategories.mockResolvedValueOnce([])
+    listSessions.mockResolvedValueOnce([])
+    createSessionCategory.mockReturnValueOnce(createCategoryDeferred.promise)
+    deleteSessionCategory.mockResolvedValueOnce({
+      category: { id: 'category-new', name: '新分类', createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:00.000Z' },
+      deletedSessionIds: []
+    })
+
+    render(<App />)
+
+    fireEvent.contextMenu(await screen.findByRole('button', { name: '所有会话' }))
+    await user.click(within(screen.getByRole('menu', { name: '会话分类操作' })).getByRole('menuitem', { name: '新建分类' }))
+    await user.type(await screen.findByLabelText('重命名分类'), '{Escape}')
+
+    expect(screen.queryByLabelText('重命名分类')).not.toBeInTheDocument()
+
+    await act(async () => {
+      createCategoryDeferred.resolve({ id: 'category-new', name: '新分类', createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:00.000Z' })
+      await createCategoryDeferred.promise
+    })
+
+    await waitFor(() => expect(deleteSessionCategory).toHaveBeenCalledWith('category-new'))
+    expect(confirmSpy).not.toHaveBeenCalled()
+    await waitFor(() => expect(screen.queryByRole('button', { name: '新分类' })).not.toBeInTheDocument())
+    expect(within(screen.getByLabelText('实体列表')).getByRole('heading', { name: '所有会话' })).toBeInTheDocument()
+  })
+
   it('moves the selected session row to a newly-created session', async () => {
     const user = userEvent.setup()
     listSessions.mockResolvedValueOnce([

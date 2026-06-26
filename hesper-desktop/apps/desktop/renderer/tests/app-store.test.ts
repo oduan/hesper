@@ -352,6 +352,24 @@ describe('app-store reducer', () => {
     expect(nextState.activeSessionId).toBeUndefined()
   })
 
+  it('can create a category without changing the active category', () => {
+    const nextState = appReducer({
+      ...initialAppState,
+      sessions: [createSessionFixture({ id: 'session-a', title: 'Category chat', categoryId: 'category-a' })],
+      sessionCategories: [createSessionCategoryFixture({ id: 'category-a', name: '分类 A' })],
+      activeSessionCategoryId: 'category-a',
+      activeSessionId: 'session-a'
+    }, {
+      type: 'sessionCategory.created',
+      category: createSessionCategoryFixture({ id: 'category-new', name: '新分类' }),
+      select: false
+    })
+
+    expect(nextState.sessionCategories.map((category) => category.id)).toEqual(['category-a', 'category-new'])
+    expect(nextState.activeSessionCategoryId).toBe('category-a')
+    expect(nextState.activeSessionId).toBe('session-a')
+  })
+
   it('stores optimistic user messages locally', () => {
     const sessionLoadedState = appReducer(initialAppState, {
       type: 'sessions.loaded',

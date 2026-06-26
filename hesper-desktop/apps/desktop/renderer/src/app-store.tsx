@@ -23,7 +23,7 @@ export type AppState = {
 export type AppAction =
   | { type: 'sessions.loaded'; sessions: Session[] }
   | { type: 'sessionCategories.loaded'; categories: SessionCategory[] }
-  | { type: 'sessionCategory.created'; category: SessionCategory }
+  | { type: 'sessionCategory.created'; category: SessionCategory; select?: boolean }
   | { type: 'sessionCategory.updated'; category: SessionCategory }
   | { type: 'sessionCategory.deleted'; categoryId: string; deletedSessionIds: string[] }
   | { type: 'sessionCategory.selected'; categoryId?: string }
@@ -223,8 +223,12 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     }
     case 'sessionCategories.loaded':
       return { ...state, sessionCategories: action.categories }
-    case 'sessionCategory.created':
-      return withActiveSessionForCurrentCategory({ ...state, sessionCategories: [...state.sessionCategories, action.category], activeSessionCategoryId: action.category.id })
+    case 'sessionCategory.created': {
+      const nextState = { ...state, sessionCategories: [...state.sessionCategories, action.category] }
+      return action.select === false
+        ? nextState
+        : withActiveSessionForCurrentCategory({ ...nextState, activeSessionCategoryId: action.category.id })
+    }
     case 'sessionCategory.updated':
       return { ...state, sessionCategories: mergeById(state.sessionCategories, action.category) }
     case 'sessionCategory.deleted': {
