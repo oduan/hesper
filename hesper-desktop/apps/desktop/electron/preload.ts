@@ -46,6 +46,14 @@ const hesperApi: HesperDesktopApi = {
   files: {
     preview: (input) => ipcRenderer.invoke(ipcChannels.filesPreview, input)
   },
+  git: {
+    getState: (input) => ipcRenderer.invoke(ipcChannels.gitGetState, input),
+    listLog: (input) => ipcRenderer.invoke(ipcChannels.gitListLog, input),
+    getCommit: (input) => ipcRenderer.invoke(ipcChannels.gitGetCommit, input),
+    createBranch: (input) => ipcRenderer.invoke(ipcChannels.gitCreateBranch, input),
+    createTag: (input) => ipcRenderer.invoke(ipcChannels.gitCreateTag, input),
+    checkout: (input) => ipcRenderer.invoke(ipcChannels.gitCheckout, input)
+  },
   attachments: {
     readDataUrl: (input) => ipcRenderer.invoke(ipcChannels.attachmentsReadDataUrl, input)
   },

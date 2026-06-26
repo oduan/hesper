@@ -19,6 +19,16 @@ import {
   createSshServerInputSchema,
   directorySelectionSchema,
   generateSessionTitleInputSchema,
+  gitActionResultSchema,
+  gitCheckoutInputSchema,
+  gitCommitDetailSchema,
+  gitCommitInputSchema,
+  gitCreateBranchInputSchema,
+  gitCreateTagInputSchema,
+  gitLogInputSchema,
+  gitLogResultSchema,
+  gitRepositoryStateSchema,
+  gitSessionInputSchema,
   ipcChannels,
   ipcEvents,
   listModelsInputSchema,
@@ -382,6 +392,30 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
         throw new Error('Local file preview requires a selected workspace for this session')
       }
       return localFilePreviewResultSchema.parse(await readLocalFilePreview({ workspacePath: session.workspacePath, path: input.path }))
+    },
+    [ipcChannels.gitGetState]: async (_event, payload) => {
+      const input = gitSessionInputSchema.parse(payload)
+      return gitRepositoryStateSchema.parse(await options.container.gitService.getState(input))
+    },
+    [ipcChannels.gitListLog]: async (_event, payload) => {
+      const input = gitLogInputSchema.parse(payload)
+      return gitLogResultSchema.parse(await options.container.gitService.listLog(input))
+    },
+    [ipcChannels.gitGetCommit]: async (_event, payload) => {
+      const input = gitCommitInputSchema.parse(payload)
+      return gitCommitDetailSchema.parse(await options.container.gitService.getCommit(input))
+    },
+    [ipcChannels.gitCreateBranch]: async (_event, payload) => {
+      const input = gitCreateBranchInputSchema.parse(payload)
+      return gitActionResultSchema.parse(await options.container.gitService.createBranch(input))
+    },
+    [ipcChannels.gitCreateTag]: async (_event, payload) => {
+      const input = gitCreateTagInputSchema.parse(payload)
+      return gitActionResultSchema.parse(await options.container.gitService.createTag(input))
+    },
+    [ipcChannels.gitCheckout]: async (_event, payload) => {
+      const input = gitCheckoutInputSchema.parse(payload)
+      return gitActionResultSchema.parse(await options.container.gitService.checkout(input))
     },
     [ipcChannels.dialogSelectDirectory]: async () => {
       const result = await options.dialog.showOpenDialog({ properties: ['openDirectory'] })

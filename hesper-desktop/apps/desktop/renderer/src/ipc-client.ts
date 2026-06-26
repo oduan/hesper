@@ -6,6 +6,12 @@ import type {
   CreateSshKeyInput,
   CreateSshServerInput,
   DirectorySelectionResult,
+  GitActionResultDto,
+  GitCommitDetailDto,
+  GitGraphRowDto,
+  GitLogResultDto,
+  GitRefDto,
+  GitRepositoryStateDto,
   HesperDesktopApi,
   MessageDto,
   GenerateSessionTitleInput,
@@ -94,6 +100,80 @@ function updateMockSession(session: SessionDto, overrides: Partial<SessionDto> =
   }) as SessionDto
 }
 
+const fallbackGitHeadCommit = '1111111111111111111111111111111111111111'
+const fallbackGitSecondCommit = '2222222222222222222222222222222222222222'
+const fallbackGitThirdCommit = '3333333333333333333333333333333333333333'
+
+function cloneGitRefs(refs: GitRefDto[]): GitRefDto[] {
+  return refs.map((ref) => ({ ...ref }))
+}
+
+function createFallbackGitRefs(headCommit = fallbackGitHeadCommit): GitRefDto[] {
+  return [
+    { name: 'HEAD', shortName: 'HEAD', type: 'head', targetCommit: headCommit },
+    { name: 'refs/heads/main', shortName: 'main', type: 'local-branch', targetCommit: headCommit },
+    { name: 'refs/heads/feature/git-log-panel', shortName: 'feature/git-log-panel', type: 'local-branch', targetCommit: fallbackGitSecondCommit },
+    { name: 'refs/remotes/origin/main', shortName: 'origin/main', type: 'remote-branch', targetCommit: headCommit },
+    { name: 'refs/tags/v0.1.0', shortName: 'v0.1.0', type: 'tag', targetCommit: fallbackGitThirdCommit }
+  ]
+}
+
+function createFallbackGitRows(limit: number): GitGraphRowDto[] {
+  const refs = createFallbackGitRefs()
+  const rows: GitGraphRowDto[] = [
+    {
+      commitHash: fallbackGitHeadCommit,
+      shortHash: '1111111',
+      parents: [fallbackGitSecondCommit],
+      subject: 'Wire Git IPC fallback data',
+      authorName: 'Hesper Desktop',
+      authorEmail: 'desktop@example.com',
+      authoredAt: '2026-06-26T04:00:00.000Z',
+      refs: refs.filter((ref) => ref.targetCommit === fallbackGitHeadCommit),
+      graph: { lanes: [{ id: 'lane-0', color: '#89b4fa', active: true }], nodeLaneId: 'lane-0', edges: [] }
+    },
+    {
+      commitHash: fallbackGitSecondCommit,
+      shortHash: '2222222',
+      parents: [fallbackGitThirdCommit],
+      subject: 'Add Git graph service contracts',
+      authorName: 'Hesper Desktop',
+      authorEmail: 'desktop@example.com',
+      authoredAt: '2026-06-25T09:30:00.000Z',
+      refs: refs.filter((ref) => ref.targetCommit === fallbackGitSecondCommit),
+      graph: {
+        lanes: [
+          { id: 'lane-0', color: '#89b4fa', active: true },
+          { id: 'lane-1', color: '#f38ba8', active: true }
+        ],
+        nodeLaneId: 'lane-1',
+        edges: [{ fromLaneId: 'lane-1', toLaneId: 'lane-0' }]
+      }
+    },
+    {
+      commitHash: fallbackGitThirdCommit,
+      shortHash: '3333333',
+      parents: [],
+      subject: 'Initial desktop repository state',
+      authorName: 'Hesper Desktop',
+      authorEmail: 'desktop@example.com',
+      authoredAt: '2026-06-24T08:15:00.000Z',
+      refs: refs.filter((ref) => ref.targetCommit === fallbackGitThirdCommit),
+      graph: { lanes: [{ id: 'lane-0', color: '#89b4fa', active: false }], nodeLaneId: 'lane-0', edges: [] }
+    }
+  ]
+  return rows.slice(0, limit).map((row) => ({
+    ...row,
+    parents: [...row.parents],
+    refs: cloneGitRefs(row.refs),
+    graph: {
+      lanes: row.graph.lanes.map((lane) => ({ ...lane })),
+      ...(row.graph.nodeLaneId ? { nodeLaneId: row.graph.nodeLaneId } : {}),
+      ...(row.graph.edges ? { edges: row.graph.edges.map((edge) => ({ ...edge })) } : {})
+    }
+  }))
+}
+
 export function createFallbackHesperApi(): HesperDesktopApi {
   let nextRunNumber = 1
   let sessions: SessionDto[] = []
@@ -116,6 +196,24 @@ export function createFallbackHesperApi(): HesperDesktopApi {
     sessions = [updated, ...sessions.filter((session) => session.id !== id)]
     return updated
   }
+  const createFallbackGitState = (sessionId: string): GitRepositoryStateDto => {
+    const session = sessions.find((candidate) => candidate.id === sessionId)
+    return withDefined({
+      sessionId,
+      workspacePath: session?.workspacePath,
+      isGitRepository: true,
+      currentBranch: 'main',
+      headCommit: fallbackGitHeadCommit,
+      dirty: false,
+      changedFiles: 0,
+      refs: createFallbackGitRefs()
+    }) as GitRepositoryStateDto
+  }
+  const createFallbackGitActionResult = (message: string, sessionId: string): GitActionResultDto => ({
+    success: true,
+    message,
+    state: createFallbackGitState(sessionId)
+  })
   const cloneModelRef = (modelRef: ManagedRoleDto['defaultModelRef']): ManagedRoleDto['defaultModelRef'] => modelRef ? { ...modelRef } : undefined
   const cloneRole = (role: ManagedRoleDto): ManagedRoleDto => ({
     ...role,
@@ -200,6 +298,43 @@ export function createFallbackHesperApi(): HesperDesktopApi {
       preview: async (_input) => {
         throw new Error('本地文件预览在 renderer fallback 模式不可用')
       }
+    },
+    git: {
+      getState: async (input): Promise<GitRepositoryStateDto> => createFallbackGitState(input.sessionId),
+      listLog: async (input): Promise<GitLogResultDto> => {
+        const limit = input.limit ?? 3
+        const totalRows = createFallbackGitRows(3)
+        return {
+          rows: totalRows.slice(0, limit),
+          limit,
+          hasMore: totalRows.length > limit
+        }
+      },
+      getCommit: async (input): Promise<GitCommitDetailDto> => {
+        const commitHash = input.commit.length === 40 ? input.commit : fallbackGitHeadCommit
+        return {
+          commitHash,
+          shortHash: commitHash.slice(0, 7),
+          parents: [fallbackGitSecondCommit],
+          subject: 'Wire Git IPC fallback data',
+          body: 'Wire Git IPC fallback data\n\nThis deterministic commit detail is used when the Electron preload API is unavailable.',
+          authorName: 'Hesper Desktop',
+          authorEmail: 'desktop@example.com',
+          authoredAt: '2026-06-26T04:00:00.000Z',
+          committerName: 'Hesper Desktop',
+          committerEmail: 'desktop@example.com',
+          committedAt: '2026-06-26T04:05:00.000Z',
+          refs: cloneGitRefs(createFallbackGitRefs(commitHash).filter((ref) => ref.targetCommit === commitHash || ref.type === 'head')),
+          files: [
+            { path: 'apps/desktop/electron/ipc-handlers.ts', status: 'modified', additions: 42, deletions: 0 },
+            { path: 'apps/desktop/electron/preload.ts', status: 'modified', additions: 8, deletions: 0 },
+            { path: 'apps/desktop/renderer/src/ipc-client.ts', status: 'modified', additions: 64, deletions: 0 }
+          ]
+        }
+      },
+      createBranch: async (input) => createFallbackGitActionResult(`Created branch ${input.branchName}${input.checkout ? ' and checked it out' : ''}`, input.sessionId),
+      createTag: async (input) => createFallbackGitActionResult(`Created tag ${input.tagName}`, input.sessionId),
+      checkout: async (input) => createFallbackGitActionResult(`Checked out ${input.ref}`, input.sessionId)
     },
     attachments: {
       readDataUrl: async () => ({ dataUrl: '' })

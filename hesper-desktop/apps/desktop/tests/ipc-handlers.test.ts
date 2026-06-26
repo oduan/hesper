@@ -664,6 +664,107 @@ describe('registerIpcHandlers', () => {
     }
   })
 
+  it('wires git IPC handlers through the container git service with schema parsing', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock' })
+    const { handles, ipcMain } = registerTestIpcHandlers(container)
+    const event = { sender: { id: 1 } }
+    const sessionId = 'session-git'
+    const commitHash = '1111111111111111111111111111111111111111'
+    const parentHash = '0000000000000000000000000000000000000000'
+    const gitState = {
+      sessionId,
+      workspacePath: '/workspace/project',
+      isGitRepository: true,
+      currentBranch: 'main',
+      headCommit: commitHash,
+      dirty: false,
+      changedFiles: 0,
+      refs: [
+        { name: 'HEAD', shortName: 'HEAD', type: 'head' as const, targetCommit: commitHash },
+        { name: 'refs/heads/main', shortName: 'main', type: 'local-branch' as const, targetCommit: commitHash }
+      ]
+    }
+    const gitLog = {
+      rows: [
+        {
+          commitHash,
+          shortHash: '1111111',
+          parents: [parentHash],
+          subject: 'Wire git IPC',
+          authorName: 'Hesper',
+          authorEmail: 'hesper@example.com',
+          authoredAt: '2026-06-26T04:00:00.000Z',
+          refs: gitState.refs,
+          graph: { lanes: [{ id: 'lane-0', color: '#89b4fa', active: true }], nodeLaneId: 'lane-0', edges: [] }
+        }
+      ],
+      limit: 25,
+      hasMore: false
+    }
+    const gitCommit = {
+      commitHash,
+      shortHash: '1111111',
+      parents: [parentHash],
+      subject: 'Wire git IPC',
+      body: 'Wire git IPC\n\nDetailed body.',
+      authorName: 'Hesper',
+      authorEmail: 'hesper@example.com',
+      authoredAt: '2026-06-26T04:00:00.000Z',
+      committerName: 'Hesper',
+      committerEmail: 'hesper@example.com',
+      committedAt: '2026-06-26T04:01:00.000Z',
+      refs: gitState.refs,
+      files: [{ path: 'apps/desktop/electron/ipc-handlers.ts', status: 'modified' as const, additions: 12, deletions: 1 }]
+    }
+    const actionResult = { success: true, message: 'ok', state: gitState }
+
+    const getStateSpy = vi.spyOn(container.gitService, 'getState').mockResolvedValue(gitState)
+    const listLogSpy = vi.spyOn(container.gitService, 'listLog').mockResolvedValue(gitLog)
+    const getCommitSpy = vi.spyOn(container.gitService, 'getCommit').mockResolvedValue(gitCommit)
+    const createBranchSpy = vi.spyOn(container.gitService, 'createBranch').mockResolvedValue(actionResult)
+    const createTagSpy = vi.spyOn(container.gitService, 'createTag').mockResolvedValue(actionResult)
+    const checkoutSpy = vi.spyOn(container.gitService, 'checkout').mockResolvedValue(actionResult)
+
+    expect(ipcMain.handle).toHaveBeenCalledWith(ipcChannels.gitGetState, expect.any(Function))
+    expect(ipcMain.handle).toHaveBeenCalledWith(ipcChannels.gitListLog, expect.any(Function))
+    expect(ipcMain.handle).toHaveBeenCalledWith(ipcChannels.gitGetCommit, expect.any(Function))
+    expect(ipcMain.handle).toHaveBeenCalledWith(ipcChannels.gitCreateBranch, expect.any(Function))
+    expect(ipcMain.handle).toHaveBeenCalledWith(ipcChannels.gitCreateTag, expect.any(Function))
+    expect(ipcMain.handle).toHaveBeenCalledWith(ipcChannels.gitCheckout, expect.any(Function))
+
+    await expect(handles.get(ipcChannels.gitGetState)?.(event, { sessionId })).resolves.toEqual(gitState)
+    expect(getStateSpy).toHaveBeenCalledWith({ sessionId })
+
+    await expect(handles.get(ipcChannels.gitListLog)?.(event, { sessionId, limit: 25 })).resolves.toEqual(gitLog)
+    expect(listLogSpy).toHaveBeenCalledWith({ sessionId, limit: 25 })
+
+    await expect(handles.get(ipcChannels.gitGetCommit)?.(event, { sessionId, commit: commitHash })).resolves.toEqual(gitCommit)
+    expect(getCommitSpy).toHaveBeenCalledWith({ sessionId, commit: commitHash })
+
+    await expect(handles.get(ipcChannels.gitCreateBranch)?.(event, { sessionId, commit: commitHash, branchName: 'feature/git-panel', checkout: true })).resolves.toEqual(actionResult)
+    expect(createBranchSpy).toHaveBeenCalledWith({ sessionId, commit: commitHash, branchName: 'feature/git-panel', checkout: true })
+
+    await expect(handles.get(ipcChannels.gitCreateTag)?.(event, { sessionId, commit: commitHash, tagName: 'v1.2.3' })).resolves.toEqual(actionResult)
+    expect(createTagSpy).toHaveBeenCalledWith({ sessionId, commit: commitHash, tagName: 'v1.2.3' })
+
+    await expect(handles.get(ipcChannels.gitCheckout)?.(event, { sessionId, ref: 'main' })).resolves.toEqual(actionResult)
+    expect(checkoutSpy).toHaveBeenCalledWith({ sessionId, ref: 'main' })
+  })
+
+  it('rejects invalid git IPC input and output with zod schemas', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock' })
+    const { handles } = registerTestIpcHandlers(container)
+    const event = { sender: { id: 1 } }
+
+    await expect(handles.get(ipcChannels.gitListLog)?.(event, { sessionId: 'session-git', limit: 0 })).rejects.toThrow()
+    await expect(handles.get(ipcChannels.gitGetCommit)?.(event, { sessionId: 'session-git' })).rejects.toThrow()
+
+    vi.spyOn(container.gitService, 'getState').mockResolvedValue({ sessionId: 'session-git' } as Awaited<ReturnType<typeof container.gitService.getState>>)
+    await expect(handles.get(ipcChannels.gitGetState)?.(event, { sessionId: 'session-git' })).rejects.toThrow()
+  })
+
   it('schedules persistence for high-frequency session and role deletes without awaiting full saves', async () => {
     const persistence = await createInMemoryPersistence()
     const container = createServiceContainer({ persistence, agentMode: 'mock' })

@@ -421,7 +421,7 @@ function dedupeActiveLanes(activeLanes: string[]): void {
   const seen = new Set<string>()
   for (let index = activeLanes.length - 1; index >= 0; index -= 1) {
     const commit = activeLanes[index]
-    if (seen.has(commit)) {
+    if (commit === undefined || seen.has(commit)) {
       activeLanes.splice(index, 1)
       continue
     }
