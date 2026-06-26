@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -25,6 +25,35 @@ function createSessionService(session: TestSession) {
 
 async function git(workspacePath: string, args: string[]) {
   return execFileAsync('git', ['-C', workspacePath, ...args], { encoding: 'utf8' })
+}
+
+async function gitWithInput(workspacePath: string, args: string[], input: string): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('git', ['-C', workspacePath, ...args], { stdio: ['pipe', 'pipe', 'pipe'] })
+    let stdout = ''
+    let stderr = ''
+    child.stdout.setEncoding('utf8')
+    child.stderr.setEncoding('utf8')
+    child.stdout.on('data', (chunk: string) => { stdout += chunk })
+    child.stderr.on('data', (chunk: string) => { stderr += chunk })
+    child.on('error', reject)
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve({ stdout, stderr })
+        return
+      }
+      reject(new Error(`git ${args.join(' ')} failed with code ${code}: ${stderr || stdout}`))
+    })
+    child.stdin.end(input)
+  })
+}
+
+async function writeBlob(workspacePath: string, content: string): Promise<string> {
+  return (await gitWithInput(workspacePath, ['hash-object', '-w', '--stdin'], content)).stdout.trim()
+}
+
+async function createTreeWithSingleBlob(workspacePath: string, filePath: string, blobHash: string): Promise<string> {
+  return (await gitWithInput(workspacePath, ['mktree', '-z'], `100644 blob ${blobHash}\t${filePath}\0`)).stdout.trim()
 }
 
 async function withTempDir<T>(run: (workspacePath: string) => Promise<T>): Promise<T> {
@@ -210,6 +239,46 @@ describe('GitService', () => {
     })
   })
 
+  it('parses commit file changes with tab characters in paths', async () => {
+    await withTempDir(async (workspacePath) => {
+      const { secondCommit } = await initGitRepo(workspacePath)
+      const tabbedPath = 'has\ttab.txt'
+      const blob = await writeBlob(workspacePath, 'tabbed\n')
+      const tree = await createTreeWithSingleBlob(workspacePath, tabbedPath, blob)
+      const tabbedCommit = (await git(workspacePath, ['commit-tree', tree, '-p', secondCommit, '-m', 'Add tabbed path'])).stdout.trim()
+      await git(workspacePath, ['update-ref', 'refs/heads/main', tabbedCommit])
+      const service = createGitService({ id: 'session-1', workspacePath })
+
+      const commit = await service.getCommit({ sessionId: 'session-1', commit: tabbedCommit })
+
+      expect(commit.files).toEqual(expect.arrayContaining([
+        expect.objectContaining({ path: tabbedPath, status: 'added', additions: 1, deletions: 0 })
+      ]))
+    })
+  })
+
+  it('parses renamed file changes and numstat by the new path', async () => {
+    await withTempDir(async (workspacePath) => {
+      const { secondCommit } = await initGitRepo(workspacePath)
+      const oldPath = 'old\tname.txt'
+      const newPath = 'new\tname.txt'
+      const oldBlob = await writeBlob(workspacePath, 'line one\nline two\n')
+      const oldTree = await createTreeWithSingleBlob(workspacePath, oldPath, oldBlob)
+      const oldCommit = (await git(workspacePath, ['commit-tree', oldTree, '-p', secondCommit, '-m', 'Add old tabbed path'])).stdout.trim()
+      const newBlob = await writeBlob(workspacePath, 'line one\nline two\nline three\n')
+      const newTree = await createTreeWithSingleBlob(workspacePath, newPath, newBlob)
+      const renameCommit = (await git(workspacePath, ['commit-tree', newTree, '-p', oldCommit, '-m', 'Rename tabbed path'])).stdout.trim()
+      await git(workspacePath, ['update-ref', 'refs/heads/main', renameCommit])
+      const service = createGitService({ id: 'session-1', workspacePath })
+
+      const commit = await service.getCommit({ sessionId: 'session-1', commit: renameCommit })
+
+      expect(commit.files).toEqual([
+        expect.objectContaining({ path: newPath, oldPath, status: 'renamed', additions: 1, deletions: 0 })
+      ])
+    })
+  })
+
   it('creates a branch without checking it out', async () => {
     await withTempDir(async (workspacePath) => {
       const { firstCommit } = await initGitRepo(workspacePath)
@@ -251,6 +320,18 @@ describe('GitService', () => {
     })
   })
 
+  it('rejects branch creation with checkout when the workspace is dirty', async () => {
+    await withTempDir(async (workspacePath) => {
+      const { firstCommit } = await initGitRepo(workspacePath)
+      await fs.writeFile(path.join(workspacePath, 'dirty.txt'), 'not staged\n')
+      const service = createGitService({ id: 'session-1', workspacePath })
+
+      await expect(service.createBranch({ sessionId: 'session-1', branchName: 'dirty-checkout', commit: firstCommit, checkout: true })).rejects.toThrow(/dirty workspace/i)
+      expect((await git(workspacePath, ['branch', '--show-current'])).stdout.trim()).toBe('main')
+      await expect(git(workspacePath, ['rev-parse', '--verify', 'dirty-checkout'])).rejects.toThrow()
+    })
+  })
+
   it('creates a tag', async () => {
     await withTempDir(async (workspacePath) => {
       const { firstCommit } = await initGitRepo(workspacePath)
@@ -260,6 +341,21 @@ describe('GitService', () => {
 
       expect(result.success).toBe(true)
       expect((await git(workspacePath, ['rev-parse', 'v0.1.0'])).stdout.trim()).toBe(firstCommit)
+    })
+  })
+
+  it('points annotated tag refs at the peeled commit', async () => {
+    await withTempDir(async (workspacePath) => {
+      const { secondCommit } = await initGitRepo(workspacePath)
+      await git(workspacePath, ['tag', '-a', 'annotated/v1', '-m', 'Annotated release', secondCommit])
+      const tagObject = (await git(workspacePath, ['rev-parse', 'annotated/v1^{tag}'])).stdout.trim()
+      const service = createGitService({ id: 'session-1', workspacePath })
+
+      const state = await service.getState({ sessionId: 'session-1' })
+      const tagRef = state.refs.find((ref) => ref.type === 'tag' && ref.shortName === 'annotated/v1')
+
+      expect(tagObject).not.toBe(secondCommit)
+      expect(tagRef).toEqual(expect.objectContaining({ targetCommit: secondCommit }))
     })
   })
 

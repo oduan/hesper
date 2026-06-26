@@ -100,6 +100,9 @@ export class GitService {
   async listLog(input: GitLogInput): Promise<GitLogResultDto> {
     const { workspacePath } = await this.requireRepository(input.sessionId)
     const limit = input.limit ?? DEFAULT_LOG_LIMIT
+    if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
+      throw new Error('Invalid git log limit: must be an integer between 1 and 500')
+    }
     const requestedCount = limit + 1
     const output = await this.git(workspacePath, [
       'log',
@@ -158,6 +161,10 @@ export class GitService {
     const { workspacePath } = await this.requireRepository(input.sessionId)
 
     if (input.checkout === true) {
+      const state = await this.getState({ sessionId: input.sessionId })
+      if (state.dirty) {
+        throw new Error('Cannot create and checkout branch with a dirty workspace. Commit, stash, or discard changes first.')
+      }
       await this.git(workspacePath, ['switch', '-c', input.branchName, input.commit])
       return {
         success: true,
@@ -260,7 +267,7 @@ export class GitService {
   private async listRepositoryRefs(workspacePath: string): Promise<GitRefDto[]> {
     const refsOutput = await this.optionalGit(workspacePath, [
       'for-each-ref',
-      '--format=%(refname)%00%(refname:short)%00%(objectname)',
+      '--format=%(refname)%00%(refname:short)%00%(objectname)%00%(*objectname)',
       'refs/heads',
       'refs/remotes',
       'refs/tags'
@@ -278,7 +285,7 @@ export class GitService {
       'for-each-ref',
       '--points-at',
       commit,
-      '--format=%(refname)%00%(refname:short)%00%(objectname)',
+      '--format=%(refname)%00%(refname:short)%00%(objectname)%00%(*objectname)',
       'refs/heads',
       'refs/remotes',
       'refs/tags'
@@ -293,11 +300,11 @@ export class GitService {
 
   private async listCommitFiles(workspacePath: string, commit: string): Promise<GitCommitFileChangeDto[]> {
     const [statusOutput, numstatOutput] = await Promise.all([
-      this.git(workspacePath, ['diff-tree', '--root', '--no-commit-id', '--name-status', '-r', '-M', '-C', commit]),
-      this.git(workspacePath, ['show', '--format=', '--numstat', '-M', '-C', commit])
+      this.git(workspacePath, ['diff-tree', '--root', '--no-commit-id', '--name-status', '-r', '-M', '-C', '-z', commit]),
+      this.git(workspacePath, ['show', '--format=', '--numstat', '-M', '-C', '-z', commit])
     ])
-    const stats = parseNumstat(numstatOutput.stdout)
-    return parseNameStatus(statusOutput.stdout).map((change) => ({
+    const stats = parseNumstatZ(numstatOutput.stdout)
+    return parseNameStatusZ(statusOutput.stdout).map((change) => ({
       ...change,
       ...stats.get(change.path)
     }))
@@ -446,10 +453,10 @@ function toIsoString(value: string): string {
 function parseForEachRefs(output: string): GitRefDto[] {
   return output
     .split(/\r?\n/)
-    .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => {
-      const [name = '', shortName = '', targetCommit = ''] = line.split(FIELD_SEPARATOR)
+      const [name = '', shortName = '', objectCommit = '', peeledCommit = ''] = line.split(FIELD_SEPARATOR)
+      const targetCommit = name.startsWith('refs/tags/') && peeledCommit ? peeledCommit : objectCommit
       return toGitRef(name, shortName, targetCommit)
     })
     .filter((ref): ref is GitRefDto => ref !== undefined)
@@ -507,47 +514,72 @@ function dedupeRefs(refs: GitRefDto[]): GitRefDto[] {
   return result
 }
 
-function parseNameStatus(output: string): Array<Omit<GitCommitFileChangeDto, 'additions' | 'deletions'>> {
-  return output
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const fields = line.split('\t')
-      const statusCode = fields[0] ?? ''
-      const status = toFileStatus(statusCode)
-      if (status === 'renamed' || status === 'copied') {
-        return {
-          path: fields[2] ?? fields[1] ?? '',
-          ...(fields[1] ? { oldPath: fields[1] } : {}),
+function parseNameStatusZ(output: string): Array<Omit<GitCommitFileChangeDto, 'additions' | 'deletions'>> {
+  const tokens = splitNulTokens(output)
+  const changes: Array<Omit<GitCommitFileChangeDto, 'additions' | 'deletions'>> = []
+  for (let index = 0; index < tokens.length;) {
+    const statusCode = tokens[index++] ?? ''
+    const status = toFileStatus(statusCode)
+    if (status === 'renamed' || status === 'copied') {
+      const oldPath = tokens[index++] ?? ''
+      const newPath = tokens[index++] ?? ''
+      if (newPath) {
+        changes.push({
+          path: newPath,
+          ...(oldPath ? { oldPath } : {}),
           status
-        }
+        })
       }
-      return { path: fields[1] ?? '', status }
-    })
-    .filter((change) => change.path.length > 0)
+      continue
+    }
+    const filePath = tokens[index++] ?? ''
+    if (filePath) {
+      changes.push({ path: filePath, status })
+    }
+  }
+  return changes
 }
 
-function parseNumstat(output: string): Map<string, Pick<GitCommitFileChangeDto, 'additions' | 'deletions'>> {
+function parseNumstatZ(output: string): Map<string, Pick<GitCommitFileChangeDto, 'additions' | 'deletions'>> {
   const stats = new Map<string, Pick<GitCommitFileChangeDto, 'additions' | 'deletions'>>()
-  for (const line of output.split(/\r?\n/)) {
-    if (!line.trim()) continue
-    const fields = line.split('\t')
-    const additions = parseOptionalNonNegativeInt(fields[0])
-    const deletions = parseOptionalNonNegativeInt(fields[1])
-    const filePath = normalizeNumstatPath(fields.slice(2).join('\t'))
+  const tokens = splitNulTokens(output)
+  for (let index = 0; index < tokens.length;) {
+    const header = tokens[index++] ?? ''
+    if (!header) continue
+    const parsedHeader = parseNumstatHeader(header)
+    if (!parsedHeader) continue
+
+    let filePath = parsedHeader.path
+    if (!filePath) {
+      index += 1
+      filePath = tokens[index++] ?? ''
+    }
     if (!filePath) continue
+
     stats.set(filePath, {
-      ...(additions !== undefined ? { additions } : {}),
-      ...(deletions !== undefined ? { deletions } : {})
+      ...(parsedHeader.additions !== undefined ? { additions: parsedHeader.additions } : {}),
+      ...(parsedHeader.deletions !== undefined ? { deletions: parsedHeader.deletions } : {})
     })
   }
   return stats
 }
 
-function normalizeNumstatPath(value: string): string {
-  const match = value.match(/^(.+) => (.+)$/)
-  return (match?.[2] ?? value).trim()
+function splitNulTokens(output: string): string[] {
+  return output.split('\0').filter((token) => token.length > 0)
+}
+
+function parseNumstatHeader(header: string): { additions?: number; deletions?: number; path: string } | undefined {
+  const firstTab = header.indexOf('\t')
+  if (firstTab < 0) return undefined
+  const secondTab = header.indexOf('\t', firstTab + 1)
+  if (secondTab < 0) return undefined
+  const additions = parseOptionalNonNegativeInt(header.slice(0, firstTab))
+  const deletions = parseOptionalNonNegativeInt(header.slice(firstTab + 1, secondTab))
+  return {
+    ...(additions !== undefined ? { additions } : {}),
+    ...(deletions !== undefined ? { deletions } : {}),
+    path: header.slice(secondTab + 1)
+  }
 }
 
 function parseOptionalNonNegativeInt(value: string | undefined): number | undefined {
