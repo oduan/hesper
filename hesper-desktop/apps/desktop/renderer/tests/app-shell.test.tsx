@@ -2247,13 +2247,15 @@ describe('renderer App', () => {
     await user.click(screen.getByRole('button', { name: '发送' }))
 
     await waitFor(() => expect(enqueue).toHaveBeenCalledTimes(2))
-    expect((enqueue.mock.calls[1] as unknown as [any])[0]).toEqual(expect.objectContaining({
+    const imageCapablePayload = (enqueue.mock.calls[1] as unknown as [any])[0]
+    expect(imageCapablePayload).toEqual(expect.objectContaining({
       sessionId: 'session-1',
       modelId: 'gpt-5.5',
       draftAttachments: [
         expect.objectContaining({ kind: 'image', name: 'hidden.png', mimeType: 'image/png', bytes: imageFile.size })
       ]
     }))
+    expect(imageCapablePayload.draftAttachments[0]).not.toHaveProperty('id')
   })
 
   it('passes the selected thinking intensity when enqueueing a run', async () => {

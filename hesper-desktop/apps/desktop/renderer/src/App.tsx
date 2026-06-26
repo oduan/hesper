@@ -4,7 +4,7 @@ import { AppShell, ConversationView, resolveThemeVariant, themeTokens, type AppS
 import { AppStoreProvider, useAppStore } from './app-store'
 import { hesperApi } from './ipc-client'
 import { defaultFallbackModelId, fallbackSessionModelCatalog, loadAvailableModelCatalog, mergeModelOptions, type SessionModelCatalog } from './model-options'
-import type { AppSettings, CreateSshKeyInput, CreateSshServerInput, ManagedRoleDto, SkillDto, SshKeyDto, SshServerDto, ToolCredentialStatus, ToolDto, UpdateSettingsInput, UpdateSshServerInput } from '../../electron/ipc-contract'
+import type { AppSettings, CreateSshKeyInput, CreateSshServerInput, DraftAttachment, ManagedRoleDto, SkillDto, SshKeyDto, SshServerDto, ToolCredentialStatus, ToolDto, UpdateSettingsInput, UpdateSshServerInput } from '../../electron/ipc-contract'
 import { AppearanceSettingsPanel } from './appearance-settings-panel'
 import { ProviderSettingsPanel } from './provider-settings-panel'
 import { createShortcutHandler } from './shortcuts'
@@ -1830,6 +1830,7 @@ async function sendMessage({
 }) {
   setSendErrorsBySession((current) => clearSessionSendError(current, session.id))
   const draftAttachments = filterDraftAttachmentsForModel(sendOptions?.draftAttachments, modelCapabilities)
+  const enqueueDraftAttachments = draftAttachments.map(toAgentEnqueueDraftAttachment)
   const message = createOptimisticUserMessage({ session, content })
   dispatch({ type: 'message.optimistic', message })
   dispatch({ type: 'session.touched', sessionId: session.id, updatedAt: message.createdAt })
@@ -1841,7 +1842,7 @@ async function sendMessage({
       ...(sendOptions?.displayPrompt ? { displayPrompt: sendOptions.displayPrompt } : {}),
       modelId,
       ...(sendOptions?.thinkingLevel ? { thinkingLevel: sendOptions.thinkingLevel } : {}),
-      ...(draftAttachments.length > 0 ? { draftAttachments } : {}),
+      ...(enqueueDraftAttachments.length > 0 ? { draftAttachments: enqueueDraftAttachments } : {}),
       messageId: message.id,
       messageCreatedAt: message.createdAt,
       ...(session.workspacePath ? { workspacePath: session.workspacePath } : {})
@@ -1855,6 +1856,25 @@ async function sendMessage({
       ...current,
       [session.id]: error instanceof Error ? error.message : 'unknown enqueue error'
     }))
+  }
+}
+
+function toAgentEnqueueDraftAttachment(attachment: ComposerDraftAttachment): DraftAttachment {
+  if (attachment.kind === 'image') {
+    return {
+      kind: 'image',
+      name: attachment.name,
+      mimeType: attachment.mimeType,
+      bytes: attachment.bytes,
+      dataUrl: attachment.dataUrl
+    }
+  }
+  return {
+    kind: 'text',
+    name: attachment.name,
+    mimeType: attachment.mimeType,
+    bytes: attachment.bytes,
+    content: attachment.content
   }
 }
 
