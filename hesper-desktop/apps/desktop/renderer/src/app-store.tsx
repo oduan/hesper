@@ -284,8 +284,18 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         sessions: sortSessions(revertSessionUpdatedAt(state.sessions, action.sessionId, action.optimisticUpdatedAt, action.previousUpdatedAt))
       }
     }
-    case 'session.selected':
-      return { ...state, activeSessionId: action.sessionId }
+    case 'session.selected': {
+      if (!state.activeSessionCategoryId) {
+        return { ...state, activeSessionId: action.sessionId }
+      }
+
+      const session = state.sessions.find((candidate) => candidate.id === action.sessionId)
+      if (session?.categoryId === state.activeSessionCategoryId) {
+        return { ...state, activeSessionId: action.sessionId }
+      }
+
+      return withActiveSessionForCurrentCategory(state)
+    }
     case 'history.loaded': {
       const childRunIds = new Set(action.runs.filter((run) => run.parentRunId).map((run) => run.id))
       const mainMessages: Message[] = []

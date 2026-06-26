@@ -295,6 +295,49 @@ describe('app-store reducer', () => {
     expect(categoryCreated.activeSessionId).toBe('session-product-new')
   })
 
+  it('ignores selecting a session outside the active category', () => {
+    const nextState = appReducer({
+      ...initialAppState,
+      sessions: [
+        createSessionFixture({ id: 'session-a', title: 'Visible chat', categoryId: 'category-a', updatedAt: '2026-06-10T03:05:00.000Z' }),
+        createSessionFixture({ id: 'session-b', title: 'Hidden chat', categoryId: 'category-b', updatedAt: '2026-06-10T03:04:00.000Z' })
+      ],
+      sessionCategories: [
+        createSessionCategoryFixture({ id: 'category-a', name: '分类 A' }),
+        createSessionCategoryFixture({ id: 'category-b', name: '分类 B' })
+      ],
+      activeSessionCategoryId: 'category-a',
+      activeSessionId: 'session-a'
+    }, {
+      type: 'session.selected',
+      sessionId: 'session-b'
+    })
+
+    expect(nextState.activeSessionId).toBe('session-a')
+  })
+
+  it('allows selecting another session inside the active category', () => {
+    const nextState = appReducer({
+      ...initialAppState,
+      sessions: [
+        createSessionFixture({ id: 'session-a', title: 'Current chat', categoryId: 'category-a', updatedAt: '2026-06-10T03:05:00.000Z' }),
+        createSessionFixture({ id: 'session-a2', title: 'Next chat', categoryId: 'category-a', updatedAt: '2026-06-10T03:04:00.000Z' }),
+        createSessionFixture({ id: 'session-b', title: 'Hidden chat', categoryId: 'category-b', updatedAt: '2026-06-10T03:03:00.000Z' })
+      ],
+      sessionCategories: [
+        createSessionCategoryFixture({ id: 'category-a', name: '分类 A' }),
+        createSessionCategoryFixture({ id: 'category-b', name: '分类 B' })
+      ],
+      activeSessionCategoryId: 'category-a',
+      activeSessionId: 'session-a'
+    }, {
+      type: 'session.selected',
+      sessionId: 'session-a2'
+    })
+
+    expect(nextState.activeSessionId).toBe('session-a2')
+  })
+
   it('clears the active session when creating a new empty category', () => {
     const nextState = appReducer({
       ...initialAppState,
