@@ -5,6 +5,7 @@ export type SqliteAdapter = {
   run(sql: string, params?: unknown[]): void
   all(sql: string, params?: unknown[]): SqliteRow[]
   get(sql: string, params?: unknown[]): SqliteRow | undefined
+  transaction<T>(fn: () => Promise<T>): Promise<T>
   exportDatabaseBytes?: () => Uint8Array
   checkpoint?: () => void
   close?: () => void

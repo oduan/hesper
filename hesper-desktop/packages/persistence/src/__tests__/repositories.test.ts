@@ -290,6 +290,44 @@ describe('persistence repositories', () => {
     }
   })
 
+  it('does not expose database byte export for native file persistence', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hesper-native-no-export-'))
+    const tempFile = path.join(tempDir, 'hesper.sqlite')
+
+    try {
+      const db = await createFilePersistence(tempFile)
+      expect(() => exportDatabaseBytes(db)).toThrow('Database byte export is not available for this persistence backend.')
+      db.close?.()
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it('rolls back file-backed transaction writes when the transaction fails', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hesper-file-transaction-'))
+    const tempFile = path.join(tempDir, 'hesper.sqlite')
+
+    try {
+      const db = await createFilePersistence(tempFile)
+      await expect(db.transaction(async () => {
+        await db.sessions.save({
+          id: 'rolled-back-session',
+          title: 'Rolled back',
+          status: 'active',
+          outputMode: 'markdown',
+          createdAt: now,
+          updatedAt: now
+        })
+        throw new Error('fail transaction')
+      })).rejects.toThrow('fail transaction')
+
+      await expect(db.sessions.get('rolled-back-session')).resolves.toBeUndefined()
+      db.close?.()
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it('persists session categories and session category ids', async () => {
     const db = await createInMemoryPersistence()
     await db.sessionCategories.save({

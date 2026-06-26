@@ -128,20 +128,22 @@ export function createSessionService(persistence: Persistence): SessionService {
       return updated
     },
     async setCategoryForSessions(ids, categoryId) {
-      const normalizedCategoryId = normalizeCategoryId(categoryId)
-      await assertCategoryExists(persistence, normalizedCategoryId)
-      const loadedSessions: Session[] = []
-      for (const id of ids) {
-        loadedSessions.push(await loadSession(persistence, id))
-      }
-      const updated = loadedSessions.map((session) => {
-        const candidate = { ...session, categoryId: normalizedCategoryId }
-        return stripUndefined(candidate) as Session
+      return persistence.transaction(async () => {
+        const normalizedCategoryId = normalizeCategoryId(categoryId)
+        await assertCategoryExists(persistence, normalizedCategoryId)
+        const loadedSessions: Session[] = []
+        for (const id of ids) {
+          loadedSessions.push(await loadSession(persistence, id))
+        }
+        const updated = loadedSessions.map((session) => {
+          const candidate = { ...session, categoryId: normalizedCategoryId }
+          return stripUndefined(candidate) as Session
+        })
+        for (const session of updated) {
+          await persistence.sessions.save(session)
+        }
+        return updated
       })
-      for (const session of updated) {
-        await persistence.sessions.save(session)
-      }
-      return updated
     },
     async setWorkspacePath(id, workspacePath) {
       const session = await loadSession(persistence, id)
@@ -181,18 +183,20 @@ export function createSessionService(persistence: Persistence): SessionService {
       return updated
     },
     async setMarkedForSessions(ids, isMarked) {
-      const loadedSessions: Session[] = []
-      for (const id of ids) {
-        loadedSessions.push(await loadSession(persistence, id))
-      }
-      const updated = loadedSessions.map((session) => stripUndefined({
-        ...session,
-        isMarked: isMarked ? true : undefined
-      }) as Session)
-      for (const session of updated) {
-        await persistence.sessions.save(session)
-      }
-      return updated
+      return persistence.transaction(async () => {
+        const loadedSessions: Session[] = []
+        for (const id of ids) {
+          loadedSessions.push(await loadSession(persistence, id))
+        }
+        const updated = loadedSessions.map((session) => stripUndefined({
+          ...session,
+          isMarked: isMarked ? true : undefined
+        }) as Session)
+        for (const session of updated) {
+          await persistence.sessions.save(session)
+        }
+        return updated
+      })
     },
     async deleteSession(id) {
       const session = await loadSession(persistence, id)

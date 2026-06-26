@@ -1,6 +1,6 @@
 import { createInMemoryPersistence, exportDatabaseBytes } from '@hesper/persistence'
 import { describe, expect, it, vi } from 'vitest'
-import { createCredentialVaultService, type CredentialVaultCodec } from '../credential-vault-service'
+import { createCredentialVaultService, type CredentialVaultCodec, type CredentialVaultService } from '../credential-vault-service'
 import { codexOAuthAccessTokenFromCredential, createModelProviderService } from '../model-provider-service'
 
 const now = '2026-06-10T03:00:00.000Z'
@@ -229,6 +229,26 @@ describe('createModelProviderService', () => {
     expect(await persistence.models.listByProvider('custom-api-example-com')).toEqual([])
     expect(await credentialVaultService.getProviderApiKeyStatus({ providerId: 'custom-api-example-com' })).toMatchObject({ hasApiKey: false })
     expect(Buffer.from(exportDatabaseBytes(persistence)).toString('latin1')).not.toContain('sk-custom-secret')
+  })
+
+  it('rolls back custom provider model deletion when credential deletion fails', async () => {
+    const persistence = await createInMemoryPersistence()
+    const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
+    const failingCredentialVaultService: CredentialVaultService = {
+      ...credentialVaultService,
+      deleteProviderApiKey: vi.fn(async () => {
+        throw new Error('vault delete failed')
+      })
+    }
+    const service = createModelProviderService({ persistence, credentialVaultService: failingCredentialVaultService, now: () => now })
+
+    await service.saveProvider({ id: 'custom-api-example-com', name: 'Example API', kind: 'openai-compatible', baseUrl: 'https://api.example.com', enabled: true, defaultModelId: 'example-chat' })
+    await service.saveModel({ id: 'example-chat', providerId: 'custom-api-example-com', modelName: 'example-chat', displayName: 'Example Chat', capabilities: ['streaming'], enabled: true })
+
+    await expect(service.deleteProvider('custom-api-example-com')).rejects.toThrow('vault delete failed')
+
+    await expect(persistence.modelProviders.get('custom-api-example-com')).resolves.toMatchObject({ id: 'custom-api-example-com' })
+    expect(await persistence.models.listByProvider('custom-api-example-com')).toMatchObject([{ id: 'example-chat' }])
   })
 
   it('disables builtin providers when asked to delete them', async () => {

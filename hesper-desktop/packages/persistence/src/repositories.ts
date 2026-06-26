@@ -199,7 +199,8 @@ export type Persistence = {
   sshExecutions: SshExecutionRepository
   sshCommandResults: SshCommandResultRepository
   credentialRecords: CredentialRecordRepository
-  exportDatabaseBytes(): Uint8Array
+  transaction<T>(fn: () => Promise<T>): Promise<T>
+  exportDatabaseBytes?: () => Uint8Array
   checkpoint?(): void
   close?(): void
 }
@@ -653,7 +654,7 @@ export function createRepositories(db: SqliteAdapter): Persistence {
   const roleColumns = tableColumns('roles')
   const hasLegacyRoleSubagentColumn = roleColumns.has('can_be_subagent')
 
-  return {
+  const persistence: Persistence = {
     settings: {
       async save(settings) {
         exec('DELETE FROM app_settings')
@@ -1176,11 +1177,8 @@ export function createRepositories(db: SqliteAdapter): Persistence {
         exec('DELETE FROM credential_records WHERE id = ?', [id])
       }
     },
-    exportDatabaseBytes() {
-      if (!db.exportDatabaseBytes) {
-        throw new Error('Database byte export is not available for this persistence backend.')
-      }
-      return db.exportDatabaseBytes()
+    transaction(fn) {
+      return db.transaction(fn)
     },
     checkpoint() {
       db.checkpoint?.()
@@ -1189,4 +1187,10 @@ export function createRepositories(db: SqliteAdapter): Persistence {
       db.close?.()
     }
   }
+
+  if (db.exportDatabaseBytes) {
+    persistence.exportDatabaseBytes = () => db.exportDatabaseBytes!()
+  }
+
+  return persistence
 }

@@ -552,9 +552,11 @@ export function createModelProviderService(options: {
       if (builtinProviderIds.has(id)) {
         return this.disableProvider(id)
       }
-      await options.persistence.models.deleteByProvider(id)
-      await options.credentialVaultService.deleteProviderApiKey({ providerId: id })
-      await options.persistence.modelProviders.delete(id)
+      await options.persistence.transaction(async () => {
+        await options.persistence.models.deleteByProvider(id)
+        await options.credentialVaultService.deleteProviderApiKey({ providerId: id })
+        await options.persistence.modelProviders.delete(id)
+      })
       return undefined
     },
     async listModels(providerId) {
