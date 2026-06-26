@@ -193,14 +193,16 @@ describe('ui components', () => {
       />
     )
 
-    const sessionsButton = screen.getByRole('button', { name: '会话' })
+    const disclosureButton = screen.getByRole('button', { name: '收起会话分类' })
+    const allSessionsButton = screen.getByRole('button', { name: '所有会话' })
     const disclosure = screen.getByTestId('sessions-disclosure-icon')
-    expect(sessionsButton).toHaveAttribute('aria-expanded', 'true')
+    expect(disclosureButton).toHaveAttribute('aria-expanded', 'true')
+    expect(allSessionsButton).toHaveAttribute('aria-current', 'page')
     expect(disclosure).toHaveAttribute('data-state', 'expanded')
     expect(disclosure.querySelector('svg')).toHaveAttribute('viewBox', '0 0 16 16')
     expect(screen.getByRole('navigation', { name: '会话分类导航' })).toBeInTheDocument()
 
-    fireEvent.contextMenu(screen.getByRole('button', { name: '所有会话' }))
+    fireEvent.contextMenu(allSessionsButton)
     await user.click(within(screen.getByRole('menu', { name: '会话分类操作' })).getByRole('menuitem', { name: '新建分类' }))
 
     expect(onCreateSessionCategory).toHaveBeenCalledTimes(1)
@@ -260,16 +262,18 @@ describe('ui components', () => {
       />
     )
 
-    const sessionsButton = screen.getByRole('button', { name: '会话' })
+    const disclosureButton = screen.getByRole('button', { name: '展开会话分类' })
+    const allSessionsButton = screen.getByRole('button', { name: '所有会话' })
     const disclosure = screen.getByTestId('sessions-disclosure-icon')
     const icon = disclosure.querySelector('svg')
-    expect(sessionsButton).toHaveAttribute('aria-expanded', 'false')
+    expect(disclosureButton).toHaveAttribute('aria-expanded', 'false')
+    expect(allSessionsButton).toHaveAttribute('aria-current', 'page')
     expect(disclosure).toHaveAttribute('data-state', 'collapsed')
     expect(disclosure).toHaveStyle({ width: '16px', height: '16px' })
     expect(icon).toHaveAttribute('viewBox', '0 0 16 16')
     expect(icon).toHaveAttribute('width', '16')
     expect(icon).toHaveAttribute('height', '16')
-    expect(screen.queryByRole('button', { name: '所有会话' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: '会话分类导航' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '产品图' })).not.toBeInTheDocument()
   })
 
@@ -284,21 +288,23 @@ describe('ui components', () => {
       />
     )
 
-    const sessionsButton = screen.getByRole('button', { name: '会话' })
-    expect(sessionsButton).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.getByTestId('sessions-disclosure-icon')).toHaveAttribute('data-state', 'collapsed')
-    expect(screen.queryByRole('button', { name: '所有会话' })).not.toBeInTheDocument()
-
-    await user.click(sessionsButton)
-    expect(sessionsButton).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByTestId('sessions-disclosure-icon')).toHaveAttribute('data-state', 'expanded')
+    const disclosureButton = screen.getByRole('button', { name: '展开会话分类' })
+    expect(disclosureButton).toHaveAttribute('aria-expanded', 'false')
     expect(screen.getByRole('button', { name: '所有会话' })).toBeInTheDocument()
+    expect(screen.getByTestId('sessions-disclosure-icon')).toHaveAttribute('data-state', 'collapsed')
+    expect(screen.queryByRole('navigation', { name: '会话分类导航' })).not.toBeInTheDocument()
+
+    await user.click(disclosureButton)
+    expect(disclosureButton).toHaveAttribute('aria-expanded', 'true')
+    expect(disclosureButton).toHaveAttribute('aria-label', '收起会话分类')
+    expect(screen.getByTestId('sessions-disclosure-icon')).toHaveAttribute('data-state', 'expanded')
     expect(screen.getByRole('navigation', { name: '会话分类导航' })).toBeInTheDocument()
 
-    await user.click(sessionsButton)
-    expect(sessionsButton).toHaveAttribute('aria-expanded', 'false')
+    await user.click(disclosureButton)
+    expect(disclosureButton).toHaveAttribute('aria-expanded', 'false')
+    expect(disclosureButton).toHaveAttribute('aria-label', '展开会话分类')
     expect(screen.getByTestId('sessions-disclosure-icon')).toHaveAttribute('data-state', 'collapsed')
-    expect(screen.queryByRole('button', { name: '所有会话' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: '会话分类导航' })).not.toBeInTheDocument()
   })
 
   it('commits category rename on blur and exits editing mode', async () => {
@@ -389,6 +395,15 @@ describe('ui components', () => {
     const allSessionsButton = screen.getByRole('button', { name: '所有会话' })
     expect(allSessionsButton).toHaveAttribute('aria-current', 'page')
     expect(allSessionsButton).toHaveClass('is-active')
+
+    const disclosureButton = screen.getByRole('button', { name: '收起会话分类' })
+    await user.click(disclosureButton)
+    expect(onSelectSection).not.toHaveBeenCalled()
+    expect(onSelectSessionCategory).not.toHaveBeenCalled()
+    expect(screen.queryByRole('navigation', { name: '会话分类导航' })).not.toBeInTheDocument()
+
+    await user.click(disclosureButton)
+    expect(screen.getByRole('navigation', { name: '会话分类导航' })).toBeInTheDocument()
 
     await user.click(allSessionsButton)
     expect(onSelectSection).toHaveBeenLastCalledWith('sessions')

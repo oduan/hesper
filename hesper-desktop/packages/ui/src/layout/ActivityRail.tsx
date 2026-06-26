@@ -111,7 +111,6 @@ export function ActivityRail({
   }, [editingCategory?.id])
 
   const handleToggleSessionsExpanded = () => {
-    onSelectSection?.('sessions')
     setCategoryMenu(undefined)
     if (isSessionsExpandedControlled) {
       onToggleSessionsExpanded()
@@ -223,38 +222,40 @@ export function ActivityRail({
       <nav aria-label="主导航" style={{ display: 'grid', gap: 2 }}>
         {sections.map((section) => {
           if (section.id === 'sessions') {
-            const isCollapsedActive = activeSection === 'sessions' && !effectiveSessionsExpanded
             const isAllSessionsActive = activeSection === 'sessions' && !activeSessionCategoryId
+            const disclosureLabel = effectiveSessionsExpanded ? '收起会话分类' : '展开会话分类'
             return (
               <div key={section.id} style={sessionsGroupStyle}>
-                <button
-                  type="button"
-                  className={`hesper-nav-item${isCollapsedActive ? ' is-active' : ''}`}
-                  aria-current={isCollapsedActive ? 'page' : undefined}
-                  aria-label={section.label}
-                  aria-expanded={effectiveSessionsExpanded}
-                  onClick={handleToggleSessionsExpanded}
-                  style={sessionsToggleStyle}
+                <div
+                  className={`hesper-nav-item${isAllSessionsActive ? ' is-active' : ''}`}
+                  style={allSessionsPrimaryRowStyle}
+                  onContextMenu={(event) => {
+                    event.preventDefault()
+                    openAllCategoriesMenu(event.clientX, event.clientY)
+                  }}
                 >
-                  <SessionDisclosureIcon expanded={effectiveSessionsExpanded} />
-                  <span>{section.visibleLabel}</span>
-                </button>
+                  <button
+                    type="button"
+                    aria-label={disclosureLabel}
+                    aria-expanded={effectiveSessionsExpanded}
+                    onClick={handleToggleSessionsExpanded}
+                    style={sessionsDisclosureButtonStyle}
+                  >
+                    <SessionDisclosureIcon expanded={effectiveSessionsExpanded} />
+                  </button>
+                  <button
+                    type="button"
+                    className={isAllSessionsActive ? 'is-active' : undefined}
+                    aria-current={isAllSessionsActive ? 'page' : undefined}
+                    aria-label="所有会话"
+                    onClick={handleSelectAllSessions}
+                    style={allSessionsPrimaryButtonStyle}
+                  >
+                    <span>所有会话</span>
+                  </button>
+                </div>
                 {effectiveSessionsExpanded ? (
                   <nav aria-label="会话分类导航" style={sessionCategoryListStyle}>
-                    <button
-                      type="button"
-                      className={`hesper-nav-item${isAllSessionsActive ? ' is-active' : ''}`}
-                      aria-current={isAllSessionsActive ? 'page' : undefined}
-                      aria-label="所有会话"
-                      onClick={handleSelectAllSessions}
-                      onContextMenu={(event) => {
-                        event.preventDefault()
-                        openAllCategoriesMenu(event.clientX, event.clientY)
-                      }}
-                      style={allSessionsRowStyle}
-                    >
-                      所有会话
-                    </button>
                     {visibleCategories.map((category) => {
                       const isEditing = editingCategory?.id === category.id
                       const isActive = activeSection === 'sessions' && activeSessionCategoryId === category.id
@@ -403,12 +404,45 @@ const sessionsGroupStyle: CSSProperties = {
   minWidth: 0
 }
 
-const sessionsToggleStyle: CSSProperties = {
+const allSessionsPrimaryRowStyle: CSSProperties = {
+  minHeight: 34,
   display: 'flex',
   alignItems: 'center',
-  gap: 6,
   minWidth: 0,
   width: '100%',
+  padding: '0 10px 0 4px',
+  gap: 4,
+  boxSizing: 'border-box'
+}
+
+const sessionsDisclosureButtonStyle: CSSProperties = {
+  width: 24,
+  height: 34,
+  flex: '0 0 24px',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  border: 0,
+  borderRadius: 8,
+  background: 'transparent',
+  color: 'inherit',
+  padding: 0,
+  cursor: 'pointer'
+}
+
+const allSessionsPrimaryButtonStyle: CSSProperties = {
+  flex: 1,
+  alignSelf: 'stretch',
+  minWidth: 0,
+  display: 'flex',
+  alignItems: 'center',
+  border: 0,
+  background: 'transparent',
+  color: 'inherit',
+  padding: 0,
+  font: 'inherit',
+  fontWeight: 600,
+  cursor: 'pointer',
   textAlign: 'left'
 }
 
@@ -416,15 +450,6 @@ const sessionCategoryListStyle: CSSProperties = {
   display: 'grid',
   gap: 2,
   minWidth: 0
-}
-
-const allSessionsRowStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  minWidth: 0,
-  width: '100%',
-  textAlign: 'left',
-  paddingLeft: 32
 }
 
 const categoryRowStyle: CSSProperties = {
