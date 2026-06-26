@@ -1276,6 +1276,15 @@ function AppContent() {
     }
   }
 
+  const discardSessionCategory = async (categoryId: string) => {
+    try {
+      const result = await hesperApi.sessionCategories.delete(categoryId)
+      dispatch({ type: 'sessionCategory.deleted', categoryId, deletedSessionIds: result.deletedSessionIds })
+    } catch (error) {
+      console.warn('Failed to discard session category', error)
+    }
+  }
+
   const setSessionCategory = async (_sessionId: string, sessionIds: string[] | undefined, categoryId?: string) => {
     const ids = sessionIds?.length ? sessionIds : [_sessionId]
 
@@ -1360,6 +1369,9 @@ function AppContent() {
       onRenameSessionCategory={renameSessionCategory}
       onDeleteSessionCategory={(categoryId) => {
         void deleteSessionCategory(categoryId)
+      }}
+      onDiscardSessionCategory={(categoryId) => {
+        void discardSessionCategory(categoryId)
       }}
       onSetSessionCategory={(sessionId, sessionIds, categoryId) => {
         void setSessionCategory(sessionId, sessionIds, categoryId)

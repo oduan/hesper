@@ -293,6 +293,43 @@ describe('ui components', () => {
     expect(onRenameSessionCategory).toHaveBeenCalledWith('category-new', '头像')
   })
 
+  it('discards a pending category create when the draft is cancelled before it resolves', async () => {
+    const user = userEvent.setup()
+    let resolveCreateCategory!: (category: { id: string; name: string; createdAt: string; updatedAt: string }) => void
+    const createCategoryPromise = new Promise<{ id: string; name: string; createdAt: string; updatedAt: string }>((resolve) => {
+      resolveCreateCategory = resolve
+    })
+    const onCreateSessionCategory = vi.fn(() => createCategoryPromise)
+    const onDiscardSessionCategory = vi.fn()
+    const onDeleteSessionCategory = vi.fn()
+    const onSelectSessionCategory = vi.fn()
+
+    render(
+      <ActivityRail
+        activeSection="sessions"
+        sessionsExpanded={false}
+        sessionCategories={[]}
+        onCreateSessionCategory={onCreateSessionCategory}
+        onDiscardSessionCategory={onDiscardSessionCategory}
+        onDeleteSessionCategory={onDeleteSessionCategory}
+        onSelectSessionCategory={onSelectSessionCategory}
+      />
+    )
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: '所有会话' }))
+    await user.click(within(screen.getByRole('menu', { name: '会话分类操作' })).getByRole('menuitem', { name: '新建分类' }))
+    await user.type(await screen.findByLabelText('重命名分类'), '{Escape}')
+
+    expect(screen.queryByLabelText('重命名分类')).not.toBeInTheDocument()
+    expect(onDeleteSessionCategory).not.toHaveBeenCalled()
+
+    resolveCreateCategory({ id: 'category-new', name: '新分类', createdAt: now, updatedAt: now })
+    await waitFor(() => {
+      expect(onDiscardSessionCategory).toHaveBeenCalledWith('category-new')
+    })
+    expect(onSelectSessionCategory).not.toHaveBeenCalled()
+  })
+
   it('keeps the category rename editor visible while rename is pending', async () => {
     const user = userEvent.setup()
     let resolveRename!: () => void

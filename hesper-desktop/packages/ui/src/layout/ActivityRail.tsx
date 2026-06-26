@@ -22,6 +22,7 @@ export type ActivityRailProps = {
   onCreateSessionCategory?: () => Promise<SessionCategoryListItem | undefined>
   onRenameSessionCategory?: (categoryId: string, name: string) => void | Promise<void>
   onDeleteSessionCategory?: (categoryId: string) => void | Promise<void>
+  onDiscardSessionCategory?: (categoryId: string) => void | Promise<void>
 }
 
 type EditingCategoryState = { id: string; name: string; isNew: boolean; realId?: string; pendingCreate?: boolean; queuedCommit?: boolean }
@@ -62,7 +63,8 @@ export function ActivityRail({
   onSelectSessionCategory,
   onCreateSessionCategory,
   onRenameSessionCategory,
-  onDeleteSessionCategory
+  onDeleteSessionCategory,
+  onDiscardSessionCategory
 }: ActivityRailProps) {
   const [fallbackSessionsExpanded, setFallbackSessionsExpanded] = useState(() => sessionsExpanded ?? true)
   const [categoryMenu, setCategoryMenu] = useState<CategoryMenuState>()
@@ -71,6 +73,7 @@ export function ActivityRail({
   const categoryMenuFirstItemRef = useRef<HTMLButtonElement>(null)
   const editingCategoryRef = useRef<EditingCategoryState | undefined>(undefined)
   const committingCategoryIdRef = useRef<string | undefined>(undefined)
+  const cancelledDraftCategoryIdsRef = useRef<Set<string>>(new Set())
   const draftCategoryIdRef = useRef(0)
   const isSessionsExpandedControlled = sessionsExpanded !== undefined && onToggleSessionsExpanded !== undefined
   const effectiveSessionsExpanded = isSessionsExpandedControlled ? sessionsExpanded : fallbackSessionsExpanded
@@ -161,9 +164,12 @@ export function ActivityRail({
   const cancelEditingCategory = () => {
     const current = editingCategory
     setEditingCategory(undefined)
-    if (current?.isNew) {
-      void onDeleteSessionCategory?.(current.realId ?? current.id)
+    if (!current?.isNew) return
+    if (current.pendingCreate) {
+      cancelledDraftCategoryIdsRef.current.add(current.id)
+      return
     }
+    void onDeleteSessionCategory?.(current.realId ?? current.id)
   }
 
   const commitEditingCategoryFor = async (current: EditingCategoryState, existingNameOverride?: string) => {
@@ -223,17 +229,18 @@ export function ActivityRail({
           return
         }
 
-        onSelectSessionCategory?.(category.id)
         const latestEditingCategory = editingCategoryRef.current
-        const nextEditingCategory: EditingCategoryState | undefined = latestEditingCategory?.id === draftId
-          ? { ...latestEditingCategory, realId: category.id, pendingCreate: false }
-          : undefined
+        if (cancelledDraftCategoryIdsRef.current.has(draftId) || latestEditingCategory?.id !== draftId) {
+          cancelledDraftCategoryIdsRef.current.delete(draftId)
+          await onDiscardSessionCategory?.(category.id)
+          return
+        }
 
-        if (nextEditingCategory) {
-          setEditingCategory(nextEditingCategory)
-          if (nextEditingCategory.queuedCommit) {
-            await commitEditingCategoryFor(nextEditingCategory, category.name)
-          }
+        onSelectSessionCategory?.(category.id)
+        const nextEditingCategory: EditingCategoryState = { ...latestEditingCategory, realId: category.id, pendingCreate: false }
+        setEditingCategory(nextEditingCategory)
+        if (nextEditingCategory.queuedCommit) {
+          await commitEditingCategoryFor(nextEditingCategory, category.name)
         }
         return
       }
