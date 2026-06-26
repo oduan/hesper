@@ -76,7 +76,7 @@ export const createSessionInputSchema = z.object({
   title: z.string().optional(),
   workspacePath: z.string().optional(),
   defaultModelId: z.string().optional(),
-  categoryId: z.string().min(1).optional(),
+  categoryId: z.string().optional(),
   outputMode: z.enum(['markdown', 'html']).optional()
 })
 
@@ -125,7 +125,7 @@ export const updateSessionCategoryInputSchema = z.object({
 }).strict()
 export const setSessionCategoryInputSchema = z.object({
   ids: z.array(nonEmptyStringSchema).min(1),
-  categoryId: nonEmptyStringSchema.optional()
+  categoryId: z.string().optional()
 }).strict()
 export const deleteSessionCategoryResultSchema = z.object({
   category: sessionCategoryDtoSchema,

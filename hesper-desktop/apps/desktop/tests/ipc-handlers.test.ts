@@ -116,6 +116,33 @@ describe('desktop service container', () => {
     expect(ipcMain.handle).toHaveBeenCalledWith(ipcChannels.sessionCategoriesList, expect.any(Function))
   })
 
+  it('creates sessions through ipc without a category when categoryId is blank', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock' })
+    const { handles } = registerTestIpcHandlers(container)
+
+    const session = await handles.get(ipcChannels.sessionsCreate)?.({ sender: { id: 1 } }, { title: 'Blank category', categoryId: '' }) as { id: string; categoryId?: string }
+
+    expect(session).toMatchObject({ title: 'Blank category' })
+    expect(session).not.toHaveProperty('categoryId')
+  })
+
+  it('clears session category through ipc when categoryId is blank', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock' })
+    const { handles } = registerTestIpcHandlers(container)
+
+    const category = await handles.get(ipcChannels.sessionCategoriesCreate)?.({ sender: { id: 1 } }, { name: 'To clear' }) as { id: string }
+    const session = await handles.get(ipcChannels.sessionsCreate)?.({ sender: { id: 1 } }, { title: 'Categorized', categoryId: category.id }) as { id: string; categoryId?: string }
+    expect(session.categoryId).toBe(category.id)
+
+    const moved = await handles.get(ipcChannels.sessionsSetCategory)?.({ sender: { id: 1 } }, { ids: [session.id], categoryId: '' }) as Array<{ id: string; categoryId?: string }>
+
+    expect(moved).toHaveLength(1)
+    expect(moved[0]).toMatchObject({ id: session.id })
+    expect(moved[0]).not.toHaveProperty('categoryId')
+  })
+
   it('supports injecting a skill service for desktop runtime and tools', async () => {
     const persistence = await createInMemoryPersistence()
     const researchSkill = { id: 'Research', name: 'Research', description: 'Find references', source: 'user' as const, prompt: 'Research carefully.' }
