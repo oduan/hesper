@@ -84,7 +84,6 @@ function createGitPanel(overrides: Partial<ConversationGitPanelProps> = {}): Con
     selectedCommit: gitGraphRow.commitHash,
     onOpen: vi.fn(),
     onClose: vi.fn(),
-    onRefresh: vi.fn(),
     onSelectCommit: vi.fn(),
     onLoadCommitDetail: vi.fn(),
     onCreateBranch: vi.fn(),
@@ -124,18 +123,57 @@ describe('ui components', () => {
     expect(screen.queryByRole('dialog', { name: 'Git 提交图谱' })).not.toBeInTheDocument()
   })
 
-  it('renders the Git graph entry with branch name when the git panel is visible', () => {
+  it('renders the Git graph entry with branch name and a centered three-column header layout', () => {
     renderConversationWithGitPanel(createGitPanel())
 
-    const button = screen.getByRole('button', { name: '打开 Git 图谱' })
+    const button = screen.getByRole('button', { name: /打开 Git 图谱，当前分支 feature\/git-log-panel/ })
     expect(button).toBeInTheDocument()
     expect(button).toHaveTextContent('feature/git-log-panel')
+
+    const header = screen.getByRole('heading', { name: '测试会话' }).closest('header')
+    expect(header).toHaveStyle({ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)' })
+    expect(header?.querySelector('[data-hesper-git-entry-slot="true"]')).toContainElement(button)
   })
 
-  it('announces dirty Git working tree state from the conversation header entry', () => {
+  it('shows a visible focus ring on the Git graph entry when reached by keyboard', async () => {
+    const user = userEvent.setup()
+    renderConversationWithGitPanel(createGitPanel())
+
+    await user.tab()
+
+    const button = screen.getByRole('button', { name: /打开 Git 图谱，当前分支 feature\/git-log-panel/ })
+    expect(button).toHaveFocus()
+    expect(button).toHaveStyle({ outline: `2px solid ${themeTokens.color.accent}` })
+  })
+
+  it('describes a dirty Git working tree without using a live status region', () => {
     renderConversationWithGitPanel(createGitPanel({ dirty: true }))
 
-    expect(screen.getByLabelText('工作区有未提交更改')).toBeInTheDocument()
+    const button = screen.getByRole('button', { name: /打开 Git 图谱，当前分支 feature\/git-log-panel/ })
+    expect(button).toHaveAccessibleDescription('工作区有未提交更改')
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('does not open the Git graph when the entry is disabled', async () => {
+    const user = userEvent.setup()
+    const gitPanel = createGitPanel({ disabled: true, onOpen: vi.fn() })
+    renderConversationWithGitPanel(gitPanel)
+
+    await user.click(screen.getByRole('button', { name: /打开 Git 图谱，当前分支 feature\/git-log-panel/ }))
+
+    expect(gitPanel.onOpen).not.toHaveBeenCalled()
+  })
+
+  it('marks the Git graph entry busy while loading', () => {
+    renderConversationWithGitPanel(createGitPanel({ loading: true }))
+
+    expect(screen.getByRole('button', { name: /正在加载/ })).toHaveAttribute('aria-busy', 'true')
+  })
+
+  it('exposes Git graph entry errors in the accessible label', () => {
+    renderConversationWithGitPanel(createGitPanel({ error: '拉取失败' }))
+
+    expect(screen.getByRole('button', { name: /错误：拉取失败/ })).toBeInTheDocument()
   })
 
   it('calls onOpen when the Git graph entry is clicked', async () => {
@@ -143,7 +181,7 @@ describe('ui components', () => {
     const gitPanel = createGitPanel({ onOpen: vi.fn() })
     renderConversationWithGitPanel(gitPanel)
 
-    await user.click(screen.getByRole('button', { name: '打开 Git 图谱' }))
+    await user.click(screen.getByRole('button', { name: /打开 Git 图谱，当前分支 feature\/git-log-panel/ }))
 
     expect(gitPanel.onOpen).toHaveBeenCalledTimes(1)
   })

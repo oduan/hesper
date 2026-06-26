@@ -28,7 +28,6 @@ export type ConversationGitPanelProps = {
   detail?: GitCommitDetailView
   onOpen: () => void
   onClose: () => void
-  onRefresh?: () => void
   onSelectCommit: (commitHash: string) => void
   onLoadCommitDetail: (commitHash: string) => void
   onCreateBranch: (commitHash: string) => void
@@ -364,8 +363,14 @@ export function ConversationView({
   const [closeFullscreenSignal, setCloseFullscreenSignal] = useState(0)
   const [showJumpToBottom, setShowJumpToBottom] = useState(false)
   const [localFilePreviewState, setLocalFilePreviewState] = useState<LocalFilePreviewState>()
+  const [gitPanelEntryFocused, setGitPanelEntryFocused] = useState(false)
   const shouldShowGitPanel = gitPanel?.visible === true
   const gitPanelDisabled = Boolean(gitPanel?.disabled)
+  const gitPanelBranchLabel = gitPanel?.currentBranch ? `，当前分支 ${gitPanel.currentBranch}` : ''
+  const gitPanelBusyLabel = gitPanel?.loading ? '，正在加载' : ''
+  const gitPanelErrorLabel = gitPanel?.error ? `，错误：${gitPanel.error}` : ''
+  const gitPanelEntryLabel = `打开 Git 图谱${gitPanelBranchLabel}${gitPanelBusyLabel}${gitPanelErrorLabel}`
+  const gitPanelDirtyDescriptionId = `conversation-git-panel-dirty-${session.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`
   const anchorRefs = useRef<Record<string, HTMLElement | null>>({})
   const messagesScrollRef = useRef<HTMLDivElement | null>(null)
   const messagesContentRef = useRef<HTMLDivElement | null>(null)
@@ -698,19 +703,25 @@ export function ConversationView({
           style={{
             position: 'relative',
             minHeight: 32,
-            display: 'flex',
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)',
             alignItems: 'center',
-            justifyContent: 'center',
+            columnGap: themeTokens.spacing.md,
             padding: `${themeTokens.spacing.lg} ${themeTokens.spacing.lg} ${themeTokens.spacing.sm}`
           }}
         >
-          <h2 style={{ margin: 0, maxWidth: '65%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: themeTokens.typography.body, lineHeight: 1.2, textAlign: 'center', fontWeight: 700 }}>{session.title}</h2>
-          {shouldShowGitPanel && gitPanel ? (
-            <div style={gitPanelEntryAreaStyle}>
+          <div aria-hidden="true" style={gitPanelHeaderSideStyle} />
+          <h2 style={{ margin: 0, maxWidth: '100%', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: themeTokens.typography.body, lineHeight: 1.2, textAlign: 'center', fontWeight: 700, justifySelf: 'center' }}>{session.title}</h2>
+          <div data-hesper-git-entry-slot="true" style={gitPanelEntrySlotStyle}>
+            {shouldShowGitPanel && gitPanel ? (
               <button
                 type="button"
-                aria-label="打开 Git 图谱"
+                aria-label={gitPanelEntryLabel}
+                aria-busy={gitPanel.loading ? 'true' : undefined}
+                aria-describedby={gitPanel.dirty ? gitPanelDirtyDescriptionId : undefined}
                 disabled={gitPanelDisabled}
+                onFocus={() => setGitPanelEntryFocused(true)}
+                onBlur={() => setGitPanelEntryFocused(false)}
                 onClick={() => {
                   if (gitPanelDisabled) return
                   gitPanel.onOpen()
@@ -718,6 +729,7 @@ export function ConversationView({
                 style={{
                   ...gitPanelEntryButtonStyle,
                   ...(gitPanel.open ? gitPanelEntryButtonActiveStyle : {}),
+                  ...(gitPanelEntryFocused ? gitPanelEntryButtonFocusStyle : {}),
                   ...(gitPanelDisabled ? gitPanelEntryButtonDisabledStyle : {})
                 }}
               >
@@ -727,10 +739,17 @@ export function ConversationView({
                   <path d="M7 8v2a4 4 0 0 0 4 4h2a4 4 0 0 0 4-4V8" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                 </svg>
                 {gitPanel.currentBranch ? <span style={gitPanelEntryBranchStyle}>{gitPanel.currentBranch}</span> : null}
-                {gitPanel.dirty ? <span aria-label="工作区有未提交更改" role="status" style={gitPanelDirtyDotStyle} /> : null}
+                {gitPanel.loading ? <span style={gitPanelEntryStateTextStyle}>加载中</span> : null}
+                {gitPanel.error ? <span aria-hidden="true" style={gitPanelEntryErrorDotStyle} /> : null}
+                {gitPanel.dirty ? (
+                  <>
+                    <span aria-hidden="true" style={gitPanelDirtyDotStyle} />
+                    <span id={gitPanelDirtyDescriptionId} style={visuallyHiddenStyle}>工作区有未提交更改</span>
+                  </>
+                ) : null}
               </button>
-            </div>
-          ) : null}
+            ) : null}
+          </div>
         </header>
         <div style={messagesAreaStyle} onWheelCapture={handleConversationWheelCapture}>
           <div
@@ -963,22 +982,25 @@ export function ConversationView({
   )
 }
 
-const gitPanelEntryAreaStyle = {
-  position: 'absolute',
-  top: 12,
-  right: themeTokens.spacing.lg,
-  maxWidth: '30%',
+const gitPanelHeaderSideStyle = {
+  minWidth: 0,
+  minHeight: 1
+} satisfies CSSProperties
+
+const gitPanelEntrySlotStyle = {
+  minWidth: 0,
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'flex-end',
-  pointerEvents: 'auto'
+  justifySelf: 'stretch'
 } satisfies CSSProperties
 
 const gitPanelEntryButtonStyle = {
   minWidth: 34,
   height: 30,
   border: 0,
-  outline: 0,
+  outline: '2px solid transparent',
+  outlineOffset: 2,
   borderRadius: 999,
   background: themeTokens.color.softControl,
   color: themeTokens.color.textMuted,
@@ -997,6 +1019,11 @@ const gitPanelEntryButtonStyle = {
 const gitPanelEntryButtonActiveStyle = {
   color: themeTokens.color.accent,
   background: themeTokens.color.hover
+} satisfies CSSProperties
+
+const gitPanelEntryButtonFocusStyle = {
+  outline: `2px solid ${themeTokens.color.accent}`,
+  boxShadow: `0 0 0 4px ${themeTokens.color.softControl}`
 } satisfies CSSProperties
 
 const gitPanelEntryButtonDisabledStyle = {
@@ -1022,6 +1049,21 @@ const gitPanelEntryBranchStyle = {
   fontWeight: 650
 } satisfies CSSProperties
 
+const gitPanelEntryStateTextStyle = {
+  color: 'inherit',
+  fontWeight: 650,
+  whiteSpace: 'nowrap'
+} satisfies CSSProperties
+
+const gitPanelEntryErrorDotStyle = {
+  width: 8,
+  height: 8,
+  borderRadius: 999,
+  background: themeTokens.color.danger,
+  boxShadow: `0 0 0 3px ${themeTokens.color.dangerSoft}`,
+  flex: '0 0 auto'
+} satisfies CSSProperties
+
 const gitPanelDirtyDotStyle = {
   width: 8,
   height: 8,
@@ -1029,6 +1071,18 @@ const gitPanelDirtyDotStyle = {
   background: themeTokens.color.warning,
   boxShadow: `0 0 0 3px ${themeTokens.color.warningSoft}`,
   flex: '0 0 auto'
+} satisfies CSSProperties
+
+const visuallyHiddenStyle = {
+  position: 'absolute',
+  width: 1,
+  height: 1,
+  padding: 0,
+  margin: -1,
+  overflow: 'hidden',
+  clip: 'rect(0 0 0 0)',
+  whiteSpace: 'nowrap',
+  border: 0
 } satisfies CSSProperties
 
 const messagesAreaStyle = {
