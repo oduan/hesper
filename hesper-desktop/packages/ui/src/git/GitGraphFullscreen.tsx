@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { themeTokens } from '../theme'
 import { GitCommitContextMenu } from './GitCommitContextMenu'
 import { GitCommitDetailDrawer } from './GitCommitDetailDrawer'
@@ -36,6 +36,7 @@ export function GitGraphFullscreen({
   onCheckout,
   onCopyCommitId
 }: GitGraphFullscreenProps) {
+  const rootRef = useRef<HTMLDivElement | null>(null)
   const [menuRequest, setMenuRequest] = useState<GitCommitMenuRequest | undefined>()
   const [detailCommitHash, setDetailCommitHash] = useState<string | undefined>()
 
@@ -45,8 +46,27 @@ export function GitGraphFullscreen({
     [detailCommitHash, rows, selectedCommit]
   )
 
-  const closeMenu = () => setMenuRequest(undefined)
-  const closeDetail = () => setDetailCommitHash(undefined)
+  const focusCommitRow = (commitHash?: string) => {
+    const root = rootRef.current
+    if (!root) return
+    const rowsByHash = Array.from(root.querySelectorAll<HTMLElement>('[data-git-commit-hash]'))
+    const row = rowsByHash.find((candidate) => candidate.getAttribute('data-git-commit-hash') === commitHash) ?? rowsByHash[0]
+    ;(row ?? root).focus()
+  }
+
+  const closeMenu = (restoreFocus = true) => {
+    const triggerElement = menuRequest?.triggerElement
+    setMenuRequest(undefined)
+    if (restoreFocus) {
+      window.setTimeout(() => (triggerElement?.isConnected ? triggerElement.focus() : focusCommitRow(selectedCommit)), 0)
+    }
+  }
+
+  const closeDetail = () => {
+    const commitToRestore = detailCommitHash ?? selectedCommit
+    setDetailCommitHash(undefined)
+    window.setTimeout(() => focusCommitRow(commitToRestore), 0)
+  }
   const openDetail = (commitHash: string) => {
     setDetailCommitHash(commitHash)
     onLoadCommitDetail(commitHash)
@@ -56,7 +76,13 @@ export function GitGraphFullscreen({
     if (!open) {
       setMenuRequest(undefined)
       setDetailCommitHash(undefined)
+      return
     }
+
+    window.setTimeout(() => {
+      if (document.activeElement !== document.body) return
+      focusCommitRow(selectedCommit)
+    }, 0)
   }, [open])
 
   useEffect(() => {
@@ -88,7 +114,7 @@ export function GitGraphFullscreen({
   if (!open) return null
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="Git 提交图谱" style={fullscreenStyle}>
+    <div ref={rootRef} role="dialog" aria-modal="true" aria-label="Git 提交图谱" tabIndex={-1} style={fullscreenStyle}>
       <header style={headerStyle}>
         <div>
           <p style={eyebrowStyle}>Repository history</p>

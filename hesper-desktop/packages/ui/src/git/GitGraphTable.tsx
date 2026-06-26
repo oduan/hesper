@@ -1,12 +1,13 @@
 import type { CSSProperties, KeyboardEvent, MouseEvent } from 'react'
 import { themeTokens } from '../theme'
-import { RefBadge } from './GitCommitDetailDrawer'
+import { GitRefBadge } from './GitRefBadge'
 import type { GitGraphLaneView, GitGraphRowView } from './git-graph-types'
 
 export type GitCommitMenuRequest = {
   commitHash: string
   x: number
   y: number
+  triggerElement?: HTMLElement | undefined
 }
 
 export type GitGraphTableProps = {
@@ -41,17 +42,18 @@ export function GitGraphTable({ rows, selectedCommit, onSelectCommit, onOpenCont
               tabIndex={0}
               aria-selected={selected}
               aria-label={`${row.subject} ${row.shortHash}`}
+              data-git-commit-hash={row.commitHash}
               style={selected ? selectedRowStyle : rowStyle}
               onClick={() => onSelectCommit(row.commitHash)}
               onContextMenu={(event) => handleContextMenu(event, row.commitHash, onSelectCommit, onOpenContextMenu)}
-              onKeyDown={(event) => handleRowKeyDown(event, row.commitHash, onOpenDetail)}
+              onKeyDown={(event) => handleRowKeyDown(event, row.commitHash, onSelectCommit, onOpenDetail, onOpenContextMenu)}
             >
               <td style={{ ...cellStyle, ...graphCellStyle }}>
                 <CommitGraph row={row} />
               </td>
               <td style={{ ...cellStyle, ...descriptionCellStyle }}>
                 <span aria-label="提交描述" style={descriptionContentStyle}>
-                  {row.refs.map((ref) => <RefBadge key={`${ref.type}-${ref.name}`} refView={ref} />)}
+                  {row.refs.map((ref) => <GitRefBadge key={`${ref.type}-${ref.name}`} refView={ref} />)}
                   <span style={subjectStyle}>{row.subject}</span>
                 </span>
               </td>
@@ -169,13 +171,39 @@ const handleContextMenu = (
 ) => {
   event.preventDefault()
   onSelectCommit(commitHash)
-  onOpenContextMenu({ commitHash, x: event.clientX, y: event.clientY })
+  onOpenContextMenu({ commitHash, x: event.clientX, y: event.clientY, triggerElement: event.currentTarget })
 }
 
-const handleRowKeyDown = (event: KeyboardEvent<HTMLTableRowElement>, commitHash: string, onOpenDetail: (commitHash: string) => void) => {
-  if (event.key !== 'Enter') return
-  event.preventDefault()
-  onOpenDetail(commitHash)
+const handleRowKeyDown = (
+  event: KeyboardEvent<HTMLTableRowElement>,
+  commitHash: string,
+  onSelectCommit: (commitHash: string) => void,
+  onOpenDetail: (commitHash: string) => void,
+  onOpenContextMenu: (request: GitCommitMenuRequest) => void
+) => {
+  if (event.key === 'Enter') {
+    event.preventDefault()
+    onOpenDetail(commitHash)
+    return
+  }
+
+  if (event.key === ' ') {
+    event.preventDefault()
+    onSelectCommit(commitHash)
+    return
+  }
+
+  if (event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey)) {
+    event.preventDefault()
+    onSelectCommit(commitHash)
+    const rect = event.currentTarget.getBoundingClientRect()
+    onOpenContextMenu({
+      commitHash,
+      x: rect.left + Math.min(24, Math.max(8, rect.width / 2)),
+      y: rect.top + Math.max(8, rect.height / 2),
+      triggerElement: event.currentTarget
+    })
+  }
 }
 
 const formatDate = (value: string) => {

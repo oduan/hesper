@@ -1,6 +1,7 @@
-import type { CSSProperties } from 'react'
+import { useEffect, useRef, type CSSProperties } from 'react'
 import { themeTokens } from '../theme'
-import type { GitCommitDetailView, GitGraphRowView, GitRefView } from './git-graph-types'
+import { GitRefBadge } from './GitRefBadge'
+import type { GitCommitDetailView, GitGraphRowView } from './git-graph-types'
 
 export type GitCommitDetailDrawerProps = {
   open: boolean
@@ -29,13 +30,20 @@ export function GitCommitDetailDrawer({
   onCheckout,
   onCopyCommitId
 }: GitCommitDetailDrawerProps) {
-  if (!open) return null
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null)
+  const effectiveHash = detail?.commitHash ?? commitHash ?? row?.commitHash ?? ''
+  const matchingRow = row?.commitHash === effectiveHash ? row : undefined
+  const shortHash = detail?.shortHash ?? matchingRow?.shortHash ?? effectiveHash.slice(0, 7)
+  const subject = detail?.subject ?? matchingRow?.subject ?? '提交详情'
+  const refs = detail?.refs ?? matchingRow?.refs ?? []
+  const parents = detail?.parents ?? matchingRow?.parents ?? []
 
-  const effectiveHash = detail?.commitHash ?? row?.commitHash ?? commitHash ?? ''
-  const shortHash = detail?.shortHash ?? row?.shortHash ?? effectiveHash.slice(0, 7)
-  const subject = detail?.subject ?? row?.subject ?? '提交详情'
-  const refs = detail?.refs ?? row?.refs ?? []
-  const parents = detail?.parents ?? row?.parents ?? []
+  useEffect(() => {
+    if (!open) return
+    closeButtonRef.current?.focus()
+  }, [open, effectiveHash])
+
+  if (!open) return null
 
   const copyCommitId = () => {
     if (!effectiveHash) return
@@ -53,7 +61,7 @@ export function GitCommitDetailDrawer({
           <p style={eyebrowStyle}>Commit detail</p>
           <h2 style={titleStyle}>{subject}</h2>
         </div>
-        <button type="button" aria-label="关闭提交详情" onClick={onClose} style={iconButtonStyle}>
+        <button ref={closeButtonRef} type="button" aria-label="关闭提交详情" onClick={onClose} style={iconButtonStyle}>
           <svg aria-hidden="true" viewBox="0 0 24 24" style={iconStyle}>
             <path d="M7 7l10 10M17 7 7 17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
@@ -72,19 +80,21 @@ export function GitCommitDetailDrawer({
         {error ? <p role="alert" style={errorStyle}>{error}</p> : null}
 
         <section style={sectionStyle} aria-label="提交摘要">
-          <InfoRow label="Short hash" value={shortHash} />
-          <InfoRow label="Full hash" value={effectiveHash} />
-          <InfoRow label="Author" value={formatPerson(detail?.authorName ?? row?.authorName, detail?.authorEmail ?? row?.authorEmail)} />
-          <InfoRow label="Author date" value={formatDate(detail?.authoredAt ?? row?.authoredAt)} />
-          {detail ? <InfoRow label="Committer" value={formatPerson(detail.committerName, detail.committerEmail)} /> : null}
-          {detail ? <InfoRow label="Commit date" value={formatDate(detail.committedAt)} /> : null}
-          <InfoRow label="Parents" value={parents.length > 0 ? parents.join(', ') : '无'} />
+          <dl role="list" aria-label="提交元数据" style={infoListStyle}>
+            <InfoRow label="Short hash" value={shortHash} />
+            <InfoRow label="Full hash" value={effectiveHash} />
+            <InfoRow label="Author" value={formatPerson(detail?.authorName ?? matchingRow?.authorName, detail?.authorEmail ?? matchingRow?.authorEmail)} />
+            <InfoRow label="Author date" value={formatDate(detail?.authoredAt ?? matchingRow?.authoredAt)} />
+            {detail ? <InfoRow label="Committer" value={formatPerson(detail.committerName, detail.committerEmail)} /> : null}
+            {detail ? <InfoRow label="Commit date" value={formatDate(detail.committedAt)} /> : null}
+            <InfoRow label="Parents" value={parents.length > 0 ? parents.join(', ') : '无'} />
+          </dl>
         </section>
 
         {refs.length > 0 ? (
           <section style={sectionStyle} aria-label="提交引用">
             <h3 style={sectionTitleStyle}>Refs</h3>
-            <div style={refListStyle}>{refs.map((ref) => <RefBadge key={`${ref.type}-${ref.name}`} refView={ref} />)}</div>
+            <div style={refListStyle}>{refs.map((ref) => <GitRefBadge key={`${ref.type}-${ref.name}`} refView={ref} />)}</div>
           </section>
         ) : null}
 
@@ -124,13 +134,6 @@ function InfoRow({ label, value }: { label: string; value: string }) {
       <dd style={infoValueStyle}>{value}</dd>
     </div>
   )
-}
-
-export function RefBadge({ refView }: { refView: GitRefView }) {
-  const label = refView.shortName
-  const style = refView.type === 'tag' ? tagBadgeStyle : refView.type === 'head' ? headBadgeStyle : branchBadgeStyle
-
-  return <span style={style}>{label}</span>
 }
 
 const formatPerson = (name?: string, email?: string) => {
@@ -232,27 +235,11 @@ const mutedStyle: CSSProperties = { margin: 0, color: themeTokens.color.textMute
 const errorStyle: CSSProperties = { margin: 0, color: themeTokens.color.danger }
 const bodyStyle: CSSProperties = { margin: 0, color: themeTokens.color.text, whiteSpace: 'pre-wrap', lineHeight: 1.55 }
 
+const infoListStyle: CSSProperties = { margin: 0 }
 const infoRowStyle: CSSProperties = { display: 'grid', gridTemplateColumns: '104px minmax(0, 1fr)', gap: themeTokens.spacing.sm, padding: `${themeTokens.spacing.xs} 0` }
 const infoLabelStyle: CSSProperties = { color: themeTokens.color.textMuted, margin: 0 }
 const infoValueStyle: CSSProperties = { color: themeTokens.color.text, margin: 0, overflowWrap: 'anywhere' }
 const refListStyle: CSSProperties = { display: 'flex', flexWrap: 'wrap', gap: themeTokens.spacing.xs }
-
-const badgeBaseStyle: CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  maxWidth: '100%',
-  borderRadius: 999,
-  border: `1px solid ${themeTokens.color.border}`,
-  padding: `1px ${themeTokens.spacing.sm}`,
-  fontSize: 12,
-  lineHeight: 1.6,
-  color: themeTokens.color.text,
-  background: themeTokens.color.neutralSoft
-}
-
-const branchBadgeStyle: CSSProperties = { ...badgeBaseStyle, background: themeTokens.color.softControl, borderColor: themeTokens.color.accent }
-const tagBadgeStyle: CSSProperties = { ...badgeBaseStyle, background: themeTokens.color.warningSoft, borderColor: themeTokens.color.warning }
-const headBadgeStyle: CSSProperties = { ...badgeBaseStyle, background: themeTokens.color.successSoft, borderColor: themeTokens.color.success }
 
 const fileListStyle: CSSProperties = { listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: themeTokens.spacing.xs }
 const fileItemStyle: CSSProperties = { display: 'grid', gridTemplateColumns: '36px minmax(0, 1fr) auto', gap: themeTokens.spacing.sm, alignItems: 'center', color: themeTokens.color.text }

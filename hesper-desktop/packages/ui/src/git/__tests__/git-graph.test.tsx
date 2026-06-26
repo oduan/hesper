@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { GitGraphFullscreen, themeTokens, type GitCommitDetailView, type GitGraphRowView } from '../..'
@@ -117,6 +117,70 @@ describe('GitGraphFullscreen', () => {
     expect(within(menu).getByRole('menuitem', { name: '查看提交详情' })).toBeInTheDocument()
   })
 
+  it('opens the context menu from keyboard and restores focus on Escape', async () => {
+    renderGraph()
+    const row = screen.getByRole('row', { name: /Add git graph panel/ })
+
+    row.focus()
+    fireEvent.keyDown(row, { key: 'ContextMenu' })
+
+    const firstItem = screen.getByRole('menuitem', { name: '从选中提交新建分支' })
+    await waitFor(() => expect(firstItem).toHaveFocus())
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(screen.queryByRole('menu', { name: '提交操作' })).not.toBeInTheDocument()
+    await waitFor(() => expect(row).toHaveFocus())
+
+    fireEvent.keyDown(row, { key: 'F10', shiftKey: true })
+    await waitFor(() => expect(screen.getByRole('menuitem', { name: '从选中提交新建分支' })).toHaveFocus())
+  })
+
+  it('supports Arrow/Home/End navigation in the context menu', async () => {
+    renderGraph()
+    const row = screen.getByRole('row', { name: /Add git graph panel/ })
+
+    row.focus()
+    fireEvent.keyDown(row, { key: 'ContextMenu' })
+    const items = screen.getAllByRole('menuitem')
+
+    await waitFor(() => expect(items[0]).toHaveFocus())
+    fireEvent.keyDown(screen.getByRole('menu', { name: '提交操作' }), { key: 'ArrowDown' })
+    expect(items[1]).toHaveFocus()
+    fireEvent.keyDown(screen.getByRole('menu', { name: '提交操作' }), { key: 'End' })
+    expect(items[4]).toHaveFocus()
+    fireEvent.keyDown(screen.getByRole('menu', { name: '提交操作' }), { key: 'ArrowUp' })
+    expect(items[3]).toHaveFocus()
+    fireEvent.keyDown(screen.getByRole('menu', { name: '提交操作' }), { key: 'Home' })
+    expect(items[0]).toHaveFocus()
+  })
+
+  it('clamps the context menu inside the viewport', () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 800 })
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 600 })
+    renderGraph()
+
+    fireEvent.contextMenu(screen.getByRole('row', { name: /Add git graph panel/ }), { clientX: 790, clientY: 590 })
+
+    const menu = screen.getByRole('menu', { name: '提交操作' })
+    expect(Number.parseInt(menu.style.left, 10)).toBeLessThanOrEqual(572)
+    expect(Number.parseInt(menu.style.top, 10)).toBeLessThanOrEqual(402)
+  })
+
+  it('closes the context menu on outside click or focus loss', async () => {
+    renderGraph()
+    const row = screen.getByRole('row', { name: /Add git graph panel/ })
+
+    fireEvent.contextMenu(row)
+    expect(screen.getByRole('menu', { name: '提交操作' })).toBeInTheDocument()
+    fireEvent.pointerDown(document.body)
+    await waitFor(() => expect(screen.queryByRole('menu', { name: '提交操作' })).not.toBeInTheDocument())
+
+    fireEvent.contextMenu(row)
+    expect(screen.getByRole('menu', { name: '提交操作' })).toBeInTheDocument()
+    screen.getByRole('button', { name: '关闭 Git 提交图谱' }).focus()
+    await waitFor(() => expect(screen.queryByRole('menu', { name: '提交操作' })).not.toBeInTheDocument())
+  })
+
   it('opens the temporary detail drawer from the menu or Enter', async () => {
     const callbacks = renderGraph()
     const user = userEvent.setup()
@@ -135,12 +199,14 @@ describe('GitGraphFullscreen', () => {
     expect(screen.getByRole('dialog', { name: '提交详情' })).toBeInTheDocument()
   })
 
-  it('closes Escape in menu, detail drawer, fullscreen order', () => {
+  it('closes Escape in menu, detail drawer, fullscreen order', async () => {
     const callbacks = renderGraph()
+    const row = screen.getByRole('row', { name: /Add git graph panel/ })
 
-    screen.getByRole('row', { name: /Add git graph panel/ }).focus()
+    row.focus()
     fireEvent.keyDown(document.activeElement ?? window, { key: 'Enter' })
-    fireEvent.contextMenu(screen.getByRole('row', { name: /Add git graph panel/ }))
+    await waitFor(() => expect(screen.getByRole('button', { name: '关闭提交详情' })).toHaveFocus())
+    fireEvent.contextMenu(row)
 
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(screen.queryByRole('menu', { name: '提交操作' })).not.toBeInTheDocument()
@@ -150,9 +216,38 @@ describe('GitGraphFullscreen', () => {
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(screen.queryByRole('dialog', { name: '提交详情' })).not.toBeInTheDocument()
     expect(callbacks.onClose).not.toHaveBeenCalled()
+    await waitFor(() => expect(row).toHaveFocus())
 
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(callbacks.onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('sets initial fullscreen focus, uses Space for row selection, and removes Escape listener when closed', async () => {
+    const callbacks = renderGraph()
+    const row = screen.getByRole('row', { name: /Add git graph panel/ })
+
+    await waitFor(() => expect(row).toHaveFocus())
+    fireEvent.keyDown(row, { key: ' ' })
+    expect(callbacks.onSelectCommit).toHaveBeenCalledWith(firstRow.commitHash)
+
+    cleanup()
+    const closedCallbacks = renderGraph({ open: false })
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(closedCallbacks.onClose).not.toHaveBeenCalled()
+  })
+
+  it('keeps dt and dd inside a description list in the drawer', () => {
+    renderGraph()
+
+    screen.getByRole('row', { name: /Add git graph panel/ }).focus()
+    fireEvent.keyDown(document.activeElement ?? window, { key: 'Enter' })
+
+    const summary = screen.getByRole('region', { name: '提交摘要' })
+    const descriptionList = within(summary).getByRole('list', { name: '提交元数据' })
+    const term = within(descriptionList).getByText('Full hash')
+    const value = within(descriptionList).getByText(firstRow.commitHash)
+    expect(term.closest('dl')).toBe(descriptionList)
+    expect(value.closest('dl')).toBe(descriptionList)
   })
 
   it('invokes callbacks from context menu actions', async () => {

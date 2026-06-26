@@ -1,11 +1,15 @@
-import type { CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, type CSSProperties, type KeyboardEvent } from 'react'
 import { themeTokens } from '../theme'
+
+const menuWidth = 220
+const menuHeight = 190
+const viewportMargin = 8
 
 export type GitCommitContextMenuProps = {
   commitHash: string
   x: number
   y: number
-  onClose: () => void
+  onClose: (restoreFocus?: boolean) => void
   onCreateBranch: (commitHash: string) => void
   onCreateTag: (commitHash: string) => void
   onCheckout: (ref: string) => void
@@ -24,9 +28,36 @@ export function GitCommitContextMenu({
   onCopyCommitId,
   onViewDetail
 }: GitCommitContextMenuProps) {
+  const menuRef = useRef<HTMLDivElement | null>(null)
+  const position = useMemo(() => clampMenuPosition(x, y), [x, y])
+
+  useEffect(() => {
+    const firstItem = menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')
+    firstItem?.focus()
+  }, [])
+
+  useEffect(() => {
+    const handlePointerDown = (event: PointerEvent) => {
+      if (menuRef.current?.contains(event.target as Node)) return
+      onClose(false)
+    }
+
+    const handleFocusIn = (event: FocusEvent) => {
+      if (menuRef.current?.contains(event.target as Node)) return
+      onClose(false)
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown, { capture: true })
+    document.addEventListener('focusin', handleFocusIn, { capture: true })
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown, { capture: true })
+      document.removeEventListener('focusin', handleFocusIn, { capture: true })
+    }
+  }, [onClose])
+
   const runAction = (action: () => void) => {
     action()
-    onClose()
+    onClose(false)
   }
 
   const copyCommitId = () => {
@@ -40,10 +71,12 @@ export function GitCommitContextMenu({
 
   return (
     <div
+      ref={menuRef}
       role="menu"
       aria-label="提交操作"
-      style={{ ...menuStyle, left: x, top: y }}
+      style={{ ...menuStyle, left: position.x, top: position.y, width: menuWidth }}
       onContextMenu={(event) => event.preventDefault()}
+      onKeyDown={handleMenuKeyDown}
     >
       <MenuItem onClick={() => runAction(() => onCreateBranch(commitHash))}>从选中提交新建分支</MenuItem>
       <MenuItem onClick={() => runAction(() => onCreateTag(commitHash))}>创建标签</MenuItem>
@@ -67,10 +100,39 @@ function MenuItem({ children, onClick }: MenuItemProps) {
   )
 }
 
+const handleMenuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+  if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
+
+  event.preventDefault()
+  const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
+  if (items.length === 0) return
+
+  const currentIndex = Math.max(0, items.findIndex((item) => item === document.activeElement))
+  const nextIndex = event.key === 'Home'
+    ? 0
+    : event.key === 'End'
+      ? items.length - 1
+      : event.key === 'ArrowDown'
+        ? (currentIndex + 1) % items.length
+        : (currentIndex - 1 + items.length) % items.length
+
+  items[nextIndex]?.focus()
+}
+
+const clampMenuPosition = (x: number, y: number) => {
+  const maxX = Math.max(viewportMargin, window.innerWidth - menuWidth - viewportMargin)
+  const maxY = Math.max(viewportMargin, window.innerHeight - menuHeight - viewportMargin)
+
+  return {
+    x: Math.min(Math.max(viewportMargin, x), maxX),
+    y: Math.min(Math.max(viewportMargin, y), maxY)
+  }
+}
+
 const menuStyle: CSSProperties = {
   position: 'fixed',
   zIndex: 1100,
-  minWidth: 196,
+  minWidth: menuWidth,
   padding: themeTokens.spacing.xs,
   borderWidth: 1,
   borderStyle: 'solid',
