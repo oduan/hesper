@@ -129,7 +129,7 @@ function safetyMarginForWindow(contextWindow: number): number {
   return Math.max(16, Math.min(512, Math.floor(contextWindow * 0.05)))
 }
 
-export const DEFAULT_UNKNOWN_MODEL_CONTEXT_WINDOW = 128_000
+const DEFAULT_UNKNOWN_MODEL_CONTEXT_WINDOW = 128_000
 
 const RECENT_MESSAGE_RUN_COUNT = 1
 const SESSION_COMPACTION_MAX_CHARS_BY_ATTEMPT = [4000, 2000, 1000] as const
