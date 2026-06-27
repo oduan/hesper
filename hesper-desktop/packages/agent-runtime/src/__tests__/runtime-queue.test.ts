@@ -232,6 +232,24 @@ class AlwaysOverflowAdapter implements AgentAdapter {
   }
 }
 
+class AlwaysProviderCodeOverflowAdapter implements AgentAdapter {
+  readonly inputs: AgentPromptInput[] = []
+
+  async run(input: AgentPromptInput): Promise<void> {
+    this.inputs.push(input)
+    throw { code: 'context_overflow', message: 'context length exceeded for Bearer super-secret-overflow-token', retryable: true }
+  }
+}
+
+class AlwaysRetryableMessageOverflowAdapter implements AgentAdapter {
+  readonly inputs: AgentPromptInput[] = []
+
+  async run(input: AgentPromptInput): Promise<void> {
+    this.inputs.push(input)
+    throw { code: 'network_error', message: 'context length exceeded for Bearer super-secret-overflow-token', retryable: true }
+  }
+}
+
 class OverflowThenAbortableAdapter implements AgentAdapter {
   readonly inputs: AgentPromptInput[] = []
   private releaseSecondAttempt!: () => void
@@ -359,6 +377,16 @@ async function seedOverflowHistory(persistence: Awaited<ReturnType<typeof create
     'recent request',
     makeVerboseRunSummary('run-overflow-3', ['Validate runtime overflow recovery.', 'z'.repeat(120)])
   )
+}
+
+function makeNoMeaningfulRunSummary(runId: string): string {
+  return [
+    `<hesper_run_context run_id="${runId}" version="2">`,
+    'purpose: previous_run_continuity_not_new_user_request',
+    'tool_activity:',
+    JSON.stringify({ category: 'file_read', status: 'succeeded', title: 'List files' }),
+    '</hesper_run_context>'
+  ].join('\n')
 }
 
 type RuntimeInternals = {
@@ -1109,6 +1137,135 @@ describe('AgentRuntime queue', () => {
     expect(storedRun?.error?.message).toContain('[redacted-sensitive-value]')
     expect(events.filter((event) => event.type === 'run.retrying')).toHaveLength(0)
     expect(events.filter((event) => event.type === 'run.failed')).toHaveLength(1)
+  })
+
+  it('does not retry a provider overflow when no older runs are eligible for compaction', async () => {
+    const persistence = await createInMemoryPersistence()
+    await persistence.sessions.save({ ...session, id: 'session-overflow-no-eligible-runs' })
+    await saveModel(persistence, 'mock/hesper-fast', 10_000)
+    await seedHistoricalRun(
+      persistence,
+      'session-overflow-no-eligible-runs',
+      'run-overflow-only-recent',
+      '2026-06-27T09:30:00.000Z',
+      'recent only request',
+      makeVerboseRunSummary('run-overflow-only-recent', ['Keep the only historical run as a recent full-message window.'])
+    )
+
+    const adapter = new AlwaysOverflowAdapter()
+    const runtime = new AgentRuntime({ persistence, adapter })
+    const events: AgentRuntimeEvent[] = []
+    runtime.subscribe((event) => {
+      events.push(event)
+    })
+
+    const run = await runtime.enqueue({ sessionId: 'session-overflow-no-eligible-runs', prompt: 'cannot compact recent-only history', modelId: 'mock/hesper-fast' })
+    await runtime.waitForIdle('session-overflow-no-eligible-runs')
+
+    const storedRun = await persistence.runs.get(run.id)
+    expect(adapter.inputs).toHaveLength(1)
+    expect(new Set(adapter.inputs.map((input) => (input.historyMessages ?? []).reduce((total, message) => total + message.content.length, 0))).size).toBe(1)
+    expect(storedRun).toMatchObject({ status: 'failed', retryCount: 0 })
+    expect((await persistence.contextItems.listBySession('session-overflow-no-eligible-runs')).filter((item) => item.kind === 'session_summary')).toHaveLength(0)
+    expect(events.filter((event) => event.type === 'run.retrying')).toHaveLength(0)
+  })
+
+  it('does not retry a provider overflow when compaction has no meaningful source material', async () => {
+    const persistence = await createInMemoryPersistence()
+    await persistence.sessions.save({ ...session, id: 'session-overflow-no-meaningful-content' })
+    await saveModel(persistence, 'mock/hesper-fast', 10_000)
+    await seedHistoricalRun(
+      persistence,
+      'session-overflow-no-meaningful-content',
+      'run-overflow-no-meaning-1',
+      '2026-06-27T09:10:00.000Z',
+      'older noisy request',
+      makeNoMeaningfulRunSummary('run-overflow-no-meaning-1')
+    )
+    await seedHistoricalRun(
+      persistence,
+      'session-overflow-no-meaningful-content',
+      'run-overflow-no-meaning-2',
+      '2026-06-27T09:30:00.000Z',
+      'recent request',
+      makeVerboseRunSummary('run-overflow-no-meaning-2', ['Keep the recent run complete.'])
+    )
+
+    const adapter = new AlwaysOverflowAdapter()
+    const runtime = new AgentRuntime({ persistence, adapter })
+    const events: AgentRuntimeEvent[] = []
+    runtime.subscribe((event) => {
+      events.push(event)
+    })
+
+    const run = await runtime.enqueue({ sessionId: 'session-overflow-no-meaningful-content', prompt: 'cannot compact meaningless source', modelId: 'mock/hesper-fast' })
+    await runtime.waitForIdle('session-overflow-no-meaningful-content')
+
+    const storedRun = await persistence.runs.get(run.id)
+    expect(adapter.inputs).toHaveLength(1)
+    expect(storedRun).toMatchObject({ status: 'failed', retryCount: 0 })
+    expect((await persistence.contextItems.listBySession('session-overflow-no-meaningful-content')).filter((item) => item.kind === 'session_summary')).toHaveLength(0)
+    expect(events.filter((event) => event.type === 'run.retrying')).toHaveLength(0)
+  })
+
+  it('normalizes provider context overflow codes to a supported stored error', async () => {
+    const persistence = await createInMemoryPersistence()
+    await persistence.sessions.save({ ...session, id: 'session-overflow-provider-code' })
+    await saveModel(persistence, 'mock/hesper-fast', 10_000)
+    await seedOverflowHistory(persistence, 'session-overflow-provider-code')
+
+    const adapter = new AlwaysProviderCodeOverflowAdapter()
+    const runtime = new AgentRuntime({ persistence, adapter })
+    const events: AgentRuntimeEvent[] = []
+    runtime.subscribe((event) => {
+      events.push(event)
+    })
+
+    const run = await runtime.enqueue({ sessionId: 'session-overflow-provider-code', prompt: 'provider code overflow', modelId: 'mock/hesper-fast' })
+    await runtime.waitForIdle('session-overflow-provider-code')
+
+    const storedRun = await persistence.runs.get(run.id)
+    expect(adapter.inputs).toHaveLength(3)
+    expect(storedRun).toMatchObject({
+      id: run.id,
+      status: 'failed',
+      retryCount: 0,
+      error: expect.objectContaining({ code: 'unknown', retryable: false })
+    })
+    expect(storedRun?.error?.message).toContain('[redacted-sensitive-value]')
+    await expect(persistence.runs.listBySession('session-overflow-provider-code')).resolves.toEqual(expect.arrayContaining([expect.objectContaining({ id: run.id })]))
+    expect(events.filter((event) => event.type === 'run.retrying')).toHaveLength(0)
+  })
+
+  it('does not mix message-detected context overflow with the normal retry policy', async () => {
+    const persistence = await createInMemoryPersistence()
+    await persistence.sessions.save({ ...session, id: 'session-overflow-no-normal-retry' })
+    await saveModel(persistence, 'mock/hesper-fast', 10_000)
+    await seedOverflowHistory(persistence, 'session-overflow-no-normal-retry')
+
+    const adapter = new AlwaysRetryableMessageOverflowAdapter()
+    const runtime = new AgentRuntime({
+      persistence,
+      adapter,
+      retryPolicy: {
+        ...defaultRetryPolicy,
+        maxRetries: 1,
+        initialDelayMs: 0,
+        retryableErrors: ['network_error']
+      }
+    })
+    const events: AgentRuntimeEvent[] = []
+    runtime.subscribe((event) => {
+      events.push(event)
+    })
+
+    const run = await runtime.enqueue({ sessionId: 'session-overflow-no-normal-retry', prompt: 'context message must not use network retry', modelId: 'mock/hesper-fast' })
+    await runtime.waitForIdle('session-overflow-no-normal-retry')
+
+    const storedRun = await persistence.runs.get(run.id)
+    expect(adapter.inputs).toHaveLength(3)
+    expect(storedRun).toMatchObject({ status: 'failed', retryCount: 0, error: expect.objectContaining({ retryable: false }) })
+    expect(events.filter((event) => event.type === 'run.retrying')).toHaveLength(0)
   })
 
   it('still allows cancellation after an overflow-triggered retry starts', async () => {

@@ -138,6 +138,32 @@ type SessionHistorySnapshot = {
   historyMessages: Message[]
 }
 
+type SessionCompactionApplication = {
+  historyMessages: Message[]
+  changed: boolean
+}
+
+function totalHistoryContentLength(messages: Message[]): number {
+  return messages.reduce((total, message) => total + message.content.length, 0)
+}
+
+function sameHistoryMessages(left: Message[], right: Message[]): boolean {
+  if (left.length !== right.length) return false
+  return left.every((message, index) => {
+    const other = right[index]
+    return other !== undefined &&
+      message.id === other.id &&
+      message.role === other.role &&
+      message.content === other.content &&
+      message.createdAt === other.createdAt
+  })
+}
+
+function didHistoryBecomeShorter(previous: Message[], next: Message[]): boolean {
+  if (sameHistoryMessages(previous, next)) return false
+  return totalHistoryContentLength(next) < totalHistoryContentLength(previous)
+}
+
 export class AgentRuntime {
   private readonly persistence: Persistence
   private readonly adapter: AgentAdapter
@@ -461,12 +487,16 @@ export class AgentRuntime {
     })
     if (!budget.overLimit) return snapshot.historyMessages
 
-    return this.applySessionCompaction(currentRun, snapshot, 0)
+    return (await this.applySessionCompaction(currentRun, snapshot, 0)).historyMessages
   }
 
-  private async applySessionCompaction(currentRun: AgentRun, snapshot: SessionHistorySnapshot, overflowAttempt: number): Promise<Message[]> {
+  private unchangedSessionCompaction(snapshot: SessionHistorySnapshot): SessionCompactionApplication {
+    return { historyMessages: snapshot.historyMessages, changed: false }
+  }
+
+  private async applySessionCompaction(currentRun: AgentRun, snapshot: SessionHistorySnapshot, overflowAttempt: number): Promise<SessionCompactionApplication> {
     const eligibleRuns = snapshot.previousParentRuns.slice(0, Math.max(0, snapshot.previousParentRuns.length - RECENT_MESSAGE_RUN_COUNT))
-    if (eligibleRuns.length === 0) return snapshot.historyMessages
+    if (eligibleRuns.length === 0) return this.unchangedSessionCompaction(snapshot)
 
     const runSummaries: Array<{ runId: string, content: string, createdAt: string, version?: number }> = []
     for (const previousRun of eligibleRuns) {
@@ -497,7 +527,7 @@ export class AgentRuntime {
       })
     }
 
-    if (runSummaries.length === 0) return snapshot.historyMessages
+    if (runSummaries.length === 0) return this.unchangedSessionCompaction(snapshot)
 
     const maxChars = SESSION_COMPACTION_MAX_CHARS_BY_ATTEMPT[Math.min(overflowAttempt, SESSION_COMPACTION_MAX_CHARS_BY_ATTEMPT.length - 1)]
     const built = buildSessionCompaction({
@@ -506,7 +536,7 @@ export class AgentRuntime {
       runSummaries,
       ...(maxChars !== undefined ? { maxChars } : {})
     })
-    if (!built) return snapshot.historyMessages
+    if (!built) return this.unchangedSessionCompaction(snapshot)
 
     const existingReusable = [...snapshot.contextItemsByRunId.values()]
       .flat()
@@ -517,7 +547,11 @@ export class AgentRuntime {
       await this.persistence.contextItems.save(built.item)
     }
 
-    return (await this.loadSessionHistorySnapshot(currentRun)).historyMessages
+    const historyMessages = (await this.loadSessionHistorySnapshot(currentRun)).historyMessages
+    return {
+      historyMessages,
+      changed: didHistoryBecomeShorter(snapshot.historyMessages, historyMessages)
+    }
   }
 
   private async executeRun(run: AgentRun, prompt: string, thinkingLevel?: ModelThinkingLevel, systemPrompt?: string, enabledToolIds?: string[], attachments?: MessageAttachment[], attachmentReader?: AttachmentReader): Promise<void> {
@@ -591,15 +625,27 @@ export class AgentRuntime {
             return
           }
 
-          if (isContextOverflowError(error) || isContextOverflowError(normalized)) {
-            const nextAttempt = nextOverflowAttempt(overflowAttempt)
-            if (nextAttempt !== undefined) {
-              overflowAttempt = nextAttempt
-              historyMessages = await this.applySessionCompaction(
+          const isOverflow = isContextOverflowError(error) || isContextOverflowError(normalized)
+          const failureError: RunError = isOverflow ? { ...normalized, retryable: false } : normalized
+
+          if (isOverflow) {
+            let nextAttempt = nextOverflowAttempt(overflowAttempt)
+            let retryWithCompactedHistory = false
+            while (nextAttempt !== undefined) {
+              const compaction = await this.applySessionCompaction(
                 latestRun,
                 await this.loadSessionHistorySnapshot(latestRun),
-                overflowAttempt
+                nextAttempt
               )
+              overflowAttempt = nextAttempt
+              if (compaction.changed) {
+                historyMessages = compaction.historyMessages
+                retryWithCompactedHistory = true
+                break
+              }
+              nextAttempt = nextOverflowAttempt(nextAttempt)
+            }
+            if (retryWithCompactedHistory) {
               if (await this.applyCancellationIfNeeded(latestRun.id) || await this.applyTerminationIfNeeded(latestRun.id)) {
                 return
               }
@@ -607,7 +653,7 @@ export class AgentRuntime {
             }
           }
 
-          if (isRetryableRunError(normalized, this.retryPolicy) && attempt < this.retryPolicy.maxRetries) {
+          if (!isOverflow && isRetryableRunError(normalized, this.retryPolicy) && attempt < this.retryPolicy.maxRetries) {
             const delayMs = getRetryDelayMs(this.retryPolicy, attempt)
             attempt += 1
             latestRun = {
@@ -633,13 +679,13 @@ export class AgentRuntime {
             status: 'failed',
             retryCount: attempt,
             endedAt: nowIso(),
-            error: normalized
+            error: failureError
           } satisfies AgentRun
           await this.persistence.runs.save(latestRun)
           await this.persistRunContextItem(latestRun)
           clearPiEventRunState(latestRun.id)
           clearPiToolRunState(latestRun.id)
-          await this.emitAndPersist({ type: 'run.failed', runId: latestRun.id, error: normalized, ...(latestRun.endedAt ? { endedAt: latestRun.endedAt } : {}) })
+          await this.emitAndPersist({ type: 'run.failed', runId: latestRun.id, error: failureError, ...(latestRun.endedAt ? { endedAt: latestRun.endedAt } : {}) })
           return
         } finally {
           if (this.activeControllers.get(latestRun.id) === controller) {
