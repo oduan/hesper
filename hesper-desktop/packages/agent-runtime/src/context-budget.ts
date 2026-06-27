@@ -65,12 +65,15 @@ function countMessageChars(messages: ContextBudgetMessageLike[] | undefined): nu
   return total
 }
 
-function countRenderedAttachmentTextLengthChars(lengths: number[] | undefined): number {
+function countRenderedAttachmentTextLengthChars(lengths: number[] | undefined, reasons: string[]): number {
   if (!lengths || lengths.length === 0) return 0
 
   let total = 0
-  for (const length of lengths) {
-    if (!isFiniteNonNegativeNumber(length)) continue
+  for (const [index, length] of lengths.entries()) {
+    if (!isFiniteNonNegativeNumber(length)) {
+      reasons.push(`renderedAttachmentTextLengths[${index}] must be a finite non-negative number`)
+      continue
+    }
     total += Math.floor(length)
   }
   return total
@@ -91,18 +94,19 @@ export function checkContextBudget(input: CheckContextBudgetInput): ContextBudge
     + countTextChars(input.prompt)
     + countMessageChars(input.historyMessages)
     + (input.renderedAttachmentTexts?.reduce((total, text) => total + countTextChars(text), 0) ?? 0)
-    + countRenderedAttachmentTextLengthChars(input.renderedAttachmentTextLengths)
+    + countRenderedAttachmentTextLengthChars(input.renderedAttachmentTextLengths, reasons)
 
   const estimatedInputTokens = estimateTokensFromTotalChars(totalChars)
   const invalidConfig = reasons.length > 0
   const maxInputTokens = invalidConfig
     ? 0
     : Math.max(0, modelContextWindow - reservedOutputTokens - safetyMargin)
+  const overLimit = invalidConfig || estimatedInputTokens > maxInputTokens
 
   return {
     estimatedInputTokens,
     maxInputTokens,
-    overLimit: estimatedInputTokens > maxInputTokens,
+    overLimit,
     ...(invalidConfig ? { invalidConfig: true, reasons } : {})
   }
 }

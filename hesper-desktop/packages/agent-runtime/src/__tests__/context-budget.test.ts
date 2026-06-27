@@ -152,6 +152,35 @@ describe('checkContextBudget', () => {
     })
   })
 
+  it('marks invalid configuration as over limit even when the estimated input is zero', () => {
+    const result = checkContextBudget({
+      modelContextWindow: Number.NaN
+    })
+
+    expect(result).toEqual({
+      estimatedInputTokens: 0,
+      maxInputTokens: 0,
+      overLimit: true,
+      invalidConfig: true,
+      reasons: ['modelContextWindow must be a finite non-negative number']
+    })
+  })
+
+  it('marks invalid rendered attachment lengths instead of silently skipping them', () => {
+    const result = checkContextBudget({
+      modelContextWindow: 100,
+      renderedAttachmentTextLengths: [8, Number.NaN, 4]
+    })
+
+    expect(result).toEqual({
+      estimatedInputTokens: 3,
+      maxInputTokens: 0,
+      overLimit: true,
+      invalidConfig: true,
+      reasons: ['renderedAttachmentTextLengths[1] must be a finite non-negative number']
+    })
+  })
+
   it('estimates rendered attachment text rather than bare attachment content', () => {
     const renderedAttachment = renderTextAttachment('report.md', 'text/markdown', 'hello')
     const result = checkContextBudget({
