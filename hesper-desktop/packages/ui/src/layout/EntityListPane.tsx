@@ -521,11 +521,13 @@ export function EntityListPane({
               const isSelected = selectedSessionIdSet.has(session.id)
               const isRunning = runningSessionIdSet.has(session.id)
               const hasUnreadCompletion = Boolean(session.unreadCompletedAt)
+              const isEditingSession = editingSession?.sessionId === session.id
+              const hasLeadingStatusIcon = !isEditingSession && (isRunning || hasUnreadCompletion)
               const relativeUpdatedAt = formatRelativeSessionTime(session.updatedAt, relativeNowMs)
               const sessionRowClassName = `hesper-list-row${isActive ? ' is-active' : ''}${isSelected ? ' is-selected' : ''}`
               return (
-                <li key={session.id} className="hesper-session-list-item" data-hesper-session-divider="true">
-                  {editingSession?.sessionId === session.id ? (
+                <li key={session.id} className="hesper-session-list-item" data-hesper-session-divider="true" style={sessionListItemStyle(hasLeadingStatusIcon)}>
+                  {isEditingSession ? (
                     <div
                       className={sessionRowClassName}
                       data-selected={isSelected ? 'true' : undefined}
@@ -857,13 +859,29 @@ const settingsCategories: Array<{ id: SettingsCategory; title: string; label: st
   { id: 'appearance', title: '外观', label: '外观设置', description: '字体大小、亮色与暗色' }
 ]
 
-const sessionListStyle: CSSProperties & Record<'--hesper-session-divider-left' | '--hesper-session-divider-right', string> = {
+const sessionRowHorizontalPaddingPx = 10
+const sessionLeadingStatusIconWidthPx = 18
+const sessionTitleIconGapPx = 6
+const sessionDividerLeftPlain = `${sessionRowHorizontalPaddingPx}px`
+const sessionDividerLeftWithStatusIcon = `${sessionRowHorizontalPaddingPx + sessionLeadingStatusIconWidthPx + sessionTitleIconGapPx}px`
+const sessionDividerRight = `${sessionRowHorizontalPaddingPx}px`
+
+type SessionDividerStyle = CSSProperties & Record<'--hesper-session-divider-left' | '--hesper-session-divider-right', string>
+
+function sessionListItemStyle(hasLeadingStatusIcon: boolean): SessionDividerStyle {
+  return {
+    '--hesper-session-divider-left': hasLeadingStatusIcon ? sessionDividerLeftWithStatusIcon : sessionDividerLeftPlain,
+    '--hesper-session-divider-right': sessionDividerRight
+  }
+}
+
+const sessionListStyle: SessionDividerStyle = {
   listStyle: 'none',
   margin: 0,
   marginRight: `-${themeTokens.spacing.lg}`,
   padding: `0 ${themeTokens.spacing.lg} 0 0`,
-  '--hesper-session-divider-left': '10px',
-  '--hesper-session-divider-right': '10px',
+  '--hesper-session-divider-left': sessionDividerLeftPlain,
+  '--hesper-session-divider-right': sessionDividerRight,
   display: 'grid',
   gap: 2,
   overflow: 'auto',

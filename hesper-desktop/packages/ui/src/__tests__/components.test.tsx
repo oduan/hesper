@@ -565,7 +565,6 @@ describe('ui components', () => {
     const entityList = screen.getByLabelText('实体列表')
     const sessionList = screen.getByLabelText('会话列表')
     expect(sessionList).toHaveClass('hesper-theme-scrollbar', 'hesper-session-list-scrollbar', 'is-scrollbar-hidden')
-    expect(sessionList).toHaveStyle('--hesper-session-divider-left: 10px')
     expect(sessionList).toHaveStyle('--hesper-session-divider-right: 10px')
 
     const items = within(sessionList).getAllByRole('listitem')
@@ -573,6 +572,8 @@ describe('ui components', () => {
     for (const item of items) {
       expect(item).toHaveClass('hesper-session-list-item')
       expect(item).toHaveAttribute('data-hesper-session-divider', 'true')
+      expect(item).toHaveStyle('--hesper-session-divider-left: 10px')
+      expect(item).toHaveStyle('--hesper-session-divider-right: 10px')
     }
 
     fireEvent.mouseMove(entityList)
@@ -591,6 +592,31 @@ describe('ui components', () => {
     })
     expect(sessionList).toHaveClass('is-scrollbar-hidden')
     expect(sessionList).not.toHaveClass('is-scrollbar-visible')
+  })
+
+  it('aligns session dividers to title text when rows include status icons', () => {
+    render(
+      <AppShell
+        sessions={[
+          { id: 'divider-plain', title: '普通会话', status: 'active', outputMode: 'markdown', createdAt: now, updatedAt: now },
+          { id: 'divider-running', title: '运行中会话', status: 'active', outputMode: 'markdown', createdAt: now, updatedAt: now },
+          { id: 'divider-unread', title: '完成未读会话', status: 'active', outputMode: 'markdown', unreadCompletedAt: now, createdAt: now, updatedAt: now }
+        ]}
+        runningSessionIds={['divider-running']}
+        activeSection="sessions"
+        activeSessionId="divider-plain"
+        title="会话列表状态图标分隔线"
+      />
+    )
+
+    const sessionList = screen.getByLabelText('会话列表')
+    const [plainItem, runningItem, unreadItem] = within(sessionList).getAllByRole('listitem')
+    expect(plainItem).toHaveStyle('--hesper-session-divider-left: 10px')
+    expect(runningItem).toHaveStyle('--hesper-session-divider-left: 34px')
+    expect(unreadItem).toHaveStyle('--hesper-session-divider-left: 34px')
+    for (const item of [plainItem, runningItem, unreadItem]) {
+      expect(item).toHaveStyle('--hesper-session-divider-right: 10px')
+    }
   })
 
   it('draws a connector from all sessions to clickable category rows', async () => {
