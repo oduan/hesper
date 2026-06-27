@@ -215,7 +215,7 @@ describe('buildSessionCompaction', () => {
     expect(content).not.toContain('xoxb-1234567890-secret-secret')
   })
 
-  it('does not redact ordinary filenames or risk labels while still redacting real sk-style tokens', () => {
+  it('does not redact ordinary pk/sk/rk-prefixed filenames while still redacting real namespaced secrets', () => {
     const result = buildSessionCompaction({
       sessionId: 'session-redact-safe-text',
       createdAt: '2026-06-27T09:20:00.000Z',
@@ -223,17 +223,22 @@ describe('buildSessionCompaction', () => {
         runSummary({
           runId: 'run-1',
           createdAt: '2026-06-27T09:10:00.000Z',
-          user: 'Review reports/task-5-code-quality-review-report.md and keep risk-score-high visible.',
-          assistant: 'Decision: compare reports/task-5-code-quality-review-report.md against sk-live-1234567890 while leaving risk-score-high unchanged.'
+          user: 'Review docs/pk-example-guide.md, docs/sk-style-token.md, docs/rk-architecture-notes.md, and keep risk-score-high visible.',
+          assistant: 'Decision: compare docs/pk-example-guide.md, docs/sk-style-token.md, and docs/rk-architecture-notes.md against sk-live-12345678, pk-test-12345678, and rk-live-12345678 while leaving risk-score-high unchanged.'
         })
       ]
     })
 
     const content = result?.item.content ?? ''
-    expect(content).toContain('reports/task-5-code-quality-review-report.md')
+    expect(content).toContain('docs/pk-example-guide.md')
+    expect(content).toContain('docs/sk-style-token.md')
+    expect(content).toContain('docs/rk-architecture-notes.md')
     expect(content).toContain('risk-score-high')
+    expect(content).toContain('important_files:')
     expect(content).toContain('[redacted-sensitive-value]')
-    expect(content).not.toContain('sk-live-1234567890')
+    expect(content).not.toContain('sk-live-12345678')
+    expect(content).not.toContain('pk-test-12345678')
+    expect(content).not.toContain('rk-live-12345678')
   })
 
   it('returns undefined when only filtered success noise remains', () => {

@@ -84,7 +84,7 @@ function redactSensitiveText(value: string): string {
     .replace(/\bhf_[A-Za-z0-9]{20,}\b/g, REDACTED_VALUE)
     .replace(/\bAKIA[0-9A-Z]{16}\b/g, REDACTED_VALUE)
     .replace(/\bAIza[0-9A-Za-z_-]{20,}\b/g, REDACTED_VALUE)
-    .replace(/\b(?:sk|pk|rk)-[A-Za-z0-9_-]{8,}\b/g, REDACTED_VALUE)
+    .replace(/\b(?:sk|pk|rk)-(?:live|test)-[A-Za-z0-9_-]{8,}\b/g, REDACTED_VALUE)
     .replace(/(["']?(?:api[_ -]?key|secret|token|password)["']?\s*[:=]\s*["']?)([^"'\s,;]+)/gi, `$1${REDACTED_VALUE}`)
 }
 
