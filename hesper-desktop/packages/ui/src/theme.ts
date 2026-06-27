@@ -128,11 +128,11 @@ const derivePalette = ({
 
 const hesperLightPalette = derivePalette({
   background: '#f6f8fb',
-  surface: '#eef2f6',
-  surfaceMuted: '#e8edf3',
+  surface: '#f3f6f9',
+  surfaceMuted: '#f0f4f8',
   text: '#232a33',
   textMuted: '#667282',
-  border: '#d5dce6',
+  border: '#e2e8f0',
   accent: '#c3ccd6',
   accentContrast: '#232a33',
   success: '#4f8a68',
@@ -141,7 +141,7 @@ const hesperLightPalette = derivePalette({
   hoverSource: '#26313d',
   hoverAlpha: 0.07,
   toolToggle: '#8996a6',
-  codeBackground: '#eef2f6',
+  codeBackground: '#f3f6f9',
   previewBackground: '#f6f8fb',
   scrollbarSource: '#667282',
   scrollbarHoverAlpha: 0.16,

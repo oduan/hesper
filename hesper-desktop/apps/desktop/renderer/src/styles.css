@@ -2,11 +2,11 @@
   color-scheme: light;
   /* Central bootstrap defaults before React/AppShell injects the selected theme variables. */
   --hesper-color-background: #f6f8fb;
-  --hesper-color-surface: #eef2f6;
-  --hesper-color-surface-muted: #e8edf3;
+  --hesper-color-surface: #f3f6f9;
+  --hesper-color-surface-muted: #f0f4f8;
   --hesper-color-text: #232a33;
   --hesper-color-text-muted: #667282;
-  --hesper-color-border: #d5dce6;
+  --hesper-color-border: #e2e8f0;
   --hesper-color-accent: #c3ccd6;
   --hesper-color-accent-contrast: #232a33;
   --hesper-color-success: #4f8a68;
@@ -20,9 +20,9 @@
   --hesper-color-danger-strong: #b35c5c;
   --hesper-color-success-soft: rgba(79, 138, 104, 0.16);
   --hesper-color-warning-soft: rgba(154, 122, 69, 0.16);
-  --hesper-color-border-subtle: rgba(213, 220, 230, 0.38);
+  --hesper-color-border-subtle: rgba(226, 232, 240, 0.38);
   --hesper-color-neutral-soft: rgba(35, 42, 51, 0.10);
-  --hesper-color-code-background: #eef2f6;
+  --hesper-color-code-background: #f3f6f9;
   --hesper-color-shadow: rgba(95, 111, 130, 0.08);
   --hesper-color-preview-background: #f6f8fb;
   --hesper-color-scrollbar-thumb: rgba(102, 114, 130, 0.10);

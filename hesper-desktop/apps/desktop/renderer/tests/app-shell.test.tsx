@@ -362,10 +362,12 @@ describe('renderer App', () => {
     const rootBlock = styles.match(/:root\s*{(?<body>[\s\S]*?)}/)?.groups?.body ?? ''
 
     expect(rootBlock).toContain('--hesper-color-background: #f6f8fb;')
-    expect(rootBlock).toContain('--hesper-color-surface: #eef2f6;')
-    expect(rootBlock).toContain('--hesper-color-surface-muted: #e8edf3;')
+    expect(rootBlock).toContain('--hesper-color-surface: #f3f6f9;')
+    expect(rootBlock).toContain('--hesper-color-surface-muted: #f0f4f8;')
     expect(rootBlock).toContain('--hesper-color-text: #232a33;')
     expect(rootBlock).toContain('--hesper-color-text-muted: #667282;')
+    expect(rootBlock).toContain('--hesper-color-border: #e2e8f0;')
+    expect(rootBlock).toContain('--hesper-color-border-subtle: rgba(226, 232, 240, 0.38);')
     expect(rootBlock).toContain('--hesper-color-accent: #c3ccd6;')
     expect(rootBlock).toContain('--hesper-color-hover: rgba(38, 49, 61, 0.07);')
     expect(rootBlock).toContain('--hesper-color-soft-control: rgba(195, 204, 214, 0.14);')
