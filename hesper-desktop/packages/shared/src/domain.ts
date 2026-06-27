@@ -151,7 +151,7 @@ export type RunStep = {
   completedAt?: string
 }
 
-export type RunContextItemKind = 'run_summary' | 'tool_summary' | 'child_handoff'
+export type RunContextItemKind = 'run_summary' | 'session_summary' | 'tool_summary' | 'child_handoff'
 
 export type RunContextItem = {
   id: string

@@ -10,12 +10,23 @@ export type AssembleHistoryMessagesInput = {
   maxContextItemChars?: number
   anchorRunCount?: number
   recentRunCount?: number
+  recentMessageRunCount?: number
 }
 
 type RunContextCandidate = {
   run: AgentRun
   content: string
 }
+
+type SessionSummaryCandidate = {
+  item: RunContextItem
+  content: string
+  coveredRunIds: string[]
+  firstCoveredIndex: number
+}
+
+const DEFAULT_RECENT_MESSAGE_RUN_COUNT = 1
+const SESSION_SUMMARY_COVERED_RUN_IDS_PATTERN = /<hesper_session_context\b[^>]*\bcovered_run_ids=(?:"([^"]*)"|'([^']*)')/i
 
 function stableCompare(left: string, right: string): number {
   if (left < right) return -1
@@ -47,14 +58,30 @@ function syntheticSummaryMessage(run: AgentRun, content: string, after: Message 
   }
 }
 
-function shouldSummarizeRun(run: AgentRun, steps: RunStep[]): boolean {
+function syntheticSessionSummaryMessage(item: RunContextItem): Message {
+  return {
+    id: `context-summary-${item.id}`,
+    sessionId: item.sessionId,
+    runId: item.runId,
+    role: 'user',
+    content: item.content,
+    contentType: 'plain',
+    createdAt: item.createdAt
+  }
+}
+
+function shouldSummarizeRun(run: AgentRun, _messages: Message[], steps: RunStep[]): boolean {
   return steps.length > 0 || Boolean(run.error)
+}
+
+function compareContextItemsByPreference(left: RunContextItem, right: RunContextItem): number {
+  return (right.version - left.version) || stableCompare(right.createdAt, left.createdAt) || stableCompare(left.id, right.id)
 }
 
 function persistedRunSummary(items: RunContextItem[] | undefined): string | undefined {
   return items
     ?.filter((item) => item.kind === 'run_summary' && item.content.trim())
-    .sort((left, right) => (right.version - left.version) || stableCompare(right.createdAt, left.createdAt) || stableCompare(left.id, right.id))[0]
+    .sort(compareContextItemsByPreference)[0]
     ?.content
 }
 
@@ -91,6 +118,90 @@ function selectContextCandidates(candidates: RunContextCandidate[], input: Assem
   return selectedRunIds
 }
 
+function normalizeCount(value: number | undefined, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback
+  return Math.max(0, Math.floor(value))
+}
+
+function parseCoveredRunIds(content: string): string[] {
+  const match = content.match(SESSION_SUMMARY_COVERED_RUN_IDS_PATTERN)
+  const raw = match?.[1] ?? match?.[2]
+  if (!raw) return []
+
+  return [...new Set(raw.split(',').map((runId) => runId.trim()).filter(Boolean))]
+}
+
+function isContiguousCoverage(coveredRunIds: string[], orderedRunIndexById: Map<string, number>): boolean {
+  if (coveredRunIds.length === 0) return false
+
+  const indices = coveredRunIds
+    .map((runId) => orderedRunIndexById.get(runId))
+    .filter((index): index is number => index !== undefined)
+    .sort((left, right) => left - right)
+
+  if (indices.length !== coveredRunIds.length) return false
+  for (let index = 1; index < indices.length; index += 1) {
+    if (indices[index] !== indices[index - 1]! + 1) return false
+  }
+  return true
+}
+
+function collectSessionSummaryCandidates(
+  orderedRuns: AgentRun[],
+  contextItemsByRunId: Map<string, RunContextItem[]> | undefined,
+  recentMessageRunIds: Set<string>
+): SessionSummaryCandidate[] {
+  if (!contextItemsByRunId || orderedRuns.length === 0) return []
+
+  const orderedRunIndexById = new Map(orderedRuns.map((run, index) => [run.id, index]))
+  const summarizableRunIds = new Set(orderedRuns.filter((run) => !recentMessageRunIds.has(run.id)).map((run) => run.id))
+  const bestByCoverageKey = new Map<string, SessionSummaryCandidate>()
+
+  for (const items of contextItemsByRunId.values()) {
+    for (const item of items) {
+      if (item.kind !== 'session_summary' || !item.content.trim()) continue
+      if (!orderedRunIndexById.has(item.runId)) continue
+
+      const coveredRunIds = parseCoveredRunIds(item.content)
+        .filter((runId) => summarizableRunIds.has(runId))
+        .sort((left, right) => (orderedRunIndexById.get(left)! - orderedRunIndexById.get(right)!) || stableCompare(left, right))
+
+      if (!isContiguousCoverage(coveredRunIds, orderedRunIndexById)) continue
+
+      const firstCoveredRunId = coveredRunIds[0]
+      if (!firstCoveredRunId) continue
+
+      const firstCoveredIndex = orderedRunIndexById.get(firstCoveredRunId)
+      if (firstCoveredIndex === undefined) continue
+
+      const candidate: SessionSummaryCandidate = {
+        item,
+        content: item.content,
+        coveredRunIds,
+        firstCoveredIndex
+      }
+      const coverageKey = coveredRunIds.join(',')
+      const existing = bestByCoverageKey.get(coverageKey)
+      if (!existing || compareContextItemsByPreference(candidate.item, existing.item) < 0) {
+        bestByCoverageKey.set(coverageKey, candidate)
+      }
+    }
+  }
+
+  const coveredRunIds = new Set<string>()
+  return [...bestByCoverageKey.values()]
+    .sort((left, right) => {
+      return (left.firstCoveredIndex - right.firstCoveredIndex)
+        || (right.coveredRunIds.length - left.coveredRunIds.length)
+        || compareContextItemsByPreference(left.item, right.item)
+    })
+    .filter((candidate) => {
+      if (candidate.coveredRunIds.some((runId) => coveredRunIds.has(runId))) return false
+      for (const runId of candidate.coveredRunIds) coveredRunIds.add(runId)
+      return true
+    })
+}
+
 export function assembleHistoryMessages(input: AssembleHistoryMessagesInput): Message[] {
   const parentRunIds = new Set(
     input.runs
@@ -112,10 +223,15 @@ export function assembleHistoryMessages(input: AssembleHistoryMessagesInput): Me
     messagesByRunId.set(message.runId, messages)
   }
 
-  const result: Message[] = [...unboundMessages.sort(compareMessages)]
   const orderedRuns = input.runs
     .filter((run) => parentRunIds.has(run.id))
     .sort(compareRuns)
+  const recentMessageRunCount = normalizeCount(input.recentMessageRunCount, DEFAULT_RECENT_MESSAGE_RUN_COUNT)
+  const recentMessageRunIds = new Set(
+    orderedRuns
+      .slice(Math.max(0, orderedRuns.length - recentMessageRunCount))
+      .map((run) => run.id)
+  )
   const contextCandidates: RunContextCandidate[] = []
 
   for (const run of orderedRuns) {
@@ -124,9 +240,11 @@ export function assembleHistoryMessages(input: AssembleHistoryMessagesInput): Me
       contextCandidates.push({ run, content: persisted })
       continue
     }
+
     const runMessages = (messagesByRunId.get(run.id) ?? []).sort(compareMessages)
     const steps = input.stepsByRunId?.get(run.id) ?? []
-    if (!shouldSummarizeRun(run, steps)) continue
+    if (!shouldSummarizeRun(run, runMessages, steps)) continue
+
     const summary = buildRunContextSummary({
       run,
       messages: runMessages,
@@ -137,10 +255,23 @@ export function assembleHistoryMessages(input: AssembleHistoryMessagesInput): Me
 
   const selectedContextRunIds = selectContextCandidates(contextCandidates, input)
   const contextByRunId = new Map(contextCandidates.map((candidate) => [candidate.run.id, candidate.content]))
+  const sessionSummaryCandidates = collectSessionSummaryCandidates(orderedRuns, input.contextItemsByRunId, recentMessageRunIds)
+  const sessionSummaryByFirstRunId = new Map(sessionSummaryCandidates.map((candidate) => [candidate.coveredRunIds[0]!, candidate]))
+  const coveredBySessionSummaryRunIds = new Set(sessionSummaryCandidates.flatMap((candidate) => candidate.coveredRunIds))
+  const result: Message[] = [...unboundMessages.sort(compareMessages)]
 
   for (const run of orderedRuns) {
     const runMessages = (messagesByRunId.get(run.id) ?? []).sort(compareMessages)
-    result.push(...runMessages)
+    const sessionSummary = sessionSummaryByFirstRunId.get(run.id)
+
+    if (sessionSummary) {
+      result.push(syntheticSessionSummaryMessage(sessionSummary.item))
+    }
+    if (recentMessageRunIds.has(run.id)) {
+      result.push(...runMessages)
+    }
+    if (coveredBySessionSummaryRunIds.has(run.id)) continue
+
     const context = contextByRunId.get(run.id)
     if (context && selectedContextRunIds.has(run.id)) {
       result.push(syntheticSummaryMessage(run, context, runMessages.at(-1)))
