@@ -113,6 +113,54 @@ describe('createModelProviderService', () => {
     ])
   })
 
+  it('saves and preserves provider fast mode through generic provider updates', async () => {
+    const persistence = await createInMemoryPersistence()
+    const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
+    const service = createModelProviderService({ persistence, credentialVaultService, now: () => now })
+
+    await service.saveProvider({
+      id: 'chatgpt-codex',
+      name: 'ChatGPT Codex',
+      kind: 'pi',
+      authType: 'oauth',
+      piAuthProvider: 'openai-codex',
+      enabled: true,
+      defaultModelId: 'pi/gpt-5.5',
+      fastModeEnabled: true
+    })
+
+    await expect(service.getProvider('chatgpt-codex')).resolves.toMatchObject({ fastModeEnabled: true })
+
+    await service.saveProvider({
+      id: 'chatgpt-codex',
+      name: 'Renamed Codex',
+      kind: 'pi',
+      enabled: true,
+      defaultModelId: 'pi/gpt-5.5'
+    })
+
+    await expect(service.getProvider('chatgpt-codex')).resolves.toMatchObject({ name: 'Renamed Codex', fastModeEnabled: true })
+
+    await service.saveProvider({
+      id: 'chatgpt-codex',
+      name: 'Renamed Codex',
+      kind: 'pi',
+      enabled: true,
+      defaultModelId: 'pi/gpt-5.5',
+      fastModeEnabled: false
+    })
+    await expect(service.getProvider('chatgpt-codex')).resolves.toMatchObject({ fastModeEnabled: false })
+
+    await service.saveProvider({
+      id: 'chatgpt-codex',
+      name: 'Renamed Again',
+      kind: 'pi',
+      enabled: true,
+      defaultModelId: 'pi/gpt-5.5'
+    })
+    await expect(service.getProvider('chatgpt-codex')).resolves.toMatchObject({ name: 'Renamed Again', fastModeEnabled: false })
+  })
+
   it('backfills imageInput for legacy system vision models without changing custom explicit capabilities', async () => {
     const persistence = await createInMemoryPersistence()
     const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
@@ -436,6 +484,7 @@ describe('createModelProviderService', () => {
       defaultModelId: 'pi/gpt-5.5',
       hasApiKey: true
     })
+    expect(saved.fastModeEnabled).toBeUndefined()
     expect((await service.listModels('chatgpt-codex')).map((model) => model.id)).toEqual(['pi/gpt-5.5', 'pi/gpt-5.4-mini'])
     expect(JSON.stringify(saved)).not.toContain('codex-oauth-access-token')
     expect(JSON.stringify(saved)).not.toContain('codex-oauth-refresh-token')
@@ -689,10 +738,20 @@ describe('createModelProviderService', () => {
     await service.saveOAuthConnection({ sessionId: 'oauth-session-1', connectionName: 'ChatGPT Codex' })
     expect((await service.listModels('chatgpt-codex')).map((model) => model.id)).toEqual(['pi/gpt-5.5', 'pi/gpt-5.4-mini'])
 
+    await service.saveProvider({
+      id: 'chatgpt-codex',
+      name: 'ChatGPT Codex',
+      kind: 'pi',
+      enabled: true,
+      defaultModelId: 'pi/gpt-5.5',
+      fastModeEnabled: true
+    })
+
     await service.startOAuthAuthorization({ provider: 'openai-codex', connectionName: 'ChatGPT Codex' })
     await service.saveOAuthConnection({ sessionId: 'oauth-session-2', connectionName: 'ChatGPT Codex' })
 
     expect((await service.listModels('chatgpt-codex')).map((model) => model.id)).toEqual(['pi/gpt-5.5'])
+    await expect(service.getProvider('chatgpt-codex')).resolves.toMatchObject({ fastModeEnabled: true })
   })
 
   it('requires reauthorization for expired Codex OAuth credentials without a refresh token', async () => {

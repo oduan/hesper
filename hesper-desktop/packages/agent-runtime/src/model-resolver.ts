@@ -6,10 +6,15 @@ export type ModelResolveInput = {
   providerId?: string
 }
 
+export type ResolvedModelRuntimeOptions = {
+  serviceTier?: 'priority'
+}
+
 export type ResolvedModel = {
   model: Model<Api>
   provider: ModelProviderConfig
   modelConfig: ModelConfig
+  runtimeOptions?: ResolvedModelRuntimeOptions
   getApiKey?: (provider: string) => Promise<string | undefined> | string | undefined
 }
 
@@ -95,6 +100,12 @@ function assertNonEmpty(value: string | undefined, message: string): string {
 
 function isCodexOAuthProvider(provider: ModelProviderConfig): boolean {
   return provider.kind === 'pi' && provider.authType === 'oauth' && provider.piAuthProvider === 'openai-codex'
+}
+
+function fastCodexRuntimeOptions(provider: ModelProviderConfig): ResolvedModelRuntimeOptions | undefined {
+  return isCodexOAuthProvider(provider) && provider.fastModeEnabled === true
+    ? { serviceTier: 'priority' }
+    : undefined
 }
 
 function accessTokenFromCodexOAuthCredential(rawCredential: string | undefined, nowMs = Date.now()): string | undefined {
@@ -239,6 +250,7 @@ export function createRegistryModelResolver(options: RegistryModelResolverOption
       assertEnabled(provider, model)
       await assertProviderKey(options, provider)
       const resolvedModel = createModelForProvider(provider, model, getPiModel, createFauxModel)
+      const runtimeOptions = fastCodexRuntimeOptions(provider)
 
       const apiKeyProviderAliases = new Set([
         provider.id,
@@ -251,6 +263,7 @@ export function createRegistryModelResolver(options: RegistryModelResolverOption
         model: resolvedModel,
         provider,
         modelConfig: model,
+        ...(runtimeOptions ? { runtimeOptions } : {}),
         ...(provider.kind === 'mock'
           ? {}
           : {

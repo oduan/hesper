@@ -85,6 +85,7 @@ const modelProviderConfigBaseSchema = z.object({
   hasApiKey: z.boolean().optional(),
   enabled: z.boolean(),
   defaultModelId: z.string().min(1).optional(),
+  fastModeEnabled: z.boolean().optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime()
 }).superRefine((provider, ctx) => {

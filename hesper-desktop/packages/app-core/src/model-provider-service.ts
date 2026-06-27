@@ -27,6 +27,7 @@ export type SaveModelProviderInput = {
   baseUrl?: string
   enabled?: boolean
   defaultModelId?: string
+  fastModeEnabled?: boolean
 }
 
 export type SaveModelInput = {
@@ -211,7 +212,8 @@ function mergeProvider(existing: ModelProviderConfig | undefined, input: SaveMod
     ...(input.authType !== undefined ? { authType: input.authType } : existing?.authType !== undefined ? { authType: existing.authType } : {}),
     ...(input.piAuthProvider !== undefined ? { piAuthProvider: input.piAuthProvider } : existing?.piAuthProvider !== undefined ? { piAuthProvider: existing.piAuthProvider } : {}),
     ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : existing?.baseUrl !== undefined ? { baseUrl: existing.baseUrl } : {}),
-    ...(input.defaultModelId !== undefined ? { defaultModelId: input.defaultModelId } : existing?.defaultModelId !== undefined ? { defaultModelId: existing.defaultModelId } : {})
+    ...(input.defaultModelId !== undefined ? { defaultModelId: input.defaultModelId } : existing?.defaultModelId !== undefined ? { defaultModelId: existing.defaultModelId } : {}),
+    ...(input.fastModeEnabled !== undefined ? { fastModeEnabled: input.fastModeEnabled } : existing?.fastModeEnabled !== undefined ? { fastModeEnabled: existing.fastModeEnabled } : {})
   })
 }
 
@@ -628,7 +630,8 @@ export function createModelProviderService(options: {
           authType: 'oauth',
           piAuthProvider: session.provider,
           enabled: true,
-          defaultModelId: consumed.defaultModelId
+          defaultModelId: consumed.defaultModelId,
+          ...(previousProvider?.fastModeEnabled !== undefined ? { fastModeEnabled: previousProvider.fastModeEnabled } : {})
         })
         await options.persistence.models.deleteByProvider(provider.id)
         for (const model of consumed.models) {

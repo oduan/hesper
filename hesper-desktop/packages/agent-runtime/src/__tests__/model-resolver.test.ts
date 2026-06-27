@@ -232,7 +232,8 @@ describe('ModelResolver', () => {
       kind: 'pi',
       authType: 'oauth',
       piAuthProvider: 'openai-codex',
-      defaultModelId: 'pi/gpt-5.5'
+      defaultModelId: 'pi/gpt-5.5',
+      fastModeEnabled: true
     })
     const codexModel = model({
       id: 'pi/gpt-5.5',
@@ -252,10 +253,42 @@ describe('ModelResolver', () => {
 
     expect(getPiModel).toHaveBeenCalledWith('openai-codex', 'gpt-5.5')
     expect(resolved.model).toEqual(expect.objectContaining({ id: 'gpt-5.5', provider: 'chatgpt-codex', reasoning: true }))
+    expect(resolved.runtimeOptions).toEqual({ serviceTier: 'priority' })
     await expect(resolved.getApiKey?.('openai-codex')).resolves.toBe('codex-oauth-access-token')
     await expect(resolved.getApiKey?.('chatgpt-codex')).resolves.toBe('codex-oauth-access-token')
     await expect(resolved.getApiKey?.('pi')).resolves.toBe('codex-oauth-access-token')
     expect(resolved.getApiKey?.('openai')).toBeUndefined()
+  })
+
+  it('does not request priority service tier for non-fast Codex providers', async () => {
+    const readProviderApiKey = vi.fn(async () => 'codex-oauth-access-token')
+    const getPiModel = vi.fn((_provider: KnownProvider, _modelName: string): Model<Api> => (
+      piModel({ id: 'gpt-5.5', name: 'GPT-5.5', provider: 'openai-codex', reasoning: true })
+    ))
+    const codexProvider = provider({
+      id: 'chatgpt-codex',
+      name: 'ChatGPT Codex',
+      kind: 'pi',
+      authType: 'oauth',
+      piAuthProvider: 'openai-codex',
+      defaultModelId: 'pi/gpt-5.5'
+    })
+    const codexModel = model({
+      id: 'pi/gpt-5.5',
+      providerId: 'chatgpt-codex',
+      modelName: 'gpt-5.5',
+      displayName: 'GPT-5.5',
+      capabilities: ['streaming', 'toolCalls', 'reasoning']
+    })
+    const resolver = createRegistryModelResolver({
+      registry: registry({ providers: [codexProvider], models: [codexModel] }),
+      readProviderApiKey,
+      getPiModel
+    })
+
+    const resolved = await resolver.resolve({ modelId: 'pi/gpt-5.5' })
+
+    expect(resolved.runtimeOptions).toBeUndefined()
   })
 
   it('unwraps structured Codex OAuth JSON credentials before returning keys to pi-ai', async () => {

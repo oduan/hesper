@@ -172,6 +172,7 @@ describe('session title generator', () => {
       },
       provider: codexProvider,
       modelConfig: codexModel,
+      runtimeOptions: { serviceTier: 'priority' as const },
       getApiKey: vi.fn(async () => 'codex-oauth-access-token')
     }))
     const generator = createSessionTitleGenerator({
@@ -190,8 +191,9 @@ describe('session title generator', () => {
       assistantOutput: '已定位为 Codex Responses 请求带了 ChatGPT 后端不稳定支持的结构化响应控制。'
     })
 
-    const options = (complete.mock.calls[0] as unknown[] | undefined)?.[2] as { temperature?: number; onPayload?: (payload: unknown, model: unknown) => unknown | Promise<unknown> } | undefined
+    const options = (complete.mock.calls[0] as unknown[] | undefined)?.[2] as { temperature?: number; serviceTier?: string; onPayload?: (payload: unknown, model: unknown) => unknown | Promise<unknown> } | undefined
     expect(options).not.toHaveProperty('temperature')
+    expect(options).toMatchObject({ serviceTier: 'priority' })
     await expect(Promise.resolve(options?.onPayload?.({ input: [], text: { verbosity: 'low' } }, { api: 'openai-codex-responses' }))).resolves.toEqual({
       input: [],
       text: { verbosity: 'low' }

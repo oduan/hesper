@@ -362,6 +362,27 @@ describe('desktop service container', () => {
     expect(await container.modelProviderService.listModels()).toEqual([])
   })
 
+  it('accepts provider fast mode through the providers save IPC handler', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock' })
+    const savePersistence = vi.fn(async () => undefined)
+    const { handles } = registerTestIpcHandlers(container, { savePersistence })
+
+    const provider = await handles.get(ipcChannels.providersSave)?.({ sender: { id: 1 } }, {
+      id: 'chatgpt-codex',
+      name: 'ChatGPT Codex',
+      kind: 'pi',
+      authType: 'oauth',
+      piAuthProvider: 'openai-codex',
+      enabled: true,
+      defaultModelId: 'pi/gpt-5.5',
+      fastModeEnabled: true
+    })
+
+    expect(provider).toMatchObject({ id: 'chatgpt-codex', fastModeEnabled: true })
+    expect(savePersistence).toHaveBeenCalled()
+  })
+
   it('injects model listing tools into the production tool runner without exposing credentials', async () => {
     const secret = 'sk-live-secret-never-return'
     const persistence = await createInMemoryPersistence()

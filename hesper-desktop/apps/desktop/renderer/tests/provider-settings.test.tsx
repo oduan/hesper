@@ -64,6 +64,7 @@ const baseProviders = [
     defaultModelId: 'pi/gpt-5.5',
     apiKeyRef: 'provider:chatgpt-codex:api-key',
     hasApiKey: true,
+    fastModeEnabled: true,
     createdAt: now,
     updatedAt: now
   }
@@ -458,12 +459,13 @@ describe('provider settings panel', () => {
 
     await user.click(await screen.findByRole('button', { name: '设置' }))
 
-    expect(screen.getByText('ChatGPT Codex')).toBeInTheDocument()
-    expect(screen.getByText(/pi · 使用默认端点 · 已授权/)).toBeInTheDocument()
+    expect(screen.getByText('ChatGPT Codex ⚡')).toBeInTheDocument()
+    expect(screen.getByText(/pi · Fast · 使用默认端点 · 已授权/)).toBeInTheDocument()
     expect(screen.queryByText(/chatgpt-codex.*已保存 key/)).not.toBeInTheDocument()
 
     await user.click(await screen.findByRole('button', { name: '打开连接菜单 ChatGPT Codex' }))
     const menu = await screen.findByRole('menu', { name: 'ChatGPT Codex 连接菜单' })
+    expect(within(menu).getByRole('menuitem', { name: '关闭 Fast 模式' })).toBeInTheDocument()
     expect(within(menu).queryByRole('menuitem', { name: '编辑' })).not.toBeInTheDocument()
     expect(within(menu).getByRole('menuitem', { name: '重新授权' })).toBeInTheDocument()
     expect(within(menu).getByRole('menuitem', { name: '验证连接' })).toBeInTheDocument()
@@ -483,6 +485,34 @@ describe('provider settings panel', () => {
     expect(within(codexDialog).getByRole('button', { name: /连接中/ })).toBeDisabled()
     await waitFor(() => expect(startOAuthAuthorization).toHaveBeenCalledWith({ provider: 'openai-codex', connectionName: 'ChatGPT Codex' }))
     expect(screen.queryByRole('dialog', { name: 'API 配置' })).not.toBeInTheDocument()
+  })
+
+  it('toggles Fast mode only for Codex OAuth connections', async () => {
+    const user = userEvent.setup()
+    listProviders.mockResolvedValue(baseProviders.map((provider) => provider.id === 'chatgpt-codex'
+      ? { ...provider, fastModeEnabled: false }
+      : provider
+    ))
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: '设置' }))
+    await user.click(await screen.findByRole('button', { name: '打开连接菜单 ChatGPT Codex' }))
+    const codexMenu = await screen.findByRole('menu', { name: 'ChatGPT Codex 连接菜单' })
+    await user.click(within(codexMenu).getByRole('menuitem', { name: '开启 Fast 模式' }))
+
+    await waitFor(() => {
+      expect(saveProvider).toHaveBeenCalledWith(expect.objectContaining({
+        id: 'chatgpt-codex',
+        kind: 'pi',
+        authType: 'oauth',
+        piAuthProvider: 'openai-codex',
+        fastModeEnabled: true
+      }))
+    })
+
+    await user.click(await screen.findByRole('button', { name: '打开连接菜单 DeepSeek' }))
+    const deepSeekMenu = await screen.findByRole('menu', { name: 'DeepSeek 连接菜单' })
+    expect(within(deepSeekMenu).queryByRole('menuitem', { name: /Fast 模式/ })).not.toBeInTheDocument()
   })
 
   it('cancels an active Codex OAuth session from Back and Escape', async () => {

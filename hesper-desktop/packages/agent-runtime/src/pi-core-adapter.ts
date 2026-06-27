@@ -1,5 +1,5 @@
-import { Agent, type AgentEvent, type AgentTool } from '@earendil-works/pi-agent-core'
-import { clampThinkingLevel, getSupportedThinkingLevels, type Api, type ImageContent, type Message as PiMessage, type Model, type ModelThinkingLevel as PiModelThinkingLevel, type Usage } from '@earendil-works/pi-ai'
+import { Agent, type AgentEvent, type AgentTool, type StreamFn } from '@earendil-works/pi-agent-core'
+import { clampThinkingLevel, getSupportedThinkingLevels, streamSimple, type Api, type ImageContent, type Message as PiMessage, type Model, type ModelThinkingLevel as PiModelThinkingLevel, type SimpleStreamOptions, type Usage } from '@earendil-works/pi-ai'
 import type { AgentRuntimeEvent, Message as HesperMessage } from '@hesper/shared'
 import type { AgentAdapter, AgentPromptInput } from './adapters'
 import { mapPiEventToHesperEvents } from './map-pi-event'
@@ -71,6 +71,17 @@ function escapeXmlAttribute(value: string): string {
 
 function supportsImageInput(resolved: ResolvedModel): boolean {
   return resolved.model.input?.includes('image') === true || resolved.modelConfig.capabilities?.includes('imageInput') === true
+}
+
+type RuntimeStreamOptions = SimpleStreamOptions & { serviceTier?: 'priority' }
+
+function createRuntimeStreamFn(runtimeOptions: ResolvedModel['runtimeOptions']): StreamFn | undefined {
+  const serviceTier = runtimeOptions?.serviceTier
+  if (!serviceTier) return undefined
+  return (model, context, options) => streamSimple(model, context, {
+    ...(options as SimpleStreamOptions | undefined),
+    serviceTier
+  } as RuntimeStreamOptions)
 }
 
 async function appendTextAttachments(prompt: string, input: AgentPromptInput): Promise<string> {
@@ -152,6 +163,7 @@ export class PiCoreAgentAdapter implements AgentAdapter {
     const prompt = await appendTextAttachments(input.prompt, input)
     throwIfAborted(input.signal, 'Run was aborted before the pi core agent started.')
     const images = await createImageInputs(input, resolved)
+    const runtimeStreamFn = createRuntimeStreamFn(resolved.runtimeOptions)
     throwIfAborted(input.signal, 'Run was aborted before the pi core agent started.')
 
     const agent = new Agent({
@@ -163,6 +175,7 @@ export class PiCoreAgentAdapter implements AgentAdapter {
         messages: historyMessages
       },
       ...(resolved.getApiKey ? { getApiKey: resolved.getApiKey } : {}),
+      ...(runtimeStreamFn ? { streamFn: runtimeStreamFn } : {}),
       toolExecution: 'parallel'
     })
 
