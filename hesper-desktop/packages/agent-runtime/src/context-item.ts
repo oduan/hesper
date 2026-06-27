@@ -62,28 +62,7 @@ export function buildRunContextItem(input: BuildRunContextItemInput): RunContext
     tokenEstimate: Math.ceil(content.length / 4),
     sourceHash: hashSourceMaterial({
       version: RUN_SUMMARY_CONTEXT_ITEM_VERSION,
-      run: {
-        id: input.run.id,
-        sessionId: input.run.sessionId,
-        parentRunId: input.run.parentRunId
-      },
-      messages: messages.map((message) => ({
-        id: message.id,
-        role: message.role,
-        content: message.content,
-        createdAt: message.createdAt
-      })),
-      steps: steps.map((step) => ({
-        id: step.id,
-        type: step.type,
-        status: step.status,
-        title: step.title,
-        summary: step.summary,
-        detail: step.detail,
-        createdAt: step.createdAt,
-        completedAt: step.completedAt
-      })),
-      maxChars: input.maxChars ?? null
+      content
     }),
     createdAt: input.createdAt
   }

@@ -4,8 +4,13 @@ import { reduceToolOutput } from './tool-output-reducer'
 export type BuildRunContextSummaryInput = {
   run: Pick<AgentRun, 'id'>
   messages?: Array<Pick<Message, 'role' | 'content' | 'createdAt'> & Partial<Pick<Message, 'id'>>>
-  steps?: Array<Pick<RunStep, 'type' | 'status' | 'title' | 'createdAt'> & Partial<Pick<RunStep, 'id' | 'summary' | 'detail'>>>
+  steps?: Array<Pick<RunStep, 'type' | 'status' | 'title' | 'createdAt'> & Partial<Pick<RunStep, 'id' | 'detail'>>>
   maxChars?: number
+}
+
+type SummarySection = {
+  kind: 'plain' | 'tool_activity'
+  lines: string[]
 }
 
 const DEFAULT_MAX_CHARS = 6000
@@ -23,6 +28,7 @@ function normalizeLineEndings(value: string): string {
 
 function redactSensitiveText(value: string): string {
   return value
+    .replace(/(--(?:api[_-]?key|secret|token|password))(=|\s+)(?:"[^"]*"|'[^']*'|[^\s"']+)/gi, (_match, flag: string, separator: string) => `${flag}${separator}${REDACTED_VALUE}`)
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]{8,}\b/gi, REDACTED_VALUE)
     .replace(/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, REDACTED_VALUE)
     .replace(/\bgithub_pat_[A-Za-z0-9_]{20,}\b/g, REDACTED_VALUE)
@@ -105,7 +111,7 @@ function normalizeFiles(files: string[] | undefined): string[] | undefined {
   return normalized.length > 0 ? normalized : undefined
 }
 
-function buildToolEntry(step: Pick<RunStep, 'type' | 'status' | 'title' | 'createdAt'> & Partial<Pick<RunStep, 'id' | 'summary' | 'detail'>>): Record<string, unknown> | undefined {
+function buildToolEntry(step: Pick<RunStep, 'type' | 'status' | 'title' | 'createdAt'> & Partial<Pick<RunStep, 'id' | 'detail'>>): Record<string, unknown> | undefined {
   const reduced = reduceToolOutput(step)
   if (!reduced) return undefined
 
@@ -149,33 +155,104 @@ function normalizeMaxChars(maxChars: number | undefined): number {
   return Math.floor(maxChars)
 }
 
-function truncateSummary(opening: string, body: string, closing: string, maxChars: number): string {
-  const full = `${opening}\n${body}\n${closing}`
+function flattenSections(sections: SummarySection[]): string[] {
+  return sections.flatMap((section) => section.lines)
+}
+
+function buildBodySections(latestUser: string | undefined, latestAssistant: string | undefined, toolEntries: Array<Record<string, unknown>>): SummarySection[] {
+  const sections: SummarySection[] = [
+    {
+      kind: 'plain',
+      lines: ['purpose: previous_run_continuity_not_new_user_request']
+    }
+  ]
+
+  if (latestUser) {
+    sections.push({
+      kind: 'plain',
+      lines: ['latest_user_request:', latestUser]
+    })
+  }
+
+  if (latestAssistant) {
+    sections.push({
+      kind: 'plain',
+      lines: ['latest_assistant_result:', latestAssistant]
+    })
+  }
+
+  if (toolEntries.length > 0) {
+    sections.push({
+      kind: 'tool_activity',
+      lines: ['tool_activity:', ...toolEntries.map((entry) => stableJsonStringify(entry))]
+    })
+  }
+
+  return sections
+}
+
+function renderSummary(opening: string, bodyLines: string[], closing: string, omittedChars?: number): string {
+  const lines = omittedChars && omittedChars > 0
+    ? [...bodyLines, `[truncated ${omittedChars} chars]`]
+    : bodyLines
+  return `${opening}\n${lines.join('\n')}\n${closing}`
+}
+
+function candidateLength(opening: string, bodyLines: string[], closing: string, omittedChars?: number): number {
+  return renderSummary(opening, bodyLines, closing, omittedChars).length
+}
+
+function truncateSummary(opening: string, sections: SummarySection[], closing: string, maxChars: number): string {
+  const fullBodyLines = flattenSections(sections)
+  const full = renderSummary(opening, fullBodyLines, closing)
   if (full.length <= maxChars) return full
 
-  const candidateForPrefix = (prefixLength: number): string => {
-    const prefix = body.slice(0, prefixLength)
-    const omitted = body.length - prefixLength
-    const marker = `[truncated ${omitted} chars]`
-    return `${opening}\n${prefix}${prefixLength > 0 ? '\n' : ''}${marker}\n${closing}`
+  const fullBody = fullBodyLines.join('\n')
+  const minimumCandidate = renderSummary(opening, [], closing, fullBody.length)
+  if (minimumCandidate.length > maxChars) return minimumCandidate
+
+  const candidateForLines = (bodyLines: string[]): string => {
+    const prefixLength = bodyLines.length > 0 ? bodyLines.join('\n').length : 0
+    const omittedChars = fullBody.length - prefixLength
+    return renderSummary(opening, bodyLines, closing, omittedChars > 0 ? omittedChars : undefined)
   }
 
-  const minimumCandidate = `${opening}\n[truncated ${body.length} chars]\n${closing}`
-  if (minimumCandidate.length > maxChars) return minimumCandidate.slice(0, maxChars)
+  const fits = (bodyLines: string[]): boolean => {
+    const prefixLength = bodyLines.length > 0 ? bodyLines.join('\n').length : 0
+    const omittedChars = fullBody.length - prefixLength
+    return candidateLength(opening, bodyLines, closing, omittedChars > 0 ? omittedChars : undefined) <= maxChars
+  }
 
-  let low = 0
-  let high = body.length
+  let keptLines: string[] = []
   let best = minimumCandidate
-  while (low <= high) {
-    const mid = Math.floor((low + high) / 2)
-    const candidate = candidateForPrefix(mid)
-    if (candidate.length <= maxChars) {
-      best = candidate
-      low = mid + 1
-    } else {
-      high = mid - 1
+
+  for (const section of sections) {
+    if (section.kind === 'plain') {
+      const nextLines = [...keptLines, ...section.lines]
+      if (!fits(nextLines)) break
+      keptLines = nextLines
+      best = candidateForLines(keptLines)
+      continue
+    }
+
+    const header = section.lines[0]
+    if (!header) continue
+
+    const entryLines = section.lines.slice(1)
+    const headerOnly = [...keptLines, header]
+    if (!fits(headerOnly)) break
+
+    keptLines = headerOnly
+    best = candidateForLines(keptLines)
+
+    for (const entryLine of entryLines) {
+      const nextLines = [...keptLines, entryLine]
+      if (!fits(nextLines)) return best
+      keptLines = nextLines
+      best = candidateForLines(keptLines)
     }
   }
+
   return best
 }
 
@@ -192,23 +269,7 @@ export function buildRunContextSummary(input: BuildRunContextSummaryInput): stri
 
   if (!latestUser && !latestAssistant && toolEntries.length === 0) return undefined
 
-  const bodyLines: string[] = ['purpose: previous_run_continuity_not_new_user_request']
-  if (latestUser) {
-    bodyLines.push('latest_user_request:')
-    bodyLines.push(latestUser)
-  }
-  if (latestAssistant) {
-    bodyLines.push('latest_assistant_result:')
-    bodyLines.push(latestAssistant)
-  }
-  if (toolEntries.length > 0) {
-    bodyLines.push('tool_activity:')
-    for (const entry of toolEntries) {
-      bodyLines.push(stableJsonStringify(entry))
-    }
-  }
-
   const opening = `<hesper_run_context run_id="${escapeXmlAttribute(input.run.id)}" version="${RUN_CONTEXT_SUMMARY_VERSION}">`
   const closing = '</hesper_run_context>'
-  return truncateSummary(opening, bodyLines.join('\n'), closing, maxChars)
+  return truncateSummary(opening, buildBodySections(latestUser, latestAssistant, toolEntries), closing, maxChars)
 }

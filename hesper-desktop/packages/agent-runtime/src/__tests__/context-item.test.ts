@@ -123,26 +123,58 @@ describe('buildRunContextItem', () => {
     expect(shuffled).toEqual(ordered)
   })
 
-  it('changes the source hash when source material changes while keeping the v2 stable id', () => {
+  it('keeps content and source hash stable when only legacy step summary or completedAt changes', () => {
     const base = {
       run: createRun({ id: 'run-1', sessionId: 'session-1' }),
       createdAt: '2026-06-25T04:00:11.000Z',
       messages: [createMessage({ id: 'msg-user', role: 'user', content: 'first', createdAt: '2026-06-25T04:00:00.000Z' })],
-      steps: [createStep({ id: 'step-read', type: 'tool_call', status: 'succeeded', title: 'Read File', detail: 'Command: cat README.md\nExit code: 0', createdAt: '2026-06-25T04:00:03.000Z', completedAt: '2026-06-25T04:00:04.000Z' })]
+      steps: [createStep({ id: 'step-read', type: 'tool_call', status: 'succeeded', title: 'Read File', detail: 'Command: cat README.md\nExit code: 0', createdAt: '2026-06-25T04:00:03.000Z', summary: 'legacy one', completedAt: '2026-06-25T04:00:04.000Z' })]
     }
 
     const first = buildRunContextItem(base)
-    const changed = buildRunContextItem({
+    const changedLegacy = buildRunContextItem({
       ...base,
-      steps: [createStep({ id: 'step-read', type: 'tool_call', status: 'succeeded', title: 'Read File', detail: 'Command: cat CHANGELOG.md\nExit code: 0', createdAt: '2026-06-25T04:00:03.000Z', completedAt: '2026-06-25T04:00:04.000Z' })]
+      steps: [createStep({ id: 'step-read', type: 'tool_call', status: 'succeeded', title: 'Read File', detail: 'Command: cat README.md\nExit code: 0', createdAt: '2026-06-25T04:00:03.000Z', summary: 'legacy two', completedAt: '2026-06-25T04:00:09.000Z' })]
     })
 
     expect(first?.id).toBe('context-item-run-1-run-summary-v2')
-    expect(changed?.id).toBe('context-item-run-1-run-summary-v2')
-    expect(first?.sourceHash).not.toBe(changed?.sourceHash)
+    expect(changedLegacy?.id).toBe('context-item-run-1-run-summary-v2')
+    expect(first?.content).toBe(changedLegacy?.content)
+    expect(first?.sourceHash).toBe(changedLegacy?.sourceHash)
   })
 
-  it('changes the source hash when only maxChars changes even if rendered content stays the same', () => {
+  it('changes the source hash when v2-rendered tool fields change while keeping the v2 stable id', () => {
+    const base = {
+      run: createRun({ id: 'run-1', sessionId: 'session-1' }),
+      createdAt: '2026-06-25T04:00:11.000Z',
+      messages: [createMessage({ id: 'msg-user', role: 'user', content: 'first', createdAt: '2026-06-25T04:00:00.000Z' })],
+      steps: [createStep({ id: 'step-read', type: 'tool_call', status: 'succeeded', title: 'Read File', detail: 'Command: cat README.md\nExit code: 0', createdAt: '2026-06-25T04:00:03.000Z' })]
+    }
+
+    const first = buildRunContextItem(base)
+    const changedDetail = buildRunContextItem({
+      ...base,
+      steps: [createStep({ id: 'step-read', type: 'tool_call', status: 'succeeded', title: 'Read File', detail: 'Command: cat CHANGELOG.md\nExit code: 0', createdAt: '2026-06-25T04:00:03.000Z' })]
+    })
+    const changedTitle = buildRunContextItem({
+      ...base,
+      steps: [createStep({ id: 'step-read', type: 'tool_call', status: 'succeeded', title: 'Read Docs', detail: 'Command: cat README.md\nExit code: 0', createdAt: '2026-06-25T04:00:03.000Z' })]
+    })
+    const changedStatus = buildRunContextItem({
+      ...base,
+      steps: [createStep({ id: 'step-read', type: 'tool_call', status: 'failed', title: 'Read File', detail: 'Command: cat README.md\nExit code: 1\n\nstderr:\nboom', createdAt: '2026-06-25T04:00:03.000Z' })]
+    })
+
+    expect(first?.id).toBe('context-item-run-1-run-summary-v2')
+    expect(changedDetail?.id).toBe('context-item-run-1-run-summary-v2')
+    expect(changedTitle?.id).toBe('context-item-run-1-run-summary-v2')
+    expect(changedStatus?.id).toBe('context-item-run-1-run-summary-v2')
+    expect(first?.sourceHash).not.toBe(changedDetail?.sourceHash)
+    expect(first?.sourceHash).not.toBe(changedTitle?.sourceHash)
+    expect(first?.sourceHash).not.toBe(changedStatus?.sourceHash)
+  })
+
+  it('keeps the source hash stable when only maxChars changes but rendered content stays the same', () => {
     const base = {
       run: createRun({ id: 'run-max-chars', sessionId: 'session-1' }),
       createdAt: '2026-06-25T04:00:11.000Z',
@@ -156,7 +188,7 @@ describe('buildRunContextItem', () => {
     expect(wide?.id).toBe('context-item-run-max-chars-run-summary-v2')
     expect(wider?.id).toBe('context-item-run-max-chars-run-summary-v2')
     expect(wide?.content).toBe(wider?.content)
-    expect(wide?.sourceHash).not.toBe(wider?.sourceHash)
+    expect(wide?.sourceHash).toBe(wider?.sourceHash)
   })
 
   it('returns undefined when the run has no useful context content', () => {

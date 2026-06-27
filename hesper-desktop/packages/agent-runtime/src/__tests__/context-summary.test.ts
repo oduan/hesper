@@ -54,6 +54,35 @@ describe('buildRunContextSummary', () => {
     expect(buildRunContextSummary({ run, messages: [], steps: [], maxChars: 500 })).toBeUndefined()
   })
 
+  it('redacts CLI-style secrets in latest user and assistant message sections', () => {
+    const summary = buildRunContextSummary({
+      run: { id: 'run-ctx-cli-redaction' },
+      maxChars: 4000,
+      messages: [
+        createMessage({
+          id: 'msg-cli-user',
+          role: 'user',
+          content: 'deploy --token supersecret --password hunter2 --api-key abc123',
+          createdAt: '2026-06-25T03:02:00.000Z'
+        }),
+        createMessage({
+          id: 'msg-cli-assistant',
+          role: 'assistant',
+          content: '已执行 deploy --token supersecret --password hunter2 --api-key abc123',
+          createdAt: '2026-06-25T03:03:00.000Z'
+        })
+      ]
+    })
+
+    expect(summary).toContain('latest_user_request:')
+    expect(summary).toContain('deploy --token [redacted-sensitive-value] --password [redacted-sensitive-value] --api-key [redacted-sensitive-value]')
+    expect(summary).toContain('latest_assistant_result:')
+    expect(summary).toContain('已执行 deploy --token [redacted-sensitive-value] --password [redacted-sensitive-value] --api-key [redacted-sensitive-value]')
+    expect(summary).not.toContain('supersecret')
+    expect(summary).not.toContain('hunter2')
+    expect(summary).not.toContain('abc123')
+  })
+
   it('builds a v2 wrapper with reduced tool activity and no raw detail metadata', () => {
     const summary = buildRunContextSummary({
       run,
@@ -303,5 +332,63 @@ describe('buildRunContextSummary', () => {
     expect(first).toMatch(/\[truncated \d+ chars\]/)
     expect(first).toMatch(/<\/hesper_run_context>$/)
     expect(first?.length ?? 0).toBeLessThanOrEqual(220)
+  })
+
+  it('keeps the wrapper complete and tool_activity JSON line-aligned when truncated', () => {
+    const tiny = buildRunContextSummary({
+      run: { id: 'run-ctx-tiny' },
+      maxChars: 12,
+      messages: [
+        createMessage({
+          id: 'msg-tiny-user',
+          role: 'user',
+          content: 'tiny budget content',
+          createdAt: '2026-06-25T05:00:00.000Z'
+        })
+      ]
+    })
+
+    expect(tiny).toBeDefined()
+    expect(tiny).toMatch(/^<hesper_run_context run_id="run-ctx-tiny" version="2">/)
+    expect(tiny).toContain('[truncated ')
+    expect(tiny).toMatch(/<\/hesper_run_context>$/)
+
+    const truncatedWithTools = buildRunContextSummary({
+      run: { id: 'run-ctx-truncated-tools' },
+      maxChars: 280,
+      steps: [
+        createStep({
+          id: 'step-tool-1',
+          type: 'tool_call',
+          status: 'succeeded',
+          title: 'A',
+          createdAt: '2026-06-25T05:01:00.000Z'
+        }),
+        createStep({
+          id: 'step-tool-2',
+          type: 'tool_call',
+          status: 'succeeded',
+          title: 'B',
+          createdAt: '2026-06-25T05:02:00.000Z'
+        }),
+        createStep({
+          id: 'step-tool-3',
+          type: 'tool_call',
+          status: 'succeeded',
+          title: 'C',
+          createdAt: '2026-06-25T05:03:00.000Z'
+        })
+      ]
+    })
+
+    expect(truncatedWithTools).toBeDefined()
+    expect(truncatedWithTools).toMatch(/^<hesper_run_context run_id="run-ctx-truncated-tools" version="2">/)
+    expect(truncatedWithTools).toContain('[truncated ')
+    expect(truncatedWithTools).toMatch(/<\/hesper_run_context>$/)
+    const activityLines = (truncatedWithTools ?? '').split('\n').filter((line) => line.startsWith('{'))
+    expect(activityLines.length).toBeGreaterThan(0)
+    for (const line of activityLines) {
+      expect(() => JSON.parse(line)).not.toThrow()
+    }
   })
 })
