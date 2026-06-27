@@ -26,7 +26,7 @@ const MAX_FILES = 6
 const MAX_SUMMARY_CHARS = 280
 const MAX_DIAGNOSTIC_LINES = 6
 const MAX_FAILURE_LINES = 7
-const NON_MEANINGFUL_RESULT_KEYS = new Set(['display', 'displayName', 'platform', 'shell', 'toolCallId', 'toolIcon', 'toolId', 'workspacePath'])
+const NON_MEANINGFUL_RESULT_KEYS = new Set(['bytes', 'display', 'displayName', 'path', 'paths', 'platform', 'shell', 'toolCallId', 'toolIcon', 'toolId', 'truncated', 'workspacePath'])
 
 function compareText(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0
@@ -179,6 +179,12 @@ function normalizePathCandidate(value: string): string | undefined {
   return normalized
 }
 
+function normalizeStructuredPathCandidate(value: string): string | undefined {
+  const trimmed = value.trim().replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/g, '')
+  if (!trimmed || trimmed === '.' || trimmed === '..' || trimmed.startsWith('../')) return undefined
+  return trimmed
+}
+
 function collectPathFromText(text: string, bucket: Set<string>): void {
   const lines = normalizeLineEndings(text).split('\n')
   const patterns = [
@@ -215,14 +221,14 @@ function collectFiles(value: unknown, bucket: Set<string>): void {
   const results = Array.isArray(value.results) ? value.results : undefined
   const directPath = stringValue(value.path)
   if (directPath && !results) {
-    const normalized = normalizePathCandidate(directPath)
+    const normalized = normalizeStructuredPathCandidate(directPath)
     if (normalized && normalized !== 'workspacePath') bucket.add(normalized)
   }
 
   if (Array.isArray(value.paths)) {
     for (const candidate of value.paths) {
       const text = stringValue(candidate)
-      const normalized = text ? normalizePathCandidate(text) : undefined
+      const normalized = text ? normalizeStructuredPathCandidate(text) : undefined
       if (normalized) bucket.add(normalized)
     }
   }

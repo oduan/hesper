@@ -400,6 +400,66 @@ describe('reduceToolOutput', () => {
     })
   })
 
+  it('treats runtime result bookkeeping for empty file reads as empty output', () => {
+    const reduced = reduceToolOutput(createStep({
+      title: '读取空文件',
+      detail: JSON.stringify({
+        kind: 'tool_call',
+        output: {
+          content: [{ type: 'text', text: '' }],
+          details: {
+            toolId: 'filesystem.read-file',
+            result: {
+              toolId: 'filesystem.read-file',
+              path: 'README.md',
+              bytes: 0,
+              truncated: false
+            }
+          }
+        },
+        isError: false
+      })
+    }))
+
+    expect(reduced).toEqual({
+      title: '读取空文件',
+      status: 'succeeded',
+      type: 'tool_call',
+      category: 'empty',
+      files: ['README.md']
+    })
+  })
+
+  it('keeps structured root filenames without extensions in files', () => {
+    const reduced = reduceToolOutput(createStep({
+      title: '读取根文件',
+      detail: JSON.stringify({
+        kind: 'tool_call',
+        output: {
+          content: [{ type: 'text', text: '' }],
+          details: {
+            toolId: 'filesystem.read-file',
+            result: {
+              toolId: 'filesystem.read-file',
+              path: 'README',
+              bytes: 0,
+              truncated: false
+            }
+          }
+        },
+        isError: false
+      })
+    }))
+
+    expect(reduced).toEqual({
+      title: '读取根文件',
+      status: 'succeeded',
+      type: 'tool_call',
+      category: 'empty',
+      files: ['README']
+    })
+  })
+
   it('falls back to safe plain-text reduction for oversized output', () => {
     const detail = [
       'Command: cat logs/build.log',
