@@ -177,6 +177,8 @@ describe('PromptAssemblyService', () => {
     expect(output.roleManifest).not.toContain('dangerous')
     expect(output.workerAgentRules).toContain('agent.spawn-worker-agent')
     expect(output.workerAgentRules).toContain('allowedToolIds')
+    expect(output.workerAgentRules).toContain('allowedToolIds must use registry ids')
+    expect(output.workerAgentRules).toContain('not callable names')
     expect(output.workerAgentRules).toContain('max depth: 1')
     expect(output.workerAgentRules).toContain('max worker agents per run: 2')
     expect(output.workerAgentRules).toContain('All Worker Agent waits are bounded')

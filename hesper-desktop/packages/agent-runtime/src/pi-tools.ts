@@ -1,6 +1,7 @@
 import type { AgentTool, AgentToolResult } from '@earendil-works/pi-agent-core'
 import type { ToolDefinition } from '@hesper/shared'
 import type { ToolExecutionContext, ToolRunner } from '@hesper/tools'
+import { runtimeCallableToolName } from './tool-name'
 
 type PiToolAdapterInput = {
   tools: ToolDefinition[]
@@ -57,11 +58,6 @@ function stripPiRuntimeDisplayParameters(params: unknown): unknown {
   return rest
 }
 
-function normalizePiToolName(toolId: string): string {
-  const normalized = toolId.replace(/[^a-zA-Z0-9_-]/g, '_')
-  return normalized || 'tool'
-}
-
 const toolCallCountsByRunId = new Map<string, Map<string, number>>()
 
 function parentStepIdForToolCall(runId: string, toolCallId: string, occurrence: number): string {
@@ -101,7 +97,7 @@ function toPiToolResult(tool: ToolDefinition, toolCallId: string, result: Awaite
 
 export function createPiAgentTools(input: PiToolAdapterInput): AgentTool<any>[] {
   return input.tools.map((tool) => ({
-    name: normalizePiToolName(tool.id),
+    name: runtimeCallableToolName(tool.id),
     label: preferredToolDisplayName(tool),
     description: tool.description,
     parameters: withPiRuntimeDisplayParameters(tool.inputSchema, tool) as any,

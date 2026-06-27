@@ -19,6 +19,7 @@ import {
 import type { ToolExecutionContext } from '@hesper/tools'
 import type { AgentAdapter } from './adapters'
 import { normalizeUnknownError } from './adapters'
+import { runtimeCallableToolName } from './tool-name'
 import { diagnoseWorkerAgent, type WorkerAgentDiagnosis } from './worker-agent-diagnosis'
 
 const DEFAULT_WAIT_TIMEOUT_MS = 60_000
@@ -354,6 +355,36 @@ function uniqueStrings(values: string[]): string[] {
   return [...new Set(values)]
 }
 
+function createToolIdAliasMap(tools: ToolDefinition[]): Map<string, string> {
+  const aliases = new Map<string, string>()
+  const callableTargets = new Map<string, Set<string>>()
+
+  for (const tool of tools) {
+    aliases.set(tool.id, tool.id)
+
+    const callableName = runtimeCallableToolName(tool.id)
+    const targets = callableTargets.get(callableName) ?? new Set<string>()
+    targets.add(tool.id)
+    callableTargets.set(callableName, targets)
+  }
+
+  for (const [callableName, targets] of callableTargets) {
+    if (aliases.has(callableName) || targets.size !== 1) continue
+    aliases.set(callableName, [...targets][0]!)
+  }
+
+  return aliases
+}
+
+function normalizeToolIdList(toolIds: string[], aliases: Map<string, string>): string[] {
+  const normalized: string[] = []
+  for (const toolId of toolIds) {
+    const registryId = aliases.get(toolId)
+    if (registryId) normalized.push(registryId)
+  }
+  return uniqueStrings(normalized)
+}
+
 type EffectiveWorkerModel = {
   modelId: string
   modelRef?: ModelRef
@@ -531,10 +562,11 @@ export function createWorkerAgentService(options: WorkerAgentServiceOptions): Wo
   }
 
   async function resolveEffectiveAllowedToolIds(requestedAllowedToolIds: string[], contextAllowedToolIds: string[], roleDefaultToolIds: string[] | undefined): Promise<string[]> {
-    const requested = uniqueStrings(requestedAllowedToolIds)
-    const contextAllowed = new Set(uniqueStrings(contextAllowedToolIds))
+    const toolIdAliases = createToolIdAliasMap(options.tools.list())
+    const requested = normalizeToolIdList(requestedAllowedToolIds, toolIdAliases)
+    const contextAllowed = new Set(normalizeToolIdList(contextAllowedToolIds, toolIdAliases))
     const roleDefaultToolSet = roleDefaultToolIds && roleDefaultToolIds.length > 0
-      ? new Set(uniqueStrings(roleDefaultToolIds))
+      ? new Set(normalizeToolIdList(roleDefaultToolIds, toolIdAliases))
       : undefined
     const intersection = requested.filter((toolId) => contextAllowed.has(toolId) && (!roleDefaultToolSet || roleDefaultToolSet.has(toolId)))
     if (intersection.length === 0) return []

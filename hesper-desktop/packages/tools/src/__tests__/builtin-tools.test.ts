@@ -135,6 +135,9 @@ describe('builtin tools', () => {
     const schema = spawnWorkerAgent?.inputSchema as any
 
     expect(schema.required).toEqual(['task', 'allowedToolIds'])
+    expect(schema.properties.allowedToolIds.description).toContain('registry ids')
+    expect(schema.properties.allowedToolIds.description).toContain('filesystem.read-file')
+    expect(schema.properties.allowedToolIds.description).toContain('not callable')
     expect(schema.required).not.toContain('roleId')
     expect(schema.oneOf).toEqual([
       { required: ['roleId'], not: { required: ['temporaryRole'] } },
