@@ -384,6 +384,7 @@ function toModelProvider(row: any): ModelProviderConfig {
     hasApiKey: optionalBoolean(row.has_api_key),
     enabled: Number(row.enabled) === 1,
     defaultModelId: row.default_model_id ?? undefined,
+    fastModeEnabled: optionalBoolean(row.fast_mode_enabled),
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }) as ModelProviderConfig
@@ -872,7 +873,7 @@ export async function createRepositories(db: SqliteAdapter): Promise<Persistence
     },
     modelProviders: {
       async save(provider) {
-        await upsert('model_providers', ['id', 'name', 'kind', 'auth_type', 'pi_auth_provider', 'base_url', 'api_key_ref', 'has_api_key', 'enabled', 'default_model_id', 'created_at', 'updated_at', 'sort_seq'], [
+        await upsert('model_providers', ['id', 'name', 'kind', 'auth_type', 'pi_auth_provider', 'base_url', 'api_key_ref', 'has_api_key', 'enabled', 'default_model_id', 'fast_mode_enabled', 'created_at', 'updated_at', 'sort_seq'], [
           provider.id,
           provider.name,
           provider.kind,
@@ -883,6 +884,7 @@ export async function createRepositories(db: SqliteAdapter): Promise<Persistence
           provider.hasApiKey === undefined ? undefined : provider.hasApiKey ? 1 : 0,
           provider.enabled ? 1 : 0,
           provider.defaultModelId,
+          provider.fastModeEnabled === undefined ? undefined : provider.fastModeEnabled ? 1 : 0,
           provider.createdAt,
           provider.updatedAt,
           nextSeq()

@@ -762,6 +762,7 @@ describe('persistence repositories', () => {
       hasApiKey: true,
       enabled: true,
       defaultModelId: 'deepseek-chat',
+      fastModeEnabled: true,
       createdAt: now,
       updatedAt: now
     })
@@ -780,8 +781,27 @@ describe('persistence repositories', () => {
     expect(await db.modelProviders.get('provider-deepseek')).toMatchObject({
       kind: 'deepseek',
       apiKeyRef: 'vault:provider-deepseek',
-      hasApiKey: true
+      hasApiKey: true,
+      fastModeEnabled: true
     })
+
+    await db.modelProviders.save({
+      id: 'provider-deepseek',
+      name: 'DeepSeek',
+      kind: 'deepseek',
+      baseUrl: 'https://api.deepseek.com',
+      apiKeyRef: 'vault:provider-deepseek',
+      hasApiKey: true,
+      enabled: true,
+      defaultModelId: 'deepseek-chat',
+      fastModeEnabled: false,
+      createdAt: now,
+      updatedAt: now
+    })
+    expect(await db.modelProviders.get('provider-deepseek')).toMatchObject({
+      fastModeEnabled: false
+    })
+
     expect(JSON.stringify(await db.modelProviders.list())).not.toContain('sk-')
     expect((await db.models.listByProvider('provider-deepseek')).map((model) => model.id)).toEqual(['deepseek-chat'])
   })
@@ -816,6 +836,7 @@ describe('persistence repositories', () => {
         defaultModelId: 'pi/gpt-5.5',
         hasApiKey: true
       })
+      expect((await reopened.modelProviders.get('chatgpt-codex'))?.fastModeEnabled).toBeUndefined()
       reopened.close?.()
     } finally {
       fs.rmSync(tempFile, { force: true })

@@ -105,6 +105,7 @@ CREATE TABLE IF NOT EXISTS model_providers (
   has_api_key INTEGER,
   enabled INTEGER NOT NULL,
   default_model_id TEXT,
+  fast_mode_enabled INTEGER,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   sort_seq INTEGER NOT NULL
@@ -288,7 +289,8 @@ const migrationColumns: Record<string, string[]> = {
   ],
   model_providers: [
     'auth_type TEXT',
-    'pi_auth_provider TEXT'
+    'pi_auth_provider TEXT',
+    'fast_mode_enabled INTEGER'
   ],
   // Keep worker-agent metadata columns available on legacy databases.
   worker_agent_invocations: [
