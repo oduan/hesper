@@ -1101,6 +1101,67 @@ describe('AgentRuntime queue', () => {
     ])
   })
 
+  it('uses the fallback context window for an unknown model before calling the adapter when the local budget is exceeded', async () => {
+    const persistence = await createInMemoryPersistence()
+    const sessionId = 'session-overflow-unknown-model-fallback'
+    await persistence.sessions.save({ ...session, id: sessionId })
+    await seedHistoricalRun(
+      persistence,
+      sessionId,
+      'run-unknown-fallback-1',
+      '2026-06-27T09:10:00.000Z',
+      'older unknown-model request 1',
+      makeVerboseRunSummary('run-unknown-fallback-1', ['Keep fallback context budget coverage for runtime.ts.', 'a'.repeat(260_000)])
+    )
+    await seedHistoricalRun(
+      persistence,
+      sessionId,
+      'run-unknown-fallback-2',
+      '2026-06-27T09:20:00.000Z',
+      'older unknown-model request 2',
+      makeVerboseRunSummary('run-unknown-fallback-2', ['Keep fallback context budget coverage for context-budget.ts.', 'b'.repeat(260_000)])
+    )
+    await seedHistoricalRun(
+      persistence,
+      sessionId,
+      'run-unknown-fallback-recent',
+      '2026-06-27T09:30:00.000Z',
+      'recent unknown-model request',
+      makeVerboseRunSummary('run-unknown-fallback-recent', ['Keep recent run complete.'])
+    )
+
+    const adapter = new RecordingAdapter()
+    const runtime = new AgentRuntime({ persistence, adapter })
+    const events: AgentRuntimeEvent[] = []
+    runtime.subscribe((event) => {
+      events.push(event)
+    })
+
+    const run = await runtime.enqueue({ sessionId, prompt: 'compact unknown model fallback before run', modelId: 'unknown/provider-model' })
+    await runtime.waitForIdle(sessionId)
+
+    const sessionSummaries = (await persistence.contextItems.listBySession(sessionId)).filter((item) => item.kind === 'session_summary')
+    expect(sessionSummaries).toHaveLength(1)
+    expect(adapter.inputs).toHaveLength(1)
+    expect((adapter.inputs[0]?.historyMessages ?? []).map((message) => message.content).join('\n')).toContain('<hesper_session_context')
+
+    const compressionEvents = compressionStepEvents(events)
+    expect(compressionEvents).toHaveLength(2)
+    expect(compressionEvents[0]).toMatchObject({
+      type: 'step.created',
+      step: expect.objectContaining({ runId: run.id, type: 'thought', status: 'running', title: compressionPendingTitle })
+    })
+    expect(compressionEvents[1]).toMatchObject({
+      type: 'step.updated',
+      step: expect.objectContaining({ runId: run.id, type: 'thought', status: 'succeeded', title: compressionSucceededTitle })
+    })
+    expect(compressionEvents[1]?.step.id).toBe(compressionEvents[0]?.step.id)
+
+    await expect(persistence.steps.listByRun(run.id)).resolves.toEqual([
+      expect.objectContaining({ id: compressionEvents[0]?.step.id, runId: run.id, type: 'thought', status: 'succeeded', title: compressionSucceededTitle })
+    ])
+  })
+
   it('still upserts a completed compression step if the created event append fails after saving the step', async () => {
     const persistence = await createInMemoryPersistence()
     await persistence.sessions.save({ ...session, id: 'session-overflow-step-created-event-fails' })
