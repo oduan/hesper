@@ -74,15 +74,22 @@ function supportsImageInput(resolved: ResolvedModel): boolean {
 }
 
 const gpt5SeriesModelPattern = /\bgpt-5(?:$|[._-])/iu
+const deepSeekV4XhighModelPattern = /\bdeepseek[\s._-]*v4[\s._-]*(?:flash|pro)(?:\b|[\s._-])/iu
 
-function isGpt5SeriesModel(resolved: ResolvedModel): boolean {
+function getResolvedModelSearchText(resolved: ResolvedModel): string[] {
   return [
     resolved.model.id,
     resolved.model.name,
     resolved.modelConfig.id,
     resolved.modelConfig.modelName,
     resolved.modelConfig.displayName
-  ].some((value) => gpt5SeriesModelPattern.test(value))
+  ]
+}
+
+function usesMaximumThinkingAsXhigh(resolved: ResolvedModel): boolean {
+  return getResolvedModelSearchText(resolved).some((value) => (
+    gpt5SeriesModelPattern.test(value) || deepSeekV4XhighModelPattern.test(value)
+  ))
 }
 
 type RuntimeStreamOptions = SimpleStreamOptions & { serviceTier?: 'priority' }
@@ -133,7 +140,7 @@ function resolveThinkingLevel(input: AgentPromptInput, resolved: ResolvedModel):
   const reasoningModel = resolved.model.reasoning ? resolved.model : { ...resolved.model, reasoning: true }
   const requested = input.thinkingLevel ?? 'medium'
   if (requested === 'max') {
-    return isGpt5SeriesModel(resolved)
+    return usesMaximumThinkingAsXhigh(resolved)
       ? 'xhigh'
       : clampThinkingLevel(reasoningModel, 'high')
   }

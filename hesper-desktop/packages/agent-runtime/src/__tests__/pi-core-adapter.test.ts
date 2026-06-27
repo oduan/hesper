@@ -533,6 +533,31 @@ describe('PiCoreAgentAdapter', () => {
     }))
   })
 
+  it('maps maximum thinking to xhigh for DeepSeek V4 Flash and Pro reasoning models', async () => {
+    for (const model of [
+      { id: 'deepseek-v4-flash-thinking', name: 'DeepSeek V4 Flash Thinking' },
+      { id: 'deepseek-v4-pro-thinking', name: 'DeepSeek V4 Pro Thinking' }
+    ]) {
+      vi.mocked(Agent).mockClear()
+      const adapter = new PiCoreAgentAdapter({ modelResolver: resolverFor({ ...model, reasoning: true }, ['streaming', 'reasoning']) })
+
+      await adapter.run({
+        runId: `run-thinking-max-${model.id}`,
+        sessionId: 'session-1',
+        prompt: 'hello',
+        modelId: model.id,
+        thinkingLevel: 'max',
+        signal: new AbortController().signal
+      }, vi.fn())
+
+      expect(Agent).toHaveBeenCalledWith(expect.objectContaining({
+        initialState: expect.objectContaining({
+          thinkingLevel: 'xhigh'
+        })
+      }))
+    }
+  })
+
   it('maps maximum thinking to high for non-gpt-5.x reasoning models', async () => {
     const adapter = new PiCoreAgentAdapter({ modelResolver: resolverFor({ id: 'gpt-4o', reasoning: true }, ['streaming', 'reasoning']) })
 
