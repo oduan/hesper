@@ -464,6 +464,112 @@ describe('reduceToolOutput', () => {
     })
   })
 
+  it('does not treat wrote status text prefixes as file paths', () => {
+    const reduced = reduceToolOutput(createStep({
+      title: '写入 README',
+      detail: JSON.stringify({
+        kind: 'tool_call',
+        input: {
+          path: 'README.md',
+          content: 'hello',
+          purpose: '写入 README'
+        },
+        output: {
+          content: [{ type: 'text', text: 'Wrote 10 bytes to C:\\repo\\README.md' }],
+          details: {
+            toolId: 'filesystem.write-file',
+            result: {
+              toolId: 'filesystem.write-file',
+              path: 'C:\\repo\\README.md',
+              bytes: 10
+            }
+          }
+        },
+        isError: false
+      })
+    }))
+
+    expect(reduced).toMatchObject({
+      title: '写入 README',
+      status: 'succeeded',
+      type: 'tool_call',
+      category: 'success',
+      files: ['README.md']
+    })
+    expect(reduced?.files).not.toContain('10 bytes to C:/repo/README.md')
+  })
+
+  it('does not treat edited status text prefixes as file paths', () => {
+    const reduced = reduceToolOutput(createStep({
+      title: '编辑索引文件',
+      detail: JSON.stringify({
+        kind: 'tool_call',
+        input: {
+          path: 'src/index.ts',
+          edits: [{ oldText: 'a', newText: 'b' }],
+          purpose: '编辑入口文件'
+        },
+        output: {
+          content: [{ type: 'text', text: 'Edited 1 line range in C:\\repo\\src\\index.ts' }],
+          details: {
+            toolId: 'filesystem.edit-file',
+            result: {
+              toolId: 'filesystem.edit-file',
+              path: 'C:\\repo\\src\\index.ts',
+              edits: 1,
+              linesBefore: 1,
+              linesAfter: 1,
+              bytes: 10
+            }
+          }
+        },
+        isError: false
+      })
+    }))
+
+    expect(reduced).toMatchObject({
+      title: '编辑索引文件',
+      status: 'succeeded',
+      type: 'tool_call',
+      category: 'success',
+      files: ['src/index.ts']
+    })
+    expect(reduced?.files).not.toContain('1 line range in C:/repo/src/index.ts')
+  })
+
+  it('does not treat deleted status text prefixes as file paths', () => {
+    const reduced = reduceToolOutput(createStep({
+      title: '删除 README',
+      detail: JSON.stringify({
+        kind: 'tool_call',
+        input: {
+          path: 'README.md',
+          purpose: '删除 README'
+        },
+        output: {
+          content: [{ type: 'text', text: 'Deleted file: C:\\repo\\README.md' }],
+          details: {
+            toolId: 'filesystem.delete-file',
+            result: {
+              toolId: 'filesystem.delete-file',
+              path: 'C:\\repo\\README.md'
+            }
+          }
+        },
+        isError: false
+      })
+    }))
+
+    expect(reduced).toMatchObject({
+      title: '删除 README',
+      status: 'succeeded',
+      type: 'tool_call',
+      category: 'success',
+      files: ['README.md']
+    })
+    expect(reduced?.files).not.toContain('file: C:/repo/README.md')
+  })
+
   it('keeps structured root filenames without extensions in files', () => {
     const reduced = reduceToolOutput(createStep({
       title: '读取根文件',

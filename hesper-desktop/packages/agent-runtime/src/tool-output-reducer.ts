@@ -212,7 +212,7 @@ function collectPathFromText(text: string, bucket: Set<string>): void {
   const lines = normalizeLineEndings(text).split('\n')
   const patterns = [
     /^(?:PASS|FAIL)\s+(.+?\.[A-Za-z0-9]+)(?::\d+(?::\d+)?)?$/,
-    /^(?:Created|Wrote|Updated|Edited|Deleted|Read)\s+(.+?\.[A-Za-z0-9]+)(?::\d+(?::\d+)?)?$/,
+    /^(?:Created|Wrote|Updated|Edited|Deleted|Read)\s+((?:[A-Za-z]:[\\/]|\/|\.\/?|\.\.\/)?\S+)$/,
     /^at\s+(.+?\.[A-Za-z0-9]+)(?::\d+(?::\d+)?)?$/,
     /^(.+?\.[A-Za-z0-9]+):\d+/
   ]
