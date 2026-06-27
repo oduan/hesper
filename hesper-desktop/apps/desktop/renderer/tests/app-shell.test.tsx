@@ -2172,7 +2172,7 @@ describe('renderer App', () => {
     expect(screen.getByRole('button', { name: /^Dracula/ })).toBeInTheDocument()
     expect(screen.getAllByText(/仅提供暗色样式|仅暗色/).length).toBeGreaterThan(0)
 
-    await waitFor(() => expect(appRoot?.style.getPropertyValue('--hesper-color-background')).toBe('#11111b'))
+    await waitFor(() => expect(appRoot?.style.getPropertyValue('--hesper-color-background')).toBe('#181825'))
     expect(appRoot?.style.getPropertyValue('--hesper-color-accent')).toBe('#a6adc8')
     expect(appRoot?.style.getPropertyValue('--hesper-color-tool-toggle')).toBe('#a6adc8')
     expect(appRoot?.style.getPropertyValue('--hesper-color-tool-toggle-soft')).toBe('rgba(166, 173, 200, 0.14)')
@@ -2183,7 +2183,7 @@ describe('renderer App', () => {
     await user.click(screen.getByRole('button', { name: /^亮色/ }))
     await waitFor(() => expect(updateSettings).toHaveBeenCalledWith({ themeMode: 'light' }))
     await waitFor(() => expect(document.documentElement.dataset.theme).toBe('light'))
-    expect(appRoot?.style.getPropertyValue('--hesper-color-background')).toBe('#dce0e8')
+    expect(appRoot?.style.getPropertyValue('--hesper-color-background')).toBe('#e6e9ef')
     expect(appRoot?.style.getPropertyValue('--hesper-color-accent')).toBe('#bcc0cc')
     expect(appRoot?.style.getPropertyValue('--hesper-color-tool-toggle')).toBe('#40a02b')
     expect(appRoot?.style.getPropertyValue('--hesper-color-tool-toggle-soft')).toBe('rgba(64, 160, 43, 0.14)')
@@ -2200,7 +2200,7 @@ describe('renderer App', () => {
     await user.click(screen.getByRole('button', { name: /^Catppuccin/ }))
     await waitFor(() => expect(updateSettings).toHaveBeenCalledWith({ themeId: 'catppuccin' }))
     await waitFor(() => expect(document.documentElement.dataset.theme).toBe('light'))
-    expect(appRoot?.style.getPropertyValue('--hesper-color-background')).toBe('#dce0e8')
+    expect(appRoot?.style.getPropertyValue('--hesper-color-background')).toBe('#e6e9ef')
 
     await user.click(screen.getByRole('button', { name: '16px' }))
     await waitFor(() => expect(updateSettings).toHaveBeenCalledWith({ fontSize: 16 }))

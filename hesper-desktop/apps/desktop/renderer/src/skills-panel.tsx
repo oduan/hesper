@@ -97,15 +97,15 @@ const panelCenterStyle: CSSProperties = {
   placeItems: 'center',
   textAlign: 'center',
   padding: 24,
-  border: '1px solid var(--hesper-color-border, #414868)',
+  border: '1px solid var(--hesper-color-border, #2b3046)',
   borderRadius: 14,
-  background: 'var(--hesper-color-surface-muted, #24283b)'
+  background: 'var(--hesper-color-surface-muted, #202436)'
 }
 
 const headerStyle: CSSProperties = {
-  border: '1px solid var(--hesper-color-border, #414868)',
+  border: '1px solid var(--hesper-color-border, #2b3046)',
   borderRadius: 14,
-  background: 'var(--hesper-color-surface-muted, #24283b)',
+  background: 'var(--hesper-color-surface-muted, #202436)',
   padding: 20
 }
 
@@ -145,9 +145,9 @@ const errorTextStyle: CSSProperties = {
 }
 
 const cardStyle: CSSProperties = {
-  border: '1px solid var(--hesper-color-border, #414868)',
+  border: '1px solid var(--hesper-color-border, #2b3046)',
   borderRadius: 14,
-  background: 'var(--hesper-color-surface-muted, #24283b)',
+  background: 'var(--hesper-color-surface-muted, #202436)',
   padding: 18
 }
 
