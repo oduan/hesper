@@ -215,6 +215,112 @@ describe('buildSessionCompaction', () => {
     expect(content).not.toContain('xoxb-1234567890-secret-secret')
   })
 
+  it('drops non-meaningful success noise while retaining failures and diagnostic file activity', () => {
+    const result = buildSessionCompaction({
+      sessionId: 'session-tool-filtering',
+      createdAt: '2026-06-27T09:20:00.000Z',
+      runSummaries: [
+        runSummary({
+          runId: 'run-1',
+          createdAt: '2026-06-27T09:10:00.000Z',
+          user: 'Keep only meaningful old tool activity.',
+          toolEntries: [
+            {
+              category: 'success',
+              status: 'succeeded',
+              title: 'List files',
+              outputSummary: 'listed 240 entries'
+            },
+            {
+              category: 'bulk_output',
+              status: 'succeeded',
+              title: 'Read huge log',
+              outputSummary: 'stdout line '.repeat(30),
+              omittedChars: 900
+            },
+            {
+              category: 'diagnostic',
+              status: 'succeeded',
+              title: 'Search repo',
+              files: ['packages/agent-runtime/src/session-compaction.ts'],
+              outputSummary: 'packages/agent-runtime/src/session-compaction.ts:142 normalizeOrderedRunSummaries'
+            },
+            {
+              category: 'error',
+              status: 'failed',
+              title: 'Run failing test',
+              command: 'pnpm test -- packages/agent-runtime/src/__tests__/session-compaction.test.ts',
+              exitCode: 1,
+              files: ['packages/agent-runtime/src/__tests__/session-compaction.test.ts'],
+              errorExcerpt: 'AssertionError: expected false to be true',
+              outputSummary: 'FAIL session-compaction.test.ts'
+            }
+          ]
+        })
+      ]
+    })
+
+    expect(result).toBeDefined()
+    expect(result?.item.content).toContain('packages/agent-runtime/src/session-compaction.ts')
+    expect(result?.item.content).toContain('AssertionError: expected false to be true')
+    expect(result?.item.content).not.toContain('List files')
+    expect(result?.item.content).not.toContain('Read huge log')
+    expect(extractToolActivity(result?.item.content ?? '')).toEqual([
+      {
+        category: 'diagnostic',
+        files: ['packages/agent-runtime/src/session-compaction.ts'],
+        outputSummary: 'packages/agent-runtime/src/session-compaction.ts:142 normalizeOrderedRunSummaries',
+        status: 'succeeded',
+        title: 'Search repo'
+      },
+      {
+        category: 'error',
+        command: 'pnpm test -- packages/agent-runtime/src/__tests__/session-compaction.test.ts',
+        errorExcerpt: 'AssertionError: expected false to be true',
+        exitCode: 1,
+        files: ['packages/agent-runtime/src/__tests__/session-compaction.test.ts'],
+        outputSummary: 'FAIL session-compaction.test.ts',
+        status: 'failed',
+        title: 'Run failing test'
+      }
+    ])
+  })
+
+  it('only keeps bullet and numbered lines when they actually match constraint, decision, or validation patterns', () => {
+    const result = buildSessionCompaction({
+      sessionId: 'session-bullet-filtering',
+      createdAt: '2026-06-27T09:20:00.000Z',
+      currentPrompt: [
+        '- explored package A',
+        '- Must keep wrapper completeness',
+        '1. looked at package B'
+      ].join('\n'),
+      runSummaries: [
+        runSummary({
+          runId: 'run-1',
+          createdAt: '2026-06-27T09:10:00.000Z',
+          user: 'Need deterministic session compaction.',
+          assistant: [
+            '- explored package A',
+            '- looked at package B',
+            '- confirmed architecture decision',
+            '1. validation failed in smoke test'
+          ].join('\n')
+        })
+      ]
+    })
+
+    expect(result).toBeDefined()
+    expect(result?.item.content).toContain('hard_constraints:')
+    expect(result?.item.content).toContain('Must keep wrapper completeness')
+    expect(result?.item.content).toContain('confirmed_decisions:')
+    expect(result?.item.content).toContain('confirmed architecture decision')
+    expect(result?.item.content).toContain('recent_failures_and_validation:')
+    expect(result?.item.content).toContain('validation failed in smoke test')
+    expect(result?.item.content).not.toContain('explored package A')
+    expect(result?.item.content).not.toContain('looked at package B')
+  })
+
   it('keeps the wrapper complete and includes a truncation marker under a tight maxChars budget', () => {
     const result = buildSessionCompaction({
       sessionId: 'session-tight-budget',
@@ -247,6 +353,60 @@ describe('buildSessionCompaction', () => {
     for (const line of activityLines) {
       expect(() => JSON.parse(line)).not.toThrow()
     }
+  })
+
+  it('returns undefined when maxChars cannot fit a complete wrapper', () => {
+    const result = buildSessionCompaction({
+      sessionId: 'session-too-small',
+      createdAt: '2026-06-27T09:20:00.000Z',
+      maxChars: 40,
+      currentPrompt: 'Must preserve wrapper completeness.',
+      runSummaries: [
+        runSummary({
+          runId: 'run-1',
+          createdAt: '2026-06-27T09:10:00.000Z',
+          user: 'Need a tiny budget failure case.'
+        })
+      ]
+    })
+
+    expect(result).toBeUndefined()
+  })
+
+  it('keeps sourceHash stable when tie-case summaries differ only in version and input order changes', () => {
+    const duplicateContent = runSummary({
+      runId: 'run-tie',
+      createdAt: '2026-06-27T09:10:00.000Z',
+      user: 'Preserve deterministic order even in tie cases.'
+    }).content
+    const summaryV1 = {
+      runId: 'run-tie',
+      createdAt: '2026-06-27T09:10:00.000Z',
+      version: 1,
+      content: duplicateContent
+    }
+    const summaryV2 = {
+      runId: 'run-tie',
+      createdAt: '2026-06-27T09:10:00.000Z',
+      version: 2,
+      content: duplicateContent
+    }
+
+    const first = buildSessionCompaction({
+      sessionId: 'session-hash-tie',
+      createdAt: '2026-06-27T09:20:00.000Z',
+      runSummaries: [summaryV2, summaryV1]
+    })
+    const second = buildSessionCompaction({
+      sessionId: 'session-hash-tie',
+      createdAt: '2026-06-27T09:20:00.000Z',
+      runSummaries: [summaryV1, summaryV2]
+    })
+
+    expect(first).toBeDefined()
+    expect(second).toBeDefined()
+    expect(first?.item.content).toBe(second?.item.content)
+    expect(first?.sourceHash).toBe(second?.sourceHash)
   })
 
   it('produces a deterministic sourceHash regardless of input order and changes when content changes', () => {

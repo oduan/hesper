@@ -61,6 +61,12 @@ function compareText(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0
 }
 
+function compareOptionalNumber(left: number | undefined, right: number | undefined): number {
+  const leftValue = typeof left === 'number' && Number.isFinite(left) ? left : Number.NEGATIVE_INFINITY
+  const rightValue = typeof right === 'number' && Number.isFinite(right) ? right : Number.NEGATIVE_INFINITY
+  return leftValue < rightValue ? -1 : leftValue > rightValue ? 1 : 0
+}
+
 function normalizeLineEndings(value: string): string {
   return value.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
 }
@@ -130,15 +136,14 @@ function normalizeMaxChars(maxChars: number | undefined): number {
 }
 
 function normalizeOrderedRunSummaries(runSummaries: BuildSessionCompactionInput['runSummaries']): OrderedRunSummary[] {
-  return runSummaries
-    .map((summary, index) => ({ summary, index }))
+  return [...runSummaries]
     .sort((left, right) => {
-      return compareText(left.summary.createdAt, right.summary.createdAt)
-        || compareText(left.summary.runId, right.summary.runId)
-        || compareText(left.summary.content, right.summary.content)
-        || left.index - right.index
+      return compareText(left.createdAt, right.createdAt)
+        || compareText(left.runId, right.runId)
+        || compareText(left.content, right.content)
+        || compareOptionalNumber(left.version, right.version)
     })
-    .map(({ summary }) => ({
+    .map((summary) => ({
       runId: summary.runId,
       createdAt: summary.createdAt,
       content: normalizeLineEndings(summary.content),
@@ -320,7 +325,7 @@ function extractMatchingLines(text: string | undefined, pattern: RegExp): string
   for (const line of splitLines(text)) {
     const normalized = line.replace(/^[-*]\s+/, '').replace(/^\d+\.\s+/, '').trim()
     if (!normalized) continue
-    if (pattern.test(normalized) || /^[-*]\s+/.test(line) || /^\d+\.\s+/.test(line)) {
+    if (pattern.test(normalized)) {
       result.push(normalized)
     }
   }
@@ -371,6 +376,30 @@ function flattenSections(sections: SummarySection[]): string[] {
   return sections.flatMap((section) => [section.header, ...section.lines])
 }
 
+function isFailureToolEntry(entry: Record<string, unknown>): boolean {
+  const status = stringifyScalar(entry.status) ?? ''
+  const category = stringifyScalar(entry.category) ?? ''
+  const errorExcerpt = stringifyScalar(entry.errorExcerpt)
+  const exitCode = typeof entry.exitCode === 'number' && Number.isFinite(entry.exitCode) ? entry.exitCode : undefined
+  return FAILURE_PATTERN.test(status)
+    || FAILURE_PATTERN.test(category)
+    || Boolean(errorExcerpt)
+    || (exitCode !== undefined && exitCode !== 0)
+}
+
+function shouldKeepToolActivityEntry(entry: Record<string, unknown>): boolean {
+  if (isFailureToolEntry(entry)) return true
+
+  const category = stringifyScalar(entry.category) ?? ''
+  if (category !== 'diagnostic') return false
+
+  return collectFilesFromToolEntry(entry).length > 0
+}
+
+function filterToolActivityEntries(entries: Record<string, unknown>[]): Record<string, unknown>[] {
+  return uniqueOrderedRecords(entries.filter((entry) => shouldKeepToolActivityEntry(entry)))
+}
+
 function renderSummary(opening: string, bodyLines: string[], closing: string, omittedChars?: number): string {
   const lines = omittedChars && omittedChars > 0
     ? [...bodyLines, `[truncated ${omittedChars} chars]`]
@@ -382,14 +411,17 @@ function candidateLength(opening: string, bodyLines: string[], closing: string, 
   return renderSummary(opening, bodyLines, closing, omittedChars).length
 }
 
-function truncateSummary(opening: string, sections: SummarySection[], closing: string, maxChars: number): string {
+function truncateSummary(opening: string, sections: SummarySection[], closing: string, maxChars: number): string | undefined {
   const fullBodyLines = flattenSections(sections)
   const full = renderSummary(opening, fullBodyLines, closing)
   if (full.length <= maxChars) return full
 
+  const emptyWrapper = renderSummary(opening, [], closing)
+  if (emptyWrapper.length > maxChars) return undefined
+
   const fullBody = fullBodyLines.join('\n')
   const minimumCandidate = renderSummary(opening, [], closing, fullBody.length)
-  if (minimumCandidate.length > maxChars) return minimumCandidate
+  if (minimumCandidate.length > maxChars) return emptyWrapper
 
   const candidateForLines = (bodyLines: string[]): string => {
     const prefixLength = bodyLines.length > 0 ? bodyLines.join('\n').length : 0
@@ -441,21 +473,20 @@ function buildSections(parsedSummaries: ParsedRunSummary[], currentPrompt: strin
     ...recentMessages.filter((message) => message.role === 'assistant').flatMap((message) => extractMatchingLines(message.content, DECISION_PATTERN))
   ])
 
+  const allToolEntries = parsedSummaries.flatMap((summary) => summary.toolEntries)
   const recentFailures = selectRecentUnique(
-    parsedSummaries
-      .flatMap((summary) => summary.toolEntries)
+    allToolEntries
       .map((entry) => ({ entry, summary: summarizeToolEntry(entry) }))
-      .filter(({ entry, summary }) => Boolean(summary) && (FAILURE_PATTERN.test(stringifyScalar(entry.status) ?? '') || FAILURE_PATTERN.test(stringifyScalar(entry.category) ?? '') || Boolean(stringifyScalar(entry.errorExcerpt))))
+      .filter(({ entry, summary }) => Boolean(summary) && isFailureToolEntry(entry))
       .map(({ summary }) => `failure: ${summary!}`),
     4
   )
 
   const recentValidation = selectRecentUnique(
     [
-      ...parsedSummaries
-        .flatMap((summary) => summary.toolEntries)
+      ...allToolEntries
         .map((entry) => ({ entry, summary: summarizeToolEntry(entry) }))
-        .filter(({ entry, summary }) => Boolean(summary) && !Boolean(stringifyScalar(entry.errorExcerpt)) && (VALIDATION_PATTERN.test(stringifyScalar(entry.title) ?? '') || VALIDATION_PATTERN.test(stringifyScalar(entry.outputSummary) ?? '') || VALIDATION_PATTERN.test(stringifyScalar(entry.command) ?? '')))
+        .filter(({ entry, summary }) => Boolean(summary) && !isFailureToolEntry(entry) && (VALIDATION_PATTERN.test(stringifyScalar(entry.title) ?? '') || VALIDATION_PATTERN.test(stringifyScalar(entry.outputSummary) ?? '') || VALIDATION_PATTERN.test(stringifyScalar(entry.command) ?? '')))
         .map(({ summary }) => `validation: ${summary!}`),
       ...parsedSummaries
         .map((summary) => summary.latestAssistantResult)
@@ -470,7 +501,7 @@ function buildSections(parsedSummaries: ParsedRunSummary[], currentPrompt: strin
   ).sort(compareText)
 
   const sourceOmissions = uniqueOrdered(parsedSummaries.flatMap((summary) => summary.truncationMarkers))
-  const toolActivity = uniqueOrderedRecords(parsedSummaries.flatMap((summary) => summary.toolEntries))
+  const toolActivity = filterToolActivityEntries(allToolEntries)
   const sections: SummarySection[] = [
     {
       kind: 'plain',
