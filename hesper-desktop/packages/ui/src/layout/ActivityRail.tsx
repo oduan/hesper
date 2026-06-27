@@ -755,7 +755,7 @@ const categoryMenuStyle: CSSProperties = {
   borderRadius: themeTokens.radius.md,
   border: `1px solid ${themeTokens.color.border}`,
   background: themeTokens.color.surfaceMuted,
-  boxShadow: `0 18px 50px ${themeTokens.color.shadow}`,
+  boxShadow: `0 6px 14px -8px ${themeTokens.color.shadow}`,
   overflow: 'hidden'
 }
 

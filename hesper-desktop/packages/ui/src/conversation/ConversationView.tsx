@@ -1045,7 +1045,7 @@ const gitPanelEntryButtonStyle = {
   fontSize: 12,
   lineHeight: 1,
   maxWidth: '100%',
-  boxShadow: `0 10px 24px ${themeTokens.color.shadow}`
+  boxShadow: `0 2px 6px -3px ${themeTokens.color.shadow}`
 } satisfies CSSProperties
 
 const gitPanelEntryButtonActiveStyle = {
@@ -1140,7 +1140,7 @@ const jumpToBottomButtonStyle = {
   color: themeTokens.color.text,
   display: 'inline-grid',
   placeItems: 'center',
-  boxShadow: `0 12px 32px ${themeTokens.color.shadow}`,
+  boxShadow: `0 2px 6px -3px ${themeTokens.color.shadow}`,
   cursor: 'pointer',
   zIndex: 2
 } satisfies CSSProperties

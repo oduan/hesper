@@ -56,7 +56,7 @@ export const OutputBlock = memo(function OutputBlock({ content, contentType, clo
           borderRadius: themeTokens.radius.md,
           border: 0,
           background: themeTokens.color.surfaceMuted,
-          boxShadow: `0 6px 18px ${themeTokens.color.shadow}`
+          boxShadow: `0 2px 6px -3px ${themeTokens.color.shadow}`
         }}
       >
         <style>{outputBlockChromeCss}</style>
@@ -81,7 +81,7 @@ export const OutputBlock = memo(function OutputBlock({ content, contentType, clo
             alignItems: 'center',
             justifyContent: 'center',
             lineHeight: 1,
-            boxShadow: `0 4px 10px ${themeTokens.color.shadow}`
+            boxShadow: `0 1px 4px -2px ${themeTokens.color.shadow}`
           }}
         >
           ⤢

@@ -127,27 +127,27 @@ const derivePalette = ({
 }
 
 const hesperLightPalette = derivePalette({
-  background: '#f4f4f2',
-  surface: '#ececea',
-  surfaceMuted: '#e4e4e1',
-  text: '#242421',
-  textMuted: '#70706a',
-  border: '#d2d2ce',
-  accent: '#b8b8b2',
-  accentContrast: '#242421',
-  success: '#4f8a5b',
-  danger: '#b15a55',
-  warning: '#a77f3f',
-  hoverSource: '#242421',
-  hoverAlpha: 0.08,
-  toolToggle: '#8a8a84',
-  codeBackground: '#ececea',
-  previewBackground: '#f4f4f2',
-  scrollbarSource: '#70706a',
-  scrollbarHoverAlpha: 0.18,
-  scrollbarActiveAlpha: 0.30,
-  shadowSource: '#484843',
-  shadowAlpha: 0.12
+  background: '#f6f8fb',
+  surface: '#eef2f6',
+  surfaceMuted: '#e8edf3',
+  text: '#232a33',
+  textMuted: '#667282',
+  border: '#d5dce6',
+  accent: '#c3ccd6',
+  accentContrast: '#232a33',
+  success: '#4f8a68',
+  danger: '#b35c5c',
+  warning: '#9a7a45',
+  hoverSource: '#26313d',
+  hoverAlpha: 0.07,
+  toolToggle: '#8996a6',
+  codeBackground: '#eef2f6',
+  previewBackground: '#f6f8fb',
+  scrollbarSource: '#667282',
+  scrollbarHoverAlpha: 0.16,
+  scrollbarActiveAlpha: 0.28,
+  shadowSource: '#5f6f82',
+  shadowAlpha: 0.08
 })
 
 const catppuccinLattePalette = derivePalette({

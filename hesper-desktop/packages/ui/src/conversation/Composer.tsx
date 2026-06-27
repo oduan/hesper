@@ -372,7 +372,7 @@ export function Composer({
         border: 0,
         borderRadius: themeTokens.radius.xl,
         background: themeTokens.color.surfaceMuted,
-        boxShadow: `0 8px 18px ${themeTokens.color.shadow}`,
+        boxShadow: `0 2px 6px -3px ${themeTokens.color.shadow}`,
         padding: themeTokens.spacing.md,
         position: 'relative'
       }}
@@ -972,7 +972,7 @@ const skillMenuStyle = {
   border: `1px solid ${themeTokens.color.border}`,
   borderRadius: themeTokens.radius.lg,
   background: 'var(--hesper-color-surface, #1f2335)',
-  boxShadow: '0 18px 42px rgba(0, 0, 0, 0.38)',
+  boxShadow: `0 4px 10px -6px ${themeTokens.color.shadow}`,
   padding: 6
 } satisfies CSSProperties
 

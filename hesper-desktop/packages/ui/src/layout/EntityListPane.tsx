@@ -4,7 +4,7 @@ import { RunningStatusIcon } from '../conversation/RunningStatusIcon'
 import { themeTokens } from '../theme'
 import type { AppSection } from './ActivityRail'
 
-const paneSurfaceShadow = `0 18px 42px -34px ${themeTokens.color.shadow}`
+const paneSurfaceShadow = `0 2px 6px -4px ${themeTokens.color.shadow}`
 
 type ToolListItem = ToolDefinition & { enabled: boolean }
 
@@ -494,6 +494,8 @@ export function EntityListPane({
         width: '100%',
         minWidth: 0,
         minHeight: 0,
+        height: '100%',
+        maxHeight: '100%',
         boxSizing: 'border-box',
         background: themeTokens.color.surface,
         borderRadius: themeTokens.radius.xl,
@@ -1081,7 +1083,7 @@ const sessionMenuStyle: CSSProperties = {
   borderRadius: themeTokens.radius.md,
   border: `1px solid ${themeTokens.color.border}`,
   background: themeTokens.color.surfaceMuted,
-  boxShadow: `0 18px 50px ${themeTokens.color.shadow}`,
+  boxShadow: `0 6px 14px -8px ${themeTokens.color.shadow}`,
   overflow: 'hidden'
 }
 

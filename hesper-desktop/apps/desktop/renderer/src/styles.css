@@ -1,33 +1,33 @@
 :root {
   color-scheme: light;
   /* Central bootstrap defaults before React/AppShell injects the selected theme variables. */
-  --hesper-color-background: #f4f4f2;
-  --hesper-color-surface: #ececea;
-  --hesper-color-surface-muted: #e4e4e1;
-  --hesper-color-text: #242421;
-  --hesper-color-text-muted: #70706a;
-  --hesper-color-border: #d2d2ce;
-  --hesper-color-accent: #b8b8b2;
-  --hesper-color-accent-contrast: #242421;
-  --hesper-color-success: #4f8a5b;
-  --hesper-color-danger: #b15a55;
-  --hesper-color-warning: #a77f3f;
-  --hesper-color-hover: rgba(36, 36, 33, 0.08);
-  --hesper-color-soft-control: rgba(184, 184, 178, 0.14);
-  --hesper-color-tool-toggle: #8a8a84;
-  --hesper-color-tool-toggle-soft: rgba(138, 138, 132, 0.14);
-  --hesper-color-danger-soft: rgba(177, 90, 85, 0.14);
-  --hesper-color-danger-strong: #b15a55;
-  --hesper-color-success-soft: rgba(79, 138, 91, 0.16);
-  --hesper-color-warning-soft: rgba(167, 127, 63, 0.16);
-  --hesper-color-border-subtle: rgba(210, 210, 206, 0.38);
-  --hesper-color-neutral-soft: rgba(36, 36, 33, 0.10);
-  --hesper-color-code-background: #ececea;
-  --hesper-color-shadow: rgba(72, 72, 67, 0.12);
-  --hesper-color-preview-background: #f4f4f2;
-  --hesper-color-scrollbar-thumb: rgba(112, 112, 106, 0.10);
-  --hesper-color-scrollbar-thumb-hover: rgba(112, 112, 106, 0.18);
-  --hesper-color-scrollbar-thumb-active: rgba(112, 112, 106, 0.30);
+  --hesper-color-background: #f6f8fb;
+  --hesper-color-surface: #eef2f6;
+  --hesper-color-surface-muted: #e8edf3;
+  --hesper-color-text: #232a33;
+  --hesper-color-text-muted: #667282;
+  --hesper-color-border: #d5dce6;
+  --hesper-color-accent: #c3ccd6;
+  --hesper-color-accent-contrast: #232a33;
+  --hesper-color-success: #4f8a68;
+  --hesper-color-danger: #b35c5c;
+  --hesper-color-warning: #9a7a45;
+  --hesper-color-hover: rgba(38, 49, 61, 0.07);
+  --hesper-color-soft-control: rgba(195, 204, 214, 0.14);
+  --hesper-color-tool-toggle: #8996a6;
+  --hesper-color-tool-toggle-soft: rgba(137, 150, 166, 0.14);
+  --hesper-color-danger-soft: rgba(179, 92, 92, 0.14);
+  --hesper-color-danger-strong: #b35c5c;
+  --hesper-color-success-soft: rgba(79, 138, 104, 0.16);
+  --hesper-color-warning-soft: rgba(154, 122, 69, 0.16);
+  --hesper-color-border-subtle: rgba(213, 220, 230, 0.38);
+  --hesper-color-neutral-soft: rgba(35, 42, 51, 0.10);
+  --hesper-color-code-background: #eef2f6;
+  --hesper-color-shadow: rgba(95, 111, 130, 0.08);
+  --hesper-color-preview-background: #f6f8fb;
+  --hesper-color-scrollbar-thumb: rgba(102, 114, 130, 0.10);
+  --hesper-color-scrollbar-thumb-hover: rgba(102, 114, 130, 0.16);
+  --hesper-color-scrollbar-thumb-active: rgba(102, 114, 130, 0.28);
   --hesper-body-background: var(--hesper-color-background);
   --hesper-body-text: var(--hesper-color-text);
 }
@@ -288,7 +288,7 @@ button {
 .hesper-soft-control:hover:not(:disabled),
 .hesper-send-button:hover:not(:disabled) {
   background: var(--hesper-color-soft-control) !important;
-  box-shadow: 0 4px 12px var(--hesper-color-shadow);
+  box-shadow: 0 1px 4px -2px var(--hesper-color-shadow);
   transform: translateY(-1px);
 }
 

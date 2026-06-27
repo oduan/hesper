@@ -250,7 +250,7 @@ describe('ui components', () => {
 
     const titleBar = screen.getByLabelText('窗口标题栏')
     const appRoot = titleBar.parentElement as HTMLElement
-    const expectedPaneShadow = `0 18px 42px -34px ${themeTokens.color.shadow}`
+    const expectedPaneShadow = `0 2px 6px -4px ${themeTokens.color.shadow}`
     expect(titleBar).toHaveTextContent('Hesper')
     expect(titleBar).toHaveTextContent('构建 hesper MVP')
     expect(appRoot.style.background).toContain('radial-gradient')
@@ -266,7 +266,9 @@ describe('ui components', () => {
       boxSizing: 'border-box',
       background: themeTokens.color.surface,
       borderRadius: themeTokens.radius.xl,
-      boxShadow: expectedPaneShadow
+      boxShadow: expectedPaneShadow,
+      height: '100%',
+      maxHeight: '100%'
     })
     const sessionList = screen.getByLabelText('会话列表')
     expect(sessionList).toHaveClass('hesper-theme-scrollbar')
@@ -274,12 +276,14 @@ describe('ui components', () => {
       marginRight: '-16px',
       paddingRight: '16px'
     })
-    expect(screen.getByLabelText('主工作区')).toHaveStyle({ gridTemplateColumns: '204px 427px minmax(0, 1fr)' })
+    expect(screen.getByLabelText('主工作区')).toHaveStyle({ gridTemplateColumns: '204px 427px minmax(0, 1fr)', alignItems: 'stretch' })
     const detailPane = screen.getByLabelText('详情区域')
     expect(detailPane).toHaveStyle({
       background: themeTokens.color.surface,
       borderRadius: themeTokens.radius.xl,
-      boxShadow: expectedPaneShadow
+      boxShadow: expectedPaneShadow,
+      height: '100%',
+      maxHeight: '100%'
     })
     expect(detailPane.firstElementChild).toHaveStyle({ padding: '0px' })
     const sessionRow = screen.getByRole('button', { name: '视频脚本生成' })
@@ -293,7 +297,7 @@ describe('ui components', () => {
     expect(sessionRow).not.toHaveClass('is-selected')
     const menu = screen.getByRole('menu', { name: '会话操作' })
     expect(menu).toHaveStyle({ background: themeTokens.color.surfaceMuted, borderRadius: themeTokens.radius.md, padding: '4px 0' })
-    expect(menu).toHaveStyle({ boxShadow: `0 18px 50px ${themeTokens.color.shadow}` })
+    expect(menu).toHaveStyle({ boxShadow: `0 6px 14px -8px ${themeTokens.color.shadow}` })
     expect(menu.querySelector('style')).toHaveTextContent('.hesper-session-menu-item:hover::after')
     expect(menu.querySelector('style')).toHaveTextContent(`background: ${themeTokens.color.hover};`)
     expect(menu.querySelector('style')).not.toHaveTextContent('background: var(--hesper-color-hover);')
@@ -1714,7 +1718,7 @@ describe('ui components', () => {
     expect(sendButton).toBeDisabled()
     expect(screen.getByLabelText('消息输入区')).toHaveStyle({
       borderRadius: themeTokens.radius.xl,
-      boxShadow: `0 8px 18px ${themeTokens.color.shadow}`
+      boxShadow: `0 2px 6px -3px ${themeTokens.color.shadow}`
     })
     expect(textarea).toHaveStyle({ borderRadius: '0' })
     expect(textarea).toHaveStyle({ boxSizing: 'border-box', fontSize: 'var(--hesper-font-size, 14px)', lineHeight: '1.5', padding: '0px 2px' })
@@ -1733,7 +1737,7 @@ describe('ui components', () => {
     expect(modelListbox).toHaveStyle({
       display: 'grid',
       borderRadius: themeTokens.radius.md,
-      boxShadow: `0 10px 24px ${themeTokens.color.shadow}`
+      boxShadow: `0 4px 10px -6px ${themeTokens.color.shadow}`
     })
     expect(modelListbox.querySelector('style')).toHaveTextContent('.hesper-themed-select-option:hover')
     expect(modelListbox.querySelector('style')).toHaveTextContent(`background: ${themeTokens.color.hover} !important;`)
@@ -2588,7 +2592,7 @@ describe('ui components', () => {
     expect(bubble).toHaveStyle({
       fontSize: 'var(--hesper-font-size, 14px)',
       borderRadius: themeTokens.radius.md,
-      boxShadow: `0 2px 8px ${themeTokens.color.shadow}`
+      boxShadow: `0 1px 4px -2px ${themeTokens.color.shadow}`
     })
     const timestamp = screen.getByLabelText(/^发送时间：/)
     expect(bubble).not.toContainElement(timestamp)
@@ -2616,7 +2620,7 @@ describe('ui components', () => {
     expect(screen.getByLabelText('助手消息')).toHaveStyle({
       fontSize: 'var(--hesper-font-size, 14px)',
       borderRadius: themeTokens.radius.md,
-      boxShadow: `0 2px 8px ${themeTokens.color.shadow}`
+      boxShadow: `0 1px 4px -2px ${themeTokens.color.shadow}`
     })
     expect(screen.queryByLabelText(/^发送时间：/)).not.toBeInTheDocument()
   })
@@ -2826,7 +2830,7 @@ describe('ui components', () => {
     expect(screen.getByText('notes.md').closest('div')).toHaveStyle({
       maxWidth: '180px',
       borderRadius: themeTokens.radius.md,
-      boxShadow: `0 2px 8px ${themeTokens.color.shadow}`
+      boxShadow: `0 1px 4px -2px ${themeTokens.color.shadow}`
     })
     expect(screen.queryByText('secret-one.png')).not.toBeInTheDocument()
     expect(screen.queryByText('secret-two.png')).not.toBeInTheDocument()
@@ -2937,11 +2941,11 @@ describe('ui components', () => {
       maxWidth: '100%',
       minWidth: '0px',
       borderRadius: themeTokens.radius.md,
-      boxShadow: `0 6px 18px ${themeTokens.color.shadow}`
+      boxShadow: `0 2px 6px -3px ${themeTokens.color.shadow}`
     })
     expect(screen.getByRole('button', { name: '全屏查看输出' })).toHaveStyle({
       borderRadius: themeTokens.radius.sm,
-      boxShadow: `0 4px 10px ${themeTokens.color.shadow}`
+      boxShadow: `0 1px 4px -2px ${themeTokens.color.shadow}`
     })
 
     const tableScroller = screen.getByRole('table').parentElement

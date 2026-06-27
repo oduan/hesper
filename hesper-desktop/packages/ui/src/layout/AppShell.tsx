@@ -15,7 +15,7 @@ const shellBackgroundForColorScheme = (colorScheme: ThemeMode) => {
   ].join(', ')
 }
 
-const paneSurfaceShadow = `0 18px 42px -34px ${themeTokens.color.shadow}`
+const paneSurfaceShadow = `0 2px 6px -4px ${themeTokens.color.shadow}`
 
 export type ToolListItem = ToolDefinition & { enabled: boolean }
 export type { RoleListItem, SessionCategoryListItem, SkillListItem } from './EntityListPane'
@@ -231,6 +231,7 @@ export function AppShell({
           gridTemplateColumns: '204px 427px minmax(0, 1fr)',
           gap: themeTokens.spacing.sm,
           overflow: 'hidden',
+          alignItems: 'stretch',
           padding: `0 ${themeTokens.spacing.sm} ${themeTokens.spacing.sm} 0`
         }}
       >
@@ -287,6 +288,8 @@ export function AppShell({
           style={{
             minWidth: 0,
             minHeight: 0,
+            height: '100%',
+            maxHeight: '100%',
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',

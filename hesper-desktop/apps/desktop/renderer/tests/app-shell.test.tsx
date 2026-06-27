@@ -361,17 +361,17 @@ describe('renderer App', () => {
     const styles = readFileSync(existsSync(desktopRelativeStylesPath) ? desktopRelativeStylesPath : workspaceRelativeStylesPath, 'utf8')
     const rootBlock = styles.match(/:root\s*{(?<body>[\s\S]*?)}/)?.groups?.body ?? ''
 
-    expect(rootBlock).toContain('--hesper-color-background: #f4f4f2;')
-    expect(rootBlock).toContain('--hesper-color-surface: #ececea;')
-    expect(rootBlock).toContain('--hesper-color-surface-muted: #e4e4e1;')
-    expect(rootBlock).toContain('--hesper-color-text: #242421;')
-    expect(rootBlock).toContain('--hesper-color-text-muted: #70706a;')
-    expect(rootBlock).toContain('--hesper-color-accent: #b8b8b2;')
-    expect(rootBlock).toContain('--hesper-color-hover: rgba(36, 36, 33, 0.08);')
-    expect(rootBlock).toContain('--hesper-color-soft-control: rgba(184, 184, 178, 0.14);')
-    expect(rootBlock).toContain('--hesper-color-scrollbar-thumb: rgba(112, 112, 106, 0.10);')
-    expect(rootBlock).toContain('--hesper-color-scrollbar-thumb-hover: rgba(112, 112, 106, 0.18);')
-    expect(rootBlock).toContain('--hesper-color-scrollbar-thumb-active: rgba(112, 112, 106, 0.30);')
+    expect(rootBlock).toContain('--hesper-color-background: #f6f8fb;')
+    expect(rootBlock).toContain('--hesper-color-surface: #eef2f6;')
+    expect(rootBlock).toContain('--hesper-color-surface-muted: #e8edf3;')
+    expect(rootBlock).toContain('--hesper-color-text: #232a33;')
+    expect(rootBlock).toContain('--hesper-color-text-muted: #667282;')
+    expect(rootBlock).toContain('--hesper-color-accent: #c3ccd6;')
+    expect(rootBlock).toContain('--hesper-color-hover: rgba(38, 49, 61, 0.07);')
+    expect(rootBlock).toContain('--hesper-color-soft-control: rgba(195, 204, 214, 0.14);')
+    expect(rootBlock).toContain('--hesper-color-scrollbar-thumb: rgba(102, 114, 130, 0.10);')
+    expect(rootBlock).toContain('--hesper-color-scrollbar-thumb-hover: rgba(102, 114, 130, 0.16);')
+    expect(rootBlock).toContain('--hesper-color-scrollbar-thumb-active: rgba(102, 114, 130, 0.28);')
     const navItemBlock = styles.match(/\.hesper-nav-item\s*{(?<body>[\s\S]*?)}/)?.groups?.body ?? ''
     const listRowBlock = styles.match(/\.hesper-list-row\s*{(?<body>[\s\S]*?)}/)?.groups?.body ?? ''
     const settingsRowBlock = styles.match(/\.hesper-settings-row\s*{(?<body>[\s\S]*?)}/)?.groups?.body ?? ''
