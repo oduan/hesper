@@ -72,7 +72,8 @@ const composerThinkingLevelOptions = [
   { value: 'low', label: '低' },
   { value: 'medium', label: '中' },
   { value: 'high', label: '高' },
-  { value: 'xhigh', label: '超高' }
+  { value: 'xhigh', label: '超高' },
+  { value: 'max', label: '最大' }
 ] satisfies Array<{ value: ComposerThinkingLevel; label: string }>
 const maxComposerAttachmentBatchSize = 10
 const maxComposerImageAttachmentBytes = 10 * 1024 * 1024

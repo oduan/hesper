@@ -5,6 +5,7 @@ import {
   messageSchema,
   modelConfigSchema,
   modelProviderConfigSchema,
+  modelThinkingLevelSchema,
   roleSchema,
   runStepSchema,
   sessionCategorySchema,
@@ -23,6 +24,10 @@ import {
 const now = '2026-06-10T03:00:00.000Z'
 
 describe('shared schemas', () => {
+  it('accepts maximum thinking level for model-aware runtime mapping', () => {
+    expect(modelThinkingLevelSchema.parse('max')).toBe('max')
+  })
+
   it('validates an agent run', () => {
     const parsed = agentRunSchema.parse({
       id: 'run-1',

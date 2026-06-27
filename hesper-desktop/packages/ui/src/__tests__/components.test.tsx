@@ -2011,15 +2011,15 @@ describe('ui components', () => {
       right: 'calc(100% + 6px)',
       top: '0px'
     })
-    expect(within(thinkingMenu).getAllByRole('option').map((option) => option.textContent)).toEqual(['低', '中', '高', '超高'])
+    expect(within(thinkingMenu).getAllByRole('option').map((option) => option.textContent)).toEqual(['低', '中', '高', '超高', '最大'])
 
-    await user.click(within(thinkingMenu).getByRole('option', { name: '超高' }))
-    expect(window.localStorage.getItem('hesper.composer.thinkingLevel')).toBe('xhigh')
+    await user.click(within(thinkingMenu).getByRole('option', { name: '最大' }))
+    expect(window.localStorage.getItem('hesper.composer.thinkingLevel')).toBe('max')
 
     await user.type(screen.getByLabelText('消息输入框'), 'hello')
     await user.click(screen.getByRole('button', { name: '发送' }))
 
-    expect(onSend).toHaveBeenCalledWith('hello', expect.objectContaining({ thinkingLevel: 'xhigh' }))
+    expect(onSend).toHaveBeenCalledWith('hello', expect.objectContaining({ thinkingLevel: 'max' }))
   })
 
   it('restores the previous thinking intensity selection for new composers', async () => {
