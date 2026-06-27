@@ -17,6 +17,7 @@ const DEFAULT_MAX_CHARS = 6000
 const REDACTED_VALUE = '[redacted-sensitive-value]'
 const RUN_CONTEXT_SUMMARY_VERSION = 2
 const SENSITIVE_FIELD_NAME_PATTERN = /(?:api[_ -]?key|secret|token|password)/i
+const SUMMARY_TEXT_LINE_CHUNK_CHARS = 400
 
 function compareText(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0
@@ -49,6 +50,23 @@ function sanitizeTextSection(value: string): string {
 
 function sanitizeStructuredText(value: string): string {
   return normalizeLineEndings(redactSensitiveText(value)).trim()
+}
+
+function splitTextForSummary(value: string): string[] {
+  const lines: string[] = []
+
+  for (const line of value.split('\n')) {
+    if (line.length <= SUMMARY_TEXT_LINE_CHUNK_CHARS) {
+      lines.push(line)
+      continue
+    }
+
+    for (let index = 0; index < line.length; index += SUMMARY_TEXT_LINE_CHUNK_CHARS) {
+      lines.push(line.slice(index, index + SUMMARY_TEXT_LINE_CHUNK_CHARS))
+    }
+  }
+
+  return lines
 }
 
 function escapeXmlAttribute(value: string): string {
@@ -170,14 +188,14 @@ function buildBodySections(latestUser: string | undefined, latestAssistant: stri
   if (latestUser) {
     sections.push({
       kind: 'plain',
-      lines: ['latest_user_request:', latestUser]
+      lines: ['latest_user_request:', ...splitTextForSummary(latestUser)]
     })
   }
 
   if (latestAssistant) {
     sections.push({
       kind: 'plain',
-      lines: ['latest_assistant_result:', latestAssistant]
+      lines: ['latest_assistant_result:', ...splitTextForSummary(latestAssistant)]
     })
   }
 
@@ -228,10 +246,12 @@ function truncateSummary(opening: string, sections: SummarySection[], closing: s
 
   for (const section of sections) {
     if (section.kind === 'plain') {
-      const nextLines = [...keptLines, ...section.lines]
-      if (!fits(nextLines)) break
-      keptLines = nextLines
-      best = candidateForLines(keptLines)
+      for (const line of section.lines) {
+        const nextLines = [...keptLines, line]
+        if (!fits(nextLines)) return best
+        keptLines = nextLines
+        best = candidateForLines(keptLines)
+      }
       continue
     }
 

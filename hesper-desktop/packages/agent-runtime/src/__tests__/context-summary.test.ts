@@ -266,6 +266,43 @@ describe('buildRunContextSummary', () => {
     expect(summary?.endsWith('</hesper_run_context>')).toBe(true)
   })
 
+  it('preserves the beginning of a long latest assistant markdown report when truncated', () => {
+    const report = [
+      '## 工程分析报告：Hesper',
+      '',
+      '### 关键结论',
+      '这是一份用于验证 run_summary 截断行为的长报告。',
+      ...Array.from({ length: 40 }, (_, index) => `- 详细分析 ${index + 1}：context compression quality 需要保留 assistant 报告开头，避免整段结果被丢弃。`)
+    ].join('\n')
+
+    const summary = buildRunContextSummary({
+      run: { id: 'run-ctx-long-assistant-report' },
+      maxChars: 520,
+      messages: [
+        createMessage({
+          id: 'msg-short-user',
+          role: 'user',
+          content: '请分析 Hesper 当前问题',
+          createdAt: '2026-06-25T06:00:00.000Z'
+        }),
+        createMessage({
+          id: 'msg-long-assistant-report',
+          role: 'assistant',
+          content: report,
+          createdAt: '2026-06-25T06:01:00.000Z'
+        })
+      ]
+    })
+
+    expect(summary).toBeDefined()
+    expect(summary).toContain('latest_user_request:')
+    expect(summary).toContain('latest_assistant_result:')
+    expect(summary).toContain('## 工程分析报告：Hesper')
+    expect(summary).toMatch(/\[truncated \d+ chars\]/)
+    expect(summary).not.toMatch(/latest_user_request:\n请分析 Hesper 当前问题\n\[truncated \d+ chars\]/)
+    expect(summary?.length ?? 0).toBeLessThanOrEqual(520)
+  })
+
   it('summarizes long tool output through the reducer and still applies maxChars truncation', () => {
     const detail = [
       'Command: cat logs/build.log',
