@@ -167,11 +167,11 @@ runtimeOptions?: {
 
 消费点：
 
-- `PiCoreAgentAdapter` 创建 `Agent` 时传入 `serviceTier: resolved.runtimeOptions.serviceTier`。
+- `PiCoreAgentAdapter` 不能把 `serviceTier` 作为 `AgentOptions` 直接传入，因为当前 `pi-agent-core` 的 `AgentOptions` 不暴露该字段。主 Agent 运行时应为 Fast Codex provider 创建一个 `streamFn` 包装器，在调用底层 `streamSimple(model, context, options)` 时追加 `{ serviceTier: 'priority' }`。
 - `SessionTitleGenerator` 调用 `completeSimple()` 时传入同样的 `serviceTier`。
 - Worker Agent 共用同一个 adapter/modelResolver，因此自动生效。
 
-Fast 关闭或非 Codex provider 时不传 `serviceTier`。
+Fast 关闭或非 Codex provider 时不注入 `serviceTier`。
 
 相关文件：
 
@@ -213,7 +213,7 @@ Fast 关闭或非 Codex provider 时不传 `serviceTier`。
 6. `@hesper/agent-runtime`
    - Fast Codex provider 解析出 `runtimeOptions.serviceTier === 'priority'`。
    - 非 Fast Codex 或非 Codex provider 不返回该选项。
-   - `PiCoreAgentAdapter` 把 `serviceTier` 传给 Agent。
+   - `PiCoreAgentAdapter` 用 `streamFn` 包装器把 `serviceTier` 注入底层 `streamSimple()`。
    - `SessionTitleGenerator` 把 `serviceTier` 传给 `completeSimple()`。
 
 ## 验证
