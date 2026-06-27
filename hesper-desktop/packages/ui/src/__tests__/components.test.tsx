@@ -18,6 +18,14 @@ import type { GitGraphRowView } from '../git/git-graph-types'
 
 const now = '2026-06-10T03:00:00.000Z'
 
+function expectFloatingIslandBorder(element: Element | null) {
+  expect(element).not.toBeNull()
+  const style = element?.getAttribute('style') ?? ''
+  expect(style).toContain(`border-color: ${themeTokens.color.border}`)
+  expect(style).toContain('border-style: solid')
+  expect(style).toContain('border-width: 1px')
+}
+
 const baseSession = {
   id: 'session-1',
   title: '测试会话',
@@ -262,6 +270,7 @@ describe('ui components', () => {
     expect(screen.getByRole('button', { name: '所有会话' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByLabelText('功能栏')).toHaveStyle({ boxSizing: 'border-box' })
     const entityListPane = screen.getByLabelText('实体列表')
+    expectFloatingIslandBorder(entityListPane)
     expect(entityListPane).toHaveStyle({
       boxSizing: 'border-box',
       background: themeTokens.color.surface,
@@ -278,6 +287,7 @@ describe('ui components', () => {
     })
     expect(screen.getByLabelText('主工作区')).toHaveStyle({ gridTemplateColumns: '204px 427px minmax(0, 1fr)', alignItems: 'stretch' })
     const detailPane = screen.getByLabelText('详情区域')
+    expectFloatingIslandBorder(detailPane)
     expect(detailPane).toHaveStyle({
       background: themeTokens.color.surface,
       borderRadius: themeTokens.radius.xl,
@@ -296,6 +306,7 @@ describe('ui components', () => {
     fireEvent.contextMenu(sessionRow)
     expect(sessionRow).not.toHaveClass('is-selected')
     const menu = screen.getByRole('menu', { name: '会话操作' })
+    expectFloatingIslandBorder(menu)
     expect(menu).toHaveStyle({ background: themeTokens.color.surfaceMuted, borderRadius: themeTokens.radius.md, padding: '4px 0' })
     expect(menu).toHaveStyle({ boxShadow: `0 6px 14px -8px ${themeTokens.color.shadow}` })
     expect(menu.querySelector('style')).toHaveTextContent('.hesper-session-menu-item:hover::after')
@@ -1716,7 +1727,9 @@ describe('ui components', () => {
     expect(workspaceButton.querySelector('[data-hesper-workspace-icon="empty-house"]')).toBeInTheDocument()
 
     expect(sendButton).toBeDisabled()
-    expect(screen.getByLabelText('消息输入区')).toHaveStyle({
+    const messageInputArea = screen.getByLabelText('消息输入区')
+    expectFloatingIslandBorder(messageInputArea)
+    expect(messageInputArea).toHaveStyle({
       borderRadius: themeTokens.radius.xl,
       boxShadow: `0 2px 6px -3px ${themeTokens.color.shadow}`
     })
@@ -1729,6 +1742,7 @@ describe('ui components', () => {
     expect(modelSelect.querySelector('svg[aria-hidden="true"]')).toBeInTheDocument()
     expect(modelSelect.parentElement).toHaveStyle({ minWidth: '0' })
     expect(sendButton.parentElement).toHaveStyle({ gap: '4px' })
+    expectFloatingIslandBorder(sendButton)
     expect(sendButton).toHaveStyle({ borderRadius: themeTokens.radius.lg })
     expect(sendButton.querySelector('svg[aria-hidden="true"]')).toBeInTheDocument()
 
@@ -2589,6 +2603,7 @@ describe('ui components', () => {
     )
 
     const bubble = screen.getByLabelText('用户消息')
+    expectFloatingIslandBorder(bubble)
     expect(bubble).toHaveStyle({
       fontSize: 'var(--hesper-font-size, 14px)',
       borderRadius: themeTokens.radius.md,
@@ -2617,7 +2632,9 @@ describe('ui components', () => {
       />
     )
 
-    expect(screen.getByLabelText('助手消息')).toHaveStyle({
+    const assistantBubble = screen.getByLabelText('助手消息')
+    expectFloatingIslandBorder(assistantBubble)
+    expect(assistantBubble).toHaveStyle({
       fontSize: 'var(--hesper-font-size, 14px)',
       borderRadius: themeTokens.radius.md,
       boxShadow: `0 1px 4px -2px ${themeTokens.color.shadow}`
@@ -2827,7 +2844,9 @@ describe('ui components', () => {
     expect(images[0]).toHaveStyle({ maxWidth: '128px', maxHeight: '96px' })
     expect(images[1]).toHaveStyle({ maxWidth: '128px', maxHeight: '96px' })
     expect(screen.getByText('notes.md')).toBeInTheDocument()
-    expect(screen.getByText('notes.md').closest('div')).toHaveStyle({
+    const fileChip = screen.getByText('notes.md').closest('div')
+    expectFloatingIslandBorder(fileChip)
+    expect(fileChip).toHaveStyle({
       maxWidth: '180px',
       borderRadius: themeTokens.radius.md,
       boxShadow: `0 1px 4px -2px ${themeTokens.color.shadow}`
@@ -2937,13 +2956,16 @@ describe('ui components', () => {
     expect(outputScroller).toHaveStyle({ overflowX: 'hidden', overflowY: 'auto', minWidth: '0px' })
 
     const outputBlock = outputScroller.closest('.hesper-output-block')
+    expectFloatingIslandBorder(outputBlock)
     expect(outputBlock).toHaveStyle({
       maxWidth: '100%',
       minWidth: '0px',
       borderRadius: themeTokens.radius.md,
       boxShadow: `0 2px 6px -3px ${themeTokens.color.shadow}`
     })
-    expect(screen.getByRole('button', { name: '全屏查看输出' })).toHaveStyle({
+    const fullscreenButton = screen.getByRole('button', { name: '全屏查看输出' })
+    expectFloatingIslandBorder(fullscreenButton)
+    expect(fullscreenButton).toHaveStyle({
       borderRadius: themeTokens.radius.sm,
       boxShadow: `0 1px 4px -2px ${themeTokens.color.shadow}`
     })

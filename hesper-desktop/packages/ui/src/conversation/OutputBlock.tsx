@@ -47,6 +47,7 @@ export const OutputBlock = memo(function OutputBlock({ content, contentType, clo
         onClickCapture={handleOutputClickCapture}
         style={{
           contain: 'paint',
+          boxSizing: 'border-box',
           position: 'relative',
           minWidth: 0,
           maxWidth: '100%',
@@ -54,7 +55,9 @@ export const OutputBlock = memo(function OutputBlock({ content, contentType, clo
           maxHeight: outputBlockMaxHeight,
           overflow: 'hidden',
           borderRadius: themeTokens.radius.md,
-          border: 0,
+          borderColor: themeTokens.color.border,
+          borderStyle: 'solid',
+          borderWidth: '1px',
           background: themeTokens.color.surfaceMuted,
           boxShadow: `0 2px 6px -3px ${themeTokens.color.shadow}`
         }}
@@ -73,7 +76,9 @@ export const OutputBlock = memo(function OutputBlock({ content, contentType, clo
             width: 30,
             height: 28,
             borderRadius: themeTokens.radius.sm,
-            border: 0,
+            borderColor: themeTokens.color.border,
+            borderStyle: 'solid',
+            borderWidth: '1px',
             background: themeTokens.color.softControl,
             color: themeTokens.color.text,
             cursor: 'pointer',

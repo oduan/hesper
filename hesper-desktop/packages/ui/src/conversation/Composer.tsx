@@ -367,9 +367,12 @@ export function Composer({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       style={{
+        boxSizing: 'border-box',
         display: 'grid',
         gap: themeTokens.spacing.sm,
-        border: 0,
+        borderColor: themeTokens.color.border,
+        borderStyle: 'solid',
+        borderWidth: '1px',
         borderRadius: themeTokens.radius.xl,
         background: themeTokens.color.surfaceMuted,
         boxShadow: `0 2px 6px -3px ${themeTokens.color.shadow}`,
@@ -969,7 +972,9 @@ const skillMenuStyle = {
   maxHeight: 180,
   overflowY: 'auto',
   overflowX: 'hidden',
-  border: `1px solid ${themeTokens.color.border}`,
+  borderColor: themeTokens.color.border,
+  borderStyle: 'solid',
+  borderWidth: '1px',
   borderRadius: themeTokens.radius.lg,
   background: 'var(--hesper-color-surface, #1f2335)',
   boxShadow: `0 4px 10px -6px ${themeTokens.color.shadow}`,
@@ -1010,7 +1015,9 @@ const attachmentPreviewAreaStyle = {
 } satisfies CSSProperties
 
 const attachmentDropHintStyle = {
-  border: `1px dashed ${themeTokens.color.border}`,
+  borderColor: themeTokens.color.border,
+  borderStyle: 'dashed',
+  borderWidth: '1px',
   borderRadius: themeTokens.radius.lg,
   color: themeTokens.color.textMuted,
   padding: `${themeTokens.spacing.sm} ${themeTokens.spacing.md}`,
@@ -1021,6 +1028,9 @@ const imageAttachmentPreviewStyle = {
   position: 'relative',
   width: 96,
   height: 72,
+  borderColor: themeTokens.color.border,
+  borderStyle: 'solid',
+  borderWidth: '1px',
   borderRadius: themeTokens.radius.lg,
   overflow: 'hidden',
   background: themeTokens.color.softControl
@@ -1059,6 +1069,9 @@ const textAttachmentPreviewStyle = {
   alignItems: 'center',
   minWidth: 160,
   maxWidth: 280,
+  borderColor: themeTokens.color.border,
+  borderStyle: 'solid',
+  borderWidth: '1px',
   borderRadius: themeTokens.radius.lg,
   background: themeTokens.color.softControl,
   padding: `${themeTokens.spacing.xs} ${themeTokens.spacing.sm}`
@@ -1173,7 +1186,9 @@ const textareaStyle = {
 
 const controlButtonStyle = {
   borderRadius: themeTokens.radius.md,
-  border: 0,
+  borderColor: themeTokens.color.border,
+  borderStyle: 'solid',
+  borderWidth: '1px',
   outline: 0,
   background: themeTokens.color.softControl,
   color: themeTokens.color.textMuted,
@@ -1217,7 +1232,9 @@ const sendButtonStyle = {
   width: 34,
   height: 34,
   borderRadius: themeTokens.radius.lg,
-  border: 0,
+  borderColor: themeTokens.color.border,
+  borderStyle: 'solid',
+  borderWidth: '1px',
   outline: 0,
   background: themeTokens.color.softControl,
   color: themeTokens.color.text,

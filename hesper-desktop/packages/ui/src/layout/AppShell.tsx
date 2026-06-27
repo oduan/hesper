@@ -290,9 +290,13 @@ export function AppShell({
             minHeight: 0,
             height: '100%',
             maxHeight: '100%',
+            boxSizing: 'border-box',
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
+            borderColor: themeTokens.color.border,
+            borderStyle: 'solid',
+            borderWidth: '1px',
             borderRadius: themeTokens.radius.xl,
             background: themeTokens.color.surface,
             boxShadow: paneSurfaceShadow
