@@ -421,6 +421,18 @@ function getRuntimeInternals(runtime: AgentRuntime): RuntimeInternals {
   return runtime as unknown as RuntimeInternals
 }
 
+const compressionPendingTitle = '正在进行压缩'
+const compressionSucceededTitle = '压缩完成，继续执行'
+
+type StepRuntimeEvent = Extract<AgentRuntimeEvent, { type: 'step.created' | 'step.updated' }>
+
+function compressionStepEvents(events: AgentRuntimeEvent[]): StepRuntimeEvent[] {
+  return events.filter((event): event is StepRuntimeEvent => {
+    if (event.type !== 'step.created' && event.type !== 'step.updated') return false
+    return event.step.title === compressionPendingTitle || event.step.title === compressionSucceededTitle
+  })
+}
+
 describe('AgentRuntime queue', () => {
   it('defaults queued run workspace to the session workspace when enqueue omits it', async () => {
     const persistence = await createInMemoryPersistence()
@@ -1027,8 +1039,12 @@ describe('AgentRuntime queue', () => {
     const saveSpy = vi.spyOn(persistence.contextItems, 'save')
     const adapter = new RecordingAdapter()
     const runtime = new AgentRuntime({ persistence, adapter })
+    const events: AgentRuntimeEvent[] = []
+    runtime.subscribe((event) => {
+      events.push(event)
+    })
 
-    await runtime.enqueue({ sessionId: 'session-overflow-within-budget', prompt: 'continue without compaction', modelId: 'mock/hesper-fast' })
+    const run = await runtime.enqueue({ sessionId: 'session-overflow-within-budget', prompt: 'continue without compaction', modelId: 'mock/hesper-fast' })
     await runtime.waitForIdle('session-overflow-within-budget')
 
     const sessionSummarySaves = saveSpy.mock.calls
@@ -1037,6 +1053,8 @@ describe('AgentRuntime queue', () => {
     expect(sessionSummarySaves).toEqual([])
     expect(adapter.inputs).toHaveLength(1)
     expect((adapter.inputs[0]?.historyMessages ?? []).map((message) => message.content).join('\n')).not.toContain('<hesper_session_context')
+    expect(compressionStepEvents(events)).toEqual([])
+    await expect(persistence.steps.listByRun(run.id)).resolves.toEqual([])
   })
 
   it('creates a reusable session compaction before calling the adapter when the local budget is exceeded', async () => {
@@ -1047,8 +1065,12 @@ describe('AgentRuntime queue', () => {
 
     const adapter = new RecordingAdapter()
     const runtime = new AgentRuntime({ persistence, adapter })
+    const events: AgentRuntimeEvent[] = []
+    runtime.subscribe((event) => {
+      events.push(event)
+    })
 
-    await runtime.enqueue({ sessionId: 'session-overflow-local-budget', prompt: 'compact before run', modelId: 'mock/hesper-fast' })
+    const run = await runtime.enqueue({ sessionId: 'session-overflow-local-budget', prompt: 'compact before run', modelId: 'mock/hesper-fast' })
     await runtime.waitForIdle('session-overflow-local-budget')
 
     const sessionSummaries = (await persistence.contextItems.listBySession('session-overflow-local-budget')).filter((item) => item.kind === 'session_summary')
@@ -1061,6 +1083,22 @@ describe('AgentRuntime queue', () => {
     expect(historyContent).toContain('<hesper_session_context')
     expect(historyIds).not.toContain('context-summary-run-overflow-1')
     expect(historyIds).not.toContain('context-summary-run-overflow-2')
+
+    const compressionEvents = compressionStepEvents(events)
+    expect(compressionEvents).toHaveLength(2)
+    expect(compressionEvents[0]).toMatchObject({
+      type: 'step.created',
+      step: expect.objectContaining({ runId: run.id, type: 'thought', status: 'running', title: compressionPendingTitle })
+    })
+    expect(compressionEvents[1]).toMatchObject({
+      type: 'step.updated',
+      step: expect.objectContaining({ runId: run.id, type: 'thought', status: 'succeeded', title: compressionSucceededTitle })
+    })
+    expect(compressionEvents[1]?.step.id).toBe(compressionEvents[0]?.step.id)
+
+    await expect(persistence.steps.listByRun(run.id)).resolves.toEqual([
+      expect.objectContaining({ id: compressionEvents[0]?.step.id, runId: run.id, type: 'thought', status: 'succeeded', title: compressionSucceededTitle })
+    ])
   })
 
   it('reuses an existing session compaction for the same covered runs instead of saving it again', async () => {
@@ -1129,6 +1167,18 @@ describe('AgentRuntime queue', () => {
     expect(secondLength).toBeLessThan(firstLength)
     expect(storedRun).toMatchObject({ status: 'succeeded', retryCount: 0 })
     expect(events.filter((event) => event.type === 'run.retrying')).toHaveLength(0)
+
+    const compressionEvents = compressionStepEvents(events)
+    expect(compressionEvents).toHaveLength(2)
+    expect(compressionEvents[0]).toMatchObject({
+      type: 'step.created',
+      step: expect.objectContaining({ runId: run.id, type: 'thought', status: 'running', title: compressionPendingTitle })
+    })
+    expect(compressionEvents[1]).toMatchObject({
+      type: 'step.updated',
+      step: expect.objectContaining({ runId: run.id, type: 'thought', status: 'succeeded', title: compressionSucceededTitle })
+    })
+    expect(compressionEvents[1]?.step.id).toBe(compressionEvents[0]?.step.id)
   })
 
   it('uses the least aggressive compaction tier after provider overflow when no local preflight ran', async () => {
@@ -1319,6 +1369,8 @@ describe('AgentRuntime queue', () => {
     expect(storedRun).toMatchObject({ status: 'failed', retryCount: 0 })
     expect((await persistence.contextItems.listBySession('session-overflow-no-eligible-runs')).filter((item) => item.kind === 'session_summary')).toHaveLength(0)
     expect(events.filter((event) => event.type === 'run.retrying')).toHaveLength(0)
+    expect(compressionStepEvents(events)).toEqual([])
+    await expect(persistence.steps.listByRun(run.id)).resolves.toEqual([])
   })
 
   it('does not retry a provider overflow when compaction has no meaningful source material', async () => {

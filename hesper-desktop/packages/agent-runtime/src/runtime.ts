@@ -131,6 +131,8 @@ function safetyMarginForWindow(contextWindow: number): number {
 
 const RECENT_MESSAGE_RUN_COUNT = 1
 const SESSION_COMPACTION_MAX_CHARS_BY_ATTEMPT = [4000, 2000, 1000] as const
+const SESSION_COMPACTION_PENDING_TITLE = '正在进行压缩'
+const SESSION_COMPACTION_SUCCEEDED_TITLE = '压缩完成，继续执行'
 
 type SessionHistorySnapshot = {
   sessionMessages: Message[]
@@ -504,6 +506,66 @@ export class AgentRuntime {
     return { historyMessages: snapshot.historyMessages, changed: false, attempted }
   }
 
+  private createSessionCompactionStep(runId: string): RunStep {
+    return {
+      id: createId('step'),
+      runId,
+      type: 'thought',
+      status: 'running',
+      title: SESSION_COMPACTION_PENDING_TITLE,
+      createdAt: nowIso()
+    }
+  }
+
+  private completedSessionCompactionStep(step: RunStep): RunStep {
+    return {
+      ...step,
+      status: 'succeeded',
+      title: SESSION_COMPACTION_SUCCEEDED_TITLE,
+      completedAt: nowIso()
+    }
+  }
+
+  private failedSessionCompactionStep(step: RunStep): RunStep {
+    return {
+      ...step,
+      status: 'failed',
+      completedAt: nowIso()
+    }
+  }
+
+  private async emitRuntimeStep(kind: 'step.created' | 'step.updated', step: RunStep): Promise<void> {
+    await this.persistence.steps.save(step)
+    await this.emitAndPersist({ type: kind, step })
+  }
+
+  private async tryEmitRuntimeStep(kind: 'step.created' | 'step.updated', step: RunStep): Promise<boolean> {
+    try {
+      await this.emitRuntimeStep(kind, step)
+      return true
+    } catch (error) {
+      console.error('AgentRuntime failed to emit step event', error)
+      return false
+    }
+  }
+
+  private async withSessionCompactionStep<T>(runId: string, apply: () => Promise<T>): Promise<T> {
+    const step = this.createSessionCompactionStep(runId)
+    const stepCreated = await this.tryEmitRuntimeStep('step.created', step)
+    try {
+      const result = await apply()
+      if (stepCreated) {
+        await this.tryEmitRuntimeStep('step.updated', this.completedSessionCompactionStep(step))
+      }
+      return result
+    } catch (error) {
+      if (stepCreated) {
+        await this.tryEmitRuntimeStep('step.updated', this.failedSessionCompactionStep(step))
+      }
+      throw error
+    }
+  }
+
   private async applySessionCompaction(currentRun: AgentRun, snapshot: SessionHistorySnapshot, overflowAttempt: number): Promise<SessionCompactionApplication> {
     const eligibleRuns = snapshot.previousParentRuns.slice(0, Math.max(0, snapshot.previousParentRuns.length - RECENT_MESSAGE_RUN_COUNT))
     if (eligibleRuns.length === 0) return this.unchangedSessionCompaction(snapshot)
@@ -539,39 +601,41 @@ export class AgentRuntime {
 
     if (runSummaries.length === 0) return this.unchangedSessionCompaction(snapshot)
 
-    const maxChars = SESSION_COMPACTION_MAX_CHARS_BY_ATTEMPT[Math.min(overflowAttempt, SESSION_COMPACTION_MAX_CHARS_BY_ATTEMPT.length - 1)]
-    const built = buildSessionCompaction({
-      sessionId: currentRun.sessionId,
-      createdAt: nowIso(),
-      runSummaries,
-      ...(maxChars !== undefined ? { maxChars } : {})
+    return this.withSessionCompactionStep(currentRun.id, async () => {
+      const maxChars = SESSION_COMPACTION_MAX_CHARS_BY_ATTEMPT[Math.min(overflowAttempt, SESSION_COMPACTION_MAX_CHARS_BY_ATTEMPT.length - 1)]
+      const built = buildSessionCompaction({
+        sessionId: currentRun.sessionId,
+        createdAt: nowIso(),
+        runSummaries,
+        ...(maxChars !== undefined ? { maxChars } : {})
+      })
+      if (!built) return this.unchangedSessionCompaction(snapshot, true)
+
+      const existingReusable = [...snapshot.contextItemsByRunId.values()]
+        .flat()
+        .filter((item) => item.kind === 'session_summary' && item.sourceHash === built.sourceHash && item.content.length <= built.item.content.length)
+        .sort(compareContextItemsByPreference)[0]
+
+      const updatedContextItemsByRunId = new Map(snapshot.contextItemsByRunId)
+      if (!existingReusable) {
+        await this.persistence.contextItems.save(built.item)
+        const runItems = updatedContextItemsByRunId.get(built.item.runId) ?? []
+        updatedContextItemsByRunId.set(built.item.runId, [...runItems, built.item])
+      }
+
+      const historyMessages = assembleHistoryMessages({
+        currentRunId: currentRun.id,
+        runs: snapshot.sessionRuns,
+        messages: snapshot.sessionMessages,
+        stepsByRunId: snapshot.stepsByRunId,
+        contextItemsByRunId: updatedContextItemsByRunId
+      })
+      return {
+        historyMessages,
+        changed: didHistoryBecomeShorter(snapshot.historyMessages, historyMessages),
+        attempted: true
+      }
     })
-    if (!built) return this.unchangedSessionCompaction(snapshot, true)
-
-    const existingReusable = [...snapshot.contextItemsByRunId.values()]
-      .flat()
-      .filter((item) => item.kind === 'session_summary' && item.sourceHash === built.sourceHash && item.content.length <= built.item.content.length)
-      .sort(compareContextItemsByPreference)[0]
-
-    const updatedContextItemsByRunId = new Map(snapshot.contextItemsByRunId)
-    if (!existingReusable) {
-      await this.persistence.contextItems.save(built.item)
-      const runItems = updatedContextItemsByRunId.get(built.item.runId) ?? []
-      updatedContextItemsByRunId.set(built.item.runId, [...runItems, built.item])
-    }
-
-    const historyMessages = assembleHistoryMessages({
-      currentRunId: currentRun.id,
-      runs: snapshot.sessionRuns,
-      messages: snapshot.sessionMessages,
-      stepsByRunId: snapshot.stepsByRunId,
-      contextItemsByRunId: updatedContextItemsByRunId
-    })
-    return {
-      historyMessages,
-      changed: didHistoryBecomeShorter(snapshot.historyMessages, historyMessages),
-      attempted: true
-    }
   }
 
   private async executeRun(run: AgentRun, prompt: string, thinkingLevel?: ModelThinkingLevel, systemPrompt?: string, enabledToolIds?: string[], attachments?: MessageAttachment[], attachmentReader?: AttachmentReader): Promise<void> {
