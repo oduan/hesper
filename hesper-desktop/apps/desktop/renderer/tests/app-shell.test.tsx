@@ -1415,6 +1415,45 @@ describe('renderer App', () => {
     expect(deleteSession).not.toHaveBeenCalledWith('session-new-message')
   })
 
+  it('does not replay a previous Ctrl+Enter send when returning to sessions', async () => {
+    const user = userEvent.setup()
+    listSessions.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        title: 'Existing chat',
+        status: 'active',
+        outputMode: 'markdown',
+        createdAt: '2026-06-10T03:00:00.000Z',
+        updatedAt: '2026-06-10T03:00:00.000Z'
+      }
+    ] as any)
+
+    render(<App />)
+
+    expect(await screen.findByRole('button', { name: 'Existing chat' })).toBeInTheDocument()
+    await user.type(await screen.findByLabelText('消息输入框'), 'first prompt')
+    await user.keyboard('{Control>}{Enter}{/Control}')
+
+    await waitFor(() => expect(enqueue).toHaveBeenCalledTimes(1))
+    expect(enqueue).toHaveBeenLastCalledWith(expect.objectContaining({
+      sessionId: 'session-1',
+      prompt: 'first prompt'
+    }))
+    await waitFor(() => expect(screen.getByLabelText('消息输入框')).toHaveValue(''))
+
+    await user.type(screen.getByLabelText('消息输入框'), 'draft after page switch')
+    await user.click(screen.getByRole('button', { name: '工具' }))
+    expect(await screen.findByLabelText('工具列表')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '所有会话' }))
+
+    await waitFor(() => expect(screen.getByLabelText('消息输入框')).toHaveValue('draft after page switch'))
+    expect(enqueue).toHaveBeenCalledTimes(1)
+    expect(enqueue).not.toHaveBeenCalledWith(expect.objectContaining({
+      prompt: 'draft after page switch'
+    }))
+  })
+
   it('keeps a default new chat with a latest run when switching away', async () => {
     const user = userEvent.setup()
     listSessions.mockResolvedValueOnce([

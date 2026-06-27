@@ -2337,6 +2337,37 @@ describe('ui components', () => {
     expect(onSend).toHaveBeenCalledTimes(1)
   })
 
+  it('does not replay an already-present external send signal after remount', async () => {
+    const onSend = vi.fn()
+    const noop = () => undefined
+    const flushEffects = async () => {
+      await act(async () => {
+        await new Promise((resolve) => window.setTimeout(resolve, 0))
+      })
+    }
+    const renderComposer = (value: string) => (
+      <Composer
+        workspacePath="C:/dev/hesper"
+        modelId="mock/hesper-fast"
+        value={value}
+        onDraftChange={noop}
+        onSend={onSend}
+        sendSignal={42}
+      />
+    )
+
+    const first = render(renderComposer(''))
+    await flushEffects()
+    expect(onSend).not.toHaveBeenCalled()
+    first.unmount()
+
+    render(renderComposer('draft after page switch'))
+    await flushEffects()
+
+    expect(screen.getByPlaceholderText(/输入消息/)).toHaveValue('draft after page switch')
+    expect(onSend).not.toHaveBeenCalled()
+  })
+
   it('renders a tiny local date-time stamp outside the user message background', () => {
     render(
       <MessageBubble

@@ -114,7 +114,8 @@ export function Composer({
   const skillOptionRefs = useRef<Array<HTMLButtonElement | null>>([])
   const value = controlledValue ?? internalValue
   const selectedSkillMentions = controlledSkillMentions ?? internalSkillMentions
-  const lastHandledSendSignalRef = useRef(0)
+  // sendSignal is edge-triggered; a non-zero value present at mount is historical and must not replay.
+  const lastHandledSendSignalRef = useRef(sendSignal)
   const attachmentsRef = useRef(attachments)
   const mountedRef = useRef(true)
   const attachmentMutationVersionRef = useRef(0)
