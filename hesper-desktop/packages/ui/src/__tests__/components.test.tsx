@@ -1982,7 +1982,7 @@ describe('ui components', () => {
     expect(openAiSubmenu).toHaveStyle({
       position: 'absolute',
       right: 'calc(100% + 6px)',
-      top: '0px'
+      bottom: '0px'
     })
     const openAiModel = await screen.findByRole('option', { name: 'OpenAI/gpt-4o' })
     expect(openAiSubmenu).toContainElement(openAiModel)
@@ -2009,17 +2009,17 @@ describe('ui components', () => {
     expect(thinkingMenu).toHaveStyle({
       position: 'absolute',
       right: 'calc(100% + 6px)',
-      top: '0px'
+      bottom: '0px'
     })
-    expect(within(thinkingMenu).getAllByRole('option').map((option) => option.textContent)).toEqual(['低', '中', '高', '超高'])
+    expect(within(thinkingMenu).getAllByRole('option').map((option) => option.textContent)).toEqual(['低', '中', '高', '超高', '最大'])
 
-    await user.click(within(thinkingMenu).getByRole('option', { name: '超高' }))
-    expect(window.localStorage.getItem('hesper.composer.thinkingLevel')).toBe('xhigh')
+    await user.click(within(thinkingMenu).getByRole('option', { name: '最大' }))
+    expect(window.localStorage.getItem('hesper.composer.thinkingLevel')).toBe('max')
 
     await user.type(screen.getByLabelText('消息输入框'), 'hello')
     await user.click(screen.getByRole('button', { name: '发送' }))
 
-    expect(onSend).toHaveBeenCalledWith('hello', expect.objectContaining({ thinkingLevel: 'xhigh' }))
+    expect(onSend).toHaveBeenCalledWith('hello', expect.objectContaining({ thinkingLevel: 'max' }))
   })
 
   it('restores the previous thinking intensity selection for new composers', async () => {

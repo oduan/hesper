@@ -148,7 +148,7 @@ export function ThemedSelect({
                   <span aria-hidden="true" style={selectGroupArrowStyle}>‹</span>
                 </button>
                 {expanded ? (
-                  <div role="group" aria-label={`${group.label} 模型`} style={selectGroupOptionsStyle}>
+                  <div role="group" aria-label={`${group.label} 模型`} style={{ ...selectGroupOptionsStyle, ...selectGroupOptionsPlacementStyle(menuPlacement) }}>
                     {group.options.map((option) => (
                       <button
                         key={option.value}
@@ -211,7 +211,7 @@ export function ThemedSelect({
                   <span aria-hidden="true" style={selectGroupArrowStyle}>‹</span>
                 </button>
                 {auxiliaryMenuExpanded ? (
-                  <div role="group" aria-label={auxiliaryMenu.ariaLabel} style={selectGroupOptionsStyle}>
+                  <div role="group" aria-label={auxiliaryMenu.ariaLabel} style={{ ...selectGroupOptionsStyle, ...selectGroupOptionsPlacementStyle(menuPlacement) }}>
                     {auxiliaryMenu.options.map((option) => (
                       <button
                         key={option.value}
@@ -351,10 +351,13 @@ const selectAuxiliaryValueStyle: CSSProperties = {
   fontSize: themeTokens.typography.body
 }
 
+function selectGroupOptionsPlacementStyle(menuPlacement: ThemedSelectProps['menuPlacement']): CSSProperties {
+  return menuPlacement === 'top' ? { bottom: 0 } : { top: 0 }
+}
+
 const selectGroupOptionsStyle: CSSProperties = {
   position: 'absolute',
   right: 'calc(100% + 6px)',
-  top: 0,
   zIndex: 31,
   minWidth: 'max-content',
   width: 'max-content',

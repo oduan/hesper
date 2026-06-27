@@ -116,7 +116,7 @@ const modelConfigBaseSchema = z.object({
 
 export const modelConfigSchema = modelConfigBaseSchema.transform(stripUndefined)
 
-export const modelThinkingLevelSchema = z.enum(['low', 'medium', 'high', 'xhigh'])
+export const modelThinkingLevelSchema = z.enum(['low', 'medium', 'high', 'xhigh', 'max'])
 
 const sessionCategoryBaseSchema = z.object({
   id: z.string().min(1),
