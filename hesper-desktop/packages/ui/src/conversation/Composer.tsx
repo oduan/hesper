@@ -372,6 +372,7 @@ export function Composer({
         border: 0,
         borderRadius: themeTokens.radius.xl,
         background: themeTokens.color.surfaceMuted,
+        boxShadow: `0 8px 18px ${themeTokens.color.shadow}`,
         padding: themeTokens.spacing.md,
         position: 'relative'
       }}
@@ -1215,7 +1216,7 @@ const modelControlStyle = {
 const sendButtonStyle = {
   width: 34,
   height: 34,
-  borderRadius: '999px',
+  borderRadius: themeTokens.radius.lg,
   border: 0,
   outline: 0,
   background: themeTokens.color.softControl,

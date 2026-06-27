@@ -31,9 +31,10 @@ export function MessageBubble({ message, loadAttachmentDataUrl }: MessageBubbleP
             style={{
               maxWidth: '100%',
               padding: `${themeTokens.spacing.sm} ${themeTokens.spacing.md}`,
-              borderRadius: themeTokens.radius.lg,
+              borderRadius: themeTokens.radius.md,
               border: 0,
               background: isUser ? themeTokens.color.softControl : themeTokens.color.surfaceMuted,
+              boxShadow: `0 2px 8px ${themeTokens.color.shadow}`,
               color: themeTokens.color.text,
               whiteSpace: 'pre-wrap',
               overflowWrap: 'anywhere',
@@ -245,7 +246,7 @@ const attachmentImageStyle = {
   height: 'auto',
   objectFit: 'cover',
   borderRadius: themeTokens.radius.md,
-  boxShadow: `0 4px 14px ${themeTokens.color.shadow}`
+  boxShadow: `0 2px 8px ${themeTokens.color.shadow}`
 } satisfies CSSProperties
 
 const attachmentImagePlaceholderStyle = {
@@ -253,6 +254,7 @@ const attachmentImagePlaceholderStyle = {
   height: 64,
   borderRadius: themeTokens.radius.md,
   background: themeTokens.color.softControl,
+  boxShadow: `0 2px 8px ${themeTokens.color.shadow}`,
   opacity: 0.72
 } satisfies CSSProperties
 
@@ -265,10 +267,10 @@ const fileChipStyle = {
   rowGap: 2,
   alignItems: 'center',
   padding: `4px ${themeTokens.spacing.sm}`,
-  borderRadius: 999,
+  borderRadius: themeTokens.radius.md,
   background: themeTokens.color.surfaceMuted,
   color: themeTokens.color.text,
-  boxShadow: `0 4px 14px ${themeTokens.color.shadow}`
+  boxShadow: `0 2px 8px ${themeTokens.color.shadow}`
 } satisfies CSSProperties
 
 const fileChipIconStyle = {

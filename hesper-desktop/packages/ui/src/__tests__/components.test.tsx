@@ -1712,7 +1712,10 @@ describe('ui components', () => {
     expect(workspaceButton.querySelector('[data-hesper-workspace-icon="empty-house"]')).toBeInTheDocument()
 
     expect(sendButton).toBeDisabled()
-    expect(screen.getByLabelText('消息输入区')).toHaveStyle({ borderRadius: themeTokens.radius.xl })
+    expect(screen.getByLabelText('消息输入区')).toHaveStyle({
+      borderRadius: themeTokens.radius.xl,
+      boxShadow: `0 8px 18px ${themeTokens.color.shadow}`
+    })
     expect(textarea).toHaveStyle({ borderRadius: '0' })
     expect(textarea).toHaveStyle({ boxSizing: 'border-box', fontSize: 'var(--hesper-font-size, 14px)', lineHeight: '1.5', padding: '0px 2px' })
     expect(textarea).not.toHaveStyle({ font: 'inherit' })
@@ -1722,16 +1725,23 @@ describe('ui components', () => {
     expect(modelSelect.querySelector('svg[aria-hidden="true"]')).toBeInTheDocument()
     expect(modelSelect.parentElement).toHaveStyle({ minWidth: '0' })
     expect(sendButton.parentElement).toHaveStyle({ gap: '4px' })
+    expect(sendButton).toHaveStyle({ borderRadius: themeTokens.radius.lg })
     expect(sendButton.querySelector('svg[aria-hidden="true"]')).toBeInTheDocument()
 
     await user.click(modelSelect)
     const modelListbox = screen.getByRole('listbox', { name: '选择模型选项' })
-    expect(modelListbox).toHaveStyle({ display: 'grid' })
+    expect(modelListbox).toHaveStyle({
+      display: 'grid',
+      borderRadius: themeTokens.radius.md,
+      boxShadow: `0 10px 24px ${themeTokens.color.shadow}`
+    })
     expect(modelListbox.querySelector('style')).toHaveTextContent('.hesper-themed-select-option:hover')
     expect(modelListbox.querySelector('style')).toHaveTextContent(`background: ${themeTokens.color.hover} !important;`)
     expect(modelListbox.querySelector('style')).toHaveTextContent(`color: ${themeTokens.color.text} !important;`)
     expect(modelListbox.querySelector('style')).not.toHaveTextContent('background: var(--hesper-color-hover) !important;')
-    expect(within(modelListbox).getByRole('option', { name: 'mock/hesper-fast' })).toHaveClass('hesper-themed-select-option')
+    const modelOption = within(modelListbox).getByRole('option', { name: 'mock/hesper-fast' })
+    expect(modelOption).toHaveClass('hesper-themed-select-option')
+    expect(modelOption).toHaveStyle({ borderRadius: themeTokens.radius.sm })
 
     await user.type(textarea, 'hello')
     expect(sendButton).toBeEnabled()
@@ -2575,7 +2585,11 @@ describe('ui components', () => {
     )
 
     const bubble = screen.getByLabelText('用户消息')
-    expect(bubble).toHaveStyle({ fontSize: 'var(--hesper-font-size, 14px)' })
+    expect(bubble).toHaveStyle({
+      fontSize: 'var(--hesper-font-size, 14px)',
+      borderRadius: themeTokens.radius.md,
+      boxShadow: `0 2px 8px ${themeTokens.color.shadow}`
+    })
     const timestamp = screen.getByLabelText(/^发送时间：/)
     expect(bubble).not.toContainElement(timestamp)
     expect(timestamp.parentElement).toContainElement(bubble)
@@ -2599,7 +2613,11 @@ describe('ui components', () => {
       />
     )
 
-    expect(screen.getByLabelText('助手消息')).toHaveStyle({ fontSize: 'var(--hesper-font-size, 14px)' })
+    expect(screen.getByLabelText('助手消息')).toHaveStyle({
+      fontSize: 'var(--hesper-font-size, 14px)',
+      borderRadius: themeTokens.radius.md,
+      boxShadow: `0 2px 8px ${themeTokens.color.shadow}`
+    })
     expect(screen.queryByLabelText(/^发送时间：/)).not.toBeInTheDocument()
   })
 
@@ -2805,7 +2823,11 @@ describe('ui components', () => {
     expect(images[0]).toHaveStyle({ maxWidth: '128px', maxHeight: '96px' })
     expect(images[1]).toHaveStyle({ maxWidth: '128px', maxHeight: '96px' })
     expect(screen.getByText('notes.md')).toBeInTheDocument()
-    expect(screen.getByText('notes.md').closest('div')).toHaveStyle({ maxWidth: '180px' })
+    expect(screen.getByText('notes.md').closest('div')).toHaveStyle({
+      maxWidth: '180px',
+      borderRadius: themeTokens.radius.md,
+      boxShadow: `0 2px 8px ${themeTokens.color.shadow}`
+    })
     expect(screen.queryByText('secret-one.png')).not.toBeInTheDocument()
     expect(screen.queryByText('secret-two.png')).not.toBeInTheDocument()
   })
@@ -2911,7 +2933,16 @@ describe('ui components', () => {
     expect(outputScroller).toHaveStyle({ overflowX: 'hidden', overflowY: 'auto', minWidth: '0px' })
 
     const outputBlock = outputScroller.closest('.hesper-output-block')
-    expect(outputBlock).toHaveStyle({ maxWidth: '100%', minWidth: '0px' })
+    expect(outputBlock).toHaveStyle({
+      maxWidth: '100%',
+      minWidth: '0px',
+      borderRadius: themeTokens.radius.md,
+      boxShadow: `0 6px 18px ${themeTokens.color.shadow}`
+    })
+    expect(screen.getByRole('button', { name: '全屏查看输出' })).toHaveStyle({
+      borderRadius: themeTokens.radius.sm,
+      boxShadow: `0 4px 10px ${themeTokens.color.shadow}`
+    })
 
     const tableScroller = screen.getByRole('table').parentElement
     expect(tableScroller).toHaveAttribute('data-hesper-markdown-table-scroll', 'true')

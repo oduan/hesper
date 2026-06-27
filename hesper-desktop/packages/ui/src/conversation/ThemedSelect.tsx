@@ -304,7 +304,7 @@ const selectMenuStyle: CSSProperties = {
   borderRadius: themeTokens.radius.md,
   background: themeTokens.color.surfaceMuted,
   padding: 6,
-  boxShadow: `0 18px 36px ${themeTokens.color.shadow}`
+  boxShadow: `0 10px 24px ${themeTokens.color.shadow}`
 }
 
 const selectGroupStyle: CSSProperties = {
@@ -364,7 +364,7 @@ const selectGroupOptionsStyle: CSSProperties = {
   borderRadius: themeTokens.radius.md,
   background: themeTokens.color.surfaceMuted,
   padding: 6,
-  boxShadow: `0 18px 36px ${themeTokens.color.shadow}`
+  boxShadow: `0 10px 24px ${themeTokens.color.shadow}`
 }
 
 const selectOptionStyle: CSSProperties = {

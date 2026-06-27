@@ -53,9 +53,10 @@ export const OutputBlock = memo(function OutputBlock({ content, contentType, clo
           height: contentType === 'html' ? outputBlockHtmlHeight : 'auto',
           maxHeight: outputBlockMaxHeight,
           overflow: 'hidden',
-          borderRadius: themeTokens.radius.lg,
+          borderRadius: themeTokens.radius.md,
           border: 0,
-          background: themeTokens.color.surfaceMuted
+          background: themeTokens.color.surfaceMuted,
+          boxShadow: `0 6px 18px ${themeTokens.color.shadow}`
         }}
       >
         <style>{outputBlockChromeCss}</style>
@@ -69,11 +70,18 @@ export const OutputBlock = memo(function OutputBlock({ content, contentType, clo
             top: themeTokens.spacing.sm,
             right: themeTokens.spacing.sm,
             zIndex: 1,
-            borderRadius: themeTokens.radius.md,
+            width: 30,
+            height: 28,
+            borderRadius: themeTokens.radius.sm,
             border: 0,
             background: themeTokens.color.softControl,
             color: themeTokens.color.text,
-            cursor: 'pointer'
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            lineHeight: 1,
+            boxShadow: `0 4px 10px ${themeTokens.color.shadow}`
           }}
         >
           ⤢
