@@ -1409,6 +1409,8 @@ describe('AgentRuntime queue', () => {
     expect(storedRun).toMatchObject({ status: 'failed', retryCount: 0 })
     expect((await persistence.contextItems.listBySession('session-overflow-no-meaningful-content')).filter((item) => item.kind === 'session_summary')).toHaveLength(0)
     expect(events.filter((event) => event.type === 'run.retrying')).toHaveLength(0)
+    expect(compressionStepEvents(events)).toEqual([])
+    await expect(persistence.steps.listByRun(run.id)).resolves.toEqual([])
   })
 
   it('normalizes provider context overflow codes to a supported stored error', async () => {

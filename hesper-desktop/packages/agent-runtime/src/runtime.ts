@@ -601,16 +601,16 @@ export class AgentRuntime {
 
     if (runSummaries.length === 0) return this.unchangedSessionCompaction(snapshot)
 
-    return this.withSessionCompactionStep(currentRun.id, async () => {
-      const maxChars = SESSION_COMPACTION_MAX_CHARS_BY_ATTEMPT[Math.min(overflowAttempt, SESSION_COMPACTION_MAX_CHARS_BY_ATTEMPT.length - 1)]
-      const built = buildSessionCompaction({
-        sessionId: currentRun.sessionId,
-        createdAt: nowIso(),
-        runSummaries,
-        ...(maxChars !== undefined ? { maxChars } : {})
-      })
-      if (!built) return this.unchangedSessionCompaction(snapshot, true)
+    const maxChars = SESSION_COMPACTION_MAX_CHARS_BY_ATTEMPT[Math.min(overflowAttempt, SESSION_COMPACTION_MAX_CHARS_BY_ATTEMPT.length - 1)]
+    const built = buildSessionCompaction({
+      sessionId: currentRun.sessionId,
+      createdAt: nowIso(),
+      runSummaries,
+      ...(maxChars !== undefined ? { maxChars } : {})
+    })
+    if (!built) return this.unchangedSessionCompaction(snapshot)
 
+    return this.withSessionCompactionStep(currentRun.id, async () => {
       const existingReusable = [...snapshot.contextItemsByRunId.values()]
         .flat()
         .filter((item) => item.kind === 'session_summary' && item.sourceHash === built.sourceHash && item.content.length <= built.item.content.length)
