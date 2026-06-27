@@ -146,7 +146,7 @@ function resolveThinkingLevel(input: AgentPromptInput, resolved: ResolvedModel):
   }
 
   if (requested === 'xhigh') {
-    return getSupportedThinkingLevels(reasoningModel).includes('xhigh')
+    return usesMaximumThinkingAsXhigh(resolved) || getSupportedThinkingLevels(reasoningModel).includes('xhigh')
       ? 'xhigh'
       : clampThinkingLevel(reasoningModel, 'high')
   }
