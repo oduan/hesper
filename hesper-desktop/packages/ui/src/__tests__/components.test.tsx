@@ -1982,7 +1982,7 @@ describe('ui components', () => {
     expect(openAiSubmenu).toHaveStyle({
       position: 'absolute',
       right: 'calc(100% + 6px)',
-      top: '0px'
+      bottom: '0px'
     })
     const openAiModel = await screen.findByRole('option', { name: 'OpenAI/gpt-4o' })
     expect(openAiSubmenu).toContainElement(openAiModel)
@@ -2009,7 +2009,7 @@ describe('ui components', () => {
     expect(thinkingMenu).toHaveStyle({
       position: 'absolute',
       right: 'calc(100% + 6px)',
-      top: '0px'
+      bottom: '0px'
     })
     expect(within(thinkingMenu).getAllByRole('option').map((option) => option.textContent)).toEqual(['低', '中', '高', '超高', '最大'])
 
