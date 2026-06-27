@@ -33,26 +33,26 @@ describe('model-options', () => {
   it('creates grouped session model catalog from enabled providers and models', () => {
     const catalog = createSessionModelCatalog([
       { id: 'mock', name: 'Mock', kind: 'mock', enabled: true, hasApiKey: false },
-      { id: 'deepseek', name: 'DeepSeek', kind: 'deepseek', enabled: true, hasApiKey: true, defaultModelId: 'deepseek-chat' },
+      { id: 'deepseek', name: 'DeepSeek', kind: 'deepseek', enabled: true, hasApiKey: true, defaultModelId: 'deepseek-v4-flash' },
       { id: 'openai', name: 'OpenAI', kind: 'openai', enabled: true, hasApiKey: false },
       { id: 'chatgpt-codex', name: 'ChatGPT Codex', kind: 'pi', authType: 'oauth', piAuthProvider: 'openai-codex', enabled: true, hasApiKey: true, fastModeEnabled: true },
       { id: 'disabled', name: 'Disabled', kind: 'custom', enabled: false, hasApiKey: true }
     ] as any, [
       { id: 'mock/hesper-fast', providerId: 'mock', modelName: 'mock/hesper-fast', enabled: true },
-      { id: 'deepseek-chat', providerId: 'deepseek', modelName: 'deepseek-chat', enabled: true },
-      { id: 'deepseek-reasoner', providerId: 'deepseek', modelName: 'deepseek-reasoner', enabled: false },
+      { id: 'deepseek-v4-flash', providerId: 'deepseek', modelName: 'deepseek-v4-flash', enabled: true },
+      { id: 'deepseek-v4-pro', providerId: 'deepseek', modelName: 'deepseek-v4-pro', enabled: false },
       { id: 'gpt-4o', providerId: 'openai', modelName: 'gpt-4o', enabled: true },
       { id: 'pi/gpt-5.5', providerId: 'chatgpt-codex', modelName: 'gpt-5.5', enabled: true },
       { id: 'disabled-model', providerId: 'disabled', modelName: 'disabled-model', enabled: true }
     ] as any)
 
-    expect(catalog.preferredModelId).toBe('deepseek-chat')
-    expect(catalog.options).toEqual(['deepseek-chat', 'gpt-4o', 'pi/gpt-5.5'])
+    expect(catalog.preferredModelId).toBe('deepseek-v4-flash')
+    expect(catalog.options).toEqual(['deepseek-v4-flash', 'gpt-4o', 'pi/gpt-5.5'])
     expect(catalog.optionGroups).toEqual([
       {
         id: 'deepseek',
         label: 'DeepSeek',
-        options: [{ value: 'deepseek-chat', label: 'DeepSeek/deepseek-chat' }]
+        options: [{ value: 'deepseek-v4-flash', label: 'DeepSeek/deepseek-v4-flash' }]
       },
       {
         id: 'openai',

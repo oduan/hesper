@@ -180,15 +180,15 @@ describe('ipc-client fallback', () => {
       description: 'Created locally',
       systemPrompt: 'Fallback prompt',
       defaultToolIds: ['filesystem.read-file'],
-      defaultModelId: 'deepseek-chat',
-      defaultModelRef: { providerId: 'deepseek', modelId: 'deepseek-chat' }
+      defaultModelId: 'deepseek-v4-flash',
+      defaultModelRef: { providerId: 'deepseek', modelId: 'deepseek-v4-flash' }
     })
 
     expect(created).toMatchObject({
       name: 'Fallback Role',
       defaultToolIds: ['filesystem.read-file'],
-      defaultModelId: 'deepseek-chat',
-      defaultModelRef: { providerId: 'deepseek', modelId: 'deepseek-chat' }
+      defaultModelId: 'deepseek-v4-flash',
+      defaultModelRef: { providerId: 'deepseek', modelId: 'deepseek-v4-flash' }
     })
     expect(await api.roles.list()).toEqual([created])
 
@@ -199,8 +199,8 @@ describe('ipc-client fallback', () => {
       description: 'Created locally',
       systemPrompt: 'Fallback prompt',
       defaultToolIds: ['filesystem.read-file'],
-      defaultModelId: 'deepseek-chat',
-      defaultModelRef: { providerId: 'deepseek', modelId: 'deepseek-chat' }
+      defaultModelId: 'deepseek-v4-flash',
+      defaultModelRef: { providerId: 'deepseek', modelId: 'deepseek-v4-flash' }
     })
     expect(await api.roles.list()).toEqual([updated])
 
@@ -235,7 +235,7 @@ describe('ipc-client fallback', () => {
 
     const updated = await api.roles.update({
       id: created.id,
-      defaultModelRef: { providerId: 'deepseek', modelId: 'deepseek-chat' }
+      defaultModelRef: { providerId: 'deepseek', modelId: 'deepseek-v4-flash' }
     })
 
     expect(updated).toMatchObject({

@@ -1,6 +1,7 @@
 import type { Persistence } from '@hesper/persistence'
 import { inferModelCapabilitiesFromName, modelProviderConfigSchema, nowIso, type ModelConfig, type ModelProviderConfig, type ModelProviderKind } from '@hesper/shared'
 import { providerApiKeyRef, type CredentialVaultService } from './credential-vault-service'
+import { isRetiredOrTestModel, knownContextWindowForModel } from './known-model-context'
 
 export type PiAuthProvider = 'openai-codex'
 export type ProviderOAuthStatus = 'pending' | 'authorized' | 'failed'
@@ -475,10 +476,51 @@ export function createModelProviderService(options: {
     }
   }
 
+  const backfillKnownModelContextWindows = async (): Promise<void> => {
+    const models = await options.persistence.models.list()
+    for (const model of models) {
+      if (model.contextWindow !== undefined) continue
+      const contextWindow = knownContextWindowForModel(model)
+      if (contextWindow !== undefined) {
+        await options.persistence.models.save({ ...model, contextWindow })
+      }
+    }
+  }
+
+  const disableRetiredOrTestModels = async (): Promise<void> => {
+    const models = await options.persistence.models.list()
+    for (const model of models) {
+      if (model.enabled !== false && isRetiredOrTestModel(model)) {
+        await options.persistence.models.save({ ...model, enabled: false })
+      }
+    }
+  }
+
+  const repairRetiredDefaultModelIds = async (): Promise<void> => {
+    const providers = await options.persistence.modelProviders.list()
+    for (const provider of providers) {
+      if (!provider.defaultModelId) continue
+      const defaultModel = await options.persistence.models.get(provider.defaultModelId)
+      const defaultIsRetired = defaultModel
+        ? isRetiredOrTestModel(defaultModel)
+        : isRetiredOrTestModel({ id: provider.defaultModelId, modelName: normalizeModelName(provider.id, provider.defaultModelId), providerId: provider.id })
+      if (!defaultIsRetired) continue
+
+      const replacement = (await options.persistence.models.listByProvider(provider.id))
+        .find((model) => model.enabled !== false && !isRetiredOrTestModel(model))
+      if (replacement) {
+        await options.persistence.modelProviders.save({ ...provider, defaultModelId: replacement.id, updatedAt: now() })
+      }
+    }
+  }
+
   // Keep the historical name for existing call sites. This no longer seeds
-  // built-in providers/models; it only backfills legacy model capability data.
+  // built-in providers/models; it only backfills legacy model metadata.
   const ensureBuiltinProviders = async (): Promise<void> => {
     await backfillInferredImageInputCapabilities()
+    await backfillKnownModelContextWindows()
+    await disableRetiredOrTestModels()
+    await repairRetiredDefaultModelIds()
   }
 
   const connectionTestInput = (input: string | ProviderConnectionTestInput): ProviderConnectionTestInput => (

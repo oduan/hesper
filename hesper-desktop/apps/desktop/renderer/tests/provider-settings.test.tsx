@@ -36,7 +36,7 @@ const baseProviders = [
     kind: 'deepseek',
     baseUrl: 'https://api.deepseek.com',
     enabled: true,
-    defaultModelId: 'deepseek-chat',
+    defaultModelId: 'deepseek-v4-flash',
     apiKeyRef: 'provider:deepseek:api-key',
     hasApiKey: false,
     createdAt: now,
@@ -82,10 +82,10 @@ const baseModels = [
     updatedAt: now
   },
   {
-    id: 'deepseek-chat',
+    id: 'deepseek-v4-flash',
     providerId: 'deepseek',
-    modelName: 'deepseek-chat',
-    displayName: 'DeepSeek Chat',
+    modelName: 'deepseek-v4-flash',
+    displayName: 'DeepSeek V4 Flash',
     capabilities: ['streaming', 'toolCalls'],
     enabled: true,
     createdAt: now,
@@ -412,7 +412,7 @@ describe('provider settings panel', () => {
         kind: 'deepseek',
         baseUrl: 'https://api.deepseek.com',
         enabled: true,
-        defaultModelId: 'deepseek-chat'
+        defaultModelId: 'deepseek-v4-flash'
       }))
     })
   })
@@ -1040,10 +1040,10 @@ describe('provider settings panel', () => {
     listModels.mockResolvedValue([
       ...baseModels,
       {
-        id: 'deepseek-reasoner',
+        id: 'deepseek-v4-pro',
         providerId: 'deepseek',
-        modelName: 'deepseek-reasoner',
-        displayName: 'DeepSeek Reasoner',
+        modelName: 'deepseek-v4-pro',
+        displayName: 'DeepSeek V4 Pro',
         capabilities: ['streaming', 'toolCalls', 'jsonOutput', 'imageInput'],
         enabled: true,
         createdAt: now,
@@ -1059,7 +1059,7 @@ describe('provider settings panel', () => {
 
     expect(await screen.findByRole('dialog', { name: 'API 配置' })).toBeInTheDocument()
     expect(screen.getByLabelText('添加连接 Endpoint')).toHaveValue('https://api.deepseek.com')
-    expect(screen.getByLabelText('添加连接默认模型')).toHaveValue('deepseek-chat, deepseek-reasoner')
+    expect(screen.getByLabelText('添加连接默认模型')).toHaveValue('deepseek-v4-flash, deepseek-v4-pro')
     expect(screen.getByLabelText('添加连接 API key')).toHaveValue('')
 
     await user.click(screen.getByRole('button', { name: 'Test' }))
@@ -1068,7 +1068,7 @@ describe('provider settings panel', () => {
         providerId: 'deepseek',
         kind: 'openai-compatible',
         baseUrl: 'https://api.deepseek.com',
-        modelId: 'deepseek-chat'
+        modelId: 'deepseek-v4-flash'
       })
     })
 
@@ -1079,11 +1079,11 @@ describe('provider settings panel', () => {
     await waitFor(() => {
       expect(saveProvider).toHaveBeenCalledWith(expect.objectContaining({ id: 'deepseek', baseUrl: 'https://api.deepseek.com/v1' }))
     })
-    expect(saveModel).toHaveBeenCalledWith(expect.objectContaining({ id: 'deepseek-chat', providerId: 'deepseek', modelName: 'deepseek-chat' }))
+    expect(saveModel).toHaveBeenCalledWith(expect.objectContaining({ id: 'deepseek-v4-flash', providerId: 'deepseek', modelName: 'deepseek-v4-flash' }))
     expect(saveModel).toHaveBeenCalledWith(expect.objectContaining({
-      id: 'deepseek-reasoner',
+      id: 'deepseek-v4-pro',
       providerId: 'deepseek',
-      modelName: 'deepseek-reasoner',
+      modelName: 'deepseek-v4-pro',
       capabilities: ['streaming', 'toolCalls', 'jsonOutput', 'imageInput']
     }))
     expect(saveProviderApiKey).not.toHaveBeenCalled()

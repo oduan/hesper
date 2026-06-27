@@ -77,10 +77,10 @@ beforeEach(() => {
     updatedAt: '2026-06-10T03:00:00.000Z'
   }))
   listProviders.mockReset().mockResolvedValue([
-    { id: 'deepseek', name: 'DeepSeek', kind: 'deepseek', enabled: true, hasApiKey: true, defaultModelId: 'deepseek-chat', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+    { id: 'deepseek', name: 'DeepSeek', kind: 'deepseek', enabled: true, hasApiKey: true, defaultModelId: 'deepseek-v4-flash', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
   ] as any)
   listModels.mockReset().mockResolvedValue([
-    { id: 'deepseek-chat', providerId: 'deepseek', modelName: 'deepseek-chat', displayName: 'DeepSeek Chat', capabilities: ['streaming', 'toolCalls'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+    { id: 'deepseek-v4-flash', providerId: 'deepseek', modelName: 'deepseek-v4-flash', displayName: 'DeepSeek V4 Flash', capabilities: ['streaming', 'toolCalls'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
   ] as any)
 })
 
@@ -112,7 +112,7 @@ describe('App failed run retry', () => {
         id: 'run-failed',
         sessionId: 'session-retry',
         status: 'failed',
-        modelId: 'deepseek-chat',
+        modelId: 'deepseek-v4-flash',
         retryCount: 2,
         maxRetries: 2,
         startedAt: '2026-06-10T03:00:00.000Z',
@@ -144,7 +144,7 @@ describe('App failed run retry', () => {
     await waitFor(() => expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({
       sessionId: 'session-retry',
       prompt: 'retry this prompt',
-      modelId: 'deepseek-chat'
+      modelId: 'deepseek-v4-flash'
     })))
     expect(screen.getAllByText('retry this prompt')).toHaveLength(2)
     expect(screen.getAllByText('运行失败：stream_interrupted').length).toBeGreaterThan(0)
@@ -160,7 +160,7 @@ describe('App failed run retry', () => {
       title: 'Retry unavailable model',
       status: 'active',
       outputMode: 'markdown',
-      defaultModelId: 'deepseek-chat',
+      defaultModelId: 'deepseek-v4-flash',
       createdAt: '2026-06-10T03:00:00.000Z',
       updatedAt: '2026-06-10T03:00:10.000Z'
     }
