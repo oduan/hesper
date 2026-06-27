@@ -67,6 +67,7 @@ export type ModelProviderConfig = {
   hasApiKey?: boolean
   enabled: boolean
   defaultModelId?: string
+  fastModeEnabled?: boolean
   createdAt: string
   updatedAt: string
 }

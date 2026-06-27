@@ -204,6 +204,7 @@ describe('shared schemas', () => {
       hasApiKey: true,
       enabled: true,
       defaultModelId: 'pi/gpt-5.5',
+      fastModeEnabled: true,
       createdAt: '2026-06-20T15:20:00.000Z',
       updatedAt: '2026-06-20T15:20:00.000Z'
     })
@@ -212,7 +213,8 @@ describe('shared schemas', () => {
       kind: 'pi',
       authType: 'oauth',
       piAuthProvider: 'openai-codex',
-      hasApiKey: true
+      hasApiKey: true,
+      fastModeEnabled: true
     })
   })
 
