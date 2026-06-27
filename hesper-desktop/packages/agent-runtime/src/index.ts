@@ -1,4 +1,5 @@
 export * from './adapters'
+export * from './context-overflow'
 export * from './map-pi-event'
 export * from './mock-adapter'
 export * from './model-resolver'

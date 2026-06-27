@@ -5,6 +5,7 @@ import type { AgentAdapter, AgentPromptInput, AttachmentReader } from '../adapte
 import { MockAgentAdapter } from '../mock-adapter'
 import { defaultRetryPolicy } from '../retry-policy'
 import { AgentRuntime } from '../runtime'
+import { buildSessionCompaction } from '../session-compaction'
 
 const session: Session = {
   id: 'session-1',
@@ -196,6 +197,168 @@ class DelayedWorkerInvocationAdapter implements AgentAdapter {
       }
     })
   }
+}
+
+class OverflowThenSuccessAdapter implements AgentAdapter {
+  readonly inputs: AgentPromptInput[] = []
+
+  async run(input: AgentPromptInput, emit: (event: AgentRuntimeEvent) => void | Promise<void>): Promise<void> {
+    this.inputs.push(input)
+    if (this.inputs.length === 1) {
+      throw new Error('Prompt is too long for this model. Bearer super-secret-overflow-token')
+    }
+
+    await emit({
+      type: 'message.completed',
+      message: {
+        id: `message-${input.runId}-${this.inputs.length}`,
+        sessionId: input.sessionId,
+        role: 'assistant',
+        content: `done:${input.prompt}`,
+        contentType: 'markdown',
+        runId: input.runId,
+        createdAt: '2026-06-27T10:30:00.000Z'
+      }
+    })
+  }
+}
+
+class AlwaysOverflowAdapter implements AgentAdapter {
+  readonly inputs: AgentPromptInput[] = []
+
+  async run(input: AgentPromptInput): Promise<void> {
+    this.inputs.push(input)
+    throw new Error('maximum context length exceeded for token Bearer super-secret-overflow-token')
+  }
+}
+
+class OverflowThenAbortableAdapter implements AgentAdapter {
+  readonly inputs: AgentPromptInput[] = []
+  private releaseSecondAttempt!: () => void
+  readonly secondAttemptStarted = new Promise<void>((resolve) => {
+    this.releaseSecondAttempt = resolve
+  })
+  aborted = false
+
+  async run(input: AgentPromptInput): Promise<void> {
+    this.inputs.push(input)
+    if (this.inputs.length === 1) {
+      throw new Error('input is too long for this model')
+    }
+
+    this.releaseSecondAttempt()
+    await new Promise<void>((resolve) => {
+      input.signal.addEventListener('abort', () => {
+        this.aborted = true
+        resolve()
+      }, { once: true })
+    })
+    throw new Error('aborted')
+  }
+}
+
+async function saveModel(persistence: Awaited<ReturnType<typeof createInMemoryPersistence>>, id: string, contextWindow: number): Promise<void> {
+  await persistence.models.save({
+    id,
+    providerId: 'test-provider',
+    modelName: id,
+    displayName: id,
+    capabilities: ['streaming', 'toolCalls'],
+    contextWindow,
+    enabled: true,
+    createdAt: '2026-06-27T09:00:00.000Z',
+    updatedAt: '2026-06-27T09:00:00.000Z'
+  })
+}
+
+function makeVerboseRunSummary(runId: string, lines: string[]): string {
+  return [
+    `<hesper_run_context run_id="${runId}" version="2">`,
+    'purpose: previous_run_continuity_not_new_user_request',
+    'latest_user_request:',
+    `Decision: keep coverage for ${runId}.`,
+    ...lines,
+    'latest_assistant_result:',
+    `Validation: summarized ${runId} before runtime overflow handling.`,
+    'tool_activity:',
+    JSON.stringify({
+      category: 'error',
+      status: 'failed',
+      title: `Run failing test ${runId}`,
+      errorExcerpt: 'AssertionError: expected history to shrink',
+      files: [`packages/agent-runtime/src/${runId}.ts`]
+    }),
+    '</hesper_run_context>'
+  ].join('\n')
+}
+
+async function seedHistoricalRun(persistence: Awaited<ReturnType<typeof createInMemoryPersistence>>, sessionId: string, runId: string, startedAt: string, prompt: string, summary: string): Promise<void> {
+  await persistence.runs.save({
+    id: runId,
+    sessionId,
+    status: 'succeeded',
+    modelId: 'mock/hesper-fast',
+    retryCount: 0,
+    maxRetries: 3,
+    startedAt,
+    endedAt: startedAt
+  })
+  await persistence.messages.save({
+    id: `message-user-${runId}`,
+    sessionId,
+    role: 'user',
+    content: prompt,
+    contentType: 'plain',
+    runId,
+    createdAt: startedAt
+  })
+  await persistence.messages.save({
+    id: `message-assistant-${runId}`,
+    sessionId,
+    role: 'assistant',
+    content: `done:${prompt}`,
+    contentType: 'markdown',
+    runId,
+    createdAt: startedAt
+  })
+  await persistence.contextItems.save({
+    id: `context-item-${runId}-run-summary-v2`,
+    sessionId,
+    runId,
+    kind: 'run_summary',
+    version: 2,
+    content: summary,
+    tokenEstimate: Math.ceil(summary.length / 4),
+    sourceHash: `hash-${runId}`,
+    createdAt: startedAt
+  })
+}
+
+async function seedOverflowHistory(persistence: Awaited<ReturnType<typeof createInMemoryPersistence>>, sessionId: string): Promise<void> {
+  await seedHistoricalRun(
+    persistence,
+    sessionId,
+    'run-overflow-1',
+    '2026-06-27T09:10:00.000Z',
+    'earlier request 1',
+    makeVerboseRunSummary('run-overflow-1', ['Keep packages/agent-runtime/src/runtime.ts stable.', 'x'.repeat(800)])
+  )
+  await seedHistoricalRun(
+    persistence,
+    sessionId,
+    'run-overflow-2',
+    '2026-06-27T09:20:00.000Z',
+    'earlier request 2',
+    makeVerboseRunSummary('run-overflow-2', ['Keep packages/agent-runtime/src/context-overflow.ts focused.', 'y'.repeat(800)])
+  )
+  await seedHistoricalRun(
+    persistence,
+    sessionId,
+    'run-overflow-3',
+    '2026-06-27T09:30:00.000Z',
+    'recent request',
+    makeVerboseRunSummary('run-overflow-3', ['Validate runtime overflow recovery.', 'z'.repeat(120)])
+  )
 }
 
 type RuntimeInternals = {
@@ -803,6 +966,176 @@ describe('AgentRuntime queue', () => {
         content: 'done:persist me'
       })
     ])
+  })
+
+  it('does not generate a session compaction when the local context budget is still within limits', async () => {
+    const persistence = await createInMemoryPersistence()
+    await persistence.sessions.save({ ...session, id: 'session-overflow-within-budget' })
+    await saveModel(persistence, 'mock/hesper-fast', 10_000)
+    await seedOverflowHistory(persistence, 'session-overflow-within-budget')
+
+    const saveSpy = vi.spyOn(persistence.contextItems, 'save')
+    const adapter = new RecordingAdapter()
+    const runtime = new AgentRuntime({ persistence, adapter })
+
+    await runtime.enqueue({ sessionId: 'session-overflow-within-budget', prompt: 'continue without compaction', modelId: 'mock/hesper-fast' })
+    await runtime.waitForIdle('session-overflow-within-budget')
+
+    const sessionSummarySaves = saveSpy.mock.calls
+      .map(([item]) => item)
+      .filter((item) => item.kind === 'session_summary')
+    expect(sessionSummarySaves).toEqual([])
+    expect(adapter.inputs).toHaveLength(1)
+    expect((adapter.inputs[0]?.historyMessages ?? []).map((message) => message.content).join('\n')).not.toContain('<hesper_session_context')
+  })
+
+  it('creates a reusable session compaction before calling the adapter when the local budget is exceeded', async () => {
+    const persistence = await createInMemoryPersistence()
+    await persistence.sessions.save({ ...session, id: 'session-overflow-local-budget' })
+    await saveModel(persistence, 'mock/hesper-fast', 300)
+    await seedOverflowHistory(persistence, 'session-overflow-local-budget')
+
+    const adapter = new RecordingAdapter()
+    const runtime = new AgentRuntime({ persistence, adapter })
+
+    await runtime.enqueue({ sessionId: 'session-overflow-local-budget', prompt: 'compact before run', modelId: 'mock/hesper-fast' })
+    await runtime.waitForIdle('session-overflow-local-budget')
+
+    const sessionSummaries = (await persistence.contextItems.listBySession('session-overflow-local-budget')).filter((item) => item.kind === 'session_summary')
+    expect(sessionSummaries).toHaveLength(1)
+    expect(adapter.inputs).toHaveLength(1)
+
+    const history = adapter.inputs[0]?.historyMessages ?? []
+    const historyIds = history.map((message) => message.id)
+    const historyContent = history.map((message) => message.content).join('\n')
+    expect(historyContent).toContain('<hesper_session_context')
+    expect(historyIds).not.toContain('context-summary-run-overflow-1')
+    expect(historyIds).not.toContain('context-summary-run-overflow-2')
+  })
+
+  it('reuses an existing session compaction for the same covered runs instead of saving it again', async () => {
+    const persistence = await createInMemoryPersistence()
+    await persistence.sessions.save({ ...session, id: 'session-overflow-reuse' })
+    await saveModel(persistence, 'mock/hesper-fast', 300)
+    await seedOverflowHistory(persistence, 'session-overflow-reuse')
+
+    const olderRunSummaries = await Promise.all([
+      persistence.contextItems.listByRun('run-overflow-1'),
+      persistence.contextItems.listByRun('run-overflow-2')
+    ])
+    const built = buildSessionCompaction({
+      sessionId: 'session-overflow-reuse',
+      createdAt: '2026-06-27T10:00:00.000Z',
+      runSummaries: olderRunSummaries.flatMap((items) => items.filter((item) => item.kind === 'run_summary').map((item) => ({
+        runId: item.runId,
+        createdAt: item.createdAt,
+        version: item.version,
+        content: item.content
+      })))
+    })
+    expect(built).toBeDefined()
+    await persistence.contextItems.save(built!.item)
+
+    const saveSpy = vi.spyOn(persistence.contextItems, 'save')
+    saveSpy.mockClear()
+    const adapter = new RecordingAdapter()
+    const runtime = new AgentRuntime({ persistence, adapter })
+
+    await runtime.enqueue({ sessionId: 'session-overflow-reuse', prompt: 'reuse compaction', modelId: 'mock/hesper-fast' })
+    await runtime.waitForIdle('session-overflow-reuse')
+
+    const sessionSummarySaves = saveSpy.mock.calls
+      .map(([item]) => item)
+      .filter((item) => item.kind === 'session_summary')
+    expect(sessionSummarySaves).toEqual([])
+    expect((adapter.inputs[0]?.historyMessages ?? []).map((message) => message.content).join('\n')).toContain('<hesper_session_context')
+  })
+
+  it('retries context overflow with a shorter compacted history without using the normal retry policy', async () => {
+    const persistence = await createInMemoryPersistence()
+    await persistence.sessions.save({ ...session, id: 'session-overflow-provider-retry' })
+    await saveModel(persistence, 'mock/hesper-fast', 10_000)
+    await seedOverflowHistory(persistence, 'session-overflow-provider-retry')
+
+    const adapter = new OverflowThenSuccessAdapter()
+    const runtime = new AgentRuntime({ persistence, adapter })
+    const events: AgentRuntimeEvent[] = []
+    runtime.subscribe((event) => {
+      events.push(event)
+    })
+
+    const run = await runtime.enqueue({ sessionId: 'session-overflow-provider-retry', prompt: 'recover from provider overflow', modelId: 'mock/hesper-fast' })
+    await runtime.waitForIdle('session-overflow-provider-retry')
+
+    const storedRun = await persistence.runs.get(run.id)
+    const firstHistory = adapter.inputs[0]?.historyMessages ?? []
+    const secondHistory = adapter.inputs[1]?.historyMessages ?? []
+    const firstLength = firstHistory.reduce((total, message) => total + message.content.length, 0)
+    const secondLength = secondHistory.reduce((total, message) => total + message.content.length, 0)
+
+    expect(adapter.inputs).toHaveLength(2)
+    expect(firstHistory.map((message) => message.content).join('\n')).not.toContain('<hesper_session_context')
+    expect(secondHistory.map((message) => message.content).join('\n')).toContain('<hesper_session_context')
+    expect(secondLength).toBeLessThan(firstLength)
+    expect(storedRun).toMatchObject({ status: 'succeeded', retryCount: 0 })
+    expect(events.filter((event) => event.type === 'run.retrying')).toHaveLength(0)
+  })
+
+  it('fails with a redacted diagnostic error after exhausting overflow retries', async () => {
+    const persistence = await createInMemoryPersistence()
+    await persistence.sessions.save({ ...session, id: 'session-overflow-exhausted' })
+    await saveModel(persistence, 'mock/hesper-fast', 10_000)
+    await seedOverflowHistory(persistence, 'session-overflow-exhausted')
+
+    const adapter = new AlwaysOverflowAdapter()
+    const runtime = new AgentRuntime({ persistence, adapter })
+    const events: AgentRuntimeEvent[] = []
+    runtime.subscribe((event) => {
+      events.push(event)
+    })
+
+    const run = await runtime.enqueue({ sessionId: 'session-overflow-exhausted', prompt: 'keep overflowing', modelId: 'mock/hesper-fast' })
+    await runtime.waitForIdle('session-overflow-exhausted')
+
+    const storedRun = await persistence.runs.get(run.id)
+    expect(adapter.inputs).toHaveLength(3)
+    expect(storedRun).toMatchObject({
+      id: run.id,
+      status: 'failed',
+      retryCount: 0,
+      error: expect.objectContaining({ retryable: false })
+    })
+    expect(storedRun?.error?.message).not.toContain('super-secret-overflow-token')
+    expect(storedRun?.error?.message).toContain('[redacted-sensitive-value]')
+    expect(events.filter((event) => event.type === 'run.retrying')).toHaveLength(0)
+    expect(events.filter((event) => event.type === 'run.failed')).toHaveLength(1)
+  })
+
+  it('still allows cancellation after an overflow-triggered retry starts', async () => {
+    const persistence = await createInMemoryPersistence()
+    await persistence.sessions.save({ ...session, id: 'session-overflow-cancelled' })
+    await saveModel(persistence, 'mock/hesper-fast', 10_000)
+    await seedOverflowHistory(persistence, 'session-overflow-cancelled')
+
+    const adapter = new OverflowThenAbortableAdapter()
+    const runtime = new AgentRuntime({ persistence, adapter })
+    const events: AgentRuntimeEvent[] = []
+    runtime.subscribe((event) => {
+      events.push(event)
+    })
+
+    const run = await runtime.enqueue({ sessionId: 'session-overflow-cancelled', prompt: 'cancel after overflow', modelId: 'mock/hesper-fast' })
+    await adapter.secondAttemptStarted
+    const cancelledRun = await runtime.cancelRun(run.id)
+    await runtime.waitForIdle('session-overflow-cancelled')
+
+    expect(adapter.inputs).toHaveLength(2)
+    expect(adapter.aborted).toBe(true)
+    expect(cancelledRun).toMatchObject({ id: run.id, status: 'cancelled' })
+    expect(await persistence.runs.get(run.id)).toMatchObject({ id: run.id, status: 'cancelled' })
+    expect(events.map((event) => event.type)).toContain('run.cancelled')
+    expect(events.map((event) => event.type)).not.toContain('run.failed')
+    expect(events.map((event) => event.type)).not.toContain('run.succeeded')
   })
 
   it('retries retryable adapter failures and then succeeds', async () => {
