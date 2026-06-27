@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentRun, Message, RunContextItem, RunStep } from '@hesper/shared'
 import { assembleHistoryMessages } from '../context-assembler'
+import { buildSessionCompaction } from '../session-compaction'
 
 const baseRun = (id: string, patch: Partial<AgentRun> = {}): AgentRun => ({
   id,
@@ -391,6 +392,81 @@ describe('assembleHistoryMessages', () => {
     expect(contents).not.toContain('summary 2')
     expect(result.map((item) => item.id)).not.toContain('context-summary-run-1')
     expect(result.map((item) => item.id)).not.toContain('context-summary-run-2')
+  })
+
+  it('accepts a built session summary item in a round trip and replaces covered run summaries', () => {
+    const built = buildSessionCompaction({
+      sessionId: 'session-1',
+      createdAt: '2026-06-25T02:00:07.000Z',
+      currentPrompt: 'Must keep packages/agent-runtime/src/context-assembler.ts compatible.',
+      runSummaries: [
+        {
+          runId: 'run-1',
+          createdAt: '2026-06-25T02:00:01.000Z',
+          version: 2,
+          content: [
+            '<hesper_run_context run_id="run-1" version="2">',
+            'purpose: previous_run_continuity_not_new_user_request',
+            'latest_user_request:',
+            'first',
+            '</hesper_run_context>'
+          ].join('\n')
+        },
+        {
+          runId: 'run-2',
+          createdAt: '2026-06-25T02:00:05.000Z',
+          version: 2,
+          content: [
+            '<hesper_run_context run_id="run-2" version="2">',
+            'purpose: previous_run_continuity_not_new_user_request',
+            'latest_assistant_result:',
+            'Decision: keep session summary coverage stable.',
+            'tool_activity:',
+            JSON.stringify({
+              category: 'error',
+              status: 'failed',
+              title: 'Run failing test',
+              errorExcerpt: 'AssertionError: expected 1 to be 2',
+              files: ['packages/agent-runtime/src/__tests__/context-assembler.test.ts']
+            }),
+            '</hesper_run_context>'
+          ].join('\n')
+        }
+      ]
+    })
+
+    expect(built).toBeDefined()
+
+    const result = assembleHistoryMessages({
+      currentRunId: 'run-4',
+      runs: [
+        baseRun('run-1', { startedAt: '2026-06-25T02:00:00.000Z' }),
+        baseRun('run-2', { startedAt: '2026-06-25T02:00:05.000Z' }),
+        baseRun('run-3', { startedAt: '2026-06-25T02:00:10.000Z' }),
+        baseRun('run-4', { status: 'running', startedAt: '2026-06-25T02:00:15.000Z' })
+      ],
+      messages: [
+        message('m1', 'run-1', 'user', 'first', '2026-06-25T02:00:00.000Z'),
+        message('m2', 'run-2', 'user', 'second', '2026-06-25T02:00:05.000Z'),
+        message('m3', 'run-3', 'user', 'third', '2026-06-25T02:00:10.000Z')
+      ],
+      contextItemsByRunId: new Map([
+        ['run-1', [contextItem('run-1', '<hesper_run_context run_id="run-1">\nlegacy summary 1\n</hesper_run_context>')]],
+        ['run-2', [
+          contextItem('run-2', '<hesper_run_context run_id="run-2">\nlegacy summary 2\n</hesper_run_context>'),
+          built!.item
+        ]],
+        ['run-3', [contextItem('run-3', '<hesper_run_context run_id="run-3">\nsummary 3\n</hesper_run_context>')]]
+      ])
+    })
+
+    const contents = result.map((item) => item.content).join('\n')
+    expect(contents).toContain('<hesper_session_context')
+    expect(contents).toContain('first')
+    expect(contents).toContain('Decision: keep session summary coverage stable.')
+    expect(contents).toContain('summary 3')
+    expect(contents).not.toContain('legacy summary 1')
+    expect(contents).not.toContain('legacy summary 2')
   })
 
   it('excludes current run messages to avoid duplicating the active prompt', () => {

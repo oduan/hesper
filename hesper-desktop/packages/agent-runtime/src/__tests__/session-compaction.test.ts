@@ -215,6 +215,27 @@ describe('buildSessionCompaction', () => {
     expect(content).not.toContain('xoxb-1234567890-secret-secret')
   })
 
+  it('does not redact ordinary filenames or risk labels while still redacting real sk-style tokens', () => {
+    const result = buildSessionCompaction({
+      sessionId: 'session-redact-safe-text',
+      createdAt: '2026-06-27T09:20:00.000Z',
+      runSummaries: [
+        runSummary({
+          runId: 'run-1',
+          createdAt: '2026-06-27T09:10:00.000Z',
+          user: 'Review reports/task-5-code-quality-review-report.md and keep risk-score-high visible.',
+          assistant: 'Decision: compare reports/task-5-code-quality-review-report.md against sk-live-1234567890 while leaving risk-score-high unchanged.'
+        })
+      ]
+    })
+
+    const content = result?.item.content ?? ''
+    expect(content).toContain('reports/task-5-code-quality-review-report.md')
+    expect(content).toContain('risk-score-high')
+    expect(content).toContain('[redacted-sensitive-value]')
+    expect(content).not.toContain('sk-live-1234567890')
+  })
+
   it('returns undefined when only filtered success noise remains', () => {
     const result = buildSessionCompaction({
       sessionId: 'session-noise-only',
@@ -375,6 +396,59 @@ describe('buildSessionCompaction', () => {
     expect(result?.item.content).not.toContain('looked at package B')
   })
 
+  it('does not treat exploratory assistant text as a confirmed decision', () => {
+    const result = buildSessionCompaction({
+      sessionId: 'session-decision-filter',
+      createdAt: '2026-06-27T09:20:00.000Z',
+      runSummaries: [
+        runSummary({
+          runId: 'run-1',
+          createdAt: '2026-06-27T09:10:00.000Z',
+          user: 'Keep deterministic compaction behavior.',
+          assistant: [
+            'Plan: inspect package A and keep exploring logs.',
+            'Decision: reuse the existing wrapper format.',
+            'Architecture: keep session summaries compatible with the assembler.'
+          ].join('\n')
+        })
+      ]
+    })
+
+    expect(result).toBeDefined()
+    expect(result?.item.content).toContain('confirmed_decisions:')
+    expect(result?.item.content).toContain('Decision: reuse the existing wrapper format.')
+    expect(result?.item.content).toContain('Architecture: keep session summaries compatible with the assembler.')
+    expect(result?.item.content).not.toContain('Plan: inspect package A and keep exploring logs.')
+  })
+
+  it('collects important files from recentMessages and currentPrompt', () => {
+    const result = buildSessionCompaction({
+      sessionId: 'session-important-files',
+      createdAt: '2026-06-27T09:20:00.000Z',
+      currentPrompt: 'Update docs/task-5-code-quality-review-report.md and packages/agent-runtime/src/session-compaction.ts.',
+      recentMessages: [
+        {
+          role: 'user',
+          createdAt: '2026-06-27T09:18:00.000Z',
+          content: 'Also inspect packages/agent-runtime/src/context-assembler.ts before changing anything.'
+        }
+      ],
+      runSummaries: [
+        runSummary({
+          runId: 'run-1',
+          createdAt: '2026-06-27T09:10:00.000Z',
+          user: 'Preserve the original goal for deterministic compaction.'
+        })
+      ]
+    })
+
+    expect(result).toBeDefined()
+    expect(result?.item.content).toContain('important_files:')
+    expect(result?.item.content).toContain('docs/task-5-code-quality-review-report.md')
+    expect(result?.item.content).toContain('packages/agent-runtime/src/session-compaction.ts')
+    expect(result?.item.content).toContain('packages/agent-runtime/src/context-assembler.ts')
+  })
+
   it('still returns a summary when truly meaningful goal or error context remains', () => {
     const result = buildSessionCompaction({
       sessionId: 'session-meaningful-still-kept',
@@ -400,6 +474,34 @@ describe('buildSessionCompaction', () => {
     expect(result?.item.content).toContain('Preserve the original goal for deterministic compaction.')
     expect(result?.item.content).toContain('recent_failures_and_validation:')
     expect(result?.item.content).toContain('AssertionError: expected true to be false')
+  })
+
+  it('does not return empty or header-only summaries under tight mid-sized budgets', () => {
+    const result = buildSessionCompaction({
+      sessionId: 's',
+      createdAt: '2026-06-27T09:20:00.000Z',
+      maxChars: 170,
+      currentPrompt: 'Must keep wrapper completeness.',
+      runSummaries: [
+        runSummary({
+          runId: 'r1',
+          createdAt: '2026-06-27T09:10:00.000Z',
+          user: 'This user goal is intentionally long enough to force truncation beyond a whole section boundary.',
+          assistant: 'Decision: reuse the existing wrapper format for deterministic compaction.'
+        })
+      ]
+    })
+
+    if (!result) {
+      expect(result).toBeUndefined()
+      return
+    }
+
+    expect(result.item.content).toContain('[truncated ')
+    expect(result.item.content).toMatch(/<\/hesper_session_context>$/)
+    expect(result.item.content).not.toMatch(/^<hesper_session_context[\s\S]*>\n\[truncated \d+ chars\]\n<\/hesper_session_context>$/)
+    expect(result.item.content).not.toMatch(/^<hesper_session_context[\s\S]*>\npurpose:\n(?:\[truncated \d+ chars\]|<\/hesper_session_context>)/)
+    expect(result.item.content).not.toMatch(/\n(?:earliest_user_goal|hard_constraints|confirmed_decisions|recent_failures_and_validation|important_files|source_omissions|tool_activity):\n(?:\[truncated \d+ chars\]|<\/hesper_session_context>)/)
   })
 
   it('keeps the wrapper complete and includes a truncation marker under a tight maxChars budget', () => {

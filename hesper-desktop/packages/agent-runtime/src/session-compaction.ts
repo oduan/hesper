@@ -8,10 +8,10 @@ const REDACTED_VALUE = '[redacted-sensitive-value]'
 const SECTION_HEADER_SET = new Set(['latest_user_request:', 'latest_assistant_result:', 'tool_activity:'])
 const TRUNCATION_MARKER_PATTERN = /^\[truncated \d+ chars\]$/
 const HARD_CONSTRAINT_PATTERN = /(?:\b(?:must(?:\s+not)?|do not|don't|only|avoid|keep|preserve|required|cannot|never)\b|(?:必须|不要|仅|只做|不能|不得|保留|避免))/i
-const DECISION_PATTERN = /(?:\b(?:decision|decided|choose|chosen|approach|plan|architecture|architectural|reuse|prefer|keep|adopt|confirm(?:ed)?)\b|(?:方案|决定|架构|采用|复用|确认|保持))/i
+const DECISION_PATTERN = /(?:^(?:decision|architecture)\s*[:：]|\bdecided to\b|\bchosen\b|\bwe chose\b|\bconfirmed architecture decision\b|\barchitectural decision\b|^(?:决定|架构)\s*[:：]|\b已决定\b|\b已确认架构决定\b|\b架构决定\b)/i
 const VALIDATION_PATTERN = /(?:\b(?:test|typecheck|lint|build|validate|validation|check|assert|verification|verified)\b|(?:测试|验证|检查|构建))/i
 const FAILURE_PATTERN = /(?:\b(?:fail(?:ed|ure)?|error|exception|assertionerror|typeerror|referenceerror)\b|(?:失败|报错|错误|异常))/i
-const PATH_LIKE_PATTERN = /(?:^|[\s"'`(])((?:[A-Za-z]:[\\/]|\.\.?[\\/])?[A-Za-z0-9_.-]+(?:[\\/][A-Za-z0-9_.-]+)+\.[A-Za-z0-9]+)(?=$|[\s"'`):,])/g
+const PATH_LIKE_PATTERN = /(?:^|[\s"'`(])((?:[A-Za-z]:[\\/]|\.\.?[\\/])?[A-Za-z0-9_.-]+(?:[\\/][A-Za-z0-9_.-]+)+\.[A-Za-z0-9]+)(?=$|[\s"'`):,.;])/g
 
 export type BuildSessionCompactionInput = {
   sessionId: string
@@ -84,7 +84,7 @@ function redactSensitiveText(value: string): string {
     .replace(/\bhf_[A-Za-z0-9]{20,}\b/g, REDACTED_VALUE)
     .replace(/\bAKIA[0-9A-Z]{16}\b/g, REDACTED_VALUE)
     .replace(/\bAIza[0-9A-Za-z_-]{20,}\b/g, REDACTED_VALUE)
-    .replace(/(?:sk|pk|rk)-[A-Za-z0-9_-]{8,}/g, REDACTED_VALUE)
+    .replace(/\b(?:sk|pk|rk)-[A-Za-z0-9_-]{8,}\b/g, REDACTED_VALUE)
     .replace(/(["']?(?:api[_ -]?key|secret|token|password)["']?\s*[:=]\s*["']?)([^"'\s,;]+)/gi, `$1${REDACTED_VALUE}`)
 }
 
@@ -415,13 +415,7 @@ function truncateSummary(opening: string, sections: SummarySection[], closing: s
   const full = renderSummary(opening, fullBodyLines, closing)
   if (full.length <= maxChars) return full
 
-  const emptyWrapper = renderSummary(opening, [], closing)
-  if (emptyWrapper.length > maxChars) return undefined
-
   const fullBody = fullBodyLines.join('\n')
-  const minimumCandidate = renderSummary(opening, [], closing, fullBody.length)
-  if (minimumCandidate.length > maxChars) return emptyWrapper
-
   const candidateForLines = (bodyLines: string[]): string => {
     const prefixLength = bodyLines.length > 0 ? bodyLines.join('\n').length : 0
     const omittedChars = fullBody.length - prefixLength
@@ -434,22 +428,41 @@ function truncateSummary(opening: string, sections: SummarySection[], closing: s
     return candidateLength(opening, bodyLines, closing, omittedChars > 0 ? omittedChars : undefined) <= maxChars
   }
 
-  let keptLines: string[] = []
-  let best = minimumCandidate
+  const [purposeSection, ...remainingSections] = sections
+  if (!purposeSection || purposeSection.lines.length === 0) return undefined
 
-  for (const section of sections) {
-    const headerOnly = [...keptLines, section.header]
-    if (!fits(headerOnly)) return best
+  const purposeLines = [purposeSection.header, ...purposeSection.lines]
+  if (!fits(purposeLines)) return undefined
 
-    keptLines = headerOnly
-    best = candidateForLines(keptLines)
+  let keptLines = purposeLines
+  let best = candidateForLines(keptLines)
 
-    for (const line of section.lines) {
-      const nextLines = [...keptLines, line]
+  for (const section of remainingSections) {
+    if (section.lines.length === 0) continue
+
+    if (section.kind === 'plain') {
+      const nextLines = [...keptLines, section.header, ...section.lines]
       if (!fits(nextLines)) return best
       keptLines = nextLines
       best = candidateForLines(keptLines)
+      continue
     }
+
+    let localLines = [...keptLines, section.header]
+    let bestToolLines: string[] | undefined
+    let bestToolCandidate: string | undefined
+
+    for (const line of section.lines) {
+      const nextLines = [...localLines, line]
+      if (!fits(nextLines)) break
+      localLines = nextLines
+      bestToolLines = localLines
+      bestToolCandidate = candidateForLines(localLines)
+    }
+
+    if (!bestToolLines || !bestToolCandidate) return best
+    keptLines = bestToolLines
+    best = bestToolCandidate
   }
 
   return best
@@ -491,9 +504,11 @@ function buildSections(parsedSummaries: ParsedRunSummary[], currentPrompt: strin
     4
   )
 
-  const importantFiles = uniqueOrdered(
-    parsedSummaries.flatMap((summary) => summary.importantFiles)
-  ).sort(compareText)
+  const importantFiles = uniqueOrdered([
+    ...parsedSummaries.flatMap((summary) => summary.importantFiles),
+    ...(currentPrompt ? collectPathsFromText(currentPrompt) : []),
+    ...recentMessages.flatMap((message) => collectPathsFromText(message.content))
+  ]).sort(compareText)
 
   const sourceOmissions = uniqueOrdered(parsedSummaries.flatMap((summary) => summary.truncationMarkers))
   const toolActivity = filterToolActivityEntries(allToolEntries)
