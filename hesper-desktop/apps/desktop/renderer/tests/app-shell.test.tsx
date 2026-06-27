@@ -1085,6 +1085,60 @@ describe('renderer App', () => {
     expect(screen.queryByRole('button', { name: 'Plain chat' })).not.toBeInTheDocument()
   })
 
+  it('keeps activity rail session counts sourced from the full session scope while filtered views change', async () => {
+    const user = userEvent.setup()
+    listSessionCategories.mockResolvedValueOnce([
+      { id: 'category-product', name: '产品图', createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:00.000Z' },
+      { id: 'category-avatar', name: '头像', createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:00.000Z' }
+    ])
+    listSessions.mockResolvedValueOnce([
+      { id: 'session-product-marked', title: 'Product marked chat', status: 'active', categoryId: 'category-product', isMarked: true, outputMode: 'markdown', createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:04.000Z' },
+      { id: 'session-product', title: 'Product chat', status: 'active', categoryId: 'category-product', outputMode: 'markdown', createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:03.000Z' },
+      { id: 'session-avatar-marked', title: 'Avatar marked chat', status: 'active', categoryId: 'category-avatar', isMarked: true, outputMode: 'markdown', createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:02.000Z' },
+      { id: 'session-plain', title: 'Plain chat', status: 'active', outputMode: 'markdown', createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:01.000Z' },
+      { id: 'session-archived', title: 'Archived chat', status: 'archived', outputMode: 'markdown', createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:05.000Z' }
+    ] as any)
+
+    const expectFullScopeCounts = () => {
+      const countFor = (label: string, scope: 'all' | 'category' | 'marked' | 'archived') => {
+        const count = screen.getByRole('button', { name: label }).querySelector(`[data-hesper-nav-count="${scope}"]`)
+        expect(count).toHaveAttribute('aria-hidden', 'true')
+        return count
+      }
+
+      expect(countFor('所有会话', 'all')).toHaveTextContent(/^4$/)
+      expect(countFor('产品图', 'category')).toHaveTextContent(/^2$/)
+      expect(countFor('头像', 'category')).toHaveTextContent(/^1$/)
+      expect(countFor('已标记', 'marked')).toHaveTextContent(/^2$/)
+      expect(countFor('归档', 'archived')).toHaveTextContent(/^1$/)
+    }
+
+    render(<App />)
+
+    await screen.findByRole('button', { name: '产品图' })
+    expectFullScopeCounts()
+
+    await user.click(screen.getByRole('button', { name: '产品图' }))
+    expect(screen.getByRole('heading', { name: '产品图' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Product marked chat' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Product chat' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Avatar marked chat' })).not.toBeInTheDocument()
+    expectFullScopeCounts()
+
+    await user.click(screen.getByRole('button', { name: '已标记' }))
+    expect(screen.getByRole('heading', { name: '已标记' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Product marked chat' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Avatar marked chat' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Product chat' })).not.toBeInTheDocument()
+    expectFullScopeCounts()
+
+    await user.click(screen.getByRole('button', { name: '归档' }))
+    expect(screen.getByRole('heading', { name: '归档' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Archived chat' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Plain chat' })).not.toBeInTheDocument()
+    expectFullScopeCounts()
+  })
+
   it('restores the entity list title when leaving a selected session category', async () => {
     const user = userEvent.setup()
     listSessionCategories.mockResolvedValueOnce([

@@ -859,6 +859,7 @@ const settingsCategories: Array<{ id: SettingsCategory; title: string; label: st
   { id: 'appearance', title: '外观', label: '外观设置', description: '字体大小、亮色与暗色' }
 ]
 
+// Keep these in sync with .hesper-list-row horizontal padding, status icon slots, and sessionTitleRowStyle.gap.
 const sessionRowHorizontalPaddingPx = 10
 const sessionLeadingStatusIconWidthPx = 18
 const sessionTitleIconGapPx = 6

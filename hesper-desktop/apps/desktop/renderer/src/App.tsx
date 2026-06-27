@@ -1875,6 +1875,7 @@ function AppContent() {
   return (
     <AppShell
       sessions={visibleSessions}
+      sessionScopeSourceSessions={effectiveSessions}
       activeSection={state.activeSection}
       title={isSessionsSection ? activeSessionListTitle === '所有会话' ? activeSession?.title ?? '新建会话' : activeSessionListTitle : getSectionTitle(state.activeSection)}
       {...(isSessionsSection ? { entityListTitle: activeSessionListTitle } : {})}

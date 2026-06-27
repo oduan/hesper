@@ -22,6 +22,7 @@ export type { RoleListItem, SessionCategoryListItem, SkillListItem } from './Ent
 
 export type AppShellProps = {
   sessions: Session[]
+  sessionScopeSourceSessions?: Session[]
   activeSection: AppSection
   title: string
   platform?: DesktopPlatform
@@ -73,6 +74,7 @@ export type AppShellProps = {
 
 export function AppShell({
   sessions,
+  sessionScopeSourceSessions,
   activeSection,
   title,
   platform,
@@ -135,13 +137,14 @@ export function AppShell({
 
   const colorScheme = themeVariables.colorScheme === 'dark' ? 'dark' : 'light'
   const shellBackground = useMemo(() => shellBackgroundForColorScheme(colorScheme), [colorScheme])
+  const sessionScopeCountSessions = sessionScopeSourceSessions ?? sessions
   const sessionScopeCounts = useMemo<ActivityRailSessionScopeCounts>(() => {
     const byCategoryId: Record<string, number> = {}
     let all = 0
     let marked = 0
     let archived = 0
 
-    for (const session of sessions) {
+    for (const session of sessionScopeCountSessions) {
       if (session.status === 'archived') {
         archived += 1
         continue
@@ -161,7 +164,7 @@ export function AppShell({
     }
 
     return { all, marked, archived, byCategoryId }
-  }, [sessions])
+  }, [sessionScopeCountSessions])
 
   useLayoutEffect(() => {
     if (typeof document === 'undefined') {
