@@ -56,13 +56,14 @@ function splitTextForSummary(value: string): string[] {
   const lines: string[] = []
 
   for (const line of value.split('\n')) {
-    if (line.length <= SUMMARY_TEXT_LINE_CHUNK_CHARS) {
+    const codePoints = Array.from(line)
+    if (codePoints.length <= SUMMARY_TEXT_LINE_CHUNK_CHARS) {
       lines.push(line)
       continue
     }
 
-    for (let index = 0; index < line.length; index += SUMMARY_TEXT_LINE_CHUNK_CHARS) {
-      lines.push(line.slice(index, index + SUMMARY_TEXT_LINE_CHUNK_CHARS))
+    for (let index = 0; index < codePoints.length; index += SUMMARY_TEXT_LINE_CHUNK_CHARS) {
+      lines.push(codePoints.slice(index, index + SUMMARY_TEXT_LINE_CHUNK_CHARS).join(''))
     }
   }
 
