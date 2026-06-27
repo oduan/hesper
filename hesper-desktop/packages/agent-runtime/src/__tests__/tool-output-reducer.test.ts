@@ -113,6 +113,32 @@ describe('reduceToolOutput', () => {
     expect(reduced?.outputSummary).not.toContain('abc123')
   })
 
+  it('does not let stdout body command markers override plain-text headers', () => {
+    const reduced = reduceToolOutput(createStep({
+      title: '读取旧日志',
+      detail: [
+        'Command: outer-command --safe',
+        'Exit code: 0',
+        '',
+        'stdout:',
+        'Command: inner-command --should-not-win',
+        'Exit code: 1',
+        'Still normal output'
+      ].join('\n')
+    }))
+
+    expect(reduced).toMatchObject({
+      title: '读取旧日志',
+      status: 'succeeded',
+      type: 'tool_call',
+      category: 'success',
+      command: 'outer-command --safe',
+      exitCode: 0
+    })
+    expect(reduced?.outputSummary).toContain('Command: inner-command --should-not-win')
+    expect(reduced?.outputSummary).toContain('Exit code: 1')
+  })
+
   it('does not classify non-search tools ending with find as diagnostic', () => {
     const reduced = reduceToolOutput(createStep({
       title: '查找角色',
@@ -339,6 +365,38 @@ describe('reduceToolOutput', () => {
       status: 'succeeded',
       type: 'tool_call',
       category: 'empty'
+    })
+  })
+
+  it('treats runtime-shaped blank structured output as empty even with metadata and input path', () => {
+    const reduced = reduceToolOutput(createStep({
+      title: '读取文件',
+      detail: JSON.stringify({
+        kind: 'tool_call',
+        input: {
+          path: 'packages/agent-runtime/src/tool-output-reducer.ts',
+          purpose: '读取 reducer 文件'
+        },
+        output: {
+          content: [{ type: 'text', text: ' \n ' }],
+          details: {
+            toolId: 'filesystem.read-file',
+            toolCallId: 'tool-call-1',
+            displayName: '读取文件',
+            toolIcon: '📖',
+            display: { name: 'Read File' }
+          }
+        },
+        isError: false
+      })
+    }))
+
+    expect(reduced).toEqual({
+      title: '读取文件',
+      status: 'succeeded',
+      type: 'tool_call',
+      category: 'empty',
+      files: ['packages/agent-runtime/src/tool-output-reducer.ts']
     })
   })
 

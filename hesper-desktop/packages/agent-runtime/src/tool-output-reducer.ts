@@ -26,6 +26,7 @@ const MAX_FILES = 6
 const MAX_SUMMARY_CHARS = 280
 const MAX_DIAGNOSTIC_LINES = 6
 const MAX_FAILURE_LINES = 7
+const NON_MEANINGFUL_RESULT_KEYS = new Set(['display', 'displayName', 'platform', 'shell', 'toolCallId', 'toolIcon', 'toolId', 'workspacePath'])
 
 function compareText(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0
@@ -104,17 +105,6 @@ function parseCommandText(detail: string): ParsedCommandText {
   let currentSection: 'stdout' | 'stderr' | undefined
 
   for (const line of lines) {
-    if (line.startsWith('Command: ')) {
-      command = sanitizeText(line.slice('Command: '.length)) || undefined
-      currentSection = undefined
-      continue
-    }
-    if (line.startsWith('Exit code: ')) {
-      const parsed = Number(line.slice('Exit code: '.length).trim())
-      exitCode = Number.isFinite(parsed) ? parsed : undefined
-      currentSection = undefined
-      continue
-    }
     if (line.trim() === 'stdout:') {
       currentSection = 'stdout'
       continue
@@ -123,8 +113,23 @@ function parseCommandText(detail: string): ParsedCommandText {
       currentSection = 'stderr'
       continue
     }
-    if (currentSection === 'stdout') stdout.push(line)
-    if (currentSection === 'stderr') stderr.push(line)
+    if (currentSection === 'stdout') {
+      stdout.push(line)
+      continue
+    }
+    if (currentSection === 'stderr') {
+      stderr.push(line)
+      continue
+    }
+    if (line.startsWith('Command: ')) {
+      command = sanitizeText(line.slice('Command: '.length)) || undefined
+      continue
+    }
+    if (line.startsWith('Exit code: ')) {
+      const parsed = Number(line.slice('Exit code: '.length).trim())
+      exitCode = Number.isFinite(parsed) ? parsed : undefined
+      continue
+    }
   }
 
   const stdoutText = sanitizeText(stdout.join('\n'))
@@ -337,7 +342,7 @@ function isDiagnosticTool(toolId: string | undefined, result: Record<string, unk
 
 function hasMeaningfulStructuredOutput(result: Record<string, unknown> | undefined): boolean {
   if (!result) return false
-  return Object.keys(result).some((key) => !['toolId', 'workspacePath', 'platform', 'shell'].includes(key))
+  return Object.keys(result).some((key) => !NON_MEANINGFUL_RESULT_KEYS.has(key))
 }
 
 export function reduceToolOutput(step: ToolStepLike): ReducedToolDetail | undefined {
@@ -411,8 +416,12 @@ export function reduceToolOutput(step: ToolStepLike): ReducedToolDetail | undefi
     ? sanitizeText(result.stdout)
     : outputText ?? detailText
 
-  if (!summarySource && !command && !files && !hasMeaningfulStructuredOutput(result)) {
-    return { ...base, category: 'empty' }
+  if (!summarySource && !command && !hasMeaningfulStructuredOutput(result)) {
+    return {
+      ...base,
+      category: 'empty',
+      ...(files ? { files } : {})
+    }
   }
 
   const summary = summarySource ? buildCompactSummary(summarySource) : {}
