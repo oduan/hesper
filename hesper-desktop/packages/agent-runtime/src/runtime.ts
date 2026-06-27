@@ -534,33 +534,44 @@ export class AgentRuntime {
     }
   }
 
-  private async emitRuntimeStep(kind: 'step.created' | 'step.updated', step: RunStep): Promise<void> {
-    await this.persistence.steps.save(step)
-    await this.emitAndPersist({ type: kind, step })
-  }
-
-  private async tryEmitRuntimeStep(kind: 'step.created' | 'step.updated', step: RunStep): Promise<boolean> {
+  private async trySaveRuntimeStep(step: RunStep): Promise<boolean> {
     try {
-      await this.emitRuntimeStep(kind, step)
+      await this.persistence.steps.save(step)
       return true
     } catch (error) {
-      console.error('AgentRuntime failed to emit step event', error)
+      console.error('AgentRuntime failed to persist step state', error)
       return false
     }
   }
 
+  private async tryEmitRuntimeStepEvent(kind: 'step.created' | 'step.updated', step: RunStep): Promise<void> {
+    try {
+      await this.emitAndPersist({ type: kind, step })
+    } catch (error) {
+      console.error('AgentRuntime failed to emit step event', error)
+    }
+  }
+
+  private async tryPublishRuntimeStep(kind: 'step.created' | 'step.updated', step: RunStep): Promise<boolean> {
+    const stepSaved = await this.trySaveRuntimeStep(step)
+    if (stepSaved) {
+      await this.tryEmitRuntimeStepEvent(kind, step)
+    }
+    return stepSaved
+  }
+
   private async withSessionCompactionStep<T>(runId: string, apply: () => Promise<T>): Promise<T> {
     const step = this.createSessionCompactionStep(runId)
-    const stepCreated = await this.tryEmitRuntimeStep('step.created', step)
+    const stepSaved = await this.tryPublishRuntimeStep('step.created', step)
     try {
       const result = await apply()
-      if (stepCreated) {
-        await this.tryEmitRuntimeStep('step.updated', this.completedSessionCompactionStep(step))
+      if (stepSaved) {
+        await this.tryPublishRuntimeStep('step.updated', this.completedSessionCompactionStep(step))
       }
       return result
     } catch (error) {
-      if (stepCreated) {
-        await this.tryEmitRuntimeStep('step.updated', this.failedSessionCompactionStep(step))
+      if (stepSaved) {
+        await this.tryPublishRuntimeStep('step.updated', this.failedSessionCompactionStep(step))
       }
       throw error
     }

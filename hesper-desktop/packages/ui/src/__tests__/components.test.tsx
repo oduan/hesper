@@ -3627,6 +3627,53 @@ describe('ui components', () => {
     expect(screen.getByLabelText('步骤状态：成功')).toBeInTheDocument()
   })
 
+  it('refreshes an open compression status detail dialog when the same step id completes', async () => {
+    const user = userEvent.setup()
+    const { rerender } = render(
+      <RunSteps
+        autoExpanded
+        runStartedAt={now}
+        steps={[
+          {
+            id: 'step-compression-dialog',
+            runId: 'run-compression-dialog',
+            type: 'thought',
+            status: 'running',
+            title: '正在进行压缩',
+            createdAt: now
+          }
+        ]}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: '查看步骤详情：正在进行压缩' }))
+    const stepDialog = screen.getByRole('dialog', { name: '步骤全屏查看' })
+    expect(within(stepDialog).getByText('正在进行压缩')).toBeInTheDocument()
+
+    rerender(
+      <RunSteps
+        autoExpanded
+        runStartedAt={now}
+        runEndedAt="2026-06-10T03:00:02.000Z"
+        steps={[
+          {
+            id: 'step-compression-dialog',
+            runId: 'run-compression-dialog',
+            type: 'thought',
+            status: 'succeeded',
+            title: '压缩完成，继续执行',
+            createdAt: now,
+            completedAt: '2026-06-10T03:00:02.000Z'
+          }
+        ]}
+      />
+    )
+
+    expect(screen.getAllByRole('listitem')).toHaveLength(1)
+    expect(within(stepDialog).queryByText('正在进行压缩')).not.toBeInTheDocument()
+    expect(within(stepDialog).getByText('压缩完成，继续执行')).toBeInTheDocument()
+  })
+
   it('decodes unicode escape sequences in tool output details for readable command results', async () => {
     const user = userEvent.setup()
     render(

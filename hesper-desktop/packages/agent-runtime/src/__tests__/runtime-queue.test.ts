@@ -1101,6 +1101,34 @@ describe('AgentRuntime queue', () => {
     ])
   })
 
+  it('still upserts a completed compression step if the created event append fails after saving the step', async () => {
+    const persistence = await createInMemoryPersistence()
+    await persistence.sessions.save({ ...session, id: 'session-overflow-step-created-event-fails' })
+    await saveModel(persistence, 'mock/hesper-fast', 300)
+    await seedOverflowHistory(persistence, 'session-overflow-step-created-event-fails')
+
+    const originalAppend = persistence.events.append.bind(persistence.events)
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.spyOn(persistence.events, 'append').mockImplementation(async (event) => {
+      if (event.type === 'step.created' && event.step.title === compressionPendingTitle) {
+        throw new Error('simulated event append failure')
+      }
+      await originalAppend(event)
+    })
+
+    const adapter = new RecordingAdapter()
+    const runtime = new AgentRuntime({ persistence, adapter })
+
+    const run = await runtime.enqueue({ sessionId: 'session-overflow-step-created-event-fails', prompt: 'compact despite event failure', modelId: 'mock/hesper-fast' })
+    await runtime.waitForIdle('session-overflow-step-created-event-fails')
+
+    expect(adapter.inputs).toHaveLength(1)
+    const persistedSteps = await persistence.steps.listByRun(run.id)
+    expect(persistedSteps).toHaveLength(1)
+    expect(persistedSteps[0]).toMatchObject({ runId: run.id, type: 'thought', status: 'succeeded', title: compressionSucceededTitle })
+    expect(consoleError).toHaveBeenCalledWith('AgentRuntime failed to emit step event', expect.any(Error))
+  })
+
   it('reuses an existing session compaction for the same covered runs instead of saving it again', async () => {
     const persistence = await createInMemoryPersistence()
     await persistence.sessions.save({ ...session, id: 'session-overflow-reuse' })
