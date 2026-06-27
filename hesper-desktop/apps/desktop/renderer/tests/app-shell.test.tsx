@@ -2505,6 +2505,14 @@ describe('renderer App', () => {
   it('regenerates titles for shift-selected sessions from the context menu', async () => {
     const user = userEvent.setup()
 
+    listProviders.mockResolvedValueOnce([
+      { id: 'provider', name: 'Provider', kind: 'openai', enabled: true, hasApiKey: true, defaultModelId: 'model-one', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+    ] as any)
+    listModels.mockResolvedValueOnce([
+      { id: 'model-one', providerId: 'provider', modelName: 'model-one', displayName: 'Model One', capabilities: ['streaming'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' },
+      { id: 'model-two', providerId: 'provider', modelName: 'model-two', displayName: 'Model Two', capabilities: ['streaming'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' },
+      { id: 'model-three', providerId: 'provider', modelName: 'model-three', displayName: 'Model Three', capabilities: ['streaming'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+    ] as any)
     listSessions.mockResolvedValueOnce([
       { id: 'session-1', title: 'Chat one', status: 'active', defaultModelId: 'model-one', outputMode: 'markdown', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:03.000Z' },
       { id: 'session-2', title: 'Chat two', status: 'active', defaultModelId: 'model-two', outputMode: 'markdown', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:02.000Z' },
@@ -2621,6 +2629,36 @@ describe('renderer App', () => {
     await user.click(await screen.findByRole('menuitem', { name: '重新生成标题' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('标题生成失败：Model provider needs an API key: deepseek')
+  })
+
+  it('does not regenerate a context-menu title when the session model is unavailable in an empty catalog', async () => {
+    const user = userEvent.setup()
+
+    listProviders.mockResolvedValueOnce([])
+    listModels.mockResolvedValueOnce([])
+    listSessions.mockResolvedValueOnce([
+      {
+        id: 'session-unavailable-model',
+        title: 'Unavailable model chat',
+        status: 'active',
+        defaultModelId: 'gpt-4o',
+        outputMode: 'markdown',
+        createdAt: '2026-06-10T02:00:00.000Z',
+        updatedAt: '2026-06-10T02:00:00.000Z'
+      }
+    ] as any)
+    listMessages.mockResolvedValue([
+      { id: 'message-user-1', sessionId: 'session-unavailable-model', role: 'user', content: '请总结今天的任务', contentType: 'plain', createdAt: '2026-06-10T02:05:01.000Z' }
+    ] as any)
+
+    render(<App />)
+
+    const row = await screen.findByRole('button', { name: 'Unavailable model chat' })
+    row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 120, clientY: 160 }))
+    await user.click(await screen.findByRole('menuitem', { name: '重新生成标题' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('标题生成失败：模型不可用：gpt-4o')
+    expect(generateTitle).not.toHaveBeenCalled()
   })
 
   it('shows a visible error when no user message can seed title regeneration', async () => {

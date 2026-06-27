@@ -1667,10 +1667,11 @@ function AppContent() {
       }
 
       const latestRunId = stateRef.current.latestRunIdBySession[sessionId]
-      const sessionModelId = resolveSessionModelId(session.defaultModelId, sessionModelCatalog.preferredModelId, explicitModelSelectionSessionIdsRef.current.has(session.id))
+      const sessionModelId = resolveTitleGenerationModelId(session.defaultModelId, sessionModelCatalog, explicitModelSelectionSessionIdsRef.current.has(session.id))
       const modelId = latestRunId ? runModelIdsRef.current[latestRunId] ?? sessionModelId : sessionModelId
-      if (!modelId.trim()) {
-        setTitleGenerationError('标题生成失败：未配置模型')
+      const modelError = titleGenerationModelError(modelId, sessionModelCatalog)
+      if (modelError) {
+        setTitleGenerationError(`标题生成失败：${modelError}`)
         return
       }
       const updatedSession = await hesperApi.sessions.generateTitle({
@@ -2212,6 +2213,29 @@ function isAvailableSessionModel(modelId: string | undefined, catalog: SessionMo
 function unavailableModelMessage(modelId: string | undefined): string {
   const normalizedModelId = modelId?.trim() ?? ''
   return normalizedModelId ? `模型不可用：${normalizedModelId}` : '未配置模型'
+}
+
+function titleGenerationModelError(modelId: string | undefined, catalog: SessionModelCatalog): string | undefined {
+  const normalizedModelId = modelId?.trim() ?? ''
+  if (!normalizedModelId || isLegacyFallbackModelId(normalizedModelId)) {
+    return '未配置模型'
+  }
+  return catalog.modelsById[normalizedModelId] ? undefined : `模型不可用：${normalizedModelId}`
+}
+
+function resolveTitleGenerationModelId(sessionModelId: string | undefined, catalog: SessionModelCatalog, useSessionModelId = false): string {
+  const normalizedSessionModelId = sessionModelId?.trim() ?? ''
+  const preferredModelId = isAvailableSessionModel(catalog.preferredModelId, catalog) ? catalog.preferredModelId.trim() : defaultFallbackModelId
+
+  if (useSessionModelId) {
+    return normalizedSessionModelId
+  }
+
+  if (!normalizedSessionModelId || normalizedSessionModelId === defaultFallbackModelId || isLegacyFallbackModelId(normalizedSessionModelId)) {
+    return preferredModelId
+  }
+
+  return normalizedSessionModelId
 }
 
 function resolveAvailableSessionModelId(sessionModelId: string | undefined, catalog: SessionModelCatalog, useSessionModelId = false): string {
