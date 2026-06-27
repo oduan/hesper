@@ -24,7 +24,6 @@ describe('model-options', () => {
       { id: 'beta', enabled: false },
       { id: 'gamma' }
     ] as any)).toEqual([
-      fallbackSessionModelOptions[0],
       'alpha',
       'gamma'
     ])
@@ -69,7 +68,9 @@ describe('model-options', () => {
 
   it('keeps fallback catalog modelsById consistent with options', () => {
     expect(Object.keys(fallbackSessionModelCatalog.modelsById)).toEqual(fallbackSessionModelCatalog.options)
-    expect(fallbackSessionModelCatalog.modelsById[defaultFallbackModelId]).toMatchObject({ id: defaultFallbackModelId })
+    expect(defaultFallbackModelId).toBe('')
+    expect(fallbackSessionModelOptions).toEqual([])
+    expect(fallbackSessionModelCatalog.preferredModelId).toBe('')
   })
 
   it('keeps modelsById consistent when the provider catalog is empty or missing matching models', () => {
@@ -82,7 +83,7 @@ describe('model-options', () => {
       createSessionModelCatalog([{ id: 'custom', name: 'Custom', kind: 'custom', enabled: true, hasApiKey: true }] as any, []),
       createSessionModelCatalog([{ id: 'other', name: 'Other', kind: 'custom', enabled: true, hasApiKey: true }] as any, customModels)
     ]) {
-      expect(catalog.options).toEqual(fallbackSessionModelCatalog.options)
+      expect(catalog).toEqual(fallbackSessionModelCatalog)
       expect(Object.keys(catalog.modelsById)).toEqual(catalog.options)
     }
   })
@@ -100,8 +101,9 @@ describe('model-options', () => {
 
     try {
       const catalog = await loadAvailableModelCatalog()
-      expect(catalog.options).toEqual([defaultFallbackModelId, 'alpha'])
+      expect(catalog.options).toEqual(['alpha'])
       expect(Object.keys(catalog.modelsById)).toEqual(catalog.options)
+      expect(catalog.preferredModelId).toBe('alpha')
       expect(catalog.modelsById.alpha).toMatchObject({ id: 'alpha' })
       expect(catalog.modelsById.beta).toBeUndefined()
     } finally {
@@ -110,12 +112,12 @@ describe('model-options', () => {
     }
   })
 
-  it('falls back to the default session model when no models api is available', async () => {
+  it('returns an empty catalog when no models api is available', async () => {
     const originalModels = hesperApi.models
     ;(hesperApi as any).models = undefined
 
     try {
-      await expect(loadAvailableModelOptions()).resolves.toEqual(fallbackSessionModelOptions)
+      await expect(loadAvailableModelOptions()).resolves.toEqual([])
     } finally {
       ;(hesperApi as any).models = originalModels
     }

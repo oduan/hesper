@@ -508,8 +508,12 @@ describe('renderer App', () => {
       createdAt: '2026-06-10T03:00:00.000Z',
       updatedAt: '2026-06-10T03:00:12.000Z'
     }))
-    listProviders.mockResolvedValue([])
-    listModels.mockResolvedValue([])
+    listProviders.mockResolvedValue([
+      { id: 'mock', name: 'Mock', kind: 'mock', enabled: true, hasApiKey: false, defaultModelId: 'mock/hesper-fast', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+    ] as any)
+    listModels.mockResolvedValue([
+      { id: 'mock/hesper-fast', providerId: 'mock', modelName: 'mock/hesper-fast', displayName: 'Hesper Mock Fast', capabilities: ['streaming', 'toolCalls'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+    ] as any)
     listTools.mockResolvedValue([
       {
         id: 'filesystem.read-file',
@@ -3060,6 +3064,36 @@ describe('renderer App', () => {
     expect(imageCapablePayload.draftAttachments[0]).not.toHaveProperty('id')
     expect(await screen.findByAltText('图片附件')).toHaveAttribute('src', historicalImageDataUrl)
     expect(screen.queryByText('hidden.png')).not.toBeInTheDocument()
+  })
+
+  it('does not enqueue or clear the draft when no model is configured', async () => {
+    const user = userEvent.setup()
+    listProviders.mockResolvedValueOnce([])
+    listModels.mockResolvedValueOnce([])
+    getSettings.mockResolvedValueOnce({ defaultModelId: '', defaultOutputMode: 'markdown', themeMode: 'dark', themeId: 'catppuccin', fontSize: 14, soul: '' })
+    listSessions.mockResolvedValueOnce([
+      {
+        id: 'session-empty-model',
+        title: 'No model configured',
+        status: 'active',
+        workspacePath: 'C:/workspace',
+        outputMode: 'markdown',
+        createdAt: '2026-06-10T03:00:00.000Z',
+        updatedAt: '2026-06-10T03:00:00.000Z'
+      }
+    ] as any)
+
+    render(<App />)
+
+    expect(await screen.findByRole('button', { name: '选择模型' })).toHaveTextContent('未配置模型')
+    await user.type(screen.getByLabelText('消息输入框'), 'draft without model')
+    const sendButton = screen.getByRole('button', { name: '发送' })
+    expect(sendButton).toBeDisabled()
+
+    await user.keyboard('{Control>}{Enter}{/Control}')
+
+    expect(enqueue).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('消息输入框')).toHaveValue('draft without model')
   })
 
   it('passes the selected thinking intensity when enqueueing a run', async () => {

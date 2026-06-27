@@ -2,22 +2,9 @@ import type { ModelDto, ModelProviderDto } from '../../electron/ipc-contract'
 import type { ModelOptionGroup } from '@hesper/ui'
 import { hesperApi } from './ipc-client'
 
-export const defaultFallbackModelId = 'mock/hesper-fast'
+export const defaultFallbackModelId = ''
 
-const fallbackSessionModels: ModelDto[] = [
-  {
-    id: defaultFallbackModelId,
-    providerId: 'mock',
-    modelName: defaultFallbackModelId,
-    displayName: 'Hesper Mock Fast',
-    capabilities: ['streaming', 'toolCalls'],
-    enabled: true,
-    createdAt: '1970-01-01T00:00:00.000Z',
-    updatedAt: '1970-01-01T00:00:00.000Z'
-  }
-]
-
-export const fallbackSessionModelOptions = fallbackSessionModels.map((model) => model.id)
+export const fallbackSessionModelOptions: string[] = []
 
 export type SessionModelCatalog = {
   options: string[]
@@ -39,7 +26,7 @@ export const fallbackSessionModelCatalog: SessionModelCatalog = {
   options: fallbackSessionModelOptions,
   optionGroups: [],
   preferredModelId: defaultFallbackModelId,
-  modelsById: modelsByIdFromModels(fallbackSessionModels)
+  modelsById: {}
 }
 
 export function namespaceModelId(providerId: string, modelName: string): string {
@@ -93,7 +80,6 @@ export function mergeModelOptions(...optionGroups: Array<Array<string | undefine
 
 export function createSessionModelOptions(models: ModelDto[]): string[] {
   return mergeModelOptions(
-    fallbackSessionModelOptions,
     models.filter((model) => model.enabled !== false).map((model) => model.id)
   )
 }
@@ -156,8 +142,8 @@ export async function loadAvailableModelCatalog(): Promise<SessionModelCatalog> 
     return {
       options,
       optionGroups: [],
-      preferredModelId: defaultFallbackModelId,
-      modelsById: modelsByIdForOptions(options, [...fallbackSessionModels, ...models])
+      preferredModelId: options[0] ?? defaultFallbackModelId,
+      modelsById: modelsByIdForOptions(options, models)
     }
   }
 
@@ -168,4 +154,3 @@ export async function loadAvailableModelCatalog(): Promise<SessionModelCatalog> 
 export async function loadAvailableModelOptions(): Promise<string[]> {
   return (await loadAvailableModelCatalog()).options
 }
-

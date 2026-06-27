@@ -50,7 +50,7 @@ type GitUiStateBySession = Record<string, {
 type SettingsCategory = 'ai' | 'appearance' | 'ssh' | 'soul'
 
 const defaultAppSettings: AppSettings = {
-  defaultModelId: 'mock/hesper-fast',
+  defaultModelId: '',
   defaultOutputMode: 'markdown',
   themeMode: 'system',
   themeId: defaultAppThemeId,
@@ -792,7 +792,7 @@ function AppContent() {
             : undefined
           const modelId = runModelIdsRef.current[event.message.runId] ?? session?.defaultModelId ?? defaultFallbackModelId
 
-          if (session && source?.userPrompt && !titleGeneratedRunIdsRef.current.has(event.message.runId)) {
+          if (session && source?.userPrompt && modelId.trim() && !titleGeneratedRunIdsRef.current.has(event.message.runId)) {
             setTitleGenerationError(undefined)
             titleGeneratedRunIdsRef.current.add(event.message.runId)
             void hesperApi.sessions.generateTitle({
@@ -989,6 +989,7 @@ function AppContent() {
   const activeModelConfig = sessionModelCatalog.modelsById[activeModelId]
   const activeModelCapabilities = activeModelConfig?.capabilities ?? []
   const activeModelOptions = activeSession?.defaultModelId ? mergeModelOptions(sessionModelCatalog.options, [activeModelId, activeSession.defaultModelId]) : mergeModelOptions(sessionModelCatalog.options, [activeModelId])
+  const activeModelMissing = !activeModelId.trim()
 
   const loadGitRepositoryState = useCallback(async (sessionId: string, workspacePath: string): Promise<GitRepositoryStateDto | undefined> => {
     const requestId = (latestGitStateRequestIdRef.current[sessionId] ?? 0) + 1
@@ -1668,6 +1669,10 @@ function AppContent() {
       const latestRunId = stateRef.current.latestRunIdBySession[sessionId]
       const sessionModelId = resolveSessionModelId(session.defaultModelId, sessionModelCatalog.preferredModelId, explicitModelSelectionSessionIdsRef.current.has(session.id))
       const modelId = latestRunId ? runModelIdsRef.current[latestRunId] ?? sessionModelId : sessionModelId
+      if (!modelId.trim()) {
+        setTitleGenerationError('标题生成失败：未配置模型')
+        return
+      }
       const updatedSession = await hesperApi.sessions.generateTitle({
         id: session.id,
         modelId,
@@ -1822,7 +1827,7 @@ function AppContent() {
 
   const createTrackedSession = async () => {
     const categoryId = stateRef.current.activeSessionSpecialView ? undefined : stateRef.current.activeSessionCategoryId
-    const session = await createSession(dispatch, sessionModelCatalog.preferredModelId, categoryId)
+    const session = await createSession(dispatch, defaultFallbackModelId, categoryId)
     createdNewSessionIdsRef.current.add(session.id)
   }
 
@@ -2038,6 +2043,8 @@ function AppContent() {
             modelOptionGroups={sessionModelCatalog.optionGroups}
             modelCapabilities={activeModelCapabilities}
             skillOptions={skills.map(toSkillOption)}
+            sendDisabled={activeModelMissing}
+            sendDisabledReason="未配置模型"
             draftValue={draftsBySession[activeSession.id] ?? ''}
             draftSkillMentions={draftSkillMentionsBySession[activeSession.id] ?? []}
             draftAttachments={draftAttachmentsBySession[activeSession.id] ?? []}
@@ -2094,6 +2101,10 @@ function AppContent() {
               })
             }}
             onSend={(content, sendOptions) => {
+              if (activeModelMissing) {
+                setSendErrorsBySession((current) => ({ ...current, [activeSession.id]: '未配置模型' }))
+                return
+              }
               pendingTitlePromptsBySessionRef.current[activeSession.id] = content
               void sendMessage({
                 session: activeSession,
@@ -2185,10 +2196,11 @@ function useResolvedThemeMode(themeMode: AppSettings['themeMode']): 'light' | 'd
 }
 
 function resolveSessionModelId(sessionModelId: string | undefined, preferredModelId: string, useSessionModelId = false): string {
+  const legacyMockFallbackModelId = 'mock/hesper-fast'
   if (useSessionModelId && sessionModelId) {
     return sessionModelId
   }
-  if (!sessionModelId || sessionModelId === defaultFallbackModelId) {
+  if (!sessionModelId || sessionModelId === defaultFallbackModelId || sessionModelId === legacyMockFallbackModelId) {
     return preferredModelId
   }
   return sessionModelId
@@ -2491,6 +2503,15 @@ async function sendMessage({
   setSendErrorsBySession: Dispatch<SetStateAction<Record<string, string>>>
   setDraftAttachmentsBySession?: Dispatch<SetStateAction<Record<string, ComposerDraftAttachment[]>>>
 }) {
+  const normalizedModelId = modelId.trim()
+  if (!normalizedModelId) {
+    setSendErrorsBySession((current) => ({
+      ...current,
+      [session.id]: '未配置模型'
+    }))
+    return
+  }
+
   setSendErrorsBySession((current) => clearSessionSendError(current, session.id))
   const draftAttachments = filterDraftAttachmentsForModel(sendOptions?.draftAttachments, modelCapabilities)
   const enqueueDraftAttachments = draftAttachments.map(toAgentEnqueueDraftAttachment)
@@ -2503,7 +2524,7 @@ async function sendMessage({
       sessionId: session.id,
       prompt: sendOptions?.prompt ?? content,
       ...(sendOptions?.displayPrompt ? { displayPrompt: sendOptions.displayPrompt } : {}),
-      modelId,
+      modelId: normalizedModelId,
       ...(sendOptions?.thinkingLevel ? { thinkingLevel: sendOptions.thinkingLevel } : {}),
       ...(enqueueDraftAttachments.length > 0 ? { draftAttachments: enqueueDraftAttachments } : {}),
       messageId: message.id,

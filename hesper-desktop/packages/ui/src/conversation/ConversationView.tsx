@@ -60,6 +60,8 @@ export type ConversationViewProps = {
   draftSkillMentions?: ComposerSkillMention[]
   draftAttachments?: ComposerDraftAttachment[]
   running?: boolean
+  sendDisabled?: boolean
+  sendDisabledReason?: string
   onDraftChange?: (value: string) => void
   onDraftSkillMentionsChange?: (mentions: ComposerSkillMention[]) => void
   onDraftAttachmentsChange?: (attachments: ComposerDraftAttachment[]) => void
@@ -353,6 +355,8 @@ export function ConversationView({
   draftSkillMentions,
   draftAttachments,
   running = false,
+  sendDisabled,
+  sendDisabledReason,
   onDraftChange,
   onDraftSkillMentionsChange,
   onDraftAttachmentsChange,
@@ -958,6 +962,8 @@ export function ConversationView({
             {...(draftAttachments ? { attachments: draftAttachments } : {})}
             {...(draftValue !== undefined ? { value: draftValue } : {})}
             running={running}
+            {...(sendDisabled !== undefined ? { sendDisabled } : {})}
+            {...(sendDisabledReason ? { sendDisabledReason } : {})}
             {...(onDraftChange ? { onDraftChange } : {})}
             {...(onDraftSkillMentionsChange ? { onSkillMentionsChange: onDraftSkillMentionsChange } : {})}
             {...(onDraftAttachmentsChange ? { onAttachmentsChange: onDraftAttachmentsChange } : {})}

@@ -139,6 +139,39 @@ describe('ipc-client fallback', () => {
     await expect(api.files.preview({ sessionId: 'session-1', path: 'README.md' })).rejects.toThrowError('本地文件预览在 renderer fallback 模式不可用')
   })
 
+  it('starts fallback settings and model registry empty', async () => {
+    const api = createHesperApi({ allowFallback: true })
+
+    await expect(api.settings.get()).resolves.toMatchObject({ defaultModelId: '' })
+    await expect(api.providers.list()).resolves.toEqual([])
+    await expect(api.models.list()).resolves.toEqual([])
+  })
+
+  it('persists manually saved fallback providers and models in memory', async () => {
+    const api = createHesperApi({ allowFallback: true })
+
+    const provider = await api.providers.save({
+      id: 'custom-provider',
+      name: 'Custom Provider',
+      kind: 'openai-compatible',
+      baseUrl: 'https://models.example.test/v1',
+      defaultModelId: 'custom-provider/chat',
+      enabled: true
+    })
+    const model = await api.models.save({
+      id: 'custom-provider/chat',
+      providerId: 'custom-provider',
+      modelName: 'chat',
+      displayName: 'Custom Chat',
+      capabilities: ['streaming'],
+      enabled: true
+    })
+
+    await expect(api.providers.list()).resolves.toEqual([provider])
+    await expect(api.models.list()).resolves.toEqual([model])
+    await expect(api.models.list({ providerId: 'custom-provider' })).resolves.toEqual([model])
+  })
+
   it('manages roles in fallback mode', async () => {
     const api = createHesperApi({ allowFallback: true })
 
