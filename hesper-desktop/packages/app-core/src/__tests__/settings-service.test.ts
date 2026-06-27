@@ -61,7 +61,7 @@ describe('createSettingsService', () => {
     const settings = await createSettingsService({ persistence }).getSettings()
 
     expect(settings).toEqual({
-      defaultModelId: 'mock/hesper-fast',
+      defaultModelId: '',
       defaultOutputMode: 'markdown',
       themeMode: 'system',
       themeId: 'catppuccin',
@@ -147,7 +147,7 @@ describe('createSettingsService', () => {
 
     await waitForExpectation(() => expect(settings.get).toHaveBeenCalledTimes(2))
     await expect(secondUpdate).resolves.toEqual({
-      defaultModelId: 'mock/hesper-fast',
+      defaultModelId: '',
       defaultOutputMode: 'markdown',
       themeMode: 'system',
       themeId: 'catppuccin',
@@ -155,7 +155,7 @@ describe('createSettingsService', () => {
       soul: 'Resilient, calm, and focused.'
     })
     await expect(service.getSettings()).resolves.toEqual({
-      defaultModelId: 'mock/hesper-fast',
+      defaultModelId: '',
       defaultOutputMode: 'markdown',
       themeMode: 'system',
       themeId: 'catppuccin',

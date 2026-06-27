@@ -334,7 +334,7 @@ export const attachmentDataUrlResultSchema = z.object({
 export const appFontSizeSchema = z.number().int().min(12).max(18)
 
 export const appSettingsSchema = z.object({
-  defaultModelId: z.string().min(1),
+  defaultModelId: z.string(),
   defaultOutputMode: z.enum(['markdown', 'html']),
   themeMode: z.enum(themeModeValues),
   themeId: z.enum(appThemeIds),
@@ -343,7 +343,7 @@ export const appSettingsSchema = z.object({
 }).strict()
 
 export const updateSettingsInputSchema = z.object({
-  defaultModelId: z.string().min(1).optional(),
+  defaultModelId: z.string().optional(),
   defaultOutputMode: z.enum(['markdown', 'html']).optional(),
   themeMode: z.enum(themeModeValues).optional(),
   themeId: z.enum(appThemeIds).optional(),

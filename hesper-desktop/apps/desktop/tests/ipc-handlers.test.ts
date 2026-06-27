@@ -352,21 +352,26 @@ describe('desktop service container', () => {
     })
   })
 
-  it('seeds builtin providers for an empty desktop persistence store', async () => {
+  it('does not seed providers for an empty desktop persistence store', async () => {
     const persistence = await createInMemoryPersistence()
     const container = createServiceContainer({ persistence, agentMode: 'mock', credentialCodec: createMockCredentialCodec() })
 
     await container.modelProviderService.ensureBuiltinProviders()
 
-    expect((await container.modelProviderService.listProviders()).map((provider) => provider.id)).toEqual(['mock', 'deepseek', 'openai', 'openai-compatible'])
-    expect((await container.modelProviderService.listModels('mock')).map((model) => model.id)).toEqual(['mock/hesper-fast'])
+    expect(await container.modelProviderService.listProviders()).toEqual([])
+    expect(await container.modelProviderService.listModels()).toEqual([])
   })
 
   it('injects model listing tools into the production tool runner without exposing credentials', async () => {
     const secret = 'sk-live-secret-never-return'
     const persistence = await createInMemoryPersistence()
     const container = createServiceContainer({ persistence, agentMode: 'mock', credentialCodec: createMockCredentialCodec() })
-    await container.modelProviderService.ensureBuiltinProviders()
+    await container.modelProviderService.saveProvider({ id: 'mock', name: 'Mock', kind: 'mock', enabled: true, defaultModelId: 'mock/hesper-fast' })
+    await container.modelProviderService.saveModel({ id: 'mock/hesper-fast', providerId: 'mock', modelName: 'mock/hesper-fast', displayName: 'Hesper Mock Fast', capabilities: ['streaming', 'toolCalls'], enabled: true })
+    await container.modelProviderService.saveProvider({ id: 'deepseek', name: 'DeepSeek', kind: 'deepseek', baseUrl: 'https://api.deepseek.com', enabled: true, defaultModelId: 'deepseek-chat' })
+    await container.modelProviderService.saveModel({ id: 'deepseek-chat', providerId: 'deepseek', modelName: 'deepseek-chat', displayName: 'DeepSeek Chat', capabilities: ['streaming', 'toolCalls'], enabled: true })
+    await container.modelProviderService.saveProvider({ id: 'openai', name: 'OpenAI', kind: 'openai', baseUrl: 'https://api.openai.com/v1', enabled: true, defaultModelId: 'gpt-4o' })
+    await container.modelProviderService.saveModel({ id: 'gpt-4o', providerId: 'openai', modelName: 'gpt-4o', displayName: 'GPT-4o', capabilities: ['streaming', 'toolCalls', 'jsonOutput', 'imageInput'], enabled: true })
     await container.credentialVaultService.saveProviderApiKey({ providerId: 'openai', apiKey: secret })
 
     const { catalog, raw } = await listAvailableModelCatalog(container)
@@ -457,7 +462,9 @@ describe('desktop service container', () => {
   it('marks disabled providers and disabled models unavailable in the model catalog', async () => {
     const persistence = await createInMemoryPersistence()
     const container = createServiceContainer({ persistence, agentMode: 'mock', credentialCodec: createMockCredentialCodec() })
-    await container.modelProviderService.ensureBuiltinProviders()
+    await container.modelProviderService.saveProvider({ id: 'deepseek', name: 'DeepSeek', kind: 'deepseek', baseUrl: 'https://api.deepseek.com', enabled: true, defaultModelId: 'deepseek-chat' })
+    await container.modelProviderService.saveModel({ id: 'deepseek-chat', providerId: 'deepseek', modelName: 'deepseek-chat', displayName: 'DeepSeek Chat', capabilities: ['streaming', 'toolCalls'], enabled: true })
+    await container.modelProviderService.saveProvider({ id: 'openai', name: 'OpenAI', kind: 'openai', baseUrl: 'https://api.openai.com/v1', enabled: true, defaultModelId: 'gpt-4o' })
     await container.credentialVaultService.saveProviderApiKey({ providerId: 'deepseek', apiKey: 'sk-disabled-provider-secret' })
     await container.modelProviderService.disableProvider('deepseek')
     await container.credentialVaultService.saveProviderApiKey({ providerId: 'openai', apiKey: 'sk-disabled-model-secret' })
@@ -584,7 +591,8 @@ describe('desktop service container', () => {
   it('wires pi-core runs through the provider registry resolver and fails fast without credentials', async () => {
     const persistence = await createInMemoryPersistence()
     const container = createServiceContainer({ persistence, agentMode: 'pi-core', credentialCodec: createMockCredentialCodec() })
-    await container.modelProviderService.ensureBuiltinProviders()
+    await container.modelProviderService.saveProvider({ id: 'openai', name: 'OpenAI', kind: 'openai', baseUrl: 'https://api.openai.com/v1', enabled: true, defaultModelId: 'gpt-4o' })
+    await container.modelProviderService.saveModel({ id: 'gpt-4o', providerId: 'openai', modelName: 'gpt-4o', displayName: 'GPT-4o', capabilities: ['streaming', 'toolCalls', 'jsonOutput', 'imageInput'], enabled: true })
     const session = await container.sessionService.createSession({ title: 'Pi core resolver', defaultModelId: 'gpt-4o' })
 
     const run = await container.agentRuntime.enqueue({ sessionId: session.id, prompt: 'needs credentials', modelId: 'gpt-4o' })
