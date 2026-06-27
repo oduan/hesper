@@ -1,7 +1,7 @@
 import type { Persistence } from '@hesper/persistence'
 import { inferModelCapabilitiesFromName, modelProviderConfigSchema, nowIso, type ModelConfig, type ModelProviderConfig, type ModelProviderKind } from '@hesper/shared'
 import { providerApiKeyRef, type CredentialVaultService } from './credential-vault-service'
-import { isRetiredOrTestModel, knownContextWindowForModel } from './known-model-context'
+import { isRetiredOrTestModel, knownContextWindowForModel, modelMatchesKnownModelName, preferredSuccessorModelNameForRetiredModel } from './known-model-context'
 
 export type PiAuthProvider = 'openai-codex'
 export type ProviderOAuthStatus = 'pending' | 'authorized' | 'failed'
@@ -506,8 +506,15 @@ export function createModelProviderService(options: {
         : isRetiredOrTestModel({ id: provider.defaultModelId, modelName: normalizeModelName(provider.id, provider.defaultModelId), providerId: provider.id })
       if (!defaultIsRetired) continue
 
-      const replacement = (await options.persistence.models.listByProvider(provider.id))
-        .find((model) => model.enabled !== false && !isRetiredOrTestModel(model))
+      const providerModels = await options.persistence.models.listByProvider(provider.id)
+      const preferredSuccessorModelName = preferredSuccessorModelNameForRetiredModel(
+        defaultModel ?? { id: provider.defaultModelId, modelName: normalizeModelName(provider.id, provider.defaultModelId), providerId: provider.id }
+      )
+      const preferredReplacement = preferredSuccessorModelName
+        ? providerModels.find((model) => model.enabled !== false && !isRetiredOrTestModel(model) && modelMatchesKnownModelName(model, preferredSuccessorModelName))
+        : undefined
+      const fallbackReplacement = providerModels.find((model) => model.enabled !== false && !isRetiredOrTestModel(model))
+      const replacement = preferredReplacement ?? fallbackReplacement
       if (replacement) {
         await options.persistence.modelProviders.save({ ...provider, defaultModelId: replacement.id, updatedAt: now() })
       }

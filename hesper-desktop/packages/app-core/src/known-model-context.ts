@@ -15,6 +15,10 @@ const knownContextWindowsByModelName = new Map<string, number>([
 ])
 
 const retiredDeepSeekModelIds = new Set(['deepseek-chat', 'deepseek-reasoner'])
+const retiredDeepSeekSuccessorsByModelId = new Map<string, string>([
+  ['deepseek-chat', 'deepseek-v4-flash'],
+  ['deepseek-reasoner', 'deepseek-v4-flash']
+])
 const testModelIds = new Set(['mock/hesper-fast'])
 
 function normalize(value: string): string {
@@ -61,7 +65,24 @@ export function knownContextWindowForModel(input: KnownModelInput): number | und
 }
 
 export function isRetiredOrTestModel(input: KnownModelInput): boolean {
-  if (normalize(input.providerId) === 'mock') return true
+  const candidates = candidateModelKeys(input)
+  if (candidates.some((key) => testModelIds.has(key))) return true
+  if (normalize(input.providerId) !== 'deepseek') return false
 
-  return candidateModelKeys(input).some((key) => testModelIds.has(key) || retiredDeepSeekModelIds.has(key))
+  return candidates.some((key) => retiredDeepSeekModelIds.has(key))
+}
+
+export function preferredSuccessorModelNameForRetiredModel(input: KnownModelInput): string | undefined {
+  if (normalize(input.providerId) !== 'deepseek') return undefined
+
+  for (const key of candidateModelKeys(input)) {
+    const successor = retiredDeepSeekSuccessorsByModelId.get(key)
+    if (successor !== undefined) return successor
+  }
+  return undefined
+}
+
+export function modelMatchesKnownModelName(input: KnownModelInput, modelName: string): boolean {
+  const normalizedModelName = normalize(modelName)
+  return Boolean(normalizedModelName) && candidateModelKeys(input).includes(normalizedModelName)
 }
