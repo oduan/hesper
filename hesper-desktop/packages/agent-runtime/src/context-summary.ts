@@ -1,4 +1,5 @@
 import type { AgentRun, Message, RunStep } from '@hesper/shared'
+import { reduceToolOutput } from './tool-output-reducer'
 
 export type BuildRunContextSummaryInput = {
   run: Pick<AgentRun, 'id'>
@@ -9,6 +10,7 @@ export type BuildRunContextSummaryInput = {
 
 const DEFAULT_MAX_CHARS = 6000
 const REDACTED_VALUE = '[redacted-sensitive-value]'
+const RUN_CONTEXT_SUMMARY_VERSION = 2
 const SENSITIVE_FIELD_NAME_PATTERN = /(?:api[_ -]?key|secret|token|password)/i
 
 function compareText(left: string, right: string): number {
@@ -17,6 +19,22 @@ function compareText(left: string, right: string): number {
 
 function normalizeLineEndings(value: string): string {
   return value.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+}
+
+function redactSensitiveText(value: string): string {
+  return value
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]{8,}\b/gi, REDACTED_VALUE)
+    .replace(/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, REDACTED_VALUE)
+    .replace(/\bgithub_pat_[A-Za-z0-9_]{20,}\b/g, REDACTED_VALUE)
+    .replace(/\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{20,}\b/g, REDACTED_VALUE)
+    .replace(/\bxox[abprs]-[A-Za-z0-9-]{10,}\b/g, REDACTED_VALUE)
+    .replace(/\bglpat-[A-Za-z0-9_-]{12,}\b/g, REDACTED_VALUE)
+    .replace(/\bnpm_[A-Za-z0-9]{20,}\b/g, REDACTED_VALUE)
+    .replace(/\bhf_[A-Za-z0-9]{20,}\b/g, REDACTED_VALUE)
+    .replace(/\bAKIA[0-9A-Z]{16}\b/g, REDACTED_VALUE)
+    .replace(/\bAIza[0-9A-Za-z_-]{20,}\b/g, REDACTED_VALUE)
+    .replace(/(?:sk|pk|rk)-[A-Za-z0-9_-]{8,}/g, REDACTED_VALUE)
+    .replace(/(["']?(?:api[_ -]?key|secret|token|password)["']?\s*[:=]\s*["']?)([^"'\s,;]+)/gi, `$1${REDACTED_VALUE}`)
 }
 
 function sanitizeTextSection(value: string): string {
@@ -33,22 +51,6 @@ function escapeXmlAttribute(value: string): string {
     .replace(/"/g, '&quot;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-}
-
-function redactSensitiveText(value: string): string {
-  return value
-    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]{8,}\b/gi, REDACTED_VALUE)
-    .replace(/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, REDACTED_VALUE)
-    .replace(/\bgithub_pat_[A-Za-z0-9_]{20,}\b/g, REDACTED_VALUE)
-    .replace(/\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{20,}\b/g, REDACTED_VALUE)
-    .replace(/\bxox[abprs]-[A-Za-z0-9-]{10,}\b/g, REDACTED_VALUE)
-    .replace(/\bglpat-[A-Za-z0-9_-]{12,}\b/g, REDACTED_VALUE)
-    .replace(/\bnpm_[A-Za-z0-9]{20,}\b/g, REDACTED_VALUE)
-    .replace(/\bhf_[A-Za-z0-9]{20,}\b/g, REDACTED_VALUE)
-    .replace(/\bAKIA[0-9A-Z]{16}\b/g, REDACTED_VALUE)
-    .replace(/\bAIza[0-9A-Za-z_-]{20,}\b/g, REDACTED_VALUE)
-    .replace(/(?:sk|pk|rk)-[A-Za-z0-9_-]{8,}/g, REDACTED_VALUE)
-    .replace(/\b(api[_ -]?key|secret|token|password)\b\s*[:=]\s*["']?([^"'\s,;]+)/gi, REDACTED_VALUE)
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -97,31 +99,46 @@ function latestContentByRole(messages: Array<Pick<Message, 'role' | 'content' | 
   return undefined
 }
 
-function parseDetailValue(detail: string): unknown | undefined {
-  const normalized = normalizeLineEndings(detail).trim()
-  if (!normalized) return undefined
-  try {
-    return JSON.parse(normalized) as unknown
-  } catch {
-    return normalized
-  }
+function normalizeFiles(files: string[] | undefined): string[] | undefined {
+  if (!files || files.length === 0) return undefined
+  const normalized = [...new Set(files.map((file) => sanitizeTextSection(file)).filter(Boolean))].sort(compareText)
+  return normalized.length > 0 ? normalized : undefined
 }
 
 function buildToolEntry(step: Pick<RunStep, 'type' | 'status' | 'title' | 'createdAt'> & Partial<Pick<RunStep, 'id' | 'summary' | 'detail'>>): Record<string, unknown> | undefined {
+  const reduced = reduceToolOutput(step)
+  if (!reduced) return undefined
+
   const entry: Record<string, unknown> = {
-    status: step.status,
-    title: sanitizeTextSection(step.title),
-    type: step.type
+    category: reduced.category,
+    status: reduced.status,
+    title: sanitizeTextSection(reduced.title) || reduced.title
   }
 
-  if (step.summary) {
-    const summary = sanitizeTextSection(step.summary)
-    if (summary) entry.summary = summary
+  if (reduced.command) {
+    const command = sanitizeTextSection(reduced.command)
+    if (command) entry.command = command
   }
 
-  if (typeof step.detail === 'string') {
-    const parsed = parseDetailValue(step.detail)
-    if (parsed !== undefined) entry.detail = parsed
+  if (typeof reduced.exitCode === 'number' && Number.isFinite(reduced.exitCode)) {
+    entry.exitCode = reduced.exitCode
+  }
+
+  const files = normalizeFiles(reduced.files)
+  if (files) entry.files = files
+
+  if (reduced.errorExcerpt) {
+    const errorExcerpt = sanitizeTextSection(reduced.errorExcerpt)
+    if (errorExcerpt) entry.errorExcerpt = errorExcerpt
+  }
+
+  if (reduced.outputSummary) {
+    const outputSummary = sanitizeTextSection(reduced.outputSummary)
+    if (outputSummary) entry.outputSummary = outputSummary
+  }
+
+  if (typeof reduced.omittedChars === 'number' && Number.isFinite(reduced.omittedChars) && reduced.omittedChars > 0) {
+    entry.omittedChars = Math.floor(reduced.omittedChars)
   }
 
   return Object.keys(entry).length > 0 ? entry : undefined
@@ -191,7 +208,7 @@ export function buildRunContextSummary(input: BuildRunContextSummaryInput): stri
     }
   }
 
-  const opening = `<hesper_run_context run_id="${escapeXmlAttribute(input.run.id)}">`
+  const opening = `<hesper_run_context run_id="${escapeXmlAttribute(input.run.id)}" version="${RUN_CONTEXT_SUMMARY_VERSION}">`
   const closing = '</hesper_run_context>'
   return truncateSummary(opening, bodyLines.join('\n'), closing, maxChars)
 }

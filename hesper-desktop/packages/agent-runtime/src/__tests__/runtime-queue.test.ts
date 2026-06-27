@@ -357,11 +357,13 @@ describe('AgentRuntime queue', () => {
     const items = await persistence.contextItems.listByRun(run.id)
     expect(items).toEqual([
       expect.objectContaining({
-        id: `context-item-${run.id}-run-summary-v1`,
+        id: `context-item-${run.id}-run-summary-v2`,
         kind: 'run_summary',
-        runId: run.id
+        runId: run.id,
+        version: 2
       })
     ])
+    expect(items[0]?.content).toContain('version="2"')
     expect(items[0]?.content).toContain('compensated context')
   })
 
@@ -653,8 +655,11 @@ describe('AgentRuntime queue', () => {
     expect(adapter.inputs).toHaveLength(2)
     const secondHistory = adapter.inputs[1]!.historyMessages ?? []
     expect(secondHistory.map((message) => message.id)).toContain(`context-summary-${first.id}`)
-    expect(secondHistory.map((message) => message.content).join('\n')).toContain('filesystem.read-file')
+    expect(secondHistory.map((message) => message.content).join('\n')).toContain('version="2"')
+    expect(secondHistory.map((message) => message.content).join('\n')).toContain('"category":"success"')
+    expect(secondHistory.map((message) => message.content).join('\n')).toContain('README.md')
     expect(secondHistory.map((message) => message.content).join('\n')).toContain('hello from readme')
+    expect(secondHistory.map((message) => message.content).join('\n')).not.toContain('filesystem.read-file')
     expect(secondHistory.map((message) => message.content).join('\n')).not.toContain('continue')
   })
 
@@ -692,11 +697,11 @@ describe('AgentRuntime queue', () => {
 
     await expect(persistence.contextItems.listByRun(run.id)).resolves.toEqual([
       expect.objectContaining({
-        id: `context-item-${run.id}-run-summary-v1`,
+        id: `context-item-${run.id}-run-summary-v2`,
         sessionId: 'session-context-item-success',
         runId: run.id,
         kind: 'run_summary',
-        version: 1,
+        version: 2,
         sourceHash: expect.stringMatching(/^[a-f0-9]{64}$/)
       })
     ])
@@ -720,10 +725,11 @@ describe('AgentRuntime queue', () => {
     const items = await persistence.contextItems.listByRun(run.id)
     expect(items).toEqual([
       expect.objectContaining({
-        id: `context-item-${run.id}-run-summary-v1`,
+        id: `context-item-${run.id}-run-summary-v2`,
         sessionId: 'session-context-item-failed',
         runId: run.id,
-        kind: 'run_summary'
+        kind: 'run_summary',
+        version: 2
       })
     ])
     expect(items[0]?.content).toContain('failed run context')

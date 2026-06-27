@@ -64,7 +64,11 @@ describe('assembleHistoryMessages', () => {
       ['context-summary-run-1', 'user', true]
     ])
     expect(result[2]?.content).toContain('previous_run_continuity_not_new_user_request')
-    expect(result[2]?.content).toContain('filesystem.read-file')
+    expect(result[2]?.content).toContain('version="2"')
+    expect(result[2]?.content).toContain('"category":"success"')
+    expect(result[2]?.content).toContain('README.md')
+    expect(result[2]?.content).toContain('hello')
+    expect(result[2]?.content).not.toContain('filesystem.read-file')
   })
 
   it('uses persisted run context items before falling back to dynamic step summaries', () => {
@@ -90,7 +94,11 @@ describe('assembleHistoryMessages', () => {
     expect(summaries.map((item) => item.id)).toEqual(['context-summary-run-1', 'context-summary-run-2'])
     expect(summaries[0]?.content).toContain('persisted context')
     expect(summaries[0]?.content).not.toContain('dynamic should not appear')
-    expect(summaries[1]?.content).toContain('filesystem.read-file')
+    expect(summaries[1]?.content).toContain('version="2"')
+    expect(summaries[1]?.content).toContain('"category":"success"')
+    expect(summaries[1]?.content).toContain('README.md')
+    expect(summaries[1]?.content).toContain('hello')
+    expect(summaries[1]?.content).not.toContain('filesystem.read-file')
   })
 
   it('chooses the highest-version newest persisted run summary deterministically', () => {

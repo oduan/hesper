@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import type { AgentRun, Message, RunContextItem, RunStep } from '@hesper/shared'
 import { buildRunContextSummary } from './context-summary'
 
-const RUN_SUMMARY_CONTEXT_ITEM_VERSION = 1
+const RUN_SUMMARY_CONTEXT_ITEM_VERSION = 2
 
 export type BuildRunContextItemInput = {
   run: Pick<AgentRun, 'id' | 'sessionId'> & Partial<AgentRun>
