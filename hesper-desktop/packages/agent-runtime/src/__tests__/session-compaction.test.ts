@@ -490,6 +490,49 @@ describe('buildSessionCompaction', () => {
     expect(first?.sourceHash).toBe(second?.sourceHash)
   })
 
+  it('keeps recentMessages tie-cases deterministic when createdAt and role are identical', () => {
+    const baseInput = {
+      sessionId: 'session-recent-message-tie',
+      createdAt: '2026-06-27T09:20:00.000Z',
+      runSummaries: [
+        runSummary({
+          runId: 'run-1',
+          createdAt: '2026-06-27T09:10:00.000Z',
+          user: 'Preserve deterministic session compaction output.'
+        })
+      ]
+    }
+    const firstMessages = [
+      {
+        role: 'user',
+        createdAt: '2026-06-27T09:18:00.000Z',
+        content: 'Must keep wrapper completeness.'
+      },
+      {
+        role: 'user',
+        createdAt: '2026-06-27T09:18:00.000Z',
+        content: 'Do not implement runtime trigger.'
+      }
+    ]
+    const secondMessages = [...firstMessages].reverse()
+
+    const first = buildSessionCompaction({
+      ...baseInput,
+      recentMessages: firstMessages
+    })
+    const second = buildSessionCompaction({
+      ...baseInput,
+      recentMessages: secondMessages
+    })
+
+    expect(first).toBeDefined()
+    expect(second).toBeDefined()
+    expect(first?.item.content).toContain('Must keep wrapper completeness.')
+    expect(first?.item.content).toContain('Do not implement runtime trigger.')
+    expect(first?.item.content).toBe(second?.item.content)
+    expect(first?.sourceHash).toBe(second?.sourceHash)
+  })
+
   it('produces a deterministic sourceHash regardless of input order and changes when content changes', () => {
     const orderedInput = {
       sessionId: 'session-hash',

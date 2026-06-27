@@ -153,14 +153,13 @@ function normalizeOrderedRunSummaries(runSummaries: BuildSessionCompactionInput[
 
 function normalizeOrderedMessages(messages: BuildSessionCompactionInput['recentMessages']): OrderedMessage[] {
   return [...(messages ?? [])]
-    .map((message, index) => ({ message, index }))
-    .sort((left, right) => compareText(left.message.createdAt, right.message.createdAt) || compareText(left.message.role, right.message.role) || left.index - right.index)
-    .map(({ message }) => ({
+    .map((message) => ({
       role: message.role,
       createdAt: message.createdAt,
       content: sanitizeText(message.content)
     }))
     .filter((message) => message.content)
+    .sort((left, right) => compareText(left.createdAt, right.createdAt) || compareText(left.role, right.role) || compareText(left.content, right.content))
 }
 
 function uniqueOrdered(values: string[]): string[] {
