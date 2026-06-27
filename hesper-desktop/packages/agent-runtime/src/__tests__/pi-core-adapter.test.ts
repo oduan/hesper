@@ -5,6 +5,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { PiCoreAgentAdapter } from '../pi-core-adapter'
 
 const agentPromptCalls = vi.hoisted(() => [] as Array<{ input: unknown; images: unknown }>)
+const streamSimpleCalls = vi.hoisted(() => [] as Array<{ model: unknown; context: unknown; options: unknown }>)
+
+vi.mock('@earendil-works/pi-ai', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@earendil-works/pi-ai')>()
+  return {
+    ...actual,
+    streamSimple: vi.fn((model: unknown, context: unknown, options: unknown) => {
+      streamSimpleCalls.push({ model, context, options })
+      return {} as ReturnType<typeof actual.streamSimple>
+    })
+  }
+})
 
 vi.mock('@earendil-works/pi-agent-core', () => {
   const AgentMock = vi.fn(function AgentMock() {
@@ -66,6 +78,7 @@ describe('PiCoreAgentAdapter', () => {
   beforeEach(() => {
     vi.mocked(Agent).mockClear()
     agentPromptCalls.length = 0
+    streamSimpleCalls.length = 0
   })
 
   it('sends image attachments to image-capable models', async () => {
@@ -249,6 +262,65 @@ describe('PiCoreAgentAdapter', () => {
     expect(abortRegistration).toEqual(['abort', expect.any(Function), { once: true }])
     expect(removeEventListenerSpy).toHaveBeenCalledWith('abort', abortRegistration?.[1])
   })
+  it('does not install a runtime streamFn when no runtime options are resolved', async () => {
+    const adapter = new PiCoreAgentAdapter({ modelResolver: resolverFor() })
+
+    await adapter.run({
+      runId: 'run-standard-model',
+      sessionId: 'session-1',
+      prompt: 'hello',
+      modelId: 'gpt-4o',
+      signal: new AbortController().signal
+    }, vi.fn())
+
+    const options = vi.mocked(Agent).mock.calls[0]?.[0] as { streamFn?: unknown }
+    expect(options.streamFn).toBeUndefined()
+  })
+
+  it('injects priority service tier through a streamFn wrapper for fast Codex providers', async () => {
+    const resolver: ModelResolver = {
+      resolve: vi.fn(async () => ({
+        model: { ...piModel(), id: 'gpt-5.5', api: 'openai-codex-responses', provider: 'chatgpt-codex', reasoning: true },
+        provider: {
+          id: 'chatgpt-codex',
+          name: 'ChatGPT Codex',
+          kind: 'pi' as const,
+          authType: 'oauth' as const,
+          piAuthProvider: 'openai-codex' as const,
+          fastModeEnabled: true,
+          enabled: true,
+          createdAt: '2026-06-11T00:00:00.000Z',
+          updatedAt: '2026-06-11T00:00:00.000Z'
+        },
+        modelConfig: {
+          id: 'pi/gpt-5.5',
+          providerId: 'chatgpt-codex',
+          modelName: 'gpt-5.5',
+          displayName: 'GPT-5.5',
+          capabilities: ['streaming', 'toolCalls', 'reasoning'] as ModelCapability[],
+          enabled: true,
+          createdAt: '2026-06-11T00:00:00.000Z',
+          updatedAt: '2026-06-11T00:00:00.000Z'
+        },
+        runtimeOptions: { serviceTier: 'priority' as const }
+      }))
+    }
+    const adapter = new PiCoreAgentAdapter({ modelResolver: resolver })
+
+    await adapter.run({
+      runId: 'run-fast-codex',
+      sessionId: 'session-1',
+      prompt: 'hello',
+      modelId: 'pi/gpt-5.5',
+      signal: new AbortController().signal
+    }, vi.fn())
+
+    const options = vi.mocked(Agent).mock.calls[0]?.[0] as { streamFn?: (model: unknown, context: unknown, options?: unknown) => unknown }
+    expect(options.streamFn).toBeTypeOf('function')
+    options.streamFn?.({ id: 'gpt-5.5' }, { messages: [] }, { maxTokens: 123 })
+    expect(streamSimpleCalls[0]?.options).toMatchObject({ maxTokens: 123, serviceTier: 'priority' })
+  })
+
   it('passes provider-aware modelRef to the model resolver when present', async () => {
     const resolver = resolverFor()
     const adapter = new PiCoreAgentAdapter({ modelResolver: resolver })

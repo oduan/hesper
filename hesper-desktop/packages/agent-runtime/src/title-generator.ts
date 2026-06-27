@@ -17,6 +17,8 @@ export type SessionTitleGenerationResult = {
 
 export type CompleteSimple = (model: Model<Api>, context: Context, options?: SimpleStreamOptions) => Promise<AssistantMessage>
 
+type TitleCompleteOptions = SimpleStreamOptions & { serviceTier?: 'priority' }
+
 export type SessionTitleGenerator = {
   generateTitle(input: SessionTitleGenerationInput): Promise<SessionTitleGenerationResult | undefined>
 }
@@ -215,8 +217,9 @@ export function createSessionTitleGenerator(options: SessionTitleGeneratorOption
           ...(resolved.model.api === 'openai-codex-responses' ? {} : { temperature: 0 }),
           onPayload: (payload, model) => withJsonOutput(payload, model),
           ...(apiKey ? { apiKey } : {}),
-          ...(input.signal ? { signal: input.signal } : {})
-        }
+          ...(input.signal ? { signal: input.signal } : {}),
+          ...(resolved.runtimeOptions?.serviceTier ? { serviceTier: resolved.runtimeOptions.serviceTier } : {})
+        } as TitleCompleteOptions
       )
       if (message.stopReason === 'error') {
         throw new Error(message.errorMessage ?? 'Title generation failed')
