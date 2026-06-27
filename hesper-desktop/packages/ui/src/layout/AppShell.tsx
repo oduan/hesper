@@ -5,12 +5,15 @@ import { ActivityRail, type AppSection } from './ActivityRail'
 import { EntityListPane, type RoleListItem, type SessionCategoryListItem, type SettingsCategory, type SkillListItem } from './EntityListPane'
 import { TitleBar, type DesktopPlatform, type WindowControlAction } from './TitleBar'
 
-const shellBackground = [
-  'radial-gradient(circle at 18% 12%, rgba(255, 255, 255, 0.32), transparent 30%)',
-  'radial-gradient(circle at 82% 4%, rgba(210, 210, 206, 0.22), transparent 34%)',
-  'linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0%, rgba(244, 244, 242, 0) 54%, rgba(72, 72, 67, 0.03) 100%)',
-  themeTokens.color.background
-].join(', ')
+const shellBackgroundForColorScheme = (colorScheme: ThemeMode) => {
+  const isDark = colorScheme === 'dark'
+  return [
+    `radial-gradient(circle at 18% 12%, rgba(255, 255, 255, ${isDark ? '0.05' : '0.18'}), transparent 30%)`,
+    `radial-gradient(circle at 82% 4%, rgba(0, 0, 0, ${isDark ? '0.14' : '0.035'}), transparent 34%)`,
+    `linear-gradient(180deg, rgba(255, 255, 255, ${isDark ? '0.025' : '0.08'}) 0%, rgba(255, 255, 255, 0) 54%, rgba(0, 0, 0, ${isDark ? '0.16' : '0.04'}) 100%)`,
+    themeTokens.color.background
+  ].join(', ')
+}
 
 const paneSurfaceShadow = `0 18px 42px -34px ${themeTokens.color.shadow}`
 
@@ -129,6 +132,9 @@ export function AppShell({
     }),
     [fontSize, themeId, themeMode]
   )
+
+  const colorScheme = themeVariables.colorScheme === 'dark' ? 'dark' : 'light'
+  const shellBackground = useMemo(() => shellBackgroundForColorScheme(colorScheme), [colorScheme])
 
   useLayoutEffect(() => {
     if (typeof document === 'undefined') {

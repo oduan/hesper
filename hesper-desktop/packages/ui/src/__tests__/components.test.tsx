@@ -338,6 +338,25 @@ describe('ui components', () => {
     expect(onSelectSection).toHaveBeenCalledWith('tools')
   })
 
+  it('keeps the shell background theme-aware for non-Hesper dark themes', () => {
+    render(
+      <AppShell
+        sessions={[]}
+        activeSection="sessions"
+        title="Dracula shell"
+        appearance={{ themeId: 'dracula', themeMode: 'dark', fontSize: 14 }}
+      />
+    )
+
+    const appRoot = screen.getByLabelText('主工作区').parentElement as HTMLElement
+    expect(appRoot.style.background).toContain('radial-gradient')
+    expect(appRoot.style.background).toContain('linear-gradient')
+    expect(appRoot.style.background).toContain(themeTokens.color.background)
+    expect(appRoot.style.background).not.toContain('244, 244, 242')
+    expect(appRoot.style.background).not.toContain('72, 72, 67')
+    expect(appRoot.style.background).not.toContain('210, 210, 206')
+  })
+
   it('routes wheel events from the session pane chrome into the session list', () => {
     render(
       <AppShell
