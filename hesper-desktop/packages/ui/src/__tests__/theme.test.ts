@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { builtinThemes, createThemeVariables, darkTheme, resolveThemeVariant, themeTokens } from '../theme'
+import { builtinThemes, createThemeVariables, darkTheme, lightTheme, resolveThemeVariant, themeTokens } from '../theme'
 
 type ThemeVariableMap = Record<string, string | number | undefined>
 
@@ -21,6 +21,16 @@ describe('built-in theme registry', () => {
     expect(draculaVariant.id).toBe('dark')
     expect(draculaVariant.colorScheme).toBe('dark')
     expect(tokyoNightVariables.colorScheme).toBe('dark')
+  })
+
+  it('falls Hesper dark mode requests back to the light variant', () => {
+    const variant = resolveThemeVariant('hesper', 'dark')
+    const variables = vars(createThemeVariables({ themeId: 'hesper', mode: 'dark', fontSize: 14 }))
+
+    expect(variant.id).toBe('light')
+    expect(variant.colorScheme).toBe('light')
+    expect(variables.colorScheme).toBe('light')
+    expect(variables['--hesper-color-background']).toBe('#f4f4f2')
   })
 
   it('generates Hesper light CSS variables', () => {
@@ -87,10 +97,12 @@ describe('built-in theme registry', () => {
     expect(variables['--hesper-color-accent']).toBe('#7aa2f7')
   })
 
-  it('exports semantic theme tokens and keeps darkTheme as a compatibility alias', () => {
+  it('exports semantic theme tokens with Hesper light fallbacks and keeps darkTheme as a compatibility alias', () => {
     expect(darkTheme).toBe(themeTokens)
-    expect(themeTokens.color.accentContrast).toBe('var(--hesper-color-accent-contrast, #11111b)')
-    expect(themeTokens.color.previewBackground).toBe('var(--hesper-color-preview-background, #11111b)')
-    expect(themeTokens.color.scrollbarThumbActive).toBe('var(--hesper-color-scrollbar-thumb-active, rgba(205, 214, 244, 0.38))')
+    expect(lightTheme.color.background).toBe('#f4f4f2')
+    expect(lightTheme.color.accent).toBe('#b8b8b2')
+    expect(themeTokens.color.accentContrast).toBe('var(--hesper-color-accent-contrast, #242421)')
+    expect(themeTokens.color.previewBackground).toBe('var(--hesper-color-preview-background, #f4f4f2)')
+    expect(themeTokens.color.scrollbarThumbActive).toBe('var(--hesper-color-scrollbar-thumb-active, rgba(112, 112, 106, 0.30))')
   })
 })

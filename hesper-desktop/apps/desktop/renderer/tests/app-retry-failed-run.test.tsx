@@ -41,7 +41,7 @@ vi.mock('../src/ipc-client', () => ({
     files: { preview: vi.fn() },
     agent: { enqueue, stop: vi.fn(), onEvent },
     dialog: { selectDirectory: vi.fn() },
-    settings: { get: vi.fn(async () => ({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', themeId: 'hesper', fontSize: 14, soul: '' })), update: vi.fn() },
+    settings: { get: vi.fn(async () => ({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'system', themeId: 'hesper', fontSize: 14, soul: '' })), update: vi.fn() },
     providers: { list: listProviders },
     models: { list: listModels },
     tools: { list: vi.fn(async () => []), setEnabled: vi.fn(), credentialStatus: vi.fn(), saveApiKey: vi.fn(), deleteApiKey: vi.fn() },

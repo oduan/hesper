@@ -142,7 +142,7 @@ describe('ipc-client fallback', () => {
   it('starts fallback settings and model registry empty', async () => {
     const api = createHesperApi({ allowFallback: true })
 
-    await expect(api.settings.get()).resolves.toMatchObject({ defaultModelId: '' })
+    await expect(api.settings.get()).resolves.toMatchObject({ defaultModelId: '', themeMode: 'system', themeId: 'hesper' })
     await expect(api.providers.list()).resolves.toEqual([])
     await expect(api.models.list()).resolves.toEqual([])
   })

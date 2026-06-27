@@ -187,11 +187,11 @@ const { listSessions, listSessionCategories, createSession, createSessionCategor
     endedAt: '2026-06-10T03:00:05.000Z'
   })),
   onEvent: vi.fn(() => () => undefined),
-  getSettings: vi.fn(async () => ({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', themeId: 'hesper', fontSize: 14, soul: '' })),
+  getSettings: vi.fn(async () => ({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'system', themeId: 'hesper', fontSize: 14, soul: '' })),
   updateSettings: vi.fn(async (input: Partial<{ defaultModelId: string; defaultOutputMode: 'markdown' | 'html'; themeMode: 'system' | 'light' | 'dark'; themeId: 'hesper' | 'catppuccin' | 'dracula' | 'tokyo-night'; fontSize: number; soul: string }>) => ({
     defaultModelId: input.defaultModelId ?? 'mock/hesper-fast',
     defaultOutputMode: input.defaultOutputMode ?? 'markdown',
-    themeMode: input.themeMode ?? 'dark',
+    themeMode: input.themeMode ?? 'system',
     themeId: input.themeId ?? 'hesper',
     fontSize: input.fontSize ?? 14,
     soul: input.soul ?? ''
@@ -361,12 +361,17 @@ describe('renderer App', () => {
     const styles = readFileSync(existsSync(desktopRelativeStylesPath) ? desktopRelativeStylesPath : workspaceRelativeStylesPath, 'utf8')
     const rootBlock = styles.match(/:root\s*{(?<body>[\s\S]*?)}/)?.groups?.body ?? ''
 
-    expect(rootBlock).toContain('--hesper-color-text-muted:')
-    expect(rootBlock).toContain('--hesper-color-hover:')
-    expect(rootBlock).toContain('--hesper-color-soft-control:')
-    expect(rootBlock).toContain('--hesper-color-scrollbar-thumb:')
-    expect(rootBlock).toContain('--hesper-color-scrollbar-thumb-hover:')
-    expect(rootBlock).toContain('--hesper-color-scrollbar-thumb-active:')
+    expect(rootBlock).toContain('--hesper-color-background: #f4f4f2;')
+    expect(rootBlock).toContain('--hesper-color-surface: #ececea;')
+    expect(rootBlock).toContain('--hesper-color-surface-muted: #e4e4e1;')
+    expect(rootBlock).toContain('--hesper-color-text: #242421;')
+    expect(rootBlock).toContain('--hesper-color-text-muted: #70706a;')
+    expect(rootBlock).toContain('--hesper-color-accent: #b8b8b2;')
+    expect(rootBlock).toContain('--hesper-color-hover: rgba(36, 36, 33, 0.08);')
+    expect(rootBlock).toContain('--hesper-color-soft-control: rgba(184, 184, 178, 0.14);')
+    expect(rootBlock).toContain('--hesper-color-scrollbar-thumb: rgba(112, 112, 106, 0.10);')
+    expect(rootBlock).toContain('--hesper-color-scrollbar-thumb-hover: rgba(112, 112, 106, 0.18);')
+    expect(rootBlock).toContain('--hesper-color-scrollbar-thumb-active: rgba(112, 112, 106, 0.30);')
     expect(styles).toContain('color: var(--hesper-color-text-muted);')
     expect(styles).toContain('background: var(--hesper-color-hover);')
     expect(styles).toContain('scrollbar-color: var(--hesper-color-scrollbar-thumb) transparent;')
@@ -631,11 +636,11 @@ describe('renderer App', () => {
       createdAt: '2026-06-10T03:00:00.000Z',
       updatedAt: '2026-06-10T03:00:00.000Z'
     }))
-    getSettings.mockResolvedValue({ defaultModelId: 'deepseek-chat', defaultOutputMode: 'markdown', themeMode: 'dark', themeId: 'hesper', fontSize: 14, soul: '' })
+    getSettings.mockResolvedValue({ defaultModelId: 'deepseek-chat', defaultOutputMode: 'markdown', themeMode: 'system', themeId: 'hesper', fontSize: 14, soul: '' })
     updateSettings.mockImplementation(async (input) => ({
       defaultModelId: input.defaultModelId ?? 'deepseek-chat',
       defaultOutputMode: input.defaultOutputMode ?? 'markdown',
-      themeMode: input.themeMode ?? 'dark',
+      themeMode: input.themeMode ?? 'system',
       themeId: input.themeId ?? 'hesper',
       fontSize: input.fontSize ?? 14,
       soul: input.soul ?? ''
@@ -3231,7 +3236,7 @@ describe('renderer App', () => {
     const user = userEvent.setup()
     listProviders.mockResolvedValueOnce([])
     listModels.mockResolvedValueOnce([])
-    getSettings.mockResolvedValueOnce({ defaultModelId: '', defaultOutputMode: 'markdown', themeMode: 'dark', themeId: 'hesper', fontSize: 14, soul: '' })
+    getSettings.mockResolvedValueOnce({ defaultModelId: '', defaultOutputMode: 'markdown', themeMode: 'system', themeId: 'hesper', fontSize: 14, soul: '' })
     listSessions.mockResolvedValueOnce([
       {
         id: 'session-empty-model',

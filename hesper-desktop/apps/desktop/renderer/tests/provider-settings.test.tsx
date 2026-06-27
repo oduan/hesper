@@ -253,11 +253,11 @@ function resetProviderMocks() {
   listSkills.mockResolvedValue([])
   refreshSkills.mockResolvedValue([])
   setToolEnabled.mockImplementation(async (input: any) => ({ id: input.id, name: input.id, description: input.id, category: 'system', inputSchema: {}, enabled: input.enabled }))
-  getSettings.mockResolvedValue({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', themeId: 'hesper', fontSize: 14, soul: '' })
+  getSettings.mockResolvedValue({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'system', themeId: 'hesper', fontSize: 14, soul: '' })
   updateSettings.mockImplementation(async (input: any) => ({
     defaultModelId: input.defaultModelId ?? 'mock/hesper-fast',
     defaultOutputMode: input.defaultOutputMode ?? 'markdown',
-    themeMode: input.themeMode ?? 'dark',
+    themeMode: input.themeMode ?? 'system',
     themeId: input.themeId ?? 'hesper',
     fontSize: input.fontSize ?? 14,
     soul: input.soul ?? ''
@@ -303,7 +303,7 @@ describe('provider settings panel', () => {
     const user = userEvent.setup()
     listProviders.mockResolvedValue([])
     listModels.mockResolvedValue([])
-    getSettings.mockResolvedValue({ defaultModelId: '', defaultOutputMode: 'markdown', themeMode: 'dark', themeId: 'hesper', fontSize: 14, soul: '' })
+    getSettings.mockResolvedValue({ defaultModelId: '', defaultOutputMode: 'markdown', themeMode: 'system', themeId: 'hesper', fontSize: 14, soul: '' })
     render(<App />)
 
     await user.click(await screen.findByRole('button', { name: '设置' }))

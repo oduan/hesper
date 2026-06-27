@@ -312,14 +312,14 @@ const semanticColors = (fallbackPalette: ThemePalette): ThemePalette =>
   }, {} as ThemePalette)
 
 export const lightTheme: ThemeTokens = {
-  color: catppuccinLattePalette,
+  color: hesperLightPalette,
   radius,
   spacing,
   typography: { body: 14, tiny: 9 }
 }
 
 export const themeTokens: ThemeTokens = {
-  color: semanticColors(catppuccinMochaPalette),
+  color: semanticColors(hesperLightPalette),
   radius,
   spacing,
   typography: { body: 'var(--hesper-font-size, 14px)', tiny: 9 }

@@ -43,7 +43,7 @@ import { createId } from '@hesper/shared'
 const defaultSettings: AppSettings = {
   defaultModelId: '',
   defaultOutputMode: 'markdown',
-  themeMode: 'dark',
+  themeMode: 'system',
   themeId: 'hesper',
   fontSize: 14,
   soul: ''
