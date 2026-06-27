@@ -423,7 +423,11 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
               }
             }
           },
-          allowedToolIds: { type: 'array', items: { type: 'string' }, description: 'Requested tool ids. Effective tools are intersected with parent, requested, role/temporaryRole defaults, and global limits.' },
+          allowedToolIds: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Requested registry ids, for example "filesystem.read-file". They are not callable names such as "filesystem_read-file". Effective tools are intersected with parent, requested, role/temporaryRole defaults, and global limits.'
+          },
           modelRef: {
             type: 'object',
             description: 'Provider-aware model reference from models.list-available. Takes precedence over modelId, role defaults, and the parent run model.',

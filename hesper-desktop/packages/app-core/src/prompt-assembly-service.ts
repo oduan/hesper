@@ -258,7 +258,8 @@ function renderMainWorkerAgentRules(input: MainPromptAssemblyInput, tools: ToolD
     '- Use a Worker Agent only for independent research, review, long-context analysis, or parallelizable work.',
     '- Do not use a Worker Agent for simple one-step tasks or when user confirmation is required.',
     '- Every Worker Agent call must include task, allowedToolIds, expectedOutput, and exactly one of roleId or temporaryRole.',
-    '- allowedToolIds must be a subset of the tools listed in this prompt.',
+    '- allowedToolIds must use registry ids from the "registry id" lines in this prompt, for example "filesystem.read-file"; they are not callable names such as "filesystem_read-file".',
+    '- allowedToolIds must be a subset of the current run registry ids. Worker Agent management tools are never delegated to child Worker Agents.',
     '- Worker Agent results must be summarized back to the parent agent before final response.'
   ].join('\n')
 }

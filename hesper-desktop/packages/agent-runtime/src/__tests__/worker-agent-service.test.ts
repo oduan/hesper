@@ -9,6 +9,7 @@ type CreateHarnessOptions = {
   adapter?: AgentAdapter
   session?: Session
   roles?: Role[]
+  tools?: ToolDefinition[]
   parentRun?: Partial<AgentRun>
   now?: () => string
   filterEnabledToolIds?: (toolIds: string[]) => Promise<string[]>
@@ -238,6 +239,7 @@ class ProgressAdapter implements AgentAdapter {
 async function createHarness(options: CreateHarnessOptions = {}): Promise<any> {
   const session = options.session ?? defaultSession
   const roles = options.roles ?? [reviewerRole]
+  const harnessTools = options.tools ?? tools
   const now = options.now ?? createIncrementingClock()
   const persistence = await createInMemoryPersistence()
   await persistence.sessions.save(session)
@@ -289,8 +291,8 @@ async function createHarness(options: CreateHarnessOptions = {}): Promise<any> {
       list: () => []
     },
     tools: {
-      list: () => [...tools],
-      get: (id) => tools.find((tool) => tool.id === id)
+      list: () => [...harnessTools],
+      get: (id) => harnessTools.find((tool) => tool.id === id)
     },
     filterEnabledToolIds: options.filterEnabledToolIds ?? (async (toolIds) => toolIds.filter((toolId) => toolId === 'filesystem.read-file')),
     emit: (event) => {
@@ -669,6 +671,110 @@ describe('worker agent service', () => {
     await expect(persistence.workerAgentInvocations.get(withoutDefaultTools.invocationId)).resolves.toMatchObject({
       allowedToolIds: ['filesystem.read-file', 'filesystem.write-file']
     })
+  })
+
+  it('normalizes callable tool names to registry ids before filtering Worker Agent tools', async () => {
+    const adapter = new BlockingAdapter()
+    const filterEnabledToolIds = vi.fn(async (toolIds: string[]) => toolIds.filter((toolId) => toolId === 'filesystem.read-file'))
+    const roleWithCallableDefaultTools: Role = {
+      ...reviewerRole,
+      defaultToolIds: ['filesystem_read-file']
+    }
+    const { service, persistence, createContext } = await createHarness({
+      adapter,
+      roles: [roleWithCallableDefaultTools],
+      filterEnabledToolIds
+    })
+
+    const spawned = await withTimeout(
+      service.spawn(
+        { task: 'review with callable tool aliases', roleId: 'reviewer', allowedToolIds: ['filesystem_read-file'], wait: false },
+        createContext({ allowedToolIds: ['filesystem_read-file'] })
+      ),
+      'callable tool alias spawn timed out'
+    )
+
+    await vi.waitFor(() => expect(adapter.startedRunIds).toHaveLength(1))
+    expect(filterEnabledToolIds).toHaveBeenCalledWith(['filesystem.read-file'])
+    expect(spawned.allowedToolIds).toEqual(['filesystem.read-file'])
+    expect(adapter.inputs[0]?.enabledToolIds).toEqual(['filesystem.read-file'])
+    await expect(persistence.workerAgentInvocations.get(spawned.invocationId)).resolves.toMatchObject({
+      allowedToolIds: ['filesystem.read-file']
+    })
+  })
+
+  it('does not resolve ambiguous callable tool aliases to the wrong registry id', async () => {
+    const collidingTools: ToolDefinition[] = [
+      ...tools,
+      {
+        id: 'example.one',
+        name: 'Example One',
+        description: 'Example one',
+        category: 'filesystem',
+        inputSchema: { type: 'object', properties: {} }
+      },
+      {
+        id: 'example:one',
+        name: 'Example Colon One',
+        description: 'Example colon one',
+        category: 'filesystem',
+        inputSchema: { type: 'object', properties: {} }
+      }
+    ]
+    const roleWithCollidingTools: Role = {
+      ...reviewerRole,
+      defaultToolIds: ['example.one', 'example:one']
+    }
+    const { service, createContext } = await createHarness({
+      roles: [roleWithCollidingTools],
+      tools: collidingTools,
+      filterEnabledToolIds: async (toolIds) => toolIds
+    })
+
+    await expect(
+      service.spawn(
+        { task: 'ambiguous alias', roleId: 'reviewer', allowedToolIds: ['example_one'], wait: false },
+        createContext({ allowedToolIds: ['agent.spawn-worker-agent', 'example.one', 'example:one'] })
+      )
+    ).rejects.toThrow(/allowed tools/i)
+  })
+
+  it('drops ambiguous callable aliases instead of letting raw alias strings through filtering', async () => {
+    const filterEnabledToolIds = vi.fn(async (toolIds: string[]) => toolIds)
+    const collidingTools: ToolDefinition[] = [
+      ...tools,
+      {
+        id: 'example.one',
+        name: 'Example One',
+        description: 'Example one',
+        category: 'filesystem',
+        inputSchema: { type: 'object', properties: {} }
+      },
+      {
+        id: 'example:one',
+        name: 'Example Colon One',
+        description: 'Example colon one',
+        category: 'filesystem',
+        inputSchema: { type: 'object', properties: {} }
+      }
+    ]
+    const roleWithRawAmbiguousAlias: Role = {
+      ...reviewerRole,
+      defaultToolIds: ['example_one']
+    }
+    const { service, createContext } = await createHarness({
+      roles: [roleWithRawAmbiguousAlias],
+      tools: collidingTools,
+      filterEnabledToolIds
+    })
+
+    await expect(
+      service.spawn(
+        { task: 'raw ambiguous alias', roleId: 'reviewer', allowedToolIds: ['example_one'], wait: false },
+        createContext({ allowedToolIds: ['agent.spawn-worker-agent', 'example_one'] })
+      )
+    ).rejects.toThrow(/allowed tools/i)
+    expect(filterEnabledToolIds).not.toHaveBeenCalled()
   })
 
   it('uses temporary role default models before the parent run model', async () => {
