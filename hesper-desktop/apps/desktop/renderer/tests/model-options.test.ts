@@ -18,9 +18,10 @@ describe('model-options', () => {
     ])
   })
 
-  it('creates session model options from enabled models', () => {
+  it('creates session model options from enabled non-legacy models', () => {
     expect(createSessionModelOptions([
       { id: 'alpha', enabled: true },
+      { id: 'mock/hesper-fast', enabled: true },
       { id: 'beta', enabled: false },
       { id: 'gamma' }
     ] as any)).toEqual([
@@ -44,13 +45,8 @@ describe('model-options', () => {
     ] as any)
 
     expect(catalog.preferredModelId).toBe('deepseek-chat')
-    expect(catalog.options).toEqual(['mock/hesper-fast', 'deepseek-chat', 'gpt-4o'])
+    expect(catalog.options).toEqual(['deepseek-chat', 'gpt-4o'])
     expect(catalog.optionGroups).toEqual([
-      {
-        id: 'mock',
-        label: 'Mock',
-        options: [{ value: 'mock/hesper-fast', label: 'Mock/mock/hesper-fast' }]
-      },
       {
         id: 'deepseek',
         label: 'DeepSeek',

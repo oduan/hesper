@@ -3,7 +3,7 @@ import { createId, defaultAppThemeId, nowIso, type AgentRun, type Message, type 
 import { AppShell, ConversationView, resolveThemeVariant, themeTokens, type AppSection, type ComposerDraftAttachment, type ComposerSendOptions, type ComposerSkillMention, type ConversationGitPanelProps, type ConversationShortcutCommand, type GitCommitDetailView, type GitGraphRowView, type SkillOption } from '@hesper/ui'
 import { AppStoreProvider, useAppStore, type SessionSpecialView } from './app-store'
 import { hesperApi } from './ipc-client'
-import { defaultFallbackModelId, fallbackSessionModelCatalog, loadAvailableModelCatalog, mergeModelOptions, type SessionModelCatalog } from './model-options'
+import { defaultFallbackModelId, fallbackSessionModelCatalog, isLegacyFallbackModelId, loadAvailableModelCatalog, mergeModelOptions, type SessionModelCatalog } from './model-options'
 import type { AppSettings, CreateSshKeyInput, CreateSshServerInput, DraftAttachment, GitCommitDetailDto, GitGraphRowDto, GitRefDto, GitRepositoryStateDto, ManagedRoleDto, SkillDto, SshKeyDto, SshServerDto, ToolCredentialStatus, ToolDto, UpdateSettingsInput, UpdateSshServerInput } from '../../electron/ipc-contract'
 import { AppearanceSettingsPanel } from './appearance-settings-panel'
 import { ProviderSettingsPanel } from './provider-settings-panel'
@@ -985,11 +985,11 @@ function AppContent() {
     messagesByRun: state.childMessagesByRun,
     streamingByRun: state.streamingByRun
   }), [state.childMessagesByRun, state.runsById, state.stepsByRun, state.streamingByRun, state.workerInvocationIdByParentStepId, state.workerInvocationsById])
-  const activeModelId = activeSession ? resolveSessionModelId(activeSession.defaultModelId, sessionModelCatalog.preferredModelId, explicitModelSelectionSessionIdsRef.current.has(activeSession.id)) : sessionModelCatalog.preferredModelId
+  const activeModelId = activeSession ? resolveAvailableSessionModelId(activeSession.defaultModelId, sessionModelCatalog, explicitModelSelectionSessionIdsRef.current.has(activeSession.id)) : resolveAvailableSessionModelId(undefined, sessionModelCatalog)
   const activeModelConfig = sessionModelCatalog.modelsById[activeModelId]
   const activeModelCapabilities = activeModelConfig?.capabilities ?? []
-  const activeModelOptions = activeSession?.defaultModelId ? mergeModelOptions(sessionModelCatalog.options, [activeModelId, activeSession.defaultModelId]) : mergeModelOptions(sessionModelCatalog.options, [activeModelId])
-  const activeModelMissing = !activeModelId.trim()
+  const activeModelOptions = isAvailableSessionModel(activeModelId, sessionModelCatalog) ? mergeModelOptions(sessionModelCatalog.options, [activeModelId]) : sessionModelCatalog.options
+  const activeModelMissing = !isAvailableSessionModel(activeModelId, sessionModelCatalog)
 
   const loadGitRepositoryState = useCallback(async (sessionId: string, workspacePath: string): Promise<GitRepositoryStateDto | undefined> => {
     const requestId = (latestGitStateRequestIdRef.current[sessionId] ?? 0) + 1
@@ -2089,6 +2089,13 @@ function AppContent() {
               })
             }}
             onModelChange={(modelId) => {
+              if (!isAvailableSessionModel(modelId, sessionModelCatalog)) {
+                setSendErrorsBySession((current) => ({
+                  ...current,
+                  [activeSession.id]: unavailableModelMessage(modelId)
+                }))
+                return
+              }
               explicitModelSelectionSessionIdsRef.current.add(activeSession.id)
               void updateSessionModel({
                 session: activeSession,
@@ -2111,6 +2118,7 @@ function AppContent() {
                 modelId: activeModelId,
                 content,
                 modelCapabilities: activeModelCapabilities,
+                modelCatalog: sessionModelCatalog,
                 ...(sendOptions ? { sendOptions } : {}),
                 dispatch,
                 setSendErrorsBySession,
@@ -2123,6 +2131,7 @@ function AppContent() {
                 message,
                 run,
                 pendingTitlePromptsBySessionRef,
+                modelCatalog: sessionModelCatalog,
                 dispatch,
                 setSendErrorsBySession
               })
@@ -2195,12 +2204,36 @@ function useResolvedThemeMode(themeMode: AppSettings['themeMode']): 'light' | 'd
   return themeMode === 'system' ? systemThemeMode : themeMode
 }
 
+function isAvailableSessionModel(modelId: string | undefined, catalog: SessionModelCatalog): boolean {
+  const normalizedModelId = modelId?.trim() ?? ''
+  return Boolean(normalizedModelId && !isLegacyFallbackModelId(normalizedModelId) && catalog.modelsById[normalizedModelId])
+}
+
+function unavailableModelMessage(modelId: string | undefined): string {
+  const normalizedModelId = modelId?.trim() ?? ''
+  return normalizedModelId ? `模型不可用：${normalizedModelId}` : '未配置模型'
+}
+
+function resolveAvailableSessionModelId(sessionModelId: string | undefined, catalog: SessionModelCatalog, useSessionModelId = false): string {
+  const normalizedSessionModelId = sessionModelId?.trim() ?? ''
+  const preferredModelId = isAvailableSessionModel(catalog.preferredModelId, catalog) ? catalog.preferredModelId.trim() : defaultFallbackModelId
+
+  if (useSessionModelId) {
+    return isAvailableSessionModel(normalizedSessionModelId, catalog) ? normalizedSessionModelId : defaultFallbackModelId
+  }
+
+  if (!normalizedSessionModelId || normalizedSessionModelId === defaultFallbackModelId || isLegacyFallbackModelId(normalizedSessionModelId)) {
+    return preferredModelId
+  }
+
+  return isAvailableSessionModel(normalizedSessionModelId, catalog) ? normalizedSessionModelId : defaultFallbackModelId
+}
+
 function resolveSessionModelId(sessionModelId: string | undefined, preferredModelId: string, useSessionModelId = false): string {
-  const legacyMockFallbackModelId = 'mock/hesper-fast'
   if (useSessionModelId && sessionModelId) {
     return sessionModelId
   }
-  if (!sessionModelId || sessionModelId === defaultFallbackModelId || sessionModelId === legacyMockFallbackModelId) {
+  if (!sessionModelId || sessionModelId === defaultFallbackModelId || isLegacyFallbackModelId(sessionModelId)) {
     return preferredModelId
   }
   return sessionModelId
@@ -2427,6 +2460,7 @@ function retryFailedRun({
   message,
   run,
   pendingTitlePromptsBySessionRef,
+  modelCatalog,
   dispatch,
   setSendErrorsBySession
 }: {
@@ -2434,6 +2468,7 @@ function retryFailedRun({
   message: Message
   run: AgentRun
   pendingTitlePromptsBySessionRef: { current: Record<string, string> }
+  modelCatalog: SessionModelCatalog
   dispatch: ReturnType<typeof useAppStore>['dispatch']
   setSendErrorsBySession: Dispatch<SetStateAction<Record<string, string>>>
 }) {
@@ -2442,6 +2477,7 @@ function retryFailedRun({
     session,
     modelId: run.modelId,
     content: message.content,
+    modelCatalog,
     dispatch,
     setSendErrorsBySession
   })
@@ -2489,6 +2525,7 @@ async function sendMessage({
   modelId,
   content,
   modelCapabilities = [],
+  modelCatalog,
   dispatch,
   sendOptions,
   setSendErrorsBySession,
@@ -2498,16 +2535,17 @@ async function sendMessage({
   modelId: string
   content: string
   modelCapabilities?: readonly string[]
+  modelCatalog?: SessionModelCatalog
   sendOptions?: ComposerSendOptions
   dispatch: ReturnType<typeof useAppStore>['dispatch']
   setSendErrorsBySession: Dispatch<SetStateAction<Record<string, string>>>
   setDraftAttachmentsBySession?: Dispatch<SetStateAction<Record<string, ComposerDraftAttachment[]>>>
 }) {
   const normalizedModelId = modelId.trim()
-  if (!normalizedModelId) {
+  if (!normalizedModelId || (modelCatalog && !isAvailableSessionModel(normalizedModelId, modelCatalog))) {
     setSendErrorsBySession((current) => ({
       ...current,
-      [session.id]: '未配置模型'
+      [session.id]: unavailableModelMessage(normalizedModelId)
     }))
     return
   }

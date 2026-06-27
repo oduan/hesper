@@ -509,10 +509,10 @@ describe('renderer App', () => {
       updatedAt: '2026-06-10T03:00:12.000Z'
     }))
     listProviders.mockResolvedValue([
-      { id: 'mock', name: 'Mock', kind: 'mock', enabled: true, hasApiKey: false, defaultModelId: 'mock/hesper-fast', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+      { id: 'deepseek', name: 'DeepSeek', kind: 'deepseek', enabled: true, hasApiKey: true, defaultModelId: 'deepseek-chat', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
     ] as any)
     listModels.mockResolvedValue([
-      { id: 'mock/hesper-fast', providerId: 'mock', modelName: 'mock/hesper-fast', displayName: 'Hesper Mock Fast', capabilities: ['streaming', 'toolCalls'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+      { id: 'deepseek-chat', providerId: 'deepseek', modelName: 'deepseek-chat', displayName: 'DeepSeek Chat', capabilities: ['streaming', 'toolCalls'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
     ] as any)
     listTools.mockResolvedValue([
       {
@@ -631,9 +631,9 @@ describe('renderer App', () => {
       createdAt: '2026-06-10T03:00:00.000Z',
       updatedAt: '2026-06-10T03:00:00.000Z'
     }))
-    getSettings.mockResolvedValue({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', themeId: 'catppuccin', fontSize: 14, soul: '' })
+    getSettings.mockResolvedValue({ defaultModelId: 'deepseek-chat', defaultOutputMode: 'markdown', themeMode: 'dark', themeId: 'catppuccin', fontSize: 14, soul: '' })
     updateSettings.mockImplementation(async (input) => ({
-      defaultModelId: input.defaultModelId ?? 'mock/hesper-fast',
+      defaultModelId: input.defaultModelId ?? 'deepseek-chat',
       defaultOutputMode: input.defaultOutputMode ?? 'markdown',
       themeMode: input.themeMode ?? 'dark',
       themeId: input.themeId ?? 'catppuccin',
@@ -2900,7 +2900,7 @@ describe('renderer App', () => {
     expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({
       sessionId: 'session-1',
       prompt: 'hello agent',
-      modelId: 'mock/hesper-fast',
+      modelId: 'deepseek-chat',
       workspacePath: 'C:/workspace'
     }))
     const enqueueInput = (enqueue as any).mock.calls[0]?.[0] as { messageId?: string; messageCreatedAt?: string } | undefined
@@ -3077,6 +3077,7 @@ describe('renderer App', () => {
         title: 'No model configured',
         status: 'active',
         workspacePath: 'C:/workspace',
+        defaultModelId: 'gpt-4o',
         outputMode: 'markdown',
         createdAt: '2026-06-10T03:00:00.000Z',
         updatedAt: '2026-06-10T03:00:00.000Z'
@@ -3090,6 +3091,7 @@ describe('renderer App', () => {
     const sendButton = screen.getByRole('button', { name: '发送' })
     expect(sendButton).toBeDisabled()
 
+    await user.click(sendButton)
     await user.keyboard('{Control>}{Enter}{/Control}')
 
     expect(enqueue).not.toHaveBeenCalled()
@@ -3155,7 +3157,13 @@ describe('renderer App', () => {
 
     render(<App />)
 
-    expect(await screen.findByRole('button', { name: '选择模型' })).toHaveTextContent('DeepSeek/deepseek-chat')
+    const modelButton = await screen.findByRole('button', { name: '选择模型' })
+    expect(modelButton).toHaveTextContent('DeepSeek/deepseek-chat')
+    await user.click(modelButton)
+    expect(screen.queryByRole('button', { name: '连接 Mock' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Mock/mock/hesper-fast' })).not.toBeInTheDocument()
+    await user.keyboard('{Escape}')
+
     await user.type(screen.getByPlaceholderText(/输入消息/), 'use configured model')
     await user.click(screen.getByRole('button', { name: '发送' }))
 
