@@ -18,6 +18,14 @@ import type { GitGraphRowView } from '../git/git-graph-types'
 
 const now = '2026-06-10T03:00:00.000Z'
 
+function expectFloatingIslandBorder(element: Element | null) {
+  expect(element).not.toBeNull()
+  const style = element?.getAttribute('style') ?? ''
+  expect(style).toContain(`border-color: ${themeTokens.color.border}`)
+  expect(style).toContain('border-style: solid')
+  expect(style).toContain('border-width: 1px')
+}
+
 const baseSession = {
   id: 'session-1',
   title: '测试会话',
@@ -249,21 +257,46 @@ describe('ui components', () => {
     )
 
     const titleBar = screen.getByLabelText('窗口标题栏')
+    const appRoot = titleBar.parentElement as HTMLElement
+    const expectedPaneShadow = `0 2px 6px -4px ${themeTokens.color.shadow}`
     expect(titleBar).toHaveTextContent('Hesper')
     expect(titleBar).toHaveTextContent('构建 hesper MVP')
-    expect(screen.getByLabelText('功能栏')).not.toHaveTextContent('hesper')
+    expect(appRoot.style.background).toContain('radial-gradient')
+    expect(appRoot.style.background).toContain('linear-gradient')
+    expect(appRoot.style.background).toContain(themeTokens.color.background)
+    expect(appRoot).toHaveStyle({ color: themeTokens.color.text })
+    const activityRail = screen.getByLabelText('功能栏')
+    expect(activityRail).not.toHaveTextContent('hesper')
+    expect(activityRail).toHaveStyle({ background: 'transparent', boxSizing: 'border-box' })
     expect(screen.getByRole('heading', { name: '所有会话' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '所有会话' })).toHaveAttribute('aria-current', 'page')
-    expect(screen.getByLabelText('功能栏')).toHaveStyle({ boxSizing: 'border-box' })
-    expect(screen.getByLabelText('实体列表')).toHaveStyle({ boxSizing: 'border-box' })
+    const entityListPane = screen.getByLabelText('实体列表')
+    expectFloatingIslandBorder(entityListPane)
+    expect(entityListPane).toHaveStyle({
+      boxSizing: 'border-box',
+      background: themeTokens.color.surface,
+      borderRadius: themeTokens.radius.xl,
+      boxShadow: expectedPaneShadow,
+      height: '100%',
+      maxHeight: '100%'
+    })
     const sessionList = screen.getByLabelText('会话列表')
     expect(sessionList).toHaveClass('hesper-theme-scrollbar')
     expect(sessionList).toHaveStyle({
       marginRight: '-16px',
       paddingRight: '16px'
     })
-    expect(screen.getByLabelText('主工作区')).toHaveStyle({ gridTemplateColumns: '204px 427px minmax(0, 1fr)' })
-    expect(screen.getByLabelText('详情区域').firstElementChild).toHaveStyle({ padding: '0px' })
+    expect(screen.getByLabelText('主工作区')).toHaveStyle({ gridTemplateColumns: '204px 427px minmax(0, 1fr)', alignItems: 'stretch' })
+    const detailPane = screen.getByLabelText('详情区域')
+    expectFloatingIslandBorder(detailPane)
+    expect(detailPane).toHaveStyle({
+      background: themeTokens.color.surface,
+      borderRadius: themeTokens.radius.xl,
+      boxShadow: expectedPaneShadow,
+      height: '100%',
+      maxHeight: '100%'
+    })
+    expect(detailPane.firstElementChild).toHaveStyle({ padding: '0px' })
     const sessionRow = screen.getByRole('button', { name: '视频脚本生成' })
     expect(sessionRow).toHaveStyle({ alignItems: 'center' })
     expect(sessionRow).toHaveTextContent('视频脚本生成')
@@ -274,8 +307,9 @@ describe('ui components', () => {
     fireEvent.contextMenu(sessionRow)
     expect(sessionRow).not.toHaveClass('is-selected')
     const menu = screen.getByRole('menu', { name: '会话操作' })
-    expect(menu).toHaveStyle({ background: themeTokens.color.surfaceMuted, borderRadius: '12px', padding: '4px 0' })
-    expect(menu).toHaveStyle({ boxShadow: `0 18px 50px ${themeTokens.color.shadow}` })
+    expectFloatingIslandBorder(menu)
+    expect(menu).toHaveStyle({ background: themeTokens.color.surfaceMuted, borderRadius: themeTokens.radius.md, padding: '4px 0' })
+    expect(menu).toHaveStyle({ boxShadow: `0 6px 14px -8px ${themeTokens.color.shadow}` })
     expect(menu.querySelector('style')).toHaveTextContent('.hesper-session-menu-item:hover::after')
     expect(menu.querySelector('style')).toHaveTextContent(`background: ${themeTokens.color.hover};`)
     expect(menu.querySelector('style')).not.toHaveTextContent('background: var(--hesper-color-hover);')
@@ -318,6 +352,25 @@ describe('ui components', () => {
 
     await user.click(screen.getByRole('button', { name: '工具' }))
     expect(onSelectSection).toHaveBeenCalledWith('tools')
+  })
+
+  it('keeps the shell background theme-aware for non-Hesper dark themes', () => {
+    render(
+      <AppShell
+        sessions={[]}
+        activeSection="sessions"
+        title="Dracula shell"
+        appearance={{ themeId: 'dracula', themeMode: 'dark', fontSize: 14 }}
+      />
+    )
+
+    const appRoot = screen.getByLabelText('主工作区').parentElement as HTMLElement
+    expect(appRoot.style.background).toContain('radial-gradient')
+    expect(appRoot.style.background).toContain('linear-gradient')
+    expect(appRoot.style.background).toContain(themeTokens.color.background)
+    expect(appRoot.style.background).not.toContain('244, 244, 242')
+    expect(appRoot.style.background).not.toContain('72, 72, 67')
+    expect(appRoot.style.background).not.toContain('210, 210, 206')
   })
 
   it('routes wheel events from the session pane chrome into the session list', () => {
@@ -450,6 +503,136 @@ describe('ui components', () => {
 
     await user.click(within(nav).getByRole('button', { name: '归档' }))
     expect(onSelectSessionSpecialView).toHaveBeenCalledWith('archived')
+  })
+
+  it('renders activity rail icons and calculated session counts without changing accessible names', () => {
+    render(
+      <AppShell
+        sessions={[
+          { id: 'count-active-product-1', title: '产品一', status: 'active', outputMode: 'markdown', categoryId: 'category-product', isMarked: true, createdAt: now, updatedAt: now },
+          { id: 'count-active-avatar', title: '头像一', status: 'active', outputMode: 'markdown', categoryId: 'category-avatar', createdAt: now, updatedAt: now },
+          { id: 'count-active-product-2', title: '产品二', status: 'active', outputMode: 'markdown', categoryId: 'category-product', createdAt: now, updatedAt: now },
+          { id: 'count-active-marked', title: '标记一', status: 'active', outputMode: 'markdown', isMarked: true, createdAt: now, updatedAt: now },
+          { id: 'count-archived-product', title: '归档一', status: 'archived', outputMode: 'markdown', categoryId: 'category-product', isMarked: true, createdAt: now, updatedAt: now }
+        ]}
+        activeSection="sessions"
+        title="导航计数"
+        sessionCategories={[
+          { id: 'category-product', name: '产品图', createdAt: now, updatedAt: now },
+          { id: 'category-avatar', name: '头像', createdAt: now, updatedAt: now }
+        ]}
+        sessionsExpanded
+      />
+    )
+
+    const allSessionsButton = screen.getByRole('button', { name: '所有会话' })
+    expect(allSessionsButton).toHaveAccessibleName('所有会话')
+    expect(allSessionsButton.querySelector('[data-hesper-nav-icon="sessions"]')).toHaveAttribute('aria-hidden', 'true')
+    const allSessionsCount = allSessionsButton.querySelector('[data-hesper-nav-count]') as HTMLElement
+    expect(allSessionsCount).toHaveClass('hesper-nav-count')
+    expect(allSessionsCount).toHaveAttribute('aria-hidden', 'true')
+    expect(allSessionsCount).toHaveTextContent(/^4$/)
+
+    const productButton = screen.getByRole('button', { name: '产品图' })
+    expect(productButton).toHaveAccessibleName('产品图')
+    expect(productButton.querySelector('[data-hesper-nav-icon="category"]')).toHaveAttribute('aria-hidden', 'true')
+    expect(productButton.querySelector('[data-hesper-nav-count]')).toHaveTextContent(/^2$/)
+
+    const avatarButton = screen.getByRole('button', { name: '头像' })
+    expect(avatarButton.querySelector('[data-hesper-nav-icon="category"]')).toHaveAttribute('aria-hidden', 'true')
+    expect(avatarButton.querySelector('[data-hesper-nav-count]')).toHaveTextContent(/^1$/)
+
+    const markedButton = screen.getByRole('button', { name: '已标记' })
+    expect(markedButton).toHaveAccessibleName('已标记')
+    expect(markedButton.querySelector('[data-hesper-nav-icon="marked"]')).toHaveAttribute('aria-hidden', 'true')
+    expect(markedButton.querySelector('[data-hesper-nav-count]')).toHaveTextContent(/^2$/)
+
+    const archivedButton = screen.getByRole('button', { name: '归档' })
+    expect(archivedButton).toHaveAccessibleName('归档')
+    expect(archivedButton.querySelector('[data-hesper-nav-icon="archived"]')).toHaveAttribute('aria-hidden', 'true')
+    expect(archivedButton.querySelector('[data-hesper-nav-count]')).toHaveTextContent(/^1$/)
+
+    for (const [label, iconName] of [
+      ['技能', 'skills'],
+      ['角色', 'roles'],
+      ['工具', 'tools'],
+      ['设置', 'settings']
+    ] as const) {
+      const button = screen.getByRole('button', { name: label })
+      expect(button).toHaveAccessibleName(label)
+      expect(button.querySelector(`[data-hesper-nav-icon="${iconName}"]`)).toHaveAttribute('aria-hidden', 'true')
+    }
+  })
+
+  it('marks session rows with divider hooks and delays session scrollbar hiding after pointer leaves the entity pane', () => {
+    vi.useFakeTimers()
+    render(
+      <AppShell
+        sessions={[
+          { id: 'divider-session-1', title: '分隔会话一', status: 'active', outputMode: 'markdown', createdAt: now, updatedAt: now },
+          { id: 'divider-session-2', title: '分隔会话二', status: 'active', outputMode: 'markdown', createdAt: now, updatedAt: now }
+        ]}
+        activeSection="sessions"
+        activeSessionId="divider-session-1"
+        title="会话列表分隔线"
+      />
+    )
+
+    const entityList = screen.getByLabelText('实体列表')
+    const sessionList = screen.getByLabelText('会话列表')
+    expect(sessionList).toHaveClass('hesper-theme-scrollbar', 'hesper-session-list-scrollbar', 'is-scrollbar-hidden')
+    expect(sessionList).toHaveStyle('--hesper-session-divider-right: 10px')
+
+    const items = within(sessionList).getAllByRole('listitem')
+    expect(items).toHaveLength(2)
+    for (const item of items) {
+      expect(item).toHaveClass('hesper-session-list-item')
+      expect(item).toHaveAttribute('data-hesper-session-divider', 'true')
+      expect(item).toHaveStyle('--hesper-session-divider-left: 10px')
+      expect(item).toHaveStyle('--hesper-session-divider-right: 10px')
+    }
+
+    fireEvent.mouseMove(entityList)
+    expect(sessionList).toHaveClass('is-scrollbar-visible')
+    expect(sessionList).not.toHaveClass('is-scrollbar-hidden')
+
+    fireEvent.mouseLeave(entityList)
+    expect(sessionList).toHaveClass('is-scrollbar-visible')
+    act(() => {
+      vi.advanceTimersByTime(1999)
+    })
+    expect(sessionList).toHaveClass('is-scrollbar-visible')
+
+    act(() => {
+      vi.advanceTimersByTime(1)
+    })
+    expect(sessionList).toHaveClass('is-scrollbar-hidden')
+    expect(sessionList).not.toHaveClass('is-scrollbar-visible')
+  })
+
+  it('aligns session dividers to title text when rows include status icons', () => {
+    render(
+      <AppShell
+        sessions={[
+          { id: 'divider-plain', title: '普通会话', status: 'active', outputMode: 'markdown', createdAt: now, updatedAt: now },
+          { id: 'divider-running', title: '运行中会话', status: 'active', outputMode: 'markdown', createdAt: now, updatedAt: now },
+          { id: 'divider-unread', title: '完成未读会话', status: 'active', outputMode: 'markdown', unreadCompletedAt: now, createdAt: now, updatedAt: now }
+        ]}
+        runningSessionIds={['divider-running']}
+        activeSection="sessions"
+        activeSessionId="divider-plain"
+        title="会话列表状态图标分隔线"
+      />
+    )
+
+    const sessionList = screen.getByLabelText('会话列表')
+    const [plainItem, runningItem, unreadItem] = within(sessionList).getAllByRole('listitem')
+    expect(plainItem).toHaveStyle('--hesper-session-divider-left: 10px')
+    expect(runningItem).toHaveStyle('--hesper-session-divider-left: 34px')
+    expect(unreadItem).toHaveStyle('--hesper-session-divider-left: 34px')
+    for (const item of [plainItem, runningItem, unreadItem]) {
+      expect(item).toHaveStyle('--hesper-session-divider-right: 10px')
+    }
   })
 
   it('draws a connector from all sessions to clickable category rows', async () => {
@@ -1545,7 +1728,12 @@ describe('ui components', () => {
     expect(workspaceButton.querySelector('[data-hesper-workspace-icon="empty-house"]')).toBeInTheDocument()
 
     expect(sendButton).toBeDisabled()
-    expect(screen.getByLabelText('消息输入区')).toHaveStyle({ borderRadius: '20px' })
+    const messageInputArea = screen.getByLabelText('消息输入区')
+    expectFloatingIslandBorder(messageInputArea)
+    expect(messageInputArea).toHaveStyle({
+      borderRadius: themeTokens.radius.xl,
+      boxShadow: `0 2px 6px -3px ${themeTokens.color.shadow}`
+    })
     expect(textarea).toHaveStyle({ borderRadius: '0' })
     expect(textarea).toHaveStyle({ boxSizing: 'border-box', fontSize: 'var(--hesper-font-size, 14px)', lineHeight: '1.5', padding: '0px 2px' })
     expect(textarea).not.toHaveStyle({ font: 'inherit' })
@@ -1555,16 +1743,24 @@ describe('ui components', () => {
     expect(modelSelect.querySelector('svg[aria-hidden="true"]')).toBeInTheDocument()
     expect(modelSelect.parentElement).toHaveStyle({ minWidth: '0' })
     expect(sendButton.parentElement).toHaveStyle({ gap: '4px' })
+    expectFloatingIslandBorder(sendButton)
+    expect(sendButton).toHaveStyle({ borderRadius: themeTokens.radius.lg })
     expect(sendButton.querySelector('svg[aria-hidden="true"]')).toBeInTheDocument()
 
     await user.click(modelSelect)
     const modelListbox = screen.getByRole('listbox', { name: '选择模型选项' })
-    expect(modelListbox).toHaveStyle({ display: 'grid' })
+    expect(modelListbox).toHaveStyle({
+      display: 'grid',
+      borderRadius: themeTokens.radius.md,
+      boxShadow: `0 4px 10px -6px ${themeTokens.color.shadow}`
+    })
     expect(modelListbox.querySelector('style')).toHaveTextContent('.hesper-themed-select-option:hover')
     expect(modelListbox.querySelector('style')).toHaveTextContent(`background: ${themeTokens.color.hover} !important;`)
     expect(modelListbox.querySelector('style')).toHaveTextContent(`color: ${themeTokens.color.text} !important;`)
     expect(modelListbox.querySelector('style')).not.toHaveTextContent('background: var(--hesper-color-hover) !important;')
-    expect(within(modelListbox).getByRole('option', { name: 'mock/hesper-fast' })).toHaveClass('hesper-themed-select-option')
+    const modelOption = within(modelListbox).getByRole('option', { name: 'mock/hesper-fast' })
+    expect(modelOption).toHaveClass('hesper-themed-select-option')
+    expect(modelOption).toHaveStyle({ borderRadius: themeTokens.radius.sm })
 
     await user.type(textarea, 'hello')
     expect(sendButton).toBeEnabled()
@@ -2408,7 +2604,12 @@ describe('ui components', () => {
     )
 
     const bubble = screen.getByLabelText('用户消息')
-    expect(bubble).toHaveStyle({ fontSize: 'var(--hesper-font-size, 14px)' })
+    expectFloatingIslandBorder(bubble)
+    expect(bubble).toHaveStyle({
+      fontSize: 'var(--hesper-font-size, 14px)',
+      borderRadius: themeTokens.radius.md,
+      boxShadow: `0 1px 4px -2px ${themeTokens.color.shadow}`
+    })
     const timestamp = screen.getByLabelText(/^发送时间：/)
     expect(bubble).not.toContainElement(timestamp)
     expect(timestamp.parentElement).toContainElement(bubble)
@@ -2432,7 +2633,13 @@ describe('ui components', () => {
       />
     )
 
-    expect(screen.getByLabelText('助手消息')).toHaveStyle({ fontSize: 'var(--hesper-font-size, 14px)' })
+    const assistantBubble = screen.getByLabelText('助手消息')
+    expectFloatingIslandBorder(assistantBubble)
+    expect(assistantBubble).toHaveStyle({
+      fontSize: 'var(--hesper-font-size, 14px)',
+      borderRadius: themeTokens.radius.md,
+      boxShadow: `0 1px 4px -2px ${themeTokens.color.shadow}`
+    })
     expect(screen.queryByLabelText(/^发送时间：/)).not.toBeInTheDocument()
   })
 
@@ -2638,7 +2845,13 @@ describe('ui components', () => {
     expect(images[0]).toHaveStyle({ maxWidth: '128px', maxHeight: '96px' })
     expect(images[1]).toHaveStyle({ maxWidth: '128px', maxHeight: '96px' })
     expect(screen.getByText('notes.md')).toBeInTheDocument()
-    expect(screen.getByText('notes.md').closest('div')).toHaveStyle({ maxWidth: '180px' })
+    const fileChip = screen.getByText('notes.md').closest('div')
+    expectFloatingIslandBorder(fileChip)
+    expect(fileChip).toHaveStyle({
+      maxWidth: '180px',
+      borderRadius: themeTokens.radius.md,
+      boxShadow: `0 1px 4px -2px ${themeTokens.color.shadow}`
+    })
     expect(screen.queryByText('secret-one.png')).not.toBeInTheDocument()
     expect(screen.queryByText('secret-two.png')).not.toBeInTheDocument()
   })
@@ -2744,7 +2957,19 @@ describe('ui components', () => {
     expect(outputScroller).toHaveStyle({ overflowX: 'hidden', overflowY: 'auto', minWidth: '0px' })
 
     const outputBlock = outputScroller.closest('.hesper-output-block')
-    expect(outputBlock).toHaveStyle({ maxWidth: '100%', minWidth: '0px' })
+    expectFloatingIslandBorder(outputBlock)
+    expect(outputBlock).toHaveStyle({
+      maxWidth: '100%',
+      minWidth: '0px',
+      borderRadius: themeTokens.radius.md,
+      boxShadow: `0 2px 6px -3px ${themeTokens.color.shadow}`
+    })
+    const fullscreenButton = screen.getByRole('button', { name: '全屏查看输出' })
+    expectFloatingIslandBorder(fullscreenButton)
+    expect(fullscreenButton).toHaveStyle({
+      borderRadius: themeTokens.radius.sm,
+      boxShadow: `0 1px 4px -2px ${themeTokens.color.shadow}`
+    })
 
     const tableScroller = screen.getByRole('table').parentElement
     expect(tableScroller).toHaveAttribute('data-hesper-markdown-table-scroll', 'true')
@@ -3551,7 +3776,7 @@ describe('ui components', () => {
     expect(within(toggle).queryByLabelText(/步骤状态/)).not.toBeInTheDocument()
     expect(toggle).toHaveStyle({ gridTemplateColumns: '18px 28px minmax(0, 1fr)', columnGap: '5px' })
     expect(within(toggle).getByText('▸')).toHaveStyle({ fontSize: '16px' })
-    expect(within(toggle).getByText('3')).toHaveStyle({ borderRadius: '8px' })
+    expect(within(toggle).getByText('3')).toHaveStyle({ borderRadius: themeTokens.radius.sm })
     expect(within(toggle).getByText('Searching repo')).not.toHaveAttribute('title')
     expect(screen.queryByText('Generated deterministic mock response')).not.toBeInTheDocument()
 

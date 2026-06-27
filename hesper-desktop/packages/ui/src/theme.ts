@@ -52,7 +52,7 @@ export type BuiltinTheme = {
   variants: BuiltinThemeVariant[]
 }
 
-const radius = { sm: '8px', md: '12px', lg: '16px', xl: '20px' }
+const radius = { sm: '5px', md: '7px', lg: '9px', xl: '12px' }
 const spacing = { xs: '4px', sm: '8px', md: '12px', lg: '16px', xl: '24px' }
 
 const hexToRgb = (hex: string): [number, number, number] => {
@@ -87,6 +87,7 @@ type PaletteSeed = {
   scrollbarHoverAlpha?: number
   scrollbarActiveAlpha?: number
   shadowSource?: string
+  shadowAlpha?: number
 }
 
 const derivePalette = ({
@@ -99,6 +100,7 @@ const derivePalette = ({
   scrollbarHoverAlpha = 0.24,
   scrollbarActiveAlpha = 0.38,
   shadowSource,
+  shadowAlpha = 0.18,
   ...seed
 }: PaletteSeed): ThemePalette => {
   const toggleColor = toolToggle ?? seed.accent
@@ -116,7 +118,7 @@ const derivePalette = ({
     borderSubtle: rgba(seed.border, 0.38),
     neutralSoft: rgba(seed.text, 0.10),
     codeBackground: codeBackground ?? seed.background,
-    shadow: rgba(shadowSource ?? seed.text, 0.18),
+    shadow: rgba(shadowSource ?? seed.text, shadowAlpha),
     previewBackground: previewBackground ?? seed.surface,
     scrollbarThumb: rgba(scrollbarColor, 0.10),
     scrollbarThumbHover: rgba(scrollbarColor, scrollbarHoverAlpha),
@@ -124,83 +126,115 @@ const derivePalette = ({
   }
 }
 
+const hesperLightPalette = derivePalette({
+  background: '#f6f8fb',
+  surface: '#f3f6f9',
+  surfaceMuted: '#f0f4f8',
+  text: '#232a33',
+  textMuted: '#667282',
+  border: '#e2e8f0',
+  accent: '#c3ccd6',
+  accentContrast: '#232a33',
+  success: '#4f8a68',
+  danger: '#b35c5c',
+  warning: '#9a7a45',
+  hoverSource: '#26313d',
+  hoverAlpha: 0.07,
+  toolToggle: '#8996a6',
+  codeBackground: '#f3f6f9',
+  previewBackground: '#f6f8fb',
+  scrollbarSource: '#667282',
+  scrollbarHoverAlpha: 0.16,
+  scrollbarActiveAlpha: 0.28,
+  shadowSource: '#5f6f82',
+  shadowAlpha: 0.08
+})
+
 const catppuccinLattePalette = derivePalette({
-  // Catppuccin Latte: https://github.com/catppuccin/catppuccin
-  background: '#dce0e8', // crust
+  // Catppuccin Latte: https://github.com/catppuccin/catppuccin, softened for low-contrast floating panes.
+  background: '#e6e9ef', // mantle
   surface: '#eff1f5', // base
-  surfaceMuted: '#e6e9ef', // mantle
+  surfaceMuted: '#eceef4', // base/mantle blend
   text: '#4c4f69',
   textMuted: '#6c6f85',
-  border: '#bcc0cc', // surface1
-  accent: '#8839ef', // mauve
-  accentContrast: '#eff1f5',
+  border: '#d8dce6', // softened surface0
+  accent: '#bcc0cc', // neutral gray
+  accentContrast: '#4c4f69',
   success: '#40a02b', // green
   danger: '#d20f39', // red
   warning: '#df8e1d', // yellow
-  hoverSource: '#4c4f69',
-  hoverAlpha: 0.10,
+  hoverAlpha: 0.08,
   toolToggle: '#40a02b',
   codeBackground: '#eff1f5',
   previewBackground: '#eff1f5',
   scrollbarSource: '#4c4f69',
   scrollbarHoverAlpha: 0.22,
   scrollbarActiveAlpha: 0.36,
-  shadowSource: '#4c4f69'
+  shadowSource: '#4c4f69',
+  shadowAlpha: 0.12
 })
 
 const catppuccinMochaPalette = derivePalette({
-  // Catppuccin Mocha: https://github.com/catppuccin/catppuccin
-  background: '#11111b', // crust
+  // Catppuccin Mocha: https://github.com/catppuccin/catppuccin, lifted from crust for softer dark panes.
+  background: '#181825', // mantle
   surface: '#1e1e2e', // base
-  surfaceMuted: '#181825', // mantle
+  surfaceMuted: '#1b1b2a', // mantle/base blend
   text: '#cdd6f4',
   textMuted: '#a6adc8',
-  border: '#313244', // surface0
-  accent: '#cba6f7', // mauve
-  accentContrast: '#11111b',
+  border: '#2a2b3d', // softened surface0
+  accent: '#a6adc8', // neutral gray
+  accentContrast: '#181825',
   success: '#a6e3a1', // green
   danger: '#f38ba8', // red
   warning: '#f9e2af', // yellow
-  codeBackground: '#11111b',
-  previewBackground: '#11111b'
+  hoverAlpha: 0.10,
+  codeBackground: '#181825',
+  previewBackground: '#181825'
 })
 
 const draculaPalette = derivePalette({
-  // Dracula official OSS palette: https://github.com/dracula/dracula-theme
+  // Dracula official OSS palette: https://github.com/dracula/dracula-theme, with softer app surface layers.
   background: '#282a36',
-  surface: '#343746',
-  surfaceMuted: '#44475a',
+  surface: '#2f3140',
+  surfaceMuted: '#343746',
   text: '#f8f8f2',
   textMuted: '#6272a4',
-  border: '#44475a',
+  border: '#3a3d4d',
   accent: '#bd93f9',
   accentContrast: '#282a36',
   success: '#50fa7b',
   danger: '#ff5555',
   warning: '#f1fa8c',
+  hoverAlpha: 0.10,
   toolToggle: '#8be9fd',
   codeBackground: '#282a36',
   previewBackground: '#282a36'
 })
 
 const tokyoNightPalette = derivePalette({
-  // Tokyo Night Night palette: https://github.com/folke/tokyonight.nvim
+  // Tokyo Night Night palette: https://github.com/folke/tokyonight.nvim, softened to avoid hard dark panel seams.
   background: '#1a1b26',
-  surface: '#16161e',
-  surfaceMuted: '#24283b',
+  surface: '#1e2130',
+  surfaceMuted: '#202436',
   text: '#c0caf5',
   textMuted: '#737aa2',
-  border: '#414868',
+  border: '#2b3046',
   accent: '#7aa2f7',
-  accentContrast: '#16161e',
+  accentContrast: '#1a1b26',
   success: '#9ece6a',
   danger: '#f7768e',
   warning: '#e0af68',
-  codeBackground: '#16161e',
-  previewBackground: '#16161e'
+  hoverAlpha: 0.10,
+  codeBackground: '#1a1b26',
+  previewBackground: '#1a1b26'
 })
 
 export const builtinThemes = {
+  hesper: {
+    id: 'hesper',
+    label: 'Hesper',
+    variants: [{ id: 'light', label: 'Light', colorScheme: 'light', palette: hesperLightPalette }]
+  },
   catppuccin: {
     id: 'catppuccin',
     label: 'Catppuccin',
@@ -223,7 +257,7 @@ export const builtinThemes = {
 
 export type BuiltinThemeId = keyof typeof builtinThemes
 
-const defaultThemeId = 'catppuccin' satisfies BuiltinThemeId
+const defaultThemeId = 'hesper' satisfies BuiltinThemeId
 
 const isBuiltinThemeId = (themeId: string): themeId is BuiltinThemeId => themeId in builtinThemes
 
@@ -282,14 +316,14 @@ const semanticColors = (fallbackPalette: ThemePalette): ThemePalette =>
   }, {} as ThemePalette)
 
 export const lightTheme: ThemeTokens = {
-  color: catppuccinLattePalette,
+  color: hesperLightPalette,
   radius,
   spacing,
   typography: { body: 14, tiny: 9 }
 }
 
 export const themeTokens: ThemeTokens = {
-  color: semanticColors(catppuccinMochaPalette),
+  color: semanticColors(hesperLightPalette),
   radius,
   spacing,
   typography: { body: 'var(--hesper-font-size, 14px)', tiny: 9 }

@@ -613,7 +613,7 @@ describe('persistence repositories', () => {
         defaultModelId: 'legacy-model',
         defaultOutputMode: 'html',
         themeMode: 'dark',
-        themeId: 'catppuccin',
+        themeId: 'hesper',
         fontSize: 16,
         soul: '',
         updatedAt: now
@@ -634,7 +634,7 @@ describe('persistence repositories', () => {
         defaultModelId: 'legacy-model',
         defaultOutputMode: 'html',
         themeMode: 'dark',
-        themeId: 'catppuccin',
+        themeId: 'hesper',
         fontSize: 16,
         soul: '',
         updatedAt: now

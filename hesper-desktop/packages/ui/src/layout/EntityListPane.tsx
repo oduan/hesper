@@ -4,6 +4,8 @@ import { RunningStatusIcon } from '../conversation/RunningStatusIcon'
 import { themeTokens } from '../theme'
 import type { AppSection } from './ActivityRail'
 
+const paneSurfaceShadow = `0 2px 6px -4px ${themeTokens.color.shadow}`
+
 type ToolListItem = ToolDefinition & { enabled: boolean }
 
 export type RoleListItem = {
@@ -181,6 +183,7 @@ export function EntityListPane({
   const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([])
   const [selectionAnchorRoleId, setSelectionAnchorRoleId] = useState<string>()
   const [relativeNowMs, setRelativeNowMs] = useState(() => Date.now())
+  const [isSessionScrollbarVisible, setIsSessionScrollbarVisible] = useState(false)
   const runningSessionIdSet = useMemo(() => new Set(runningSessionIds), [runningSessionIds])
   const pendingToolIdSet = useMemo(() => new Set(pendingToolIds), [pendingToolIds])
   const sessionCategoryNameById = useMemo(() => new Map(sessionCategories.map((category) => [category.id, category.name])), [sessionCategories])
@@ -189,6 +192,28 @@ export function EntityListPane({
   const renameInputRef = useRef<HTMLInputElement>(null)
   const roleMenuFirstItemRef = useRef<HTMLButtonElement>(null)
   const sessionListRef = useRef<HTMLUListElement>(null)
+  const sessionScrollbarHideTimeoutRef = useRef<number | undefined>(undefined)
+
+  const clearSessionScrollbarHideTimeout = () => {
+    if (sessionScrollbarHideTimeoutRef.current === undefined) return
+    window.clearTimeout(sessionScrollbarHideTimeoutRef.current)
+    sessionScrollbarHideTimeoutRef.current = undefined
+  }
+
+  const showSessionScrollbar = () => {
+    if (activeSection !== 'sessions') return
+    clearSessionScrollbarHideTimeout()
+    setIsSessionScrollbarVisible(true)
+  }
+
+  const scheduleSessionScrollbarHide = () => {
+    if (activeSection !== 'sessions') return
+    clearSessionScrollbarHideTimeout()
+    sessionScrollbarHideTimeoutRef.current = window.setTimeout(() => {
+      setIsSessionScrollbarVisible(false)
+      sessionScrollbarHideTimeoutRef.current = undefined
+    }, 2_000)
+  }
 
   const handleEntityPaneWheelCapture = (event: ReactWheelEvent<HTMLElement>) => {
     if (activeSection !== 'sessions') return
@@ -207,6 +232,17 @@ export function EntityListPane({
     event.preventDefault()
     sessionList.scrollTop = nextScrollTop
   }
+
+  useEffect(() => {
+    if (activeSection === 'sessions') return undefined
+    clearSessionScrollbarHideTimeout()
+    setIsSessionScrollbarVisible(false)
+    return undefined
+  }, [activeSection])
+
+  useEffect(() => () => {
+    clearSessionScrollbarHideTimeout()
+  }, [])
 
   useEffect(() => {
     if (activeSection !== 'sessions') return undefined
@@ -450,14 +486,23 @@ export function EntityListPane({
   return (
     <aside
       aria-label="实体列表"
+      onMouseEnter={showSessionScrollbar}
+      onMouseMove={showSessionScrollbar}
+      onMouseLeave={scheduleSessionScrollbarHide}
       onWheelCapture={handleEntityPaneWheelCapture}
       style={{
         width: '100%',
         minWidth: 0,
         minHeight: 0,
+        height: '100%',
+        maxHeight: '100%',
         boxSizing: 'border-box',
         background: themeTokens.color.surface,
+        borderColor: themeTokens.color.border,
+        borderStyle: 'solid',
+        borderWidth: '1px',
         borderRadius: themeTokens.radius.xl,
+        boxShadow: paneSurfaceShadow,
         padding: themeTokens.spacing.lg,
         display: 'flex',
         flexDirection: 'column',
@@ -470,17 +515,24 @@ export function EntityListPane({
       </header>
       {activeSection === 'sessions' ? (
         sessions.length > 0 ? (
-          <ul ref={sessionListRef} aria-label="会话列表" className="hesper-theme-scrollbar" style={sessionListStyle}>
+          <ul
+            ref={sessionListRef}
+            aria-label="会话列表"
+            className={`hesper-theme-scrollbar hesper-session-list-scrollbar ${isSessionScrollbarVisible ? 'is-scrollbar-visible' : 'is-scrollbar-hidden'}`}
+            style={sessionListStyle}
+          >
             {sessions.map((session) => {
               const isActive = session.id === activeSessionId
               const isSelected = selectedSessionIdSet.has(session.id)
               const isRunning = runningSessionIdSet.has(session.id)
               const hasUnreadCompletion = Boolean(session.unreadCompletedAt)
+              const isEditingSession = editingSession?.sessionId === session.id
+              const hasLeadingStatusIcon = !isEditingSession && (isRunning || hasUnreadCompletion)
               const relativeUpdatedAt = formatRelativeSessionTime(session.updatedAt, relativeNowMs)
               const sessionRowClassName = `hesper-list-row${isActive ? ' is-active' : ''}${isSelected ? ' is-selected' : ''}`
               return (
-                <li key={session.id}>
-                  {editingSession?.sessionId === session.id ? (
+                <li key={session.id} className="hesper-session-list-item" data-hesper-session-divider="true" style={sessionListItemStyle(hasLeadingStatusIcon)}>
+                  {isEditingSession ? (
                     <div
                       className={sessionRowClassName}
                       data-selected={isSelected ? 'true' : undefined}
@@ -812,11 +864,30 @@ const settingsCategories: Array<{ id: SettingsCategory; title: string; label: st
   { id: 'appearance', title: '外观', label: '外观设置', description: '字体大小、亮色与暗色' }
 ]
 
-const sessionListStyle: CSSProperties = {
+// Keep these in sync with .hesper-list-row horizontal padding, status icon slots, and sessionTitleRowStyle.gap.
+const sessionRowHorizontalPaddingPx = 10
+const sessionLeadingStatusIconWidthPx = 18
+const sessionTitleIconGapPx = 6
+const sessionDividerLeftPlain = `${sessionRowHorizontalPaddingPx}px`
+const sessionDividerLeftWithStatusIcon = `${sessionRowHorizontalPaddingPx + sessionLeadingStatusIconWidthPx + sessionTitleIconGapPx}px`
+const sessionDividerRight = `${sessionRowHorizontalPaddingPx}px`
+
+type SessionDividerStyle = CSSProperties & Record<'--hesper-session-divider-left' | '--hesper-session-divider-right', string>
+
+function sessionListItemStyle(hasLeadingStatusIcon: boolean): SessionDividerStyle {
+  return {
+    '--hesper-session-divider-left': hasLeadingStatusIcon ? sessionDividerLeftWithStatusIcon : sessionDividerLeftPlain,
+    '--hesper-session-divider-right': sessionDividerRight
+  }
+}
+
+const sessionListStyle: SessionDividerStyle = {
   listStyle: 'none',
   margin: 0,
   marginRight: `-${themeTokens.spacing.lg}`,
   padding: `0 ${themeTokens.spacing.lg} 0 0`,
+  '--hesper-session-divider-left': sessionDividerLeftPlain,
+  '--hesper-session-divider-right': sessionDividerRight,
   display: 'grid',
   gap: 2,
   overflow: 'auto',
@@ -1013,9 +1084,11 @@ const sessionMenuStyle: CSSProperties = {
   minWidth: 180,
   padding: '4px 0',
   borderRadius: themeTokens.radius.md,
-  border: `1px solid ${themeTokens.color.border}`,
+  borderColor: themeTokens.color.border,
+  borderStyle: 'solid',
+  borderWidth: '1px',
   background: themeTokens.color.surfaceMuted,
-  boxShadow: `0 18px 50px ${themeTokens.color.shadow}`,
+  boxShadow: `0 6px 14px -8px ${themeTokens.color.shadow}`,
   overflow: 'hidden'
 }
 

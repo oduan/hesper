@@ -10,11 +10,19 @@ type SessionCategoryListItem = {
   updatedAt?: string
 }
 
+export type ActivityRailSessionScopeCounts = {
+  all: number
+  marked: number
+  archived: number
+  byCategoryId?: Record<string, number>
+}
+
 export type ActivityRailProps = {
   activeSection: AppSection
   onCreateSession?: () => void | Promise<void>
   onSelectSection?: (section: AppSection) => void
   sessionCategories?: SessionCategoryListItem[]
+  sessionScopeCounts?: ActivityRailSessionScopeCounts
   activeSessionCategoryId?: string
   activeSessionSpecialView?: 'marked' | 'archived'
   sessionsExpanded?: boolean
@@ -32,13 +40,73 @@ type CategoryMenuState = { kind: 'all' | 'category'; categoryId?: string; x: num
 
 type CategoryMenuAction = 'create' | 'rename' | 'delete'
 
-const sections: Array<{ id: AppSection; label: string; visibleLabel: string }> = [
-  { id: 'sessions', label: '会话', visibleLabel: '会话' },
-  { id: 'skills', label: '技能', visibleLabel: '技能' },
-  { id: 'roles', label: '角色', visibleLabel: '角色' },
-  { id: 'tools', label: '工具', visibleLabel: '工具' },
-  { id: 'settings', label: '设置', visibleLabel: '设置' }
+type NavIconName = 'sessions' | 'category' | 'marked' | 'archived' | 'skills' | 'roles' | 'tools' | 'settings'
+
+type NavSection = { id: AppSection; label: string; visibleLabel: string; icon: NavIconName }
+
+const sections: NavSection[] = [
+  { id: 'sessions', label: '会话', visibleLabel: '会话', icon: 'sessions' },
+  { id: 'skills', label: '技能', visibleLabel: '技能', icon: 'skills' },
+  { id: 'roles', label: '角色', visibleLabel: '角色', icon: 'roles' },
+  { id: 'tools', label: '工具', visibleLabel: '工具', icon: 'tools' },
+  { id: 'settings', label: '设置', visibleLabel: '设置', icon: 'settings' }
 ]
+
+const defaultSessionScopeCounts: ActivityRailSessionScopeCounts = {
+  all: 0,
+  marked: 0,
+  archived: 0,
+  byCategoryId: {}
+}
+
+function NavigationIcon({ name }: { name: NavIconName }) {
+  return (
+    <span aria-hidden="true" className="hesper-nav-icon" data-hesper-nav-icon={name} style={navIconSlotStyle}>
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" style={{ display: 'block' }}>
+        {name === 'sessions' ? (
+          <>
+            <path d="M3.1 3.4h9.8c.6 0 1.1.5 1.1 1.1v6.1c0 .6-.5 1.1-1.1 1.1H7.1L4 13.7v-2H3.1c-.6 0-1.1-.5-1.1-1.1V4.5c0-.6.5-1.1 1.1-1.1Z" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinejoin="round" />
+            <path d="M4.8 6.3h6.4M4.8 8.6h4.4" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+          </>
+        ) : name === 'category' ? (
+          <path d="M2.5 4.5c0-.7.5-1.2 1.2-1.2h3l1.1 1.4h4.5c.7 0 1.2.5 1.2 1.2v5.6c0 .7-.5 1.2-1.2 1.2H3.7c-.7 0-1.2-.5-1.2-1.2v-7Z" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinejoin="round" />
+        ) : name === 'marked' ? (
+          <path d="M4.2 2.8c0-.5.4-.9.9-.9h5.8c.5 0 .9.4.9.9v9.4c0 .7-.8 1.1-1.4.7L8 11.3l-2.4 1.6c-.6.4-1.4 0-1.4-.7V2.8Z" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinejoin="round" />
+        ) : name === 'archived' ? (
+          <>
+            <path d="M2.8 5.6h10.4v6.1c0 .7-.5 1.2-1.2 1.2H4c-.7 0-1.2-.5-1.2-1.2V5.6Z" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinejoin="round" />
+            <path d="M2.2 3.6c0-.4.3-.7.7-.7h10.2c.4 0 .7.3.7.7v2H2.2v-2ZM6.1 8.1h3.8" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round" />
+          </>
+        ) : name === 'skills' ? (
+          <>
+            <path d="M8 1.9 9.2 5l3.3 1.1-3.3 1.2L8 10.4 6.8 7.3 3.5 6.1 6.8 5 8 1.9Z" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" />
+            <path d="M4.4 10.1 5 11.8l1.7.6-1.7.6-.6 1.7-.6-1.7-1.7-.6 1.7-.6.6-1.7ZM12 9.7l.4 1.1 1.1.4-1.1.4-.4 1.1-.4-1.1-1.1-.4 1.1-.4.4-1.1Z" fill="currentColor" />
+          </>
+        ) : name === 'roles' ? (
+          <>
+            <path d="M8 8.1a2.8 2.8 0 1 0 0-5.6 2.8 2.8 0 0 0 0 5.6Z" fill="none" stroke="currentColor" strokeWidth="1.35" />
+            <path d="M3.3 13.4c.5-2.2 2.3-3.5 4.7-3.5s4.2 1.3 4.7 3.5" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" />
+          </>
+        ) : name === 'tools' ? (
+          <path d="M9.4 2.4a3.6 3.6 0 0 0 4.2 4.2l-5.8 5.8a2.2 2.2 0 0 1-3.1-3.1l5.8-5.8ZM4.6 11.4l-2 2" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round" />
+        ) : (
+          <>
+            <circle cx="8" cy="8" r="2" fill="none" stroke="currentColor" strokeWidth="1.35" />
+            <path d="M8 1.9v1.4M8 12.7v1.4M3.7 3.7l1 1M11.3 11.3l1 1M1.9 8h1.4M12.7 8h1.4M3.7 12.3l1-1M11.3 4.7l1-1" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" />
+          </>
+        )}
+      </svg>
+    </span>
+  )
+}
+
+function NavigationCount({ scope, value }: { scope: 'all' | 'category' | 'marked' | 'archived'; value: number }) {
+  return (
+    <span aria-hidden="true" className="hesper-nav-count" data-hesper-nav-count={scope} style={navCountStyle}>
+      {value}
+    </span>
+  )
+}
 
 function SessionDisclosureIcon({ expanded }: { expanded: boolean }) {
   return (
@@ -59,6 +127,7 @@ export function ActivityRail({
   onCreateSession,
   onSelectSection,
   sessionCategories = [],
+  sessionScopeCounts = defaultSessionScopeCounts,
   activeSessionCategoryId,
   activeSessionSpecialView,
   sessionsExpanded,
@@ -277,7 +346,7 @@ export function ActivityRail({
         minWidth: 0,
         boxSizing: 'border-box',
         padding: `${themeTokens.spacing.sm} ${themeTokens.spacing.sm} ${themeTokens.spacing.md}`,
-        background: themeTokens.color.background,
+        background: 'transparent',
         display: 'flex',
         flexDirection: 'column',
         gap: themeTokens.spacing.md
@@ -325,7 +394,9 @@ export function ActivityRail({
                     onClick={handleSelectAllSessions}
                     style={allSessionsPrimaryButtonStyle}
                   >
-                    <span>所有会话</span>
+                    <NavigationIcon name="sessions" />
+                    <span style={navLabelStyle}>所有会话</span>
+                    <NavigationCount scope="all" value={sessionScopeCounts.all} />
                   </button>
                 </div>
                 {effectiveSessionsExpanded ? (
@@ -382,7 +453,9 @@ export function ActivityRail({
                               style={categoryRowStyle}
                             >
                               <span data-testid={`session-category-surface-${category.id}`} className="hesper-session-category-surface" style={categorySurfaceStyle}>
-                                {category.name}
+                                <NavigationIcon name="category" />
+                                <span style={navLabelStyle}>{category.name}</span>
+                                <NavigationCount scope="category" value={sessionScopeCounts.byCategoryId?.[category.id] ?? 0} />
                               </span>
                             </button>
                           )}
@@ -398,7 +471,11 @@ export function ActivityRail({
                       onClick={() => handleSelectSpecialView('marked')}
                       style={categoryRowStyle}
                     >
-                      <span className="hesper-session-category-surface" style={categorySurfaceStyle}>已标记</span>
+                      <span className="hesper-session-category-surface" style={categorySurfaceStyle}>
+                        <NavigationIcon name="marked" />
+                        <span style={navLabelStyle}>已标记</span>
+                        <NavigationCount scope="marked" value={sessionScopeCounts.marked} />
+                      </span>
                     </button>
                     <button
                       type="button"
@@ -408,7 +485,11 @@ export function ActivityRail({
                       onClick={() => handleSelectSpecialView('archived')}
                       style={categoryRowStyle}
                     >
-                      <span className="hesper-session-category-surface" style={categorySurfaceStyle}>归档</span>
+                      <span className="hesper-session-category-surface" style={categorySurfaceStyle}>
+                        <NavigationIcon name="archived" />
+                        <span style={navLabelStyle}>归档</span>
+                        <NavigationCount scope="archived" value={sessionScopeCounts.archived} />
+                      </span>
                     </button>
                   </nav>
                 ) : null}
@@ -425,8 +506,10 @@ export function ActivityRail({
               aria-current={isActive ? 'page' : undefined}
               aria-label={section.label}
               onClick={() => onSelectSection?.(section.id)}
+              style={navSectionButtonStyle}
             >
-              {section.visibleLabel}
+              <NavigationIcon name={section.icon} />
+              <span style={navLabelStyle}>{section.visibleLabel}</span>
             </button>
           )
         })}
@@ -498,6 +581,41 @@ const disclosureIconSlotStyle: CSSProperties = {
   flex: '0 0 16px'
 }
 
+const navIconSlotStyle: CSSProperties = {
+  width: 16,
+  height: 16,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  flex: '0 0 16px',
+  opacity: 0.82
+}
+
+const navLabelStyle: CSSProperties = {
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap'
+}
+
+const navCountStyle: CSSProperties = {
+  marginLeft: 'auto',
+  minWidth: 18,
+  textAlign: 'right',
+  color: 'inherit',
+  fontSize: 12,
+  fontWeight: 700,
+  lineHeight: '16px',
+  fontVariantNumeric: 'tabular-nums'
+}
+
+const navSectionButtonStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  minWidth: 0
+}
+
 const sessionsGroupStyle: CSSProperties = {
   display: 'grid',
   gap: 2,
@@ -538,6 +656,7 @@ const allSessionsPrimaryButtonStyle: CSSProperties = {
   minWidth: 0,
   display: 'flex',
   alignItems: 'center',
+  gap: 8,
   border: 0,
   background: 'transparent',
   color: 'inherit',
@@ -607,6 +726,7 @@ const categorySurfaceStyle: CSSProperties = {
   minHeight: activityRailItemHeight,
   display: 'flex',
   alignItems: 'center',
+  gap: 8,
   minWidth: 0,
   boxSizing: 'border-box',
   borderRadius: 10,
@@ -633,9 +753,11 @@ const categoryMenuStyle: CSSProperties = {
   minWidth: 180,
   padding: '4px 0',
   borderRadius: themeTokens.radius.md,
-  border: `1px solid ${themeTokens.color.border}`,
+  borderColor: themeTokens.color.border,
+  borderStyle: 'solid',
+  borderWidth: '1px',
   background: themeTokens.color.surfaceMuted,
-  boxShadow: `0 18px 50px ${themeTokens.color.shadow}`,
+  boxShadow: `0 6px 14px -8px ${themeTokens.color.shadow}`,
   overflow: 'hidden'
 }
 

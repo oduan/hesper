@@ -16,6 +16,7 @@ const themeModeOptions: Array<{ value: AppSettings['themeMode']; label: string; 
 
 const fontSizeOptions = [12, 13, 14, 15, 16, 17, 18]
 const themeOptions = Object.values(builtinThemes) as Array<(typeof builtinThemes)[AppSettings['themeId']]>
+const defaultThemeLabel = themeOptions[0]?.label ?? 'Hesper'
 
 export function AppearanceSettingsPanel({ settings, error, onUpdate }: AppearanceSettingsPanelProps) {
   const update = (patch: UpdateSettingsInput) => {
@@ -67,7 +68,7 @@ export function AppearanceSettingsPanel({ settings, error, onUpdate }: Appearanc
             <h3 style={fieldTitleStyle}>主题</h3>
             <p style={fieldDescriptionStyle}>选择内置主题。暗色专属主题会自动使用暗色样式。</p>
           </div>
-          <span style={statusPillStyle}>{themeOptions.find((theme) => theme.id === settings.themeId)?.label ?? 'Catppuccin'}</span>
+          <span style={statusPillStyle}>{themeOptions.find((theme) => theme.id === settings.themeId)?.label ?? defaultThemeLabel}</span>
         </div>
         <div role="group" aria-label="主题" style={themeGridStyle}>
           {themeOptions.map((theme) => {

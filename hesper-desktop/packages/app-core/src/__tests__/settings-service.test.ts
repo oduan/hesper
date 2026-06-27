@@ -64,7 +64,7 @@ describe('createSettingsService', () => {
       defaultModelId: '',
       defaultOutputMode: 'markdown',
       themeMode: 'system',
-      themeId: 'catppuccin',
+      themeId: 'hesper',
       fontSize: 14,
       soul: ''
     })
@@ -150,7 +150,7 @@ describe('createSettingsService', () => {
       defaultModelId: '',
       defaultOutputMode: 'markdown',
       themeMode: 'system',
-      themeId: 'catppuccin',
+      themeId: 'hesper',
       fontSize: 14,
       soul: 'Resilient, calm, and focused.'
     })
@@ -158,7 +158,7 @@ describe('createSettingsService', () => {
       defaultModelId: '',
       defaultOutputMode: 'markdown',
       themeMode: 'system',
-      themeId: 'catppuccin',
+      themeId: 'hesper',
       fontSize: 14,
       soul: 'Resilient, calm, and focused.'
     })

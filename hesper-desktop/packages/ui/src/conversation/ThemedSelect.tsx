@@ -301,10 +301,13 @@ const selectMenuStyle: CSSProperties = {
   maxWidth: 280,
   display: 'grid',
   gap: 4,
+  borderColor: themeTokens.color.border,
+  borderStyle: 'solid',
+  borderWidth: '1px',
   borderRadius: themeTokens.radius.md,
   background: themeTokens.color.surfaceMuted,
   padding: 6,
-  boxShadow: `0 18px 36px ${themeTokens.color.shadow}`
+  boxShadow: `0 4px 10px -6px ${themeTokens.color.shadow}`
 }
 
 const selectGroupStyle: CSSProperties = {
@@ -364,10 +367,13 @@ const selectGroupOptionsStyle: CSSProperties = {
   maxWidth: 280,
   display: 'grid',
   gap: 2,
+  borderColor: themeTokens.color.border,
+  borderStyle: 'solid',
+  borderWidth: '1px',
   borderRadius: themeTokens.radius.md,
   background: themeTokens.color.surfaceMuted,
   padding: 6,
-  boxShadow: `0 18px 36px ${themeTokens.color.shadow}`
+  boxShadow: `0 4px 10px -6px ${themeTokens.color.shadow}`
 }
 
 const selectOptionStyle: CSSProperties = {

@@ -187,12 +187,12 @@ const { listSessions, listSessionCategories, createSession, createSessionCategor
     endedAt: '2026-06-10T03:00:05.000Z'
   })),
   onEvent: vi.fn(() => () => undefined),
-  getSettings: vi.fn(async () => ({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', themeId: 'catppuccin', fontSize: 14, soul: '' })),
-  updateSettings: vi.fn(async (input: Partial<{ defaultModelId: string; defaultOutputMode: 'markdown' | 'html'; themeMode: 'system' | 'light' | 'dark'; themeId: 'catppuccin' | 'dracula' | 'tokyo-night'; fontSize: number; soul: string }>) => ({
+  getSettings: vi.fn(async () => ({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'system', themeId: 'hesper', fontSize: 14, soul: '' })),
+  updateSettings: vi.fn(async (input: Partial<{ defaultModelId: string; defaultOutputMode: 'markdown' | 'html'; themeMode: 'system' | 'light' | 'dark'; themeId: 'hesper' | 'catppuccin' | 'dracula' | 'tokyo-night'; fontSize: number; soul: string }>) => ({
     defaultModelId: input.defaultModelId ?? 'mock/hesper-fast',
     defaultOutputMode: input.defaultOutputMode ?? 'markdown',
-    themeMode: input.themeMode ?? 'dark',
-    themeId: input.themeId ?? 'catppuccin',
+    themeMode: input.themeMode ?? 'system',
+    themeId: input.themeId ?? 'hesper',
     fontSize: input.fontSize ?? 14,
     soul: input.soul ?? ''
   })),
@@ -361,15 +361,36 @@ describe('renderer App', () => {
     const styles = readFileSync(existsSync(desktopRelativeStylesPath) ? desktopRelativeStylesPath : workspaceRelativeStylesPath, 'utf8')
     const rootBlock = styles.match(/:root\s*{(?<body>[\s\S]*?)}/)?.groups?.body ?? ''
 
-    expect(rootBlock).toContain('--hesper-color-text-muted:')
-    expect(rootBlock).toContain('--hesper-color-hover:')
-    expect(rootBlock).toContain('--hesper-color-soft-control:')
-    expect(rootBlock).toContain('--hesper-color-scrollbar-thumb:')
-    expect(rootBlock).toContain('--hesper-color-scrollbar-thumb-hover:')
-    expect(rootBlock).toContain('--hesper-color-scrollbar-thumb-active:')
+    expect(rootBlock).toContain('--hesper-color-background: #f6f8fb;')
+    expect(rootBlock).toContain('--hesper-color-surface: #f3f6f9;')
+    expect(rootBlock).toContain('--hesper-color-surface-muted: #f0f4f8;')
+    expect(rootBlock).toContain('--hesper-color-text: #232a33;')
+    expect(rootBlock).toContain('--hesper-color-text-muted: #667282;')
+    expect(rootBlock).toContain('--hesper-color-border: #e2e8f0;')
+    expect(rootBlock).toContain('--hesper-color-border-subtle: rgba(226, 232, 240, 0.38);')
+    expect(rootBlock).toContain('--hesper-color-accent: #c3ccd6;')
+    expect(rootBlock).toContain('--hesper-color-hover: rgba(38, 49, 61, 0.07);')
+    expect(rootBlock).toContain('--hesper-color-soft-control: rgba(195, 204, 214, 0.14);')
+    expect(rootBlock).toContain('--hesper-color-scrollbar-thumb: rgba(102, 114, 130, 0.10);')
+    expect(rootBlock).toContain('--hesper-color-scrollbar-thumb-hover: rgba(102, 114, 130, 0.16);')
+    expect(rootBlock).toContain('--hesper-color-scrollbar-thumb-active: rgba(102, 114, 130, 0.28);')
+    const navItemBlock = styles.match(/\.hesper-nav-item\s*{(?<body>[\s\S]*?)}/)?.groups?.body ?? ''
+    const listRowBlock = styles.match(/\.hesper-list-row\s*{(?<body>[\s\S]*?)}/)?.groups?.body ?? ''
+    const settingsRowBlock = styles.match(/\.hesper-settings-row\s*{(?<body>[\s\S]*?)}/)?.groups?.body ?? ''
+
     expect(styles).toContain('color: var(--hesper-color-text-muted);')
     expect(styles).toContain('background: var(--hesper-color-hover);')
     expect(styles).toContain('scrollbar-color: var(--hesper-color-scrollbar-thumb) transparent;')
+    expect(styles).toContain('.hesper-session-list-item + .hesper-session-list-item::before')
+    expect(styles).toContain('left: var(--hesper-session-divider-left);')
+    expect(styles).toContain('right: var(--hesper-session-divider-right);')
+    expect(styles).toContain('background: var(--hesper-color-border-subtle);')
+    expect(styles).toContain('.hesper-theme-scrollbar.hesper-session-list-scrollbar')
+    expect(styles).toContain('scrollbar-color: transparent transparent;')
+    expect(styles).toContain('.hesper-theme-scrollbar.hesper-session-list-scrollbar.is-scrollbar-visible')
+    expect(navItemBlock).toContain('border-radius: 7px;')
+    expect(listRowBlock).toContain('border-radius: 7px;')
+    expect(settingsRowBlock).toContain('border-radius: 9px;')
   })
 
   it('deletes cleared send-error entries instead of keeping undefined keys', () => {
@@ -631,12 +652,12 @@ describe('renderer App', () => {
       createdAt: '2026-06-10T03:00:00.000Z',
       updatedAt: '2026-06-10T03:00:00.000Z'
     }))
-    getSettings.mockResolvedValue({ defaultModelId: 'deepseek-chat', defaultOutputMode: 'markdown', themeMode: 'dark', themeId: 'catppuccin', fontSize: 14, soul: '' })
+    getSettings.mockResolvedValue({ defaultModelId: 'deepseek-chat', defaultOutputMode: 'markdown', themeMode: 'system', themeId: 'hesper', fontSize: 14, soul: '' })
     updateSettings.mockImplementation(async (input) => ({
       defaultModelId: input.defaultModelId ?? 'deepseek-chat',
       defaultOutputMode: input.defaultOutputMode ?? 'markdown',
-      themeMode: input.themeMode ?? 'dark',
-      themeId: input.themeId ?? 'catppuccin',
+      themeMode: input.themeMode ?? 'system',
+      themeId: input.themeId ?? 'hesper',
       fontSize: input.fontSize ?? 14,
       soul: input.soul ?? ''
     }))
@@ -1018,8 +1039,11 @@ describe('renderer App', () => {
 
     expect((await screen.findAllByText('Hesper')).length).toBeGreaterThan(0)
     expect(within(screen.getByLabelText('实体列表')).getByRole('heading', { name: '所有会话' })).toBeInTheDocument()
-    const appRoot = screen.getByLabelText('主工作区').parentElement
-    expect(appRoot).toHaveStyle({ background: themeTokens.color.background, color: themeTokens.color.text })
+    const appRoot = screen.getByLabelText('主工作区').parentElement as HTMLElement
+    expect(appRoot.style.background).toContain('radial-gradient')
+    expect(appRoot.style.background).toContain('linear-gradient')
+    expect(appRoot.style.background).toContain(themeTokens.color.background)
+    expect(appRoot).toHaveStyle({ color: themeTokens.color.text })
 
     await user.click(screen.getByRole('button', { name: '最小化窗口' }))
     await user.click(screen.getByRole('button', { name: '最大化窗口' }))
@@ -1061,6 +1085,60 @@ describe('renderer App', () => {
     expect(screen.getByRole('heading', { name: '产品图' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Product chat' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Plain chat' })).not.toBeInTheDocument()
+  })
+
+  it('keeps activity rail session counts sourced from the full session scope while filtered views change', async () => {
+    const user = userEvent.setup()
+    listSessionCategories.mockResolvedValueOnce([
+      { id: 'category-product', name: '产品图', createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:00.000Z' },
+      { id: 'category-avatar', name: '头像', createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:00.000Z' }
+    ])
+    listSessions.mockResolvedValueOnce([
+      { id: 'session-product-marked', title: 'Product marked chat', status: 'active', categoryId: 'category-product', isMarked: true, outputMode: 'markdown', createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:04.000Z' },
+      { id: 'session-product', title: 'Product chat', status: 'active', categoryId: 'category-product', outputMode: 'markdown', createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:03.000Z' },
+      { id: 'session-avatar-marked', title: 'Avatar marked chat', status: 'active', categoryId: 'category-avatar', isMarked: true, outputMode: 'markdown', createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:02.000Z' },
+      { id: 'session-plain', title: 'Plain chat', status: 'active', outputMode: 'markdown', createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:01.000Z' },
+      { id: 'session-archived', title: 'Archived chat', status: 'archived', outputMode: 'markdown', createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:05.000Z' }
+    ] as any)
+
+    const expectFullScopeCounts = () => {
+      const countFor = (label: string, scope: 'all' | 'category' | 'marked' | 'archived') => {
+        const count = screen.getByRole('button', { name: label }).querySelector(`[data-hesper-nav-count="${scope}"]`)
+        expect(count).toHaveAttribute('aria-hidden', 'true')
+        return count
+      }
+
+      expect(countFor('所有会话', 'all')).toHaveTextContent(/^4$/)
+      expect(countFor('产品图', 'category')).toHaveTextContent(/^2$/)
+      expect(countFor('头像', 'category')).toHaveTextContent(/^1$/)
+      expect(countFor('已标记', 'marked')).toHaveTextContent(/^2$/)
+      expect(countFor('归档', 'archived')).toHaveTextContent(/^1$/)
+    }
+
+    render(<App />)
+
+    await screen.findByRole('button', { name: '产品图' })
+    expectFullScopeCounts()
+
+    await user.click(screen.getByRole('button', { name: '产品图' }))
+    expect(screen.getByRole('heading', { name: '产品图' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Product marked chat' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Product chat' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Avatar marked chat' })).not.toBeInTheDocument()
+    expectFullScopeCounts()
+
+    await user.click(screen.getByRole('button', { name: '已标记' }))
+    expect(screen.getByRole('heading', { name: '已标记' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Product marked chat' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Avatar marked chat' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Product chat' })).not.toBeInTheDocument()
+    expectFullScopeCounts()
+
+    await user.click(screen.getByRole('button', { name: '归档' }))
+    expect(screen.getByRole('heading', { name: '归档' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Archived chat' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Plain chat' })).not.toBeInTheDocument()
+    expectFullScopeCounts()
   })
 
   it('restores the entity list title when leaving a selected session category', async () => {
@@ -2067,7 +2145,7 @@ describe('renderer App', () => {
 
   it('opens appearance settings and persists theme mode and global font size', async () => {
     const user = userEvent.setup()
-    let storedSettings: { defaultModelId: string; defaultOutputMode: 'markdown' | 'html'; themeMode: 'system' | 'light' | 'dark'; themeId: 'catppuccin' | 'dracula' | 'tokyo-night'; fontSize: number; soul: string } = {
+    let storedSettings: { defaultModelId: string; defaultOutputMode: 'markdown' | 'html'; themeMode: 'system' | 'light' | 'dark'; themeId: 'hesper' | 'catppuccin' | 'dracula' | 'tokyo-night'; fontSize: number; soul: string } = {
       defaultModelId: 'mock/hesper-fast',
       defaultOutputMode: 'markdown',
       themeMode: 'dark',
@@ -2089,14 +2167,15 @@ describe('renderer App', () => {
     expect(screen.getByRole('region', { name: '外观设置面板' })).toBeInTheDocument()
     const appRoot = screen.getByLabelText('主工作区').parentElement
     expect(screen.getByRole('group', { name: '主题' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Hesper/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^Catppuccin/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^Dracula/ })).toBeInTheDocument()
     expect(screen.getAllByText(/仅提供暗色样式|仅暗色/).length).toBeGreaterThan(0)
 
-    await waitFor(() => expect(appRoot?.style.getPropertyValue('--hesper-color-background')).toBe('#11111b'))
-    expect(appRoot?.style.getPropertyValue('--hesper-color-accent')).toBe('#cba6f7')
-    expect(appRoot?.style.getPropertyValue('--hesper-color-tool-toggle')).toBe('#cba6f7')
-    expect(appRoot?.style.getPropertyValue('--hesper-color-tool-toggle-soft')).toBe('rgba(203, 166, 247, 0.14)')
+    await waitFor(() => expect(appRoot?.style.getPropertyValue('--hesper-color-background')).toBe('#181825'))
+    expect(appRoot?.style.getPropertyValue('--hesper-color-accent')).toBe('#a6adc8')
+    expect(appRoot?.style.getPropertyValue('--hesper-color-tool-toggle')).toBe('#a6adc8')
+    expect(appRoot?.style.getPropertyValue('--hesper-color-tool-toggle-soft')).toBe('rgba(166, 173, 200, 0.14)')
     expect(appRoot?.style.getPropertyValue('--hesper-color-scrollbar-thumb')).toBe('rgba(205, 214, 244, 0.10)')
     expect(appRoot?.style.getPropertyValue('--hesper-color-scrollbar-thumb-hover')).toBe('rgba(205, 214, 244, 0.24)')
     expect(appRoot?.style.getPropertyValue('--hesper-color-scrollbar-thumb-active')).toBe('rgba(205, 214, 244, 0.38)')
@@ -2104,8 +2183,8 @@ describe('renderer App', () => {
     await user.click(screen.getByRole('button', { name: /^亮色/ }))
     await waitFor(() => expect(updateSettings).toHaveBeenCalledWith({ themeMode: 'light' }))
     await waitFor(() => expect(document.documentElement.dataset.theme).toBe('light'))
-    expect(appRoot?.style.getPropertyValue('--hesper-color-background')).toBe('#dce0e8')
-    expect(appRoot?.style.getPropertyValue('--hesper-color-accent')).toBe('#8839ef')
+    expect(appRoot?.style.getPropertyValue('--hesper-color-background')).toBe('#e6e9ef')
+    expect(appRoot?.style.getPropertyValue('--hesper-color-accent')).toBe('#bcc0cc')
     expect(appRoot?.style.getPropertyValue('--hesper-color-tool-toggle')).toBe('#40a02b')
     expect(appRoot?.style.getPropertyValue('--hesper-color-tool-toggle-soft')).toBe('rgba(64, 160, 43, 0.14)')
     expect(appRoot?.style.getPropertyValue('--hesper-color-scrollbar-thumb')).toBe('rgba(76, 79, 105, 0.10)')
@@ -2121,7 +2200,7 @@ describe('renderer App', () => {
     await user.click(screen.getByRole('button', { name: /^Catppuccin/ }))
     await waitFor(() => expect(updateSettings).toHaveBeenCalledWith({ themeId: 'catppuccin' }))
     await waitFor(() => expect(document.documentElement.dataset.theme).toBe('light'))
-    expect(appRoot?.style.getPropertyValue('--hesper-color-background')).toBe('#dce0e8')
+    expect(appRoot?.style.getPropertyValue('--hesper-color-background')).toBe('#e6e9ef')
 
     await user.click(screen.getByRole('button', { name: '16px' }))
     await waitFor(() => expect(updateSettings).toHaveBeenCalledWith({ fontSize: 16 }))
@@ -2130,11 +2209,11 @@ describe('renderer App', () => {
 
   it('opens soul settings and persists the soul text', async () => {
     const user = userEvent.setup()
-    let storedSettings: { defaultModelId: string; defaultOutputMode: 'markdown' | 'html'; themeMode: 'system' | 'light' | 'dark'; themeId: 'catppuccin' | 'dracula' | 'tokyo-night'; fontSize: number; soul: string } = {
+    let storedSettings: { defaultModelId: string; defaultOutputMode: 'markdown' | 'html'; themeMode: 'system' | 'light' | 'dark'; themeId: 'hesper' | 'catppuccin' | 'dracula' | 'tokyo-night'; fontSize: number; soul: string } = {
       defaultModelId: 'mock/hesper-fast',
       defaultOutputMode: 'markdown',
       themeMode: 'dark',
-      themeId: 'catppuccin',
+      themeId: 'hesper',
       fontSize: 14,
       soul: ''
     }
@@ -3230,7 +3309,7 @@ describe('renderer App', () => {
     const user = userEvent.setup()
     listProviders.mockResolvedValueOnce([])
     listModels.mockResolvedValueOnce([])
-    getSettings.mockResolvedValueOnce({ defaultModelId: '', defaultOutputMode: 'markdown', themeMode: 'dark', themeId: 'catppuccin', fontSize: 14, soul: '' })
+    getSettings.mockResolvedValueOnce({ defaultModelId: '', defaultOutputMode: 'markdown', themeMode: 'system', themeId: 'hesper', fontSize: 14, soul: '' })
     listSessions.mockResolvedValueOnce([
       {
         id: 'session-empty-model',

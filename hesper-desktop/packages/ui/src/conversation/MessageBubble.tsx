@@ -31,9 +31,13 @@ export function MessageBubble({ message, loadAttachmentDataUrl }: MessageBubbleP
             style={{
               maxWidth: '100%',
               padding: `${themeTokens.spacing.sm} ${themeTokens.spacing.md}`,
-              borderRadius: themeTokens.radius.lg,
-              border: 0,
+              boxSizing: 'border-box',
+              borderRadius: themeTokens.radius.md,
+              borderColor: themeTokens.color.border,
+              borderStyle: 'solid',
+              borderWidth: '1px',
               background: isUser ? themeTokens.color.softControl : themeTokens.color.surfaceMuted,
+              boxShadow: `0 1px 4px -2px ${themeTokens.color.shadow}`,
               color: themeTokens.color.text,
               whiteSpace: 'pre-wrap',
               overflowWrap: 'anywhere',
@@ -244,15 +248,22 @@ const attachmentImageStyle = {
   width: 'auto',
   height: 'auto',
   objectFit: 'cover',
+  borderColor: themeTokens.color.border,
+  borderStyle: 'solid',
+  borderWidth: '1px',
   borderRadius: themeTokens.radius.md,
-  boxShadow: `0 4px 14px ${themeTokens.color.shadow}`
+  boxShadow: `0 1px 4px -2px ${themeTokens.color.shadow}`
 } satisfies CSSProperties
 
 const attachmentImagePlaceholderStyle = {
   width: 96,
   height: 64,
+  borderColor: themeTokens.color.border,
+  borderStyle: 'solid',
+  borderWidth: '1px',
   borderRadius: themeTokens.radius.md,
   background: themeTokens.color.softControl,
+  boxShadow: `0 1px 4px -2px ${themeTokens.color.shadow}`,
   opacity: 0.72
 } satisfies CSSProperties
 
@@ -265,10 +276,13 @@ const fileChipStyle = {
   rowGap: 2,
   alignItems: 'center',
   padding: `4px ${themeTokens.spacing.sm}`,
-  borderRadius: 999,
+  borderColor: themeTokens.color.border,
+  borderStyle: 'solid',
+  borderWidth: '1px',
+  borderRadius: themeTokens.radius.md,
   background: themeTokens.color.surfaceMuted,
   color: themeTokens.color.text,
-  boxShadow: `0 4px 14px ${themeTokens.color.shadow}`
+  boxShadow: `0 1px 4px -2px ${themeTokens.color.shadow}`
 } satisfies CSSProperties
 
 const fileChipIconStyle = {

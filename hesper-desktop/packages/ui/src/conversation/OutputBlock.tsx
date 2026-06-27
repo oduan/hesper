@@ -47,15 +47,19 @@ export const OutputBlock = memo(function OutputBlock({ content, contentType, clo
         onClickCapture={handleOutputClickCapture}
         style={{
           contain: 'paint',
+          boxSizing: 'border-box',
           position: 'relative',
           minWidth: 0,
           maxWidth: '100%',
           height: contentType === 'html' ? outputBlockHtmlHeight : 'auto',
           maxHeight: outputBlockMaxHeight,
           overflow: 'hidden',
-          borderRadius: themeTokens.radius.lg,
-          border: 0,
-          background: themeTokens.color.surfaceMuted
+          borderRadius: themeTokens.radius.md,
+          borderColor: themeTokens.color.border,
+          borderStyle: 'solid',
+          borderWidth: '1px',
+          background: themeTokens.color.surfaceMuted,
+          boxShadow: `0 2px 6px -3px ${themeTokens.color.shadow}`
         }}
       >
         <style>{outputBlockChromeCss}</style>
@@ -69,11 +73,20 @@ export const OutputBlock = memo(function OutputBlock({ content, contentType, clo
             top: themeTokens.spacing.sm,
             right: themeTokens.spacing.sm,
             zIndex: 1,
-            borderRadius: themeTokens.radius.md,
-            border: 0,
+            width: 30,
+            height: 28,
+            borderRadius: themeTokens.radius.sm,
+            borderColor: themeTokens.color.border,
+            borderStyle: 'solid',
+            borderWidth: '1px',
             background: themeTokens.color.softControl,
             color: themeTokens.color.text,
-            cursor: 'pointer'
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            lineHeight: 1,
+            boxShadow: `0 1px 4px -2px ${themeTokens.color.shadow}`
           }}
         >
           ⤢
