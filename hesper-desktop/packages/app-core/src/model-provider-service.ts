@@ -473,6 +473,8 @@ export function createModelProviderService(options: {
     }
   }
 
+  // Keep the historical name for existing call sites. This no longer seeds
+  // built-in providers/models; it only backfills legacy model capability data.
   const ensureBuiltinProviders = async (): Promise<void> => {
     await backfillInferredImageInputCapabilities()
   }

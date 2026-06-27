@@ -2570,5 +2570,9 @@ describe('registerIpcHandlers', () => {
     await expect(
       handles.get(ipcChannels.settingsUpdate)?.({ sender: { id: 1 } }, { defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'html', themeId: 'dracula', fontSize: 15 })
     ).resolves.toMatchObject({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'html', themeId: 'dracula', fontSize: 15 })
+
+    await expect(
+      handles.get(ipcChannels.settingsUpdate)?.({ sender: { id: 1 } }, { defaultModelId: '' })
+    ).resolves.toMatchObject({ defaultModelId: '' })
   })
 })
