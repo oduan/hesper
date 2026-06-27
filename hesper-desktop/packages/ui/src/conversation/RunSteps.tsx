@@ -428,8 +428,9 @@ function StepFullscreenDialog({ step, workerAgentView, onClose, onLocalFileClick
 
 export function RunSteps({ steps, autoExpanded = false, runStartedAt, runEndedAt, workerAgentView, onLocalFileClick, getStepProps }: RunStepsProps) {
   const [expanded, setExpanded] = useState(autoExpanded)
-  const [activeStep, setActiveStep] = useState<RunStep>()
+  const [activeStepId, setActiveStepId] = useState<string>()
   const orderedSteps = useMemo(() => [...steps].sort(compareCreatedAt), [steps])
+  const activeStep = activeStepId ? orderedSteps.find((step) => step.id === activeStepId) : undefined
   const firstTool = firstToolCallStep(orderedSteps)
   const elapsedLabel = useElapsedLabel(runStartedAt, runEndedAt)
 
@@ -438,10 +439,10 @@ export function RunSteps({ steps, autoExpanded = false, runStartedAt, runEndedAt
   }, [autoExpanded])
 
   useEffect(() => {
-    if (activeStep && !orderedSteps.some((step) => step.id === activeStep.id)) {
-      setActiveStep(undefined)
+    if (activeStepId && !activeStep) {
+      setActiveStepId(undefined)
     }
-  }, [activeStep, orderedSteps])
+  }, [activeStep, activeStepId])
 
   if (!firstTool && !runStartedAt) {
     return null
@@ -492,7 +493,7 @@ export function RunSteps({ steps, autoExpanded = false, runStartedAt, runEndedAt
                   type="button"
                   aria-label={`查看步骤详情：${parts.primary}`}
                   data-hesper-step-row-button="true"
-                  onClick={() => setActiveStep(step)}
+                  onClick={() => setActiveStepId(step.id)}
                   style={stepRowButtonStyle}
                 >
                   <span aria-hidden="true" />
@@ -512,7 +513,7 @@ export function RunSteps({ steps, autoExpanded = false, runStartedAt, runEndedAt
           })}
         </ul>
       ) : null}
-      {activeStep ? <StepFullscreenDialog step={activeStep} workerAgentView={workerAgentView} onClose={() => setActiveStep(undefined)} onLocalFileClick={onLocalFileClick} /> : null}
+      {activeStep ? <StepFullscreenDialog step={activeStep} workerAgentView={workerAgentView} onClose={() => setActiveStepId(undefined)} onLocalFileClick={onLocalFileClick} /> : null}
     </section>
   )
 }

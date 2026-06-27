@@ -53,7 +53,22 @@ function redactSensitiveText(value: string): string {
     })
 }
 
-function isRunErrorLike(value: unknown): value is RunError {
+const SUPPORTED_RUN_ERROR_CODES = new Set<RunError['code']>([
+  'network_error',
+  'timeout',
+  'rate_limit_transient',
+  'stream_interrupted',
+  'tool_error',
+  'unknown'
+])
+
+type RunErrorLike = {
+  code: unknown
+  message: unknown
+  retryable: unknown
+}
+
+function isRunErrorLike(value: unknown): value is RunErrorLike {
   return Boolean(
     value &&
       typeof value === 'object' &&
@@ -63,12 +78,19 @@ function isRunErrorLike(value: unknown): value is RunError {
   )
 }
 
+function normalizeRunErrorCode(code: unknown): RunError['code'] {
+  return typeof code === 'string' && SUPPORTED_RUN_ERROR_CODES.has(code as RunError['code'])
+    ? code as RunError['code']
+    : 'unknown'
+}
+
 export function normalizeUnknownError(error: unknown): RunError {
   if (isRunErrorLike(error)) {
+    const code = normalizeRunErrorCode(error.code)
     return {
-      code: error.code,
-      message: redactSensitiveText(error.message),
-      retryable: error.retryable
+      code,
+      message: redactSensitiveText(String(error.message)),
+      retryable: code === 'unknown' ? false : error.retryable === true
     }
   }
 
