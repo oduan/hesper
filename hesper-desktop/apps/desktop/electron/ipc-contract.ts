@@ -414,7 +414,8 @@ export const saveModelProviderInputSchema = z.object({
   piAuthProvider: piAuthProviderSchema.optional(),
   baseUrl: z.string().url().optional(),
   enabled: z.boolean().optional(),
-  defaultModelId: z.string().min(1).optional()
+  defaultModelId: z.string().min(1).optional(),
+  fastModeEnabled: z.boolean().optional()
 }).strict().superRefine((provider, ctx) => {
   if (provider.piAuthProvider && provider.kind !== 'pi') {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['piAuthProvider'], message: 'piAuthProvider requires kind pi' })
