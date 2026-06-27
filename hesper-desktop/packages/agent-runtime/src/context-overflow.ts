@@ -12,7 +12,7 @@ const CONTEXT_OVERFLOW_MESSAGE_PATTERNS = [
 ]
 
 const CONTEXT_OVERFLOW_CODES = new Set(['context_overflow', 'context_length_exceeded', 'prompt_too_long', 'too_many_tokens'])
-const MAX_OVERFLOW_RETRIES = 2
+export const MAX_OVERFLOW_RETRIES = 2
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object'

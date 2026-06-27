@@ -4,6 +4,7 @@ import type { AgentRuntimeEvent, Message as HesperMessage } from '@hesper/shared
 import type { AgentAdapter, AgentPromptInput } from './adapters'
 import { mapPiEventToHesperEvents } from './map-pi-event'
 import { createStaticModelResolver, type ModelResolver, type ResolvedModel } from './model-resolver'
+import { renderTextAttachment } from './prompt-attachments'
 
 const DEFAULT_SYSTEM_PROMPT = 'You are hesper, a desktop coding assistant. Be concise, stable, and explicit about tool actions.'
 
@@ -61,14 +62,6 @@ function throwIfAborted(signal: AbortSignal, message: string): void {
   }
 }
 
-function escapeXmlAttribute(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-}
-
 function supportsImageInput(resolved: ResolvedModel): boolean {
   return resolved.model.input?.includes('image') === true || resolved.modelConfig.capabilities?.includes('imageInput') === true
 }
@@ -80,7 +73,7 @@ async function appendTextAttachments(prompt: string, input: AgentPromptInput): P
 
   const renderedAttachments = await Promise.all(textAttachments.map(async (attachment) => {
     const content = await reader.readTextAttachment(attachment.relativePath)
-    return `<attachment name="${escapeXmlAttribute(attachment.name)}" mimeType="${escapeXmlAttribute(attachment.mimeType)}">\n${content}\n</attachment>`
+    return renderTextAttachment(attachment, content)
   }))
 
   return [prompt, ...renderedAttachments].join('\n\n')

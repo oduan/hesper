@@ -289,6 +289,28 @@ async function saveModel(persistence: Awaited<ReturnType<typeof createInMemoryPe
   })
 }
 
+function textAttachment(bytes: number): MessageAttachment {
+  return {
+    id: `attachment-${bytes}`,
+    kind: 'text',
+    name: 'large-notes.md',
+    mimeType: 'text/markdown',
+    bytes,
+    relativePath: 'attachments/large-notes.md'
+  }
+}
+
+function textAttachmentReader(content: string): AttachmentReader {
+  return {
+    async readImageAttachment(): Promise<Buffer> {
+      return Buffer.from([])
+    },
+    async readTextAttachment(): Promise<string> {
+      return content
+    }
+  }
+}
+
 function makeVerboseRunSummary(runId: string, lines: string[]): string {
   return [
     `<hesper_run_context run_id="${runId}" version="2">`,
@@ -1107,6 +1129,135 @@ describe('AgentRuntime queue', () => {
     expect(secondLength).toBeLessThan(firstLength)
     expect(storedRun).toMatchObject({ status: 'succeeded', retryCount: 0 })
     expect(events.filter((event) => event.type === 'run.retrying')).toHaveLength(0)
+  })
+
+  it('uses the least aggressive compaction tier after provider overflow when no local preflight ran', async () => {
+    const persistence = await createInMemoryPersistence()
+    await persistence.sessions.save({ ...session, id: 'session-overflow-provider-no-model-budget' })
+    await seedHistoricalRun(
+      persistence,
+      'session-overflow-provider-no-model-budget',
+      'run-overflow-long-goal',
+      '2026-06-27T09:10:00.000Z',
+      'older long request',
+      makeVerboseRunSummary('run-overflow-long-goal', [`Must preserve ${'a'.repeat(2600)} packages/agent-runtime/src/runtime.ts. Validated.`])
+    )
+    await seedHistoricalRun(
+      persistence,
+      'session-overflow-provider-no-model-budget',
+      'run-overflow-second-older',
+      '2026-06-27T09:20:00.000Z',
+      'second older request',
+      makeVerboseRunSummary('run-overflow-second-older', ['Decision: keep a second older run so session compaction covers multiple runs.'])
+    )
+    await seedHistoricalRun(
+      persistence,
+      'session-overflow-provider-no-model-budget',
+      'run-overflow-recent-window',
+      '2026-06-27T09:30:00.000Z',
+      'recent request',
+      makeVerboseRunSummary('run-overflow-recent-window', ['Keep recent run complete.'])
+    )
+
+    const adapter = new OverflowThenSuccessAdapter()
+    const runtime = new AgentRuntime({ persistence, adapter })
+
+    await runtime.enqueue({ sessionId: 'session-overflow-provider-no-model-budget', prompt: 'provider overflow without model metadata', modelId: 'mock/missing-context-window' })
+    await runtime.waitForIdle('session-overflow-provider-no-model-budget')
+
+    const secondSummary = (adapter.inputs[1]?.historyMessages ?? []).find((message) => message.content.includes('<hesper_session_context'))
+    expect(adapter.inputs).toHaveLength(2)
+    expect(secondSummary?.content.length).toBeGreaterThan(2000)
+    expect(secondSummary?.content.length).toBeLessThanOrEqual(4000)
+  })
+
+  it('ignores text attachment bytes for local budget when no attachment reader will inline them', async () => {
+    const persistence = await createInMemoryPersistence()
+    await persistence.sessions.save({ ...session, id: 'session-overflow-attachment-no-reader' })
+    await saveModel(persistence, 'mock/hesper-fast', 2_000)
+    await seedHistoricalRun(
+      persistence,
+      'session-overflow-attachment-no-reader',
+      'run-overflow-small-1',
+      '2026-06-27T09:10:00.000Z',
+      'small earlier request',
+      makeVerboseRunSummary('run-overflow-small-1', ['Decision: keep small history.'])
+    )
+    await seedHistoricalRun(
+      persistence,
+      'session-overflow-attachment-no-reader',
+      'run-overflow-small-2',
+      '2026-06-27T09:20:00.000Z',
+      'second small request',
+      makeVerboseRunSummary('run-overflow-small-2', ['Decision: keep another small history item.'])
+    )
+    await seedHistoricalRun(
+      persistence,
+      'session-overflow-attachment-no-reader',
+      'run-overflow-small-3',
+      '2026-06-27T09:30:00.000Z',
+      'small recent request',
+      makeVerboseRunSummary('run-overflow-small-3', ['Keep recent run complete.'])
+    )
+
+    const adapter = new RecordingAdapter()
+    const runtime = new AgentRuntime({ persistence, adapter })
+
+    await runtime.enqueue({
+      sessionId: 'session-overflow-attachment-no-reader',
+      prompt: 'attachment is not inline without reader',
+      modelId: 'mock/hesper-fast',
+      attachments: [textAttachment(20_000)]
+    })
+    await runtime.waitForIdle('session-overflow-attachment-no-reader')
+
+    expect((await persistence.contextItems.listBySession('session-overflow-attachment-no-reader')).filter((item) => item.kind === 'session_summary')).toHaveLength(0)
+    expect((adapter.inputs[0]?.historyMessages ?? []).map((message) => message.content).join('\n')).not.toContain('<hesper_session_context')
+  })
+
+  it('counts text attachment bytes for local budget when an attachment reader will inline them', async () => {
+    const persistence = await createInMemoryPersistence()
+    await persistence.sessions.save({ ...session, id: 'session-overflow-attachment-reader' })
+    await saveModel(persistence, 'mock/hesper-fast', 2_000)
+    await seedHistoricalRun(
+      persistence,
+      'session-overflow-attachment-reader',
+      'run-overflow-reader-small-1',
+      '2026-06-27T09:10:00.000Z',
+      'small earlier request',
+      makeVerboseRunSummary('run-overflow-reader-small-1', ['Decision: keep small history.'])
+    )
+    await seedHistoricalRun(
+      persistence,
+      'session-overflow-attachment-reader',
+      'run-overflow-reader-small-2',
+      '2026-06-27T09:20:00.000Z',
+      'second small request',
+      makeVerboseRunSummary('run-overflow-reader-small-2', ['Decision: keep another small history item.'])
+    )
+    await seedHistoricalRun(
+      persistence,
+      'session-overflow-attachment-reader',
+      'run-overflow-reader-small-3',
+      '2026-06-27T09:30:00.000Z',
+      'small recent request',
+      makeVerboseRunSummary('run-overflow-reader-small-3', ['Keep recent run complete.'])
+    )
+
+    const adapter = new RecordingAdapter()
+    const runtime = new AgentRuntime({ persistence, adapter })
+
+    await runtime.enqueue({
+      sessionId: 'session-overflow-attachment-reader',
+      prompt: 'attachment will be inlined by reader',
+      modelId: 'mock/hesper-fast',
+      attachments: [textAttachment(20_000)],
+      attachmentReader: textAttachmentReader('重要内容'.repeat(1000))
+    })
+    await runtime.waitForIdle('session-overflow-attachment-reader')
+
+    expect((await persistence.contextItems.listBySession('session-overflow-attachment-reader')).filter((item) => item.kind === 'session_summary')).toHaveLength(1)
+    expect((adapter.inputs[0]?.historyMessages ?? []).map((message) => message.content).join('\n')).toContain('<hesper_session_context')
   })
 
   it('fails with a redacted diagnostic error after exhausting overflow retries', async () => {

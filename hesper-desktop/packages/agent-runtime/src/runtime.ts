@@ -4,10 +4,11 @@ import type { AgentAdapter, AttachmentReader } from './adapters'
 import { normalizeUnknownError } from './adapters'
 import { checkContextBudget } from './context-budget'
 import { assembleHistoryMessages } from './context-assembler'
-import { isContextOverflowError, nextOverflowAttempt } from './context-overflow'
+import { isContextOverflowError, MAX_OVERFLOW_RETRIES, nextOverflowAttempt } from './context-overflow'
 import { buildRunContextItem } from './context-item'
 import { clearPiEventRunState } from './map-pi-event'
 import { clearPiToolRunState } from './pi-tools'
+import { estimateRenderedTextAttachmentLength } from './prompt-attachments'
 import { defaultRetryPolicy, getRetryDelayMs, isRetryableRunError, type RetryPolicy } from './retry-policy'
 import { buildSessionCompaction } from './session-compaction'
 
@@ -78,6 +79,20 @@ function groupContextItemsByRunId(items: RunContextItem[]): Map<string, RunConte
   return byRunId
 }
 
+function groupMessagesByRunId(messages: Message[]): Map<string, Message[]> {
+  const byRunId = new Map<string, Message[]>()
+  for (const message of messages) {
+    if (!message.runId) continue
+    const runMessages = byRunId.get(message.runId) ?? []
+    runMessages.push(message)
+    byRunId.set(message.runId, runMessages)
+  }
+  for (const [runId, runMessages] of byRunId) {
+    byRunId.set(runId, [...runMessages].sort(compareMessages))
+  }
+  return byRunId
+}
+
 function hasPersistedRunSummary(items: RunContextItem[] | undefined): boolean {
   return Boolean(items?.some((item) => item.kind === 'run_summary' && item.content.trim()))
 }
@@ -106,18 +121,6 @@ function persistedRunSummaryItem(items: RunContextItem[] | undefined): RunContex
     .sort(compareContextItemsByPreference)[0]
 }
 
-function escapeXmlAttribute(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-}
-
-function estimateRenderedTextAttachmentLength(attachment: MessageAttachment): number {
-  return `<attachment name="${escapeXmlAttribute(attachment.name)}" mimeType="${escapeXmlAttribute(attachment.mimeType)}">\n\n</attachment>`.length + Math.max(0, attachment.bytes)
-}
-
 function reservedOutputTokensForWindow(contextWindow: number): number {
   return Math.max(32, Math.min(1024, Math.floor(contextWindow * 0.2)))
 }
@@ -133,6 +136,7 @@ type SessionHistorySnapshot = {
   sessionMessages: Message[]
   sessionRuns: AgentRun[]
   contextItemsByRunId: Map<string, RunContextItem[]>
+  messagesByRunId: Map<string, Message[]>
   stepsByRunId: Map<string, RunStep[]>
   previousParentRuns: AgentRun[]
   historyMessages: Message[]
@@ -141,6 +145,7 @@ type SessionHistorySnapshot = {
 type SessionCompactionApplication = {
   historyMessages: Message[]
   changed: boolean
+  attempted: boolean
 }
 
 function totalHistoryContentLength(messages: Message[]): number {
@@ -443,6 +448,7 @@ export class AgentRuntime {
     const sessionMessages = await this.persistence.messages.listBySession(currentRun.sessionId)
     const sessionRuns = await this.persistence.runs.listBySession(currentRun.sessionId)
     const contextItemsByRunId = groupContextItemsByRunId(await this.persistence.contextItems.listBySession(currentRun.sessionId))
+    const messagesByRunId = groupMessagesByRunId(sessionMessages)
     const previousParentRuns = sessionRuns
       .filter((candidate) => candidate.id !== currentRun.id && candidate.parentRunId === undefined)
       .sort(compareRuns)
@@ -457,6 +463,7 @@ export class AgentRuntime {
       sessionMessages,
       sessionRuns,
       contextItemsByRunId,
+      messagesByRunId,
       stepsByRunId,
       previousParentRuns,
       historyMessages: assembleHistoryMessages({
@@ -469,13 +476,15 @@ export class AgentRuntime {
     }
   }
 
-  private async maybeApplyLocalSessionCompaction(currentRun: AgentRun, prompt: string, systemPrompt: string | undefined, attachments: MessageAttachment[] | undefined, snapshot: SessionHistorySnapshot): Promise<Message[]> {
+  private async maybeApplyLocalSessionCompaction(currentRun: AgentRun, prompt: string, systemPrompt: string | undefined, attachments: MessageAttachment[] | undefined, attachmentReader: AttachmentReader | undefined, snapshot: SessionHistorySnapshot): Promise<SessionCompactionApplication> {
     const model = await this.persistence.models.get(currentRun.modelId)
-    if (model?.contextWindow === undefined) return snapshot.historyMessages
+    if (model?.contextWindow === undefined) return this.unchangedSessionCompaction(snapshot)
 
-    const renderedAttachmentTextLengths = attachments
-      ?.filter((attachment) => attachment.kind === 'text')
-      .map((attachment) => estimateRenderedTextAttachmentLength(attachment))
+    const renderedAttachmentTextLengths = attachmentReader === undefined
+      ? undefined
+      : attachments
+        ?.filter((attachment) => attachment.kind === 'text')
+        .map((attachment) => estimateRenderedTextAttachmentLength(attachment))
 
     const budget = checkContextBudget({
       modelContextWindow: model.contextWindow,
@@ -486,13 +495,13 @@ export class AgentRuntime {
       historyMessages: snapshot.historyMessages,
       ...(renderedAttachmentTextLengths !== undefined ? { renderedAttachmentTextLengths } : {})
     })
-    if (!budget.overLimit) return snapshot.historyMessages
+    if (!budget.overLimit) return this.unchangedSessionCompaction(snapshot)
 
-    return (await this.applySessionCompaction(currentRun, snapshot, 0)).historyMessages
+    return this.applySessionCompaction(currentRun, snapshot, 0)
   }
 
-  private unchangedSessionCompaction(snapshot: SessionHistorySnapshot): SessionCompactionApplication {
-    return { historyMessages: snapshot.historyMessages, changed: false }
+  private unchangedSessionCompaction(snapshot: SessionHistorySnapshot, attempted = false): SessionCompactionApplication {
+    return { historyMessages: snapshot.historyMessages, changed: false, attempted }
   }
 
   private async applySessionCompaction(currentRun: AgentRun, snapshot: SessionHistorySnapshot, overflowAttempt: number): Promise<SessionCompactionApplication> {
@@ -514,7 +523,7 @@ export class AgentRuntime {
 
       const dynamic = buildRunContextItem({
         run: previousRun,
-        messages: snapshot.sessionMessages.filter((message) => message.runId === previousRun.id).sort(compareMessages),
+        messages: snapshot.messagesByRunId.get(previousRun.id) ?? [],
         steps: snapshot.stepsByRunId.get(previousRun.id) ?? [],
         createdAt: previousRun.endedAt ?? previousRun.startedAt ?? nowIso()
       })
@@ -537,21 +546,31 @@ export class AgentRuntime {
       runSummaries,
       ...(maxChars !== undefined ? { maxChars } : {})
     })
-    if (!built) return this.unchangedSessionCompaction(snapshot)
+    if (!built) return this.unchangedSessionCompaction(snapshot, true)
 
     const existingReusable = [...snapshot.contextItemsByRunId.values()]
       .flat()
       .filter((item) => item.kind === 'session_summary' && item.sourceHash === built.sourceHash && item.content.length <= built.item.content.length)
       .sort(compareContextItemsByPreference)[0]
 
+    const updatedContextItemsByRunId = new Map(snapshot.contextItemsByRunId)
     if (!existingReusable) {
       await this.persistence.contextItems.save(built.item)
+      const runItems = updatedContextItemsByRunId.get(built.item.runId) ?? []
+      updatedContextItemsByRunId.set(built.item.runId, [...runItems, built.item])
     }
 
-    const historyMessages = (await this.loadSessionHistorySnapshot(currentRun)).historyMessages
+    const historyMessages = assembleHistoryMessages({
+      currentRunId: currentRun.id,
+      runs: snapshot.sessionRuns,
+      messages: snapshot.sessionMessages,
+      stepsByRunId: snapshot.stepsByRunId,
+      contextItemsByRunId: updatedContextItemsByRunId
+    })
     return {
       historyMessages,
-      changed: didHistoryBecomeShorter(snapshot.historyMessages, historyMessages)
+      changed: didHistoryBecomeShorter(snapshot.historyMessages, historyMessages),
+      attempted: true
     }
   }
 
@@ -567,14 +586,17 @@ export class AgentRuntime {
 
       let latestRun = current
       let attempt = latestRun.retryCount
-      let overflowAttempt = 0
-      let historyMessages = await this.maybeApplyLocalSessionCompaction(
+      let overflowRetryCount = 0
+      const localCompaction = await this.maybeApplyLocalSessionCompaction(
         latestRun,
         prompt,
         systemPrompt,
         attachments,
+        attachmentReader,
         await this.loadSessionHistorySnapshot(latestRun)
       )
+      let lastCompactionAttempt = localCompaction.attempted ? 0 : -1
+      let historyMessages = localCompaction.historyMessages
 
       while (true) {
         if (await this.applyCancellationIfNeeded(latestRun.id) || await this.applyTerminationIfNeeded(latestRun.id)) {
@@ -629,8 +651,8 @@ export class AgentRuntime {
           const isOverflow = isContextOverflowError(error) || isContextOverflowError(normalized)
           const failureError: RunError = isOverflow ? { ...normalized, retryable: false } : normalized
 
-          if (isOverflow) {
-            let nextAttempt = nextOverflowAttempt(overflowAttempt)
+          if (isOverflow && overflowRetryCount < MAX_OVERFLOW_RETRIES) {
+            let nextAttempt = nextOverflowAttempt(lastCompactionAttempt)
             let retryWithCompactedHistory = false
             while (nextAttempt !== undefined) {
               const compaction = await this.applySessionCompaction(
@@ -638,7 +660,9 @@ export class AgentRuntime {
                 await this.loadSessionHistorySnapshot(latestRun),
                 nextAttempt
               )
-              overflowAttempt = nextAttempt
+              if (compaction.attempted) {
+                lastCompactionAttempt = nextAttempt
+              }
               if (compaction.changed) {
                 historyMessages = compaction.historyMessages
                 retryWithCompactedHistory = true
@@ -647,6 +671,7 @@ export class AgentRuntime {
               nextAttempt = nextOverflowAttempt(nextAttempt)
             }
             if (retryWithCompactedHistory) {
+              overflowRetryCount += 1
               if (await this.applyCancellationIfNeeded(latestRun.id) || await this.applyTerminationIfNeeded(latestRun.id)) {
                 return
               }
