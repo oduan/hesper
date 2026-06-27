@@ -430,6 +430,40 @@ describe('reduceToolOutput', () => {
     })
   })
 
+  it('prefers relative input paths over absolute runtime result paths', () => {
+    const reduced = reduceToolOutput(createStep({
+      title: '读取空 README',
+      detail: JSON.stringify({
+        kind: 'tool_call',
+        input: {
+          path: 'README.md',
+          purpose: '读取 README'
+        },
+        output: {
+          content: [{ type: 'text', text: '' }],
+          details: {
+            toolId: 'filesystem.read-file',
+            result: {
+              toolId: 'filesystem.read-file',
+              path: 'C:\\repo\\README.md',
+              bytes: 0,
+              truncated: false
+            }
+          }
+        },
+        isError: false
+      })
+    }))
+
+    expect(reduced).toEqual({
+      title: '读取空 README',
+      status: 'succeeded',
+      type: 'tool_call',
+      category: 'empty',
+      files: ['README.md']
+    })
+  })
+
   it('keeps structured root filenames without extensions in files', () => {
     const reduced = reduceToolOutput(createStep({
       title: '读取根文件',

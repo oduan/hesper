@@ -185,6 +185,29 @@ function normalizeStructuredPathCandidate(value: string): string | undefined {
   return trimmed
 }
 
+function isAbsolutePathLike(value: string): boolean {
+  return /^[A-Za-z]:\//.test(value) || value.startsWith('//') || value.startsWith('/')
+}
+
+function resolvePreferredRelativePath(value: string, preferredRelativePaths: string[]): string {
+  if (!isAbsolutePathLike(value)) return value
+  for (const preferredPath of preferredRelativePaths) {
+    const normalizedPreferredPath = preferredPath.replace(/\\/g, '/').replace(/^\.\//, '')
+    if (!normalizedPreferredPath || isAbsolutePathLike(normalizedPreferredPath)) continue
+    if (value === normalizedPreferredPath || value.endsWith(`/${normalizedPreferredPath}`)) return normalizedPreferredPath
+  }
+  return value
+}
+
+function mergePreferredFiles(primaryFiles: string[] | undefined, preferredInputFiles: string[] | undefined): string[] | undefined {
+  if (!primaryFiles || primaryFiles.length === 0) return preferredInputFiles
+  if (!preferredInputFiles || preferredInputFiles.length === 0) return primaryFiles
+
+  const preferredRelativePaths = preferredInputFiles.filter((file) => !isAbsolutePathLike(file))
+  const merged = new Set(primaryFiles.map((file) => resolvePreferredRelativePath(file, preferredRelativePaths)))
+  return [...merged].sort(compareText).slice(0, MAX_FILES)
+}
+
 function collectPathFromText(text: string, bucket: Set<string>): void {
   const lines = normalizeLineEndings(text).split('\n')
   const patterns = [
@@ -376,15 +399,25 @@ export function reduceToolOutput(step: ToolStepLike): ReducedToolDetail | undefi
   const exitCode = extractExitCode(result, parsedText)
   const isError = step.status === 'failed' || (payload?.isError === true) || (typeof exitCode === 'number' && exitCode !== 0)
 
-  const fileBucket = new Set<string>()
+  let files: string[] | undefined
   if (payload) {
-    collectFiles(result, fileBucket)
-    if (outputText) collectFiles(outputText, fileBucket)
-    if (fileBucket.size === 0) collectFiles(payload.input, fileBucket)
+    const inputFileBucket = new Set<string>()
+    const primaryFileBucket = new Set<string>()
+
+    collectFiles(payload.input, inputFileBucket)
+    collectFiles(result, primaryFileBucket)
+    if (outputText) collectFiles(outputText, primaryFileBucket)
+
+    const inputFiles = finalizeFiles(inputFileBucket)
+    const primaryFiles = finalizeFiles(primaryFileBucket)
+    files = primaryFiles && primaryFiles.length > 0
+      ? mergePreferredFiles(primaryFiles, inputFiles)
+      : inputFiles
   } else if (detailText) {
+    const fileBucket = new Set<string>()
     collectFiles(detailText, fileBucket)
+    files = finalizeFiles(fileBucket)
   }
-  const files = finalizeFiles(fileBucket)
 
   if (isError) {
     const errorSource = result?.stderr && typeof result.stderr === 'string'
