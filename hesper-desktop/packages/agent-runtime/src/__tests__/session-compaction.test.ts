@@ -215,6 +215,37 @@ describe('buildSessionCompaction', () => {
     expect(content).not.toContain('xoxb-1234567890-secret-secret')
   })
 
+  it('returns undefined when only filtered success noise remains', () => {
+    const result = buildSessionCompaction({
+      sessionId: 'session-noise-only',
+      createdAt: '2026-06-27T09:20:00.000Z',
+      runSummaries: [
+        runSummary({
+          runId: 'run-1',
+          createdAt: '2026-06-27T09:10:00.000Z',
+          assistant: 'Explored old logs and listed files.',
+          toolEntries: [
+            {
+              category: 'success',
+              status: 'succeeded',
+              title: 'List files',
+              outputSummary: 'listed 240 entries'
+            },
+            {
+              category: 'bulk_output',
+              status: 'succeeded',
+              title: 'Read huge log',
+              outputSummary: 'stdout line '.repeat(30),
+              omittedChars: 900
+            }
+          ]
+        })
+      ]
+    })
+
+    expect(result).toBeUndefined()
+  })
+
   it('drops non-meaningful success noise while retaining failures and diagnostic file activity', () => {
     const result = buildSessionCompaction({
       sessionId: 'session-tool-filtering',
@@ -286,6 +317,29 @@ describe('buildSessionCompaction', () => {
     ])
   })
 
+  it('returns undefined when only exploration bullets remain after extraction', () => {
+    const result = buildSessionCompaction({
+      sessionId: 'session-exploration-only',
+      createdAt: '2026-06-27T09:20:00.000Z',
+      currentPrompt: [
+        '- explored package A',
+        '1. looked at package B'
+      ].join('\n'),
+      runSummaries: [
+        runSummary({
+          runId: 'run-1',
+          createdAt: '2026-06-27T09:10:00.000Z',
+          assistant: [
+            '- explored package A',
+            '- looked at package B'
+          ].join('\n')
+        })
+      ]
+    })
+
+    expect(result).toBeUndefined()
+  })
+
   it('only keeps bullet and numbered lines when they actually match constraint, decision, or validation patterns', () => {
     const result = buildSessionCompaction({
       sessionId: 'session-bullet-filtering',
@@ -319,6 +373,33 @@ describe('buildSessionCompaction', () => {
     expect(result?.item.content).toContain('validation failed in smoke test')
     expect(result?.item.content).not.toContain('explored package A')
     expect(result?.item.content).not.toContain('looked at package B')
+  })
+
+  it('still returns a summary when truly meaningful goal or error context remains', () => {
+    const result = buildSessionCompaction({
+      sessionId: 'session-meaningful-still-kept',
+      createdAt: '2026-06-27T09:20:00.000Z',
+      runSummaries: [
+        runSummary({
+          runId: 'run-1',
+          createdAt: '2026-06-27T09:10:00.000Z',
+          user: 'Preserve the original goal for deterministic compaction.',
+          toolEntries: [{
+            category: 'error',
+            status: 'failed',
+            title: 'Run failing test',
+            files: ['packages/agent-runtime/src/__tests__/session-compaction.test.ts'],
+            errorExcerpt: 'AssertionError: expected true to be false'
+          }]
+        })
+      ]
+    })
+
+    expect(result).toBeDefined()
+    expect(result?.item.content).toContain('earliest_user_goal:')
+    expect(result?.item.content).toContain('Preserve the original goal for deterministic compaction.')
+    expect(result?.item.content).toContain('recent_failures_and_validation:')
+    expect(result?.item.content).toContain('AssertionError: expected true to be false')
   })
 
   it('keeps the wrapper complete and includes a truncation marker under a tight maxChars budget', () => {

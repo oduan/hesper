@@ -456,10 +456,6 @@ function truncateSummary(opening: string, sections: SummarySection[], closing: s
   return best
 }
 
-function hasMeaningfulSummary(parsed: ParsedRunSummary): boolean {
-  return Boolean(parsed.latestUserRequest || parsed.latestAssistantResult || parsed.toolEntries.length > 0 || parsed.truncationMarkers.length > 0 || parsed.importantFiles.length > 0)
-}
-
 function buildSections(parsedSummaries: ParsedRunSummary[], currentPrompt: string | undefined, recentMessages: OrderedMessage[]): SummarySection[] {
   const earliestGoal = parsedSummaries.find((summary) => summary.latestUserRequest)?.latestUserRequest
   const hardConstraints = uniqueOrdered([
@@ -502,13 +498,7 @@ function buildSections(parsedSummaries: ParsedRunSummary[], currentPrompt: strin
 
   const sourceOmissions = uniqueOrdered(parsedSummaries.flatMap((summary) => summary.truncationMarkers))
   const toolActivity = filterToolActivityEntries(allToolEntries)
-  const sections: SummarySection[] = [
-    {
-      kind: 'plain',
-      header: 'purpose:',
-      lines: ['reusable_session_continuity_after_run_summary_overflow']
-    }
-  ]
+  const sections: SummarySection[] = []
 
   if (earliestGoal) {
     sections.push({
@@ -580,8 +570,6 @@ export function buildSessionCompaction(input: BuildSessionCompactionInput): Sess
   if (coveredRunIds.length === 0) return undefined
 
   const parsedSummaries = orderedRunSummaries.map((summary) => parseRunSummary(summary))
-  if (!parsedSummaries.some(hasMeaningfulSummary)) return undefined
-
   const recentMessages = normalizeOrderedMessages(input.recentMessages)
   const currentPrompt = input.currentPrompt ? sanitizeText(input.currentPrompt) : undefined
   const sections = buildSections(parsedSummaries, currentPrompt, recentMessages)
@@ -589,7 +577,14 @@ export function buildSessionCompaction(input: BuildSessionCompactionInput): Sess
 
   const opening = `<hesper_session_context session_id="${escapeXmlAttribute(input.sessionId)}" covered_run_ids="${escapeXmlAttribute(coveredRunIds.join(','))}" version="${SESSION_SUMMARY_WRAPPER_VERSION}">`
   const closing = '</hesper_session_context>'
-  const content = truncateSummary(opening, sections, closing, normalizeMaxChars(input.maxChars))
+  const content = truncateSummary(opening, [
+    {
+      kind: 'plain',
+      header: 'purpose:',
+      lines: ['reusable_session_continuity_after_run_summary_overflow']
+    },
+    ...sections
+  ], closing, normalizeMaxChars(input.maxChars))
   if (!content) return undefined
 
   const lastCoveredRunId = coveredRunIds[coveredRunIds.length - 1]
