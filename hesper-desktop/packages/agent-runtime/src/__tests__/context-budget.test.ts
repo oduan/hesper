@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { checkContextBudget } from '../context-budget'
 
+function renderTextAttachment(name: string, mimeType: string, content: string): string {
+  return `<attachment name="${name}" mimeType="${mimeType}">\n${content}\n</attachment>`
+}
+
 describe('checkContextBudget', () => {
-  it('estimates tokens across prompt, system prompt, history messages, and attachments deterministically', () => {
+  it('estimates tokens across prompt, system prompt, history messages, and rendered attachments deterministically', () => {
+    const renderedAttachment = renderTextAttachment('notes.txt', 'text/plain', '12345')
+    const totalChars = 4 + 8 + 9 + 3 + renderedAttachment.length + 7
     const result = checkContextBudget({
       modelContextWindow: 1000,
       systemPrompt: '1234',
@@ -11,15 +17,38 @@ describe('checkContextBudget', () => {
         { role: 'user', content: '123456789' },
         { role: 'assistant', content: '123' }
       ],
-      attachmentTexts: ['12345'],
-      attachmentTextLengths: [7]
+      renderedAttachmentTexts: [renderedAttachment],
+      renderedAttachmentTextLengths: [7]
     })
 
     expect(result).toEqual({
-      estimatedInputTokens: 11,
+      estimatedInputTokens: Math.ceil(totalChars / 4),
       maxInputTokens: 1000,
       overLimit: false
     })
+  })
+
+  it('produces the same estimate for the same total chars regardless of message fragmentation', () => {
+    const fragmented = checkContextBudget({
+      modelContextWindow: 100,
+      historyMessages: [
+        { role: 'user', content: 'a' },
+        { role: 'assistant', content: 'b' },
+        { role: 'user', content: 'c' },
+        { role: 'assistant', content: 'd' }
+      ]
+    })
+    const combined = checkContextBudget({
+      modelContextWindow: 100,
+      historyMessages: [{ role: 'user', content: 'abcd' }]
+    })
+
+    expect(fragmented).toEqual({
+      estimatedInputTokens: 1,
+      maxInputTokens: 100,
+      overLimit: false
+    })
+    expect(combined).toEqual(fragmented)
   })
 
   it('treats the exact boundary as within budget', () => {
@@ -88,19 +117,54 @@ describe('checkContextBudget', () => {
     })
   })
 
-  it('normalizes invalid numeric inputs safely without producing NaN or Infinity', () => {
+  it('marks invalid reserved and safety configuration instead of silently treating it as zero', () => {
     const result = checkContextBudget({
-      modelContextWindow: Number.NaN,
+      modelContextWindow: 100,
       reservedOutputTokens: Number.POSITIVE_INFINITY,
-      safetyMargin: -5,
-      prompt: ''
+      safetyMargin: Number.NaN,
+      prompt: 'x'
     })
 
     expect(result).toEqual({
-      estimatedInputTokens: 0,
+      estimatedInputTokens: 1,
       maxInputTokens: 0,
+      overLimit: true,
+      invalidConfig: true,
+      reasons: [
+        'reservedOutputTokens must be a finite non-negative number',
+        'safetyMargin must be a finite non-negative number'
+      ]
+    })
+  })
+
+  it('surfaces an invalid model context window so callers can distinguish config errors from a normal zero-budget result', () => {
+    const result = checkContextBudget({
+      modelContextWindow: Number.NaN,
+      prompt: 'x'
+    })
+
+    expect(result).toEqual({
+      estimatedInputTokens: 1,
+      maxInputTokens: 0,
+      overLimit: true,
+      invalidConfig: true,
+      reasons: ['modelContextWindow must be a finite non-negative number']
+    })
+  })
+
+  it('estimates rendered attachment text rather than bare attachment content', () => {
+    const renderedAttachment = renderTextAttachment('report.md', 'text/markdown', 'hello')
+    const result = checkContextBudget({
+      modelContextWindow: 100,
+      renderedAttachmentTexts: [renderedAttachment]
+    })
+
+    expect(result).toEqual({
+      estimatedInputTokens: Math.ceil(renderedAttachment.length / 4),
+      maxInputTokens: 100,
       overLimit: false
     })
+    expect(result.estimatedInputTokens).toBeGreaterThan(Math.ceil('hello'.length / 4))
   })
 
   it('does not mutate or reorder history messages', () => {
