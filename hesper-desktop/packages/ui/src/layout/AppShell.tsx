@@ -1,7 +1,7 @@
 import { useLayoutEffect, useMemo, type ReactNode } from 'react'
 import type { Session, ToolDefinition } from '@hesper/shared'
 import { createThemeVariables, themeTokens, type ThemeMode } from '../theme'
-import { ActivityRail, type AppSection } from './ActivityRail'
+import { ActivityRail, type ActivityRailSessionScopeCounts, type AppSection } from './ActivityRail'
 import { EntityListPane, type RoleListItem, type SessionCategoryListItem, type SettingsCategory, type SkillListItem } from './EntityListPane'
 import { TitleBar, type DesktopPlatform, type WindowControlAction } from './TitleBar'
 
@@ -135,6 +135,33 @@ export function AppShell({
 
   const colorScheme = themeVariables.colorScheme === 'dark' ? 'dark' : 'light'
   const shellBackground = useMemo(() => shellBackgroundForColorScheme(colorScheme), [colorScheme])
+  const sessionScopeCounts = useMemo<ActivityRailSessionScopeCounts>(() => {
+    const byCategoryId: Record<string, number> = {}
+    let all = 0
+    let marked = 0
+    let archived = 0
+
+    for (const session of sessions) {
+      if (session.status === 'archived') {
+        archived += 1
+        continue
+      }
+
+      if (session.status !== 'active') {
+        continue
+      }
+
+      all += 1
+      if (session.isMarked) {
+        marked += 1
+      }
+      if (session.categoryId) {
+        byCategoryId[session.categoryId] = (byCategoryId[session.categoryId] ?? 0) + 1
+      }
+    }
+
+    return { all, marked, archived, byCategoryId }
+  }, [sessions])
 
   useLayoutEffect(() => {
     if (typeof document === 'undefined') {
@@ -209,6 +236,7 @@ export function AppShell({
           {...(onCreateSession ? { onCreateSession } : {})}
           {...(onSelectSection ? { onSelectSection } : {})}
           {...(sessionCategories ? { sessionCategories } : {})}
+          sessionScopeCounts={sessionScopeCounts}
           {...(activeSessionCategoryId ? { activeSessionCategoryId } : {})}
           {...(activeSessionSpecialView ? { activeSessionSpecialView } : {})}
           {...(sessionsExpanded !== undefined ? { sessionsExpanded } : {})}

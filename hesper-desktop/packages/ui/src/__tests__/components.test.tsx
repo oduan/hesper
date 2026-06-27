@@ -489,6 +489,110 @@ describe('ui components', () => {
     expect(onSelectSessionSpecialView).toHaveBeenCalledWith('archived')
   })
 
+  it('renders activity rail icons and calculated session counts without changing accessible names', () => {
+    render(
+      <AppShell
+        sessions={[
+          { id: 'count-active-product-1', title: '产品一', status: 'active', outputMode: 'markdown', categoryId: 'category-product', isMarked: true, createdAt: now, updatedAt: now },
+          { id: 'count-active-avatar', title: '头像一', status: 'active', outputMode: 'markdown', categoryId: 'category-avatar', createdAt: now, updatedAt: now },
+          { id: 'count-active-product-2', title: '产品二', status: 'active', outputMode: 'markdown', categoryId: 'category-product', createdAt: now, updatedAt: now },
+          { id: 'count-active-marked', title: '标记一', status: 'active', outputMode: 'markdown', isMarked: true, createdAt: now, updatedAt: now },
+          { id: 'count-archived-product', title: '归档一', status: 'archived', outputMode: 'markdown', categoryId: 'category-product', isMarked: true, createdAt: now, updatedAt: now }
+        ]}
+        activeSection="sessions"
+        title="导航计数"
+        sessionCategories={[
+          { id: 'category-product', name: '产品图', createdAt: now, updatedAt: now },
+          { id: 'category-avatar', name: '头像', createdAt: now, updatedAt: now }
+        ]}
+        sessionsExpanded
+      />
+    )
+
+    const allSessionsButton = screen.getByRole('button', { name: '所有会话' })
+    expect(allSessionsButton).toHaveAccessibleName('所有会话')
+    expect(allSessionsButton.querySelector('[data-hesper-nav-icon="sessions"]')).toHaveAttribute('aria-hidden', 'true')
+    const allSessionsCount = allSessionsButton.querySelector('[data-hesper-nav-count]') as HTMLElement
+    expect(allSessionsCount).toHaveClass('hesper-nav-count')
+    expect(allSessionsCount).toHaveAttribute('aria-hidden', 'true')
+    expect(allSessionsCount).toHaveTextContent(/^4$/)
+
+    const productButton = screen.getByRole('button', { name: '产品图' })
+    expect(productButton).toHaveAccessibleName('产品图')
+    expect(productButton.querySelector('[data-hesper-nav-icon="category"]')).toHaveAttribute('aria-hidden', 'true')
+    expect(productButton.querySelector('[data-hesper-nav-count]')).toHaveTextContent(/^2$/)
+
+    const avatarButton = screen.getByRole('button', { name: '头像' })
+    expect(avatarButton.querySelector('[data-hesper-nav-icon="category"]')).toHaveAttribute('aria-hidden', 'true')
+    expect(avatarButton.querySelector('[data-hesper-nav-count]')).toHaveTextContent(/^1$/)
+
+    const markedButton = screen.getByRole('button', { name: '已标记' })
+    expect(markedButton).toHaveAccessibleName('已标记')
+    expect(markedButton.querySelector('[data-hesper-nav-icon="marked"]')).toHaveAttribute('aria-hidden', 'true')
+    expect(markedButton.querySelector('[data-hesper-nav-count]')).toHaveTextContent(/^2$/)
+
+    const archivedButton = screen.getByRole('button', { name: '归档' })
+    expect(archivedButton).toHaveAccessibleName('归档')
+    expect(archivedButton.querySelector('[data-hesper-nav-icon="archived"]')).toHaveAttribute('aria-hidden', 'true')
+    expect(archivedButton.querySelector('[data-hesper-nav-count]')).toHaveTextContent(/^1$/)
+
+    for (const [label, iconName] of [
+      ['技能', 'skills'],
+      ['角色', 'roles'],
+      ['工具', 'tools'],
+      ['设置', 'settings']
+    ] as const) {
+      const button = screen.getByRole('button', { name: label })
+      expect(button).toHaveAccessibleName(label)
+      expect(button.querySelector(`[data-hesper-nav-icon="${iconName}"]`)).toHaveAttribute('aria-hidden', 'true')
+    }
+  })
+
+  it('marks session rows with divider hooks and delays session scrollbar hiding after pointer leaves the entity pane', () => {
+    vi.useFakeTimers()
+    render(
+      <AppShell
+        sessions={[
+          { id: 'divider-session-1', title: '分隔会话一', status: 'active', outputMode: 'markdown', createdAt: now, updatedAt: now },
+          { id: 'divider-session-2', title: '分隔会话二', status: 'active', outputMode: 'markdown', createdAt: now, updatedAt: now }
+        ]}
+        activeSection="sessions"
+        activeSessionId="divider-session-1"
+        title="会话列表分隔线"
+      />
+    )
+
+    const entityList = screen.getByLabelText('实体列表')
+    const sessionList = screen.getByLabelText('会话列表')
+    expect(sessionList).toHaveClass('hesper-theme-scrollbar', 'hesper-session-list-scrollbar', 'is-scrollbar-hidden')
+    expect(sessionList).toHaveStyle('--hesper-session-divider-left: 10px')
+    expect(sessionList).toHaveStyle('--hesper-session-divider-right: 10px')
+
+    const items = within(sessionList).getAllByRole('listitem')
+    expect(items).toHaveLength(2)
+    for (const item of items) {
+      expect(item).toHaveClass('hesper-session-list-item')
+      expect(item).toHaveAttribute('data-hesper-session-divider', 'true')
+    }
+
+    fireEvent.mouseMove(entityList)
+    expect(sessionList).toHaveClass('is-scrollbar-visible')
+    expect(sessionList).not.toHaveClass('is-scrollbar-hidden')
+
+    fireEvent.mouseLeave(entityList)
+    expect(sessionList).toHaveClass('is-scrollbar-visible')
+    act(() => {
+      vi.advanceTimersByTime(1999)
+    })
+    expect(sessionList).toHaveClass('is-scrollbar-visible')
+
+    act(() => {
+      vi.advanceTimersByTime(1)
+    })
+    expect(sessionList).toHaveClass('is-scrollbar-hidden')
+    expect(sessionList).not.toHaveClass('is-scrollbar-visible')
+  })
+
   it('draws a connector from all sessions to clickable category rows', async () => {
     const user = userEvent.setup()
     const onSelectSection = vi.fn()

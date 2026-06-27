@@ -120,6 +120,20 @@ button {
   outline-offset: -2px;
 }
 
+.hesper-nav-count {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.hesper-nav-item:hover .hesper-nav-count,
+.hesper-nav-item:focus-within .hesper-nav-count,
+.hesper-nav-item:focus-visible .hesper-nav-count,
+.hesper-session-category-row:hover .hesper-nav-count,
+.hesper-session-category-row:focus-within .hesper-nav-count,
+.hesper-session-category-row:focus-visible .hesper-nav-count {
+  opacity: 1;
+}
+
 .hesper-list-row {
   width: 100%;
   min-height: 46px;
@@ -154,6 +168,23 @@ button {
 
 .hesper-list-row.is-selected {
   background: var(--hesper-color-soft-control);
+}
+
+.hesper-session-list-item {
+  position: relative;
+}
+
+.hesper-session-list-item + .hesper-session-list-item::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: var(--hesper-session-divider-left);
+  right: var(--hesper-session-divider-right);
+  height: 1px;
+  border-radius: 999px;
+  background: var(--hesper-color-border-subtle);
+  opacity: 0.42;
+  pointer-events: none;
 }
 
 .hesper-settings-row {
@@ -216,6 +247,35 @@ button {
 }
 
 .hesper-theme-scrollbar::-webkit-scrollbar-thumb:active {
+  background: var(--hesper-color-scrollbar-thumb-active) border-box;
+  background-clip: padding-box;
+}
+
+.hesper-theme-scrollbar.hesper-session-list-scrollbar {
+  scrollbar-color: transparent transparent;
+}
+
+.hesper-theme-scrollbar.hesper-session-list-scrollbar.is-scrollbar-visible {
+  scrollbar-color: var(--hesper-color-scrollbar-thumb) transparent;
+}
+
+.hesper-theme-scrollbar.hesper-session-list-scrollbar::-webkit-scrollbar-thumb {
+  background: transparent border-box;
+  background-clip: padding-box;
+  transition: background 180ms ease;
+}
+
+.hesper-theme-scrollbar.hesper-session-list-scrollbar.is-scrollbar-visible::-webkit-scrollbar-thumb {
+  background: var(--hesper-color-scrollbar-thumb) border-box;
+  background-clip: padding-box;
+}
+
+.hesper-theme-scrollbar.hesper-session-list-scrollbar.is-scrollbar-visible::-webkit-scrollbar-thumb:hover {
+  background: var(--hesper-color-scrollbar-thumb-hover) border-box;
+  background-clip: padding-box;
+}
+
+.hesper-theme-scrollbar.hesper-session-list-scrollbar.is-scrollbar-visible::-webkit-scrollbar-thumb:active {
   background: var(--hesper-color-scrollbar-thumb-active) border-box;
   background-clip: padding-box;
 }

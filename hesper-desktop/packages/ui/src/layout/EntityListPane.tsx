@@ -183,6 +183,7 @@ export function EntityListPane({
   const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([])
   const [selectionAnchorRoleId, setSelectionAnchorRoleId] = useState<string>()
   const [relativeNowMs, setRelativeNowMs] = useState(() => Date.now())
+  const [isSessionScrollbarVisible, setIsSessionScrollbarVisible] = useState(false)
   const runningSessionIdSet = useMemo(() => new Set(runningSessionIds), [runningSessionIds])
   const pendingToolIdSet = useMemo(() => new Set(pendingToolIds), [pendingToolIds])
   const sessionCategoryNameById = useMemo(() => new Map(sessionCategories.map((category) => [category.id, category.name])), [sessionCategories])
@@ -191,6 +192,28 @@ export function EntityListPane({
   const renameInputRef = useRef<HTMLInputElement>(null)
   const roleMenuFirstItemRef = useRef<HTMLButtonElement>(null)
   const sessionListRef = useRef<HTMLUListElement>(null)
+  const sessionScrollbarHideTimeoutRef = useRef<number | undefined>(undefined)
+
+  const clearSessionScrollbarHideTimeout = () => {
+    if (sessionScrollbarHideTimeoutRef.current === undefined) return
+    window.clearTimeout(sessionScrollbarHideTimeoutRef.current)
+    sessionScrollbarHideTimeoutRef.current = undefined
+  }
+
+  const showSessionScrollbar = () => {
+    if (activeSection !== 'sessions') return
+    clearSessionScrollbarHideTimeout()
+    setIsSessionScrollbarVisible(true)
+  }
+
+  const scheduleSessionScrollbarHide = () => {
+    if (activeSection !== 'sessions') return
+    clearSessionScrollbarHideTimeout()
+    sessionScrollbarHideTimeoutRef.current = window.setTimeout(() => {
+      setIsSessionScrollbarVisible(false)
+      sessionScrollbarHideTimeoutRef.current = undefined
+    }, 2_000)
+  }
 
   const handleEntityPaneWheelCapture = (event: ReactWheelEvent<HTMLElement>) => {
     if (activeSection !== 'sessions') return
@@ -209,6 +232,17 @@ export function EntityListPane({
     event.preventDefault()
     sessionList.scrollTop = nextScrollTop
   }
+
+  useEffect(() => {
+    if (activeSection === 'sessions') return undefined
+    clearSessionScrollbarHideTimeout()
+    setIsSessionScrollbarVisible(false)
+    return undefined
+  }, [activeSection])
+
+  useEffect(() => () => {
+    clearSessionScrollbarHideTimeout()
+  }, [])
 
   useEffect(() => {
     if (activeSection !== 'sessions') return undefined
@@ -452,6 +486,9 @@ export function EntityListPane({
   return (
     <aside
       aria-label="实体列表"
+      onMouseEnter={showSessionScrollbar}
+      onMouseMove={showSessionScrollbar}
+      onMouseLeave={scheduleSessionScrollbarHide}
       onWheelCapture={handleEntityPaneWheelCapture}
       style={{
         width: '100%',
@@ -473,7 +510,12 @@ export function EntityListPane({
       </header>
       {activeSection === 'sessions' ? (
         sessions.length > 0 ? (
-          <ul ref={sessionListRef} aria-label="会话列表" className="hesper-theme-scrollbar" style={sessionListStyle}>
+          <ul
+            ref={sessionListRef}
+            aria-label="会话列表"
+            className={`hesper-theme-scrollbar hesper-session-list-scrollbar ${isSessionScrollbarVisible ? 'is-scrollbar-visible' : 'is-scrollbar-hidden'}`}
+            style={sessionListStyle}
+          >
             {sessions.map((session) => {
               const isActive = session.id === activeSessionId
               const isSelected = selectedSessionIdSet.has(session.id)
@@ -482,7 +524,7 @@ export function EntityListPane({
               const relativeUpdatedAt = formatRelativeSessionTime(session.updatedAt, relativeNowMs)
               const sessionRowClassName = `hesper-list-row${isActive ? ' is-active' : ''}${isSelected ? ' is-selected' : ''}`
               return (
-                <li key={session.id}>
+                <li key={session.id} className="hesper-session-list-item" data-hesper-session-divider="true">
                   {editingSession?.sessionId === session.id ? (
                     <div
                       className={sessionRowClassName}
@@ -815,11 +857,13 @@ const settingsCategories: Array<{ id: SettingsCategory; title: string; label: st
   { id: 'appearance', title: '外观', label: '外观设置', description: '字体大小、亮色与暗色' }
 ]
 
-const sessionListStyle: CSSProperties = {
+const sessionListStyle: CSSProperties & Record<'--hesper-session-divider-left' | '--hesper-session-divider-right', string> = {
   listStyle: 'none',
   margin: 0,
   marginRight: `-${themeTokens.spacing.lg}`,
   padding: `0 ${themeTokens.spacing.lg} 0 0`,
+  '--hesper-session-divider-left': '10px',
+  '--hesper-session-divider-right': '10px',
   display: 'grid',
   gap: 2,
   overflow: 'auto',
