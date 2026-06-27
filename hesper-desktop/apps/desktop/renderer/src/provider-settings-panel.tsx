@@ -48,6 +48,14 @@ function isCodexOAuthProvider(provider: ModelProviderDto): boolean {
   return provider.kind === 'pi' && provider.authType === 'oauth' && provider.piAuthProvider === 'openai-codex'
 }
 
+function providerFastModeEnabled(provider: ModelProviderDto): boolean {
+  return isCodexOAuthProvider(provider) && provider.fastModeEnabled === true
+}
+
+function providerDisplayName(provider: ModelProviderDto): string {
+  return providerFastModeEnabled(provider) ? `${provider.name} ⚡` : provider.name
+}
+
 function providerAuthStatusText(provider: ModelProviderDto): string {
   if (provider.authType === 'oauth') {
     return provider.hasApiKey ? '已授权' : '未授权'
@@ -56,7 +64,12 @@ function providerAuthStatusText(provider: ModelProviderDto): string {
 }
 
 function providerMetaText(provider: ModelProviderDto): string {
-  return `${provider.kind} · ${provider.baseUrl ?? '使用默认端点'} · ${providerAuthStatusText(provider)}`
+  return [
+    provider.kind,
+    ...(providerFastModeEnabled(provider) ? ['Fast'] : []),
+    provider.baseUrl ?? '使用默认端点',
+    providerAuthStatusText(provider)
+  ].join(' · ')
 }
 
 export type ProviderSettingsPanelProps = {
@@ -595,6 +608,33 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
     openCodexConnection(provider.name)
   }
 
+  const toggleCodexFastMode = async (provider: ModelProviderDto) => {
+    setOpenMenuProviderId(undefined)
+    setError(undefined)
+    setMessage(undefined)
+    try {
+      const nextFastModeEnabled = !providerFastModeEnabled(provider)
+      await hesperApi.providers.save({
+        id: provider.id,
+        name: provider.name,
+        kind: provider.kind,
+        enabled: provider.enabled !== false,
+        ...(provider.authType !== undefined ? { authType: provider.authType } : {}),
+        ...(provider.piAuthProvider !== undefined ? { piAuthProvider: provider.piAuthProvider } : {}),
+        ...(provider.baseUrl !== undefined ? { baseUrl: provider.baseUrl } : {}),
+        ...(provider.defaultModelId !== undefined ? { defaultModelId: provider.defaultModelId } : {}),
+        fastModeEnabled: nextFastModeEnabled
+      })
+      if (!mountedRef.current) return
+      setMessage(nextFastModeEnabled ? '已开启 Fast 模式' : '已关闭 Fast 模式')
+      await loadProviderSettings()
+      await onModelRegistryChanged?.()
+    } catch (toggleError) {
+      if (!mountedRef.current) return
+      setError(toggleError instanceof Error ? toggleError.message : 'Fast 模式切换失败')
+    }
+  }
+
   const testSavedConnection = async (provider: ModelProviderDto) => {
     setOpenMenuProviderId(undefined)
     setError(undefined)
@@ -659,7 +699,7 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
                         />
                       ) : (
                         <>
-                          <strong>{provider.name}</strong>
+                          <strong>{providerDisplayName(provider)}</strong>
                           <button
                             type="button"
                             aria-label={`重命名连接 ${provider.name}`}
@@ -729,6 +769,9 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
         >
           {isCodexOAuthProvider(openMenuProvider) ? (
             <>
+              <button type="button" role="menuitem" style={connectionMenuItemStyle} onClick={() => void toggleCodexFastMode(openMenuProvider)}>
+                {providerFastModeEnabled(openMenuProvider) ? '关闭 Fast 模式' : '开启 Fast 模式'}
+              </button>
               <button type="button" role="menuitem" style={connectionMenuItemStyle} onClick={() => reauthorizeCodexConnection(openMenuProvider)}>重新授权</button>
               <button type="button" role="menuitem" style={connectionMenuItemStyle} onClick={() => void testSavedConnection(openMenuProvider)}>验证连接</button>
             </>

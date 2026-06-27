@@ -35,17 +35,19 @@ describe('model-options', () => {
       { id: 'mock', name: 'Mock', kind: 'mock', enabled: true, hasApiKey: false },
       { id: 'deepseek', name: 'DeepSeek', kind: 'deepseek', enabled: true, hasApiKey: true, defaultModelId: 'deepseek-chat' },
       { id: 'openai', name: 'OpenAI', kind: 'openai', enabled: true, hasApiKey: false },
+      { id: 'chatgpt-codex', name: 'ChatGPT Codex', kind: 'pi', authType: 'oauth', piAuthProvider: 'openai-codex', enabled: true, hasApiKey: true, fastModeEnabled: true },
       { id: 'disabled', name: 'Disabled', kind: 'custom', enabled: false, hasApiKey: true }
     ] as any, [
       { id: 'mock/hesper-fast', providerId: 'mock', modelName: 'mock/hesper-fast', enabled: true },
       { id: 'deepseek-chat', providerId: 'deepseek', modelName: 'deepseek-chat', enabled: true },
       { id: 'deepseek-reasoner', providerId: 'deepseek', modelName: 'deepseek-reasoner', enabled: false },
       { id: 'gpt-4o', providerId: 'openai', modelName: 'gpt-4o', enabled: true },
+      { id: 'pi/gpt-5.5', providerId: 'chatgpt-codex', modelName: 'gpt-5.5', enabled: true },
       { id: 'disabled-model', providerId: 'disabled', modelName: 'disabled-model', enabled: true }
     ] as any)
 
     expect(catalog.preferredModelId).toBe('deepseek-chat')
-    expect(catalog.options).toEqual(['mock/hesper-fast', 'deepseek-chat', 'gpt-4o'])
+    expect(catalog.options).toEqual(['mock/hesper-fast', 'deepseek-chat', 'gpt-4o', 'pi/gpt-5.5'])
     expect(catalog.optionGroups).toEqual([
       {
         id: 'mock',
@@ -61,6 +63,11 @@ describe('model-options', () => {
         id: 'openai',
         label: 'OpenAI',
         options: [{ value: 'gpt-4o', label: 'OpenAI/gpt-4o' }]
+      },
+      {
+        id: 'chatgpt-codex',
+        label: 'ChatGPT Codex ⚡',
+        options: [{ value: 'pi/gpt-5.5', label: 'ChatGPT Codex ⚡/gpt-5.5' }]
       }
     ])
     expect(Object.keys(catalog.modelsById)).toEqual(catalog.options)

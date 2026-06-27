@@ -105,6 +105,17 @@ function defaultModelForProvider(provider: ModelProviderDto, modelIds: string[])
   return modelIds[0]
 }
 
+function isFastCodexProvider(provider: ModelProviderDto): boolean {
+  return provider.kind === 'pi'
+    && provider.authType === 'oauth'
+    && provider.piAuthProvider === 'openai-codex'
+    && provider.fastModeEnabled === true
+}
+
+function providerGroupLabel(provider: ModelProviderDto): string {
+  return isFastCodexProvider(provider) ? `${provider.name} ⚡` : provider.name
+}
+
 export function createSessionModelCatalog(providers: ModelProviderDto[], models: ModelDto[]): SessionModelCatalog {
   const enabledProviders = providers.filter((provider) => provider.enabled !== false)
   const enabledProviderIds = new Set(enabledProviders.map((provider) => provider.id))
@@ -113,12 +124,13 @@ export function createSessionModelCatalog(providers: ModelProviderDto[], models:
   const optionGroups: ModelOptionGroup[] = enabledProviders
     .map((provider) => {
       const providerModels = enabledModels.filter((model) => model.providerId === provider.id)
+      const label = providerGroupLabel(provider)
       return {
         id: provider.id,
-        label: provider.name,
+        label,
         options: providerModels.map((model) => ({
           value: model.id,
-          label: `${provider.name}/${model.modelName}`
+          label: `${label}/${model.modelName}`
         }))
       }
     })
