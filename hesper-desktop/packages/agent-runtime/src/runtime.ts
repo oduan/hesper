@@ -263,6 +263,7 @@ export class AgentRuntime {
     clearPiEventRunState(runId)
     clearPiToolRunState(runId)
     await this.emitAndPersist({ type: 'run.failed', runId, error: normalized, ...(failedRun.endedAt ? { endedAt: failedRun.endedAt } : {}) })
+    this.activeControllers.get(runId)?.abort()
 
     if (!this.isActiveRun(runId)) {
       this.terminatedRuns.delete(runId)

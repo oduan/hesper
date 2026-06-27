@@ -1295,6 +1295,37 @@ describe('AgentRuntime queue', () => {
     expect(events.map((event) => event.type)).not.toContain('run.succeeded')
   })
 
+  it('still allows termination after an overflow-triggered retry starts', async () => {
+    const persistence = await createInMemoryPersistence()
+    await persistence.sessions.save({ ...session, id: 'session-overflow-terminated' })
+    await saveModel(persistence, 'mock/hesper-fast', 10_000)
+    await seedOverflowHistory(persistence, 'session-overflow-terminated')
+
+    const adapter = new OverflowThenAbortableAdapter()
+    const runtime = new AgentRuntime({ persistence, adapter })
+    const events: AgentRuntimeEvent[] = []
+    runtime.subscribe((event) => {
+      events.push(event)
+    })
+
+    const run = await runtime.enqueue({ sessionId: 'session-overflow-terminated', prompt: 'terminate after overflow', modelId: 'mock/hesper-fast' })
+    await adapter.secondAttemptStarted
+    const failedRun = await runtime.failRun(run.id, { code: 'tool_error', message: 'terminated by supervisor', retryable: false })
+    const waitResult = await Promise.race([
+      runtime.waitForIdle('session-overflow-terminated').then(() => 'idle' as const),
+      new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), 200))
+    ])
+
+    expect(waitResult).toBe('idle')
+    expect(adapter.inputs).toHaveLength(2)
+    expect(adapter.aborted).toBe(true)
+    expect(failedRun).toMatchObject({ id: run.id, status: 'failed' })
+    expect(await persistence.runs.get(run.id)).toMatchObject({ id: run.id, status: 'failed' })
+    expect(events.map((event) => event.type)).toContain('run.failed')
+    expect(events.map((event) => event.type)).not.toContain('run.cancelled')
+    expect(events.map((event) => event.type)).not.toContain('run.succeeded')
+  })
+
   it('retries retryable adapter failures and then succeeds', async () => {
     const persistence = await createInMemoryPersistence()
     await persistence.sessions.save({ ...session, id: 'session-2' })
