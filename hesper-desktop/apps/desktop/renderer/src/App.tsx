@@ -302,8 +302,10 @@ function AppContent() {
   const runModelIdsRef = useRef<Record<string, string>>({})
   const pendingTitlePromptsBySessionRef = useRef<Record<string, string>>({})
   const titleGeneratedRunIdsRef = useRef<Set<string>>(new Set())
+  const sessionModelCatalogRef = useRef(sessionModelCatalog)
   const stateRef = useRef(state)
   gitUiStateRef.current = gitUiStateBySession
+  sessionModelCatalogRef.current = sessionModelCatalog
   const nextRenameRequestIdRef = useRef(0)
   const latestRenameRequestIdBySessionRef = useRef<Record<string, number>>({})
   const nextSettingsRequestIdRef = useRef(0)
@@ -792,24 +794,30 @@ function AppContent() {
             : undefined
           const modelId = runModelIdsRef.current[event.message.runId] ?? session?.defaultModelId ?? defaultFallbackModelId
 
-          if (session && source?.userPrompt && modelId.trim() && !titleGeneratedRunIdsRef.current.has(event.message.runId)) {
-            setTitleGenerationError(undefined)
-            titleGeneratedRunIdsRef.current.add(event.message.runId)
-            void hesperApi.sessions.generateTitle({
-              id: session.id,
-              modelId,
-              userPrompt: source.userPrompt,
-              ...(source.assistantOutput ? { assistantOutput: source.assistantOutput } : {})
-            }).then((updatedSession) => {
-              dispatch({ type: 'session.updated', session: updatedSession })
-              titleGeneratedRunIdsRef.current.delete(event.message.runId!)
-            }).catch((error) => {
-              titleGeneratedRunIdsRef.current.delete(event.message.runId!)
-              console.warn('Failed to generate session title', error)
-              setTitleGenerationError(`标题生成失败：${error instanceof Error ? error.message : '未知错误'}`)
-            }).finally(() => {
+          if (session && source?.userPrompt && !titleGeneratedRunIdsRef.current.has(event.message.runId)) {
+            const modelError = titleGenerationModelError(modelId, sessionModelCatalogRef.current)
+            if (modelError) {
+              setTitleGenerationError(`标题生成失败：${modelError}`)
               delete pendingTitlePromptsBySessionRef.current[event.message.sessionId]
-            })
+            } else {
+              setTitleGenerationError(undefined)
+              titleGeneratedRunIdsRef.current.add(event.message.runId)
+              void hesperApi.sessions.generateTitle({
+                id: session.id,
+                modelId,
+                userPrompt: source.userPrompt,
+                ...(source.assistantOutput ? { assistantOutput: source.assistantOutput } : {})
+              }).then((updatedSession) => {
+                dispatch({ type: 'session.updated', session: updatedSession })
+                titleGeneratedRunIdsRef.current.delete(event.message.runId!)
+              }).catch((error) => {
+                titleGeneratedRunIdsRef.current.delete(event.message.runId!)
+                console.warn('Failed to generate session title', error)
+                setTitleGenerationError(`标题生成失败：${error instanceof Error ? error.message : '未知错误'}`)
+              }).finally(() => {
+                delete pendingTitlePromptsBySessionRef.current[event.message.sessionId]
+              })
+            }
           }
         }
       }
