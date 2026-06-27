@@ -85,6 +85,63 @@ describe('reduceToolOutput', () => {
     })
   })
 
+  it('redacts CLI-style secrets in command text and fallback summaries', () => {
+    const reduced = reduceToolOutput(createStep({
+      title: '部署命令',
+      detail: [
+        'Command: deploy --token supersecret --password hunter2 --api-key abc123',
+        'Exit code: 0'
+      ].join('\n')
+    }))
+
+    expect(reduced).toMatchObject({
+      title: '部署命令',
+      status: 'succeeded',
+      type: 'tool_call',
+      category: 'success',
+      command: 'deploy --token [redacted-sensitive-value] --password [redacted-sensitive-value] --api-key [redacted-sensitive-value]',
+      exitCode: 0
+    })
+    expect(reduced?.outputSummary).toContain('--token [redacted-sensitive-value]')
+    expect(reduced?.outputSummary).toContain('--password [redacted-sensitive-value]')
+    expect(reduced?.outputSummary).toContain('--api-key [redacted-sensitive-value]')
+    expect(reduced?.command).not.toContain('supersecret')
+    expect(reduced?.command).not.toContain('hunter2')
+    expect(reduced?.command).not.toContain('abc123')
+    expect(reduced?.outputSummary).not.toContain('supersecret')
+    expect(reduced?.outputSummary).not.toContain('hunter2')
+    expect(reduced?.outputSummary).not.toContain('abc123')
+  })
+
+  it('does not classify non-search tools ending with find as diagnostic', () => {
+    const reduced = reduceToolOutput(createStep({
+      title: '查找角色',
+      detail: JSON.stringify({
+        kind: 'tool_call',
+        output: {
+          content: [{ type: 'text', text: '{"roles":[{"id":"editor","name":"Editor"}],"count":1}' }],
+          details: {
+            toolId: 'roles.find',
+            result: {
+              query: 'editor',
+              roles: [{ id: 'editor', name: 'Editor' }],
+              count: 1
+            }
+          }
+        },
+        isError: false
+      })
+    }))
+
+    expect(reduced).toEqual({
+      title: '查找角色',
+      status: 'succeeded',
+      type: 'tool_call',
+      category: 'success',
+      outputSummary: '{"roles":[{"id":"editor","name":"Editor"}],"count":1}'
+    })
+  })
+
   it('keeps grep or search diagnostics while sorting files and redacting secrets', () => {
     const step = createStep({
       title: '搜索代码',
@@ -214,6 +271,53 @@ describe('reduceToolOutput', () => {
         '+ 1',
         'at packages/agent-runtime/src/__tests__/tool-output-reducer.test.ts:18:11'
       ].join('\n')
+    })
+  })
+
+  it('classifies failed search-like tools as error before diagnostic handling', () => {
+    const reduced = reduceToolOutput(createStep({
+      status: 'failed',
+      title: '搜索失败',
+      detail: JSON.stringify({
+        kind: 'tool_call',
+        input: {
+          command: 'grep -R --line-number token src'
+        },
+        output: {
+          content: [{
+            type: 'text',
+            text: [
+              'Command: grep -R --line-number token src',
+              'Exit code: 2',
+              '',
+              'stderr:',
+              'Permission denied while reading src/secret.txt'
+            ].join('\n')
+          }],
+          details: {
+            toolId: 'filesystem.search-files',
+            result: {
+              toolId: 'filesystem.search-files',
+              command: 'grep -R --line-number token src',
+              exitCode: 2,
+              stdout: '',
+              stderr: 'Permission denied while reading src/secret.txt'
+            }
+          }
+        },
+        isError: true
+      })
+    }))
+
+    expect(reduced).toEqual({
+      title: '搜索失败',
+      status: 'failed',
+      type: 'tool_call',
+      category: 'error',
+      command: 'grep -R --line-number token src',
+      exitCode: 2,
+      errorExcerpt: 'Permission denied while reading src/secret.txt',
+      outputSummary: 'Permission denied while reading src/secret.txt'
     })
   })
 

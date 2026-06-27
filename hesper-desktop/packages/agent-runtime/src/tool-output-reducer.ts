@@ -37,6 +37,7 @@ function normalizeLineEndings(value: string): string {
 
 function redactSensitiveText(value: string): string {
   return value
+    .replace(/(--(?:api[_-]?key|secret|token|password))(=|\s+)(?:"[^"]*"|'[^']*'|[^\s"']+)/gi, (_match, flag: string, separator: string) => `${flag}${separator}${REDACTED_VALUE}`)
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]{8,}\b/gi, REDACTED_VALUE)
     .replace(/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, REDACTED_VALUE)
     .replace(/\bgithub_pat_[A-Za-z0-9_]{20,}\b/g, REDACTED_VALUE)
@@ -137,9 +138,13 @@ function parseCommandText(detail: string): ParsedCommandText {
 }
 
 function extractToolId(payload: Record<string, unknown>): string | undefined {
+  const output = isRecord(payload.output) ? payload.output : undefined
+  const details = isRecord(output?.details) ? output.details : undefined
+  const result = isRecord(details?.result) ? details.result : undefined
   return stringValue(payload.toolId)
-    ?? stringValue(isRecord(payload.output) ? payload.output.toolId : undefined)
-    ?? stringValue(isRecord(isRecord(payload.output) ? payload.output.details : undefined) ? (payload.output as Record<string, unknown>).details as unknown : undefined)
+    ?? stringValue(output?.toolId)
+    ?? stringValue(details?.toolId)
+    ?? stringValue(result?.toolId)
 }
 
 function extractOutputRecord(payload: Record<string, unknown>): Record<string, unknown> | undefined {
@@ -317,9 +322,17 @@ function extractExitCode(result: Record<string, unknown> | undefined, parsedText
   return numberValue(result?.exitCode) ?? parsedText.exitCode
 }
 
+function hasSearchMatchResults(result: Record<string, unknown> | undefined): boolean {
+  return Array.isArray(result?.results) && result.results.some((entry) => (
+    isRecord(entry)
+    && Array.isArray(entry.matches)
+    && entry.matches.some((match) => isRecord(match) && typeof match.line === 'string' && typeof match.lineNumber === 'number')
+  ))
+}
+
 function isDiagnosticTool(toolId: string | undefined, result: Record<string, unknown> | undefined): boolean {
-  if (toolId && /(search|grep|find)/i.test(toolId)) return true
-  return Array.isArray(result?.results) && result.results.some((entry) => isRecord(entry) && Array.isArray(entry.matches))
+  if (toolId && /(?:^|\.)(?:grep|search(?:-files)?)$/i.test(toolId)) return true
+  return hasSearchMatchResults(result)
 }
 
 function hasMeaningfulStructuredOutput(result: Record<string, unknown> | undefined): boolean {
@@ -347,7 +360,7 @@ export function reduceToolOutput(step: ToolStepLike): ReducedToolDetail | undefi
   const result = payload ? extractOutputRecord(payload) : undefined
   const outputText = payload ? extractOutputText(payload) : detailText
   const parsedText = typeof outputText === 'string' ? parseCommandText(outputText) : detailText ? parseCommandText(detailText) : {}
-  const toolId = payload ? stringValue(payload.toolId) ?? stringValue(isRecord(payload.output) && isRecord(payload.output.details) ? payload.output.details.toolId : undefined) : undefined
+  const toolId = payload ? extractToolId(payload) : undefined
   const command = payload ? extractCommand(payload, result, parsedText) : parsedText.command
   const exitCode = extractExitCode(result, parsedText)
   const isError = step.status === 'failed' || (payload?.isError === true) || (typeof exitCode === 'number' && exitCode !== 0)
@@ -361,18 +374,6 @@ export function reduceToolOutput(step: ToolStepLike): ReducedToolDetail | undefi
     collectFiles(detailText, fileBucket)
   }
   const files = finalizeFiles(fileBucket)
-
-  if (payload && isDiagnosticTool(toolId, result)) {
-    const reduced: ReducedToolDetail = {
-      ...base,
-      category: 'diagnostic',
-      ...(files ? { files } : {})
-    }
-    const summary = result ? buildSearchSummary(result) : {}
-    if (summary.text) reduced.outputSummary = summary.text
-    if (summary.omittedChars !== undefined) reduced.omittedChars = summary.omittedChars
-    return reduced
-  }
 
   if (isError) {
     const errorSource = result?.stderr && typeof result.stderr === 'string'
@@ -391,6 +392,18 @@ export function reduceToolOutput(step: ToolStepLike): ReducedToolDetail | undefi
       reduced.outputSummary = excerpt.text
     }
     if (excerpt.omittedChars !== undefined) reduced.omittedChars = excerpt.omittedChars
+    return reduced
+  }
+
+  if (payload && isDiagnosticTool(toolId, result)) {
+    const reduced: ReducedToolDetail = {
+      ...base,
+      category: 'diagnostic',
+      ...(files ? { files } : {})
+    }
+    const summary = result ? buildSearchSummary(result) : {}
+    if (summary.text) reduced.outputSummary = summary.text
+    if (summary.omittedChars !== undefined) reduced.omittedChars = summary.omittedChars
     return reduced
   }
 
