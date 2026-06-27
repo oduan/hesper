@@ -187,12 +187,12 @@ const { listSessions, listSessionCategories, createSession, createSessionCategor
     endedAt: '2026-06-10T03:00:05.000Z'
   })),
   onEvent: vi.fn(() => () => undefined),
-  getSettings: vi.fn(async () => ({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', themeId: 'catppuccin', fontSize: 14, soul: '' })),
-  updateSettings: vi.fn(async (input: Partial<{ defaultModelId: string; defaultOutputMode: 'markdown' | 'html'; themeMode: 'system' | 'light' | 'dark'; themeId: 'catppuccin' | 'dracula' | 'tokyo-night'; fontSize: number; soul: string }>) => ({
+  getSettings: vi.fn(async () => ({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', themeId: 'hesper', fontSize: 14, soul: '' })),
+  updateSettings: vi.fn(async (input: Partial<{ defaultModelId: string; defaultOutputMode: 'markdown' | 'html'; themeMode: 'system' | 'light' | 'dark'; themeId: 'hesper' | 'catppuccin' | 'dracula' | 'tokyo-night'; fontSize: number; soul: string }>) => ({
     defaultModelId: input.defaultModelId ?? 'mock/hesper-fast',
     defaultOutputMode: input.defaultOutputMode ?? 'markdown',
     themeMode: input.themeMode ?? 'dark',
-    themeId: input.themeId ?? 'catppuccin',
+    themeId: input.themeId ?? 'hesper',
     fontSize: input.fontSize ?? 14,
     soul: input.soul ?? ''
   })),
@@ -631,12 +631,12 @@ describe('renderer App', () => {
       createdAt: '2026-06-10T03:00:00.000Z',
       updatedAt: '2026-06-10T03:00:00.000Z'
     }))
-    getSettings.mockResolvedValue({ defaultModelId: 'deepseek-chat', defaultOutputMode: 'markdown', themeMode: 'dark', themeId: 'catppuccin', fontSize: 14, soul: '' })
+    getSettings.mockResolvedValue({ defaultModelId: 'deepseek-chat', defaultOutputMode: 'markdown', themeMode: 'dark', themeId: 'hesper', fontSize: 14, soul: '' })
     updateSettings.mockImplementation(async (input) => ({
       defaultModelId: input.defaultModelId ?? 'deepseek-chat',
       defaultOutputMode: input.defaultOutputMode ?? 'markdown',
       themeMode: input.themeMode ?? 'dark',
-      themeId: input.themeId ?? 'catppuccin',
+      themeId: input.themeId ?? 'hesper',
       fontSize: input.fontSize ?? 14,
       soul: input.soul ?? ''
     }))
@@ -2067,7 +2067,7 @@ describe('renderer App', () => {
 
   it('opens appearance settings and persists theme mode and global font size', async () => {
     const user = userEvent.setup()
-    let storedSettings: { defaultModelId: string; defaultOutputMode: 'markdown' | 'html'; themeMode: 'system' | 'light' | 'dark'; themeId: 'catppuccin' | 'dracula' | 'tokyo-night'; fontSize: number; soul: string } = {
+    let storedSettings: { defaultModelId: string; defaultOutputMode: 'markdown' | 'html'; themeMode: 'system' | 'light' | 'dark'; themeId: 'hesper' | 'catppuccin' | 'dracula' | 'tokyo-night'; fontSize: number; soul: string } = {
       defaultModelId: 'mock/hesper-fast',
       defaultOutputMode: 'markdown',
       themeMode: 'dark',
@@ -2089,14 +2089,15 @@ describe('renderer App', () => {
     expect(screen.getByRole('region', { name: '外观设置面板' })).toBeInTheDocument()
     const appRoot = screen.getByLabelText('主工作区').parentElement
     expect(screen.getByRole('group', { name: '主题' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Hesper/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^Catppuccin/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^Dracula/ })).toBeInTheDocument()
     expect(screen.getAllByText(/仅提供暗色样式|仅暗色/).length).toBeGreaterThan(0)
 
     await waitFor(() => expect(appRoot?.style.getPropertyValue('--hesper-color-background')).toBe('#11111b'))
-    expect(appRoot?.style.getPropertyValue('--hesper-color-accent')).toBe('#cba6f7')
-    expect(appRoot?.style.getPropertyValue('--hesper-color-tool-toggle')).toBe('#cba6f7')
-    expect(appRoot?.style.getPropertyValue('--hesper-color-tool-toggle-soft')).toBe('rgba(203, 166, 247, 0.14)')
+    expect(appRoot?.style.getPropertyValue('--hesper-color-accent')).toBe('#a6adc8')
+    expect(appRoot?.style.getPropertyValue('--hesper-color-tool-toggle')).toBe('#a6adc8')
+    expect(appRoot?.style.getPropertyValue('--hesper-color-tool-toggle-soft')).toBe('rgba(166, 173, 200, 0.14)')
     expect(appRoot?.style.getPropertyValue('--hesper-color-scrollbar-thumb')).toBe('rgba(205, 214, 244, 0.10)')
     expect(appRoot?.style.getPropertyValue('--hesper-color-scrollbar-thumb-hover')).toBe('rgba(205, 214, 244, 0.24)')
     expect(appRoot?.style.getPropertyValue('--hesper-color-scrollbar-thumb-active')).toBe('rgba(205, 214, 244, 0.38)')
@@ -2105,7 +2106,7 @@ describe('renderer App', () => {
     await waitFor(() => expect(updateSettings).toHaveBeenCalledWith({ themeMode: 'light' }))
     await waitFor(() => expect(document.documentElement.dataset.theme).toBe('light'))
     expect(appRoot?.style.getPropertyValue('--hesper-color-background')).toBe('#dce0e8')
-    expect(appRoot?.style.getPropertyValue('--hesper-color-accent')).toBe('#8839ef')
+    expect(appRoot?.style.getPropertyValue('--hesper-color-accent')).toBe('#bcc0cc')
     expect(appRoot?.style.getPropertyValue('--hesper-color-tool-toggle')).toBe('#40a02b')
     expect(appRoot?.style.getPropertyValue('--hesper-color-tool-toggle-soft')).toBe('rgba(64, 160, 43, 0.14)')
     expect(appRoot?.style.getPropertyValue('--hesper-color-scrollbar-thumb')).toBe('rgba(76, 79, 105, 0.10)')
@@ -2130,11 +2131,11 @@ describe('renderer App', () => {
 
   it('opens soul settings and persists the soul text', async () => {
     const user = userEvent.setup()
-    let storedSettings: { defaultModelId: string; defaultOutputMode: 'markdown' | 'html'; themeMode: 'system' | 'light' | 'dark'; themeId: 'catppuccin' | 'dracula' | 'tokyo-night'; fontSize: number; soul: string } = {
+    let storedSettings: { defaultModelId: string; defaultOutputMode: 'markdown' | 'html'; themeMode: 'system' | 'light' | 'dark'; themeId: 'hesper' | 'catppuccin' | 'dracula' | 'tokyo-night'; fontSize: number; soul: string } = {
       defaultModelId: 'mock/hesper-fast',
       defaultOutputMode: 'markdown',
       themeMode: 'dark',
-      themeId: 'catppuccin',
+      themeId: 'hesper',
       fontSize: 14,
       soul: ''
     }
@@ -3230,7 +3231,7 @@ describe('renderer App', () => {
     const user = userEvent.setup()
     listProviders.mockResolvedValueOnce([])
     listModels.mockResolvedValueOnce([])
-    getSettings.mockResolvedValueOnce({ defaultModelId: '', defaultOutputMode: 'markdown', themeMode: 'dark', themeId: 'catppuccin', fontSize: 14, soul: '' })
+    getSettings.mockResolvedValueOnce({ defaultModelId: '', defaultOutputMode: 'markdown', themeMode: 'dark', themeId: 'hesper', fontSize: 14, soul: '' })
     listSessions.mockResolvedValueOnce([
       {
         id: 'session-empty-model',

@@ -87,6 +87,7 @@ type PaletteSeed = {
   scrollbarHoverAlpha?: number
   scrollbarActiveAlpha?: number
   shadowSource?: string
+  shadowAlpha?: number
 }
 
 const derivePalette = ({
@@ -99,6 +100,7 @@ const derivePalette = ({
   scrollbarHoverAlpha = 0.24,
   scrollbarActiveAlpha = 0.38,
   shadowSource,
+  shadowAlpha = 0.18,
   ...seed
 }: PaletteSeed): ThemePalette => {
   const toggleColor = toolToggle ?? seed.accent
@@ -116,13 +118,37 @@ const derivePalette = ({
     borderSubtle: rgba(seed.border, 0.38),
     neutralSoft: rgba(seed.text, 0.10),
     codeBackground: codeBackground ?? seed.background,
-    shadow: rgba(shadowSource ?? seed.text, 0.18),
+    shadow: rgba(shadowSource ?? seed.text, shadowAlpha),
     previewBackground: previewBackground ?? seed.surface,
     scrollbarThumb: rgba(scrollbarColor, 0.10),
     scrollbarThumbHover: rgba(scrollbarColor, scrollbarHoverAlpha),
     scrollbarThumbActive: rgba(scrollbarColor, scrollbarActiveAlpha)
   }
 }
+
+const hesperLightPalette = derivePalette({
+  background: '#f4f4f2',
+  surface: '#ececea',
+  surfaceMuted: '#e4e4e1',
+  text: '#242421',
+  textMuted: '#70706a',
+  border: '#d2d2ce',
+  accent: '#b8b8b2',
+  accentContrast: '#242421',
+  success: '#4f8a5b',
+  danger: '#b15a55',
+  warning: '#a77f3f',
+  hoverSource: '#242421',
+  hoverAlpha: 0.08,
+  toolToggle: '#8a8a84',
+  codeBackground: '#ececea',
+  previewBackground: '#f4f4f2',
+  scrollbarSource: '#70706a',
+  scrollbarHoverAlpha: 0.18,
+  scrollbarActiveAlpha: 0.30,
+  shadowSource: '#484843',
+  shadowAlpha: 0.12
+})
 
 const catppuccinLattePalette = derivePalette({
   // Catppuccin Latte: https://github.com/catppuccin/catppuccin
@@ -132,12 +158,11 @@ const catppuccinLattePalette = derivePalette({
   text: '#4c4f69',
   textMuted: '#6c6f85',
   border: '#bcc0cc', // surface1
-  accent: '#8839ef', // mauve
-  accentContrast: '#eff1f5',
+  accent: '#bcc0cc', // neutral gray
+  accentContrast: '#4c4f69',
   success: '#40a02b', // green
   danger: '#d20f39', // red
   warning: '#df8e1d', // yellow
-  hoverSource: '#4c4f69',
   hoverAlpha: 0.10,
   toolToggle: '#40a02b',
   codeBackground: '#eff1f5',
@@ -156,7 +181,7 @@ const catppuccinMochaPalette = derivePalette({
   text: '#cdd6f4',
   textMuted: '#a6adc8',
   border: '#313244', // surface0
-  accent: '#cba6f7', // mauve
+  accent: '#a6adc8', // neutral gray
   accentContrast: '#11111b',
   success: '#a6e3a1', // green
   danger: '#f38ba8', // red
@@ -201,6 +226,11 @@ const tokyoNightPalette = derivePalette({
 })
 
 export const builtinThemes = {
+  hesper: {
+    id: 'hesper',
+    label: 'Hesper',
+    variants: [{ id: 'light', label: 'Light', colorScheme: 'light', palette: hesperLightPalette }]
+  },
   catppuccin: {
     id: 'catppuccin',
     label: 'Catppuccin',
@@ -223,7 +253,7 @@ export const builtinThemes = {
 
 export type BuiltinThemeId = keyof typeof builtinThemes
 
-const defaultThemeId = 'catppuccin' satisfies BuiltinThemeId
+const defaultThemeId = 'hesper' satisfies BuiltinThemeId
 
 const isBuiltinThemeId = (themeId: string): themeId is BuiltinThemeId => themeId in builtinThemes
 

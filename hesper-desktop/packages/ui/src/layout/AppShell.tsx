@@ -109,7 +109,7 @@ export function AppShell({
   onWindowClose,
   children
 }: AppShellProps) {
-  const themeId = appearance?.themeId ?? 'catppuccin'
+  const themeId = appearance?.themeId ?? 'hesper'
   const themeMode = appearance?.themeMode ?? 'dark'
   const fontSize = appearance?.fontSize ?? 14
   const themeVariables = useMemo(

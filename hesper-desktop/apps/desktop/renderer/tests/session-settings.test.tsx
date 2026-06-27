@@ -49,12 +49,12 @@ const { listSessions, setWorkspace, setModel, setOutputMode, selectDirectory, on
   onEvent: vi.fn(() => () => undefined),
   enqueue: vi.fn(async () => ({ runId: 'run-1' })),
   stopRun: vi.fn(async () => undefined),
-  getSettings: vi.fn(async () => ({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', themeId: 'catppuccin', fontSize: 14, soul: '' })),
-  updateSettings: vi.fn(async (input: Partial<{ defaultModelId: string; defaultOutputMode: 'markdown' | 'html'; themeMode: 'system' | 'light' | 'dark'; themeId: 'catppuccin' | 'dracula' | 'tokyo-night'; fontSize: number; soul: string }>) => ({
+  getSettings: vi.fn(async () => ({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', themeId: 'hesper', fontSize: 14, soul: '' })),
+  updateSettings: vi.fn(async (input: Partial<{ defaultModelId: string; defaultOutputMode: 'markdown' | 'html'; themeMode: 'system' | 'light' | 'dark'; themeId: 'hesper' | 'catppuccin' | 'dracula' | 'tokyo-night'; fontSize: number; soul: string }>) => ({
     defaultModelId: input.defaultModelId ?? 'mock/hesper-fast',
     defaultOutputMode: input.defaultOutputMode ?? 'markdown',
     themeMode: input.themeMode ?? 'dark',
-    themeId: input.themeId ?? 'catppuccin',
+    themeId: input.themeId ?? 'hesper',
     fontSize: input.fontSize ?? 14,
     soul: input.soul ?? ''
   })),
@@ -165,12 +165,12 @@ describe('session settings and restore flow', () => {
     listRoles.mockResolvedValue([])
     enqueue.mockResolvedValue({ runId: 'run-1' })
     stopRun.mockResolvedValue(undefined)
-    getSettings.mockResolvedValue({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', themeId: 'catppuccin', fontSize: 14, soul: '' })
+    getSettings.mockResolvedValue({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', themeId: 'hesper', fontSize: 14, soul: '' })
     updateSettings.mockImplementation(async (input) => ({
       defaultModelId: input.defaultModelId ?? 'mock/hesper-fast',
       defaultOutputMode: input.defaultOutputMode ?? 'markdown',
       themeMode: input.themeMode ?? 'dark',
-      themeId: input.themeId ?? 'catppuccin',
+      themeId: input.themeId ?? 'hesper',
       fontSize: input.fontSize ?? 14,
       soul: input.soul ?? ''
     }))

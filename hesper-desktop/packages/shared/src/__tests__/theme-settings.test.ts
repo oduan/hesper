@@ -3,11 +3,12 @@ import { appThemeIds, defaultAppThemeId, isAppThemeId, themeModeValues } from '.
 
 describe('theme settings', () => {
   it('defines the supported built-in application theme ids', () => {
-    expect(appThemeIds).toEqual(['catppuccin', 'dracula', 'tokyo-night'])
-    expect(defaultAppThemeId).toBe('catppuccin')
+    expect(appThemeIds).toEqual(['hesper', 'catppuccin', 'dracula', 'tokyo-night'])
+    expect(defaultAppThemeId).toBe('hesper')
   })
 
   it('checks application theme ids at runtime', () => {
+    expect(isAppThemeId('hesper')).toBe(true)
     expect(isAppThemeId('catppuccin')).toBe(true)
     expect(isAppThemeId('dracula')).toBe(true)
     expect(isAppThemeId('tokyo-night')).toBe(true)

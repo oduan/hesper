@@ -44,7 +44,7 @@ const defaultSettings: AppSettings = {
   defaultModelId: '',
   defaultOutputMode: 'markdown',
   themeMode: 'dark',
-  themeId: 'catppuccin',
+  themeId: 'hesper',
   fontSize: 14,
   soul: ''
 }
