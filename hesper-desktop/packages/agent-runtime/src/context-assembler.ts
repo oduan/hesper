@@ -13,16 +13,13 @@ export type AssembleHistoryMessagesInput = {
   recentMessageRunCount?: number
 }
 
-type RunContextCandidate = {
-  run: AgentRun
-  content: string
-}
-
-type SessionSummaryCandidate = {
-  item: RunContextItem
-  content: string
+type ContextCandidate = {
+  key: string
+  insertionRunId: string
+  orderIndex: number
   coveredRunIds: string[]
-  firstCoveredIndex: number
+  content: string
+  message: Message
 }
 
 const DEFAULT_RECENT_MESSAGE_RUN_COUNT = 1
@@ -70,10 +67,6 @@ function syntheticSessionSummaryMessage(item: RunContextItem): Message {
   }
 }
 
-function shouldSummarizeRun(run: AgentRun, _messages: Message[], steps: RunStep[]): boolean {
-  return steps.length > 0 || Boolean(run.error)
-}
-
 function compareContextItemsByPreference(left: RunContextItem, right: RunContextItem): number {
   return (right.version - left.version) || stableCompare(right.createdAt, left.createdAt) || stableCompare(left.id, right.id)
 }
@@ -85,37 +78,64 @@ function persistedRunSummary(items: RunContextItem[] | undefined): string | unde
     ?.content
 }
 
-function addCandidateIfBudgetAllows(selectedRunIds: Set<string>, candidate: RunContextCandidate, budget: { used: number, max: number }): void {
-  if (selectedRunIds.has(candidate.run.id)) return
-  if (budget.used + candidate.content.length > budget.max) return
-  selectedRunIds.add(candidate.run.id)
-  budget.used += candidate.content.length
+function compareContextCandidates(left: ContextCandidate, right: ContextCandidate): number {
+  return (left.orderIndex - right.orderIndex)
+    || (right.coveredRunIds.length - left.coveredRunIds.length)
+    || stableCompare(left.key, right.key)
 }
 
-function selectContextCandidates(candidates: RunContextCandidate[], input: AssembleHistoryMessagesInput): Set<string> {
+function addCandidateIfBudgetAllows(
+  selectedCandidateKeys: Set<string>,
+  coveredRunIds: Set<string>,
+  candidate: ContextCandidate,
+  budget: { used: number, max: number }
+): void {
+  if (selectedCandidateKeys.has(candidate.key)) return
+  if (candidate.coveredRunIds.some((runId) => coveredRunIds.has(runId))) return
+  if (budget.used + candidate.content.length > budget.max) return
+
+  selectedCandidateKeys.add(candidate.key)
+  budget.used += candidate.content.length
+  for (const runId of candidate.coveredRunIds) {
+    coveredRunIds.add(runId)
+  }
+}
+
+function selectContextCandidates(candidates: ContextCandidate[], input: AssembleHistoryMessagesInput): Set<string> {
+  const orderedCandidates = [...candidates].sort(compareContextCandidates)
+
   if (input.maxContextItemChars === undefined) {
-    return new Set(candidates.map((candidate) => candidate.run.id))
+    const selectedCandidateKeys = new Set<string>()
+    const coveredRunIds = new Set<string>()
+    const unlimitedBudget = { used: 0, max: Number.POSITIVE_INFINITY }
+
+    for (const candidate of orderedCandidates) {
+      addCandidateIfBudgetAllows(selectedCandidateKeys, coveredRunIds, candidate, unlimitedBudget)
+    }
+
+    return selectedCandidateKeys
   }
 
-  const selectedRunIds = new Set<string>()
+  const selectedCandidateKeys = new Set<string>()
+  const coveredRunIds = new Set<string>()
   const budget = { used: 0, max: Math.max(0, input.maxContextItemChars) }
   const anchorCount = Math.max(0, input.anchorRunCount ?? 0)
   const recentCount = Math.max(0, input.recentRunCount ?? 0)
-  const anchorCandidates = candidates.slice(0, anchorCount)
-  const recentCandidates = candidates.slice(Math.max(anchorCount, candidates.length - recentCount))
-  const middleCandidates = candidates.slice(anchorCount, Math.max(anchorCount, candidates.length - recentCount))
+  const anchorCandidates = orderedCandidates.slice(0, anchorCount)
+  const recentCandidates = orderedCandidates.slice(Math.max(anchorCount, orderedCandidates.length - recentCount))
+  const middleCandidates = orderedCandidates.slice(anchorCount, Math.max(anchorCount, orderedCandidates.length - recentCount))
 
   for (const candidate of anchorCandidates) {
-    addCandidateIfBudgetAllows(selectedRunIds, candidate, budget)
+    addCandidateIfBudgetAllows(selectedCandidateKeys, coveredRunIds, candidate, budget)
   }
   for (const candidate of [...recentCandidates].reverse()) {
-    addCandidateIfBudgetAllows(selectedRunIds, candidate, budget)
+    addCandidateIfBudgetAllows(selectedCandidateKeys, coveredRunIds, candidate, budget)
   }
   for (const candidate of middleCandidates) {
-    addCandidateIfBudgetAllows(selectedRunIds, candidate, budget)
+    addCandidateIfBudgetAllows(selectedCandidateKeys, coveredRunIds, candidate, budget)
   }
 
-  return selectedRunIds
+  return selectedCandidateKeys
 }
 
 function normalizeCount(value: number | undefined, fallback: number): number {
@@ -150,12 +170,11 @@ function collectSessionSummaryCandidates(
   orderedRuns: AgentRun[],
   contextItemsByRunId: Map<string, RunContextItem[]> | undefined,
   recentMessageRunIds: Set<string>
-): SessionSummaryCandidate[] {
+): ContextCandidate[] {
   if (!contextItemsByRunId || orderedRuns.length === 0) return []
 
   const orderedRunIndexById = new Map(orderedRuns.map((run, index) => [run.id, index]))
-  const summarizableRunIds = new Set(orderedRuns.filter((run) => !recentMessageRunIds.has(run.id)).map((run) => run.id))
-  const bestByCoverageKey = new Map<string, SessionSummaryCandidate>()
+  const bestByCoverageKey = new Map<string, { item: RunContextItem, coveredRunIds: string[], firstCoveredIndex: number }>()
 
   for (const items of contextItemsByRunId.values()) {
     for (const item of items) {
@@ -163,43 +182,41 @@ function collectSessionSummaryCandidates(
       if (!orderedRunIndexById.has(item.runId)) continue
 
       const coveredRunIds = parseCoveredRunIds(item.content)
-        .filter((runId) => summarizableRunIds.has(runId))
-        .sort((left, right) => (orderedRunIndexById.get(left)! - orderedRunIndexById.get(right)!) || stableCompare(left, right))
+      if (coveredRunIds.length === 0) continue
+      if (coveredRunIds.some((runId) => !orderedRunIndexById.has(runId))) continue
+      if (coveredRunIds.some((runId) => recentMessageRunIds.has(runId))) continue
 
-      if (!isContiguousCoverage(coveredRunIds, orderedRunIndexById)) continue
+      const orderedCoveredRunIds = [...coveredRunIds].sort((left, right) => (orderedRunIndexById.get(left)! - orderedRunIndexById.get(right)!) || stableCompare(left, right))
+      if (!isContiguousCoverage(orderedCoveredRunIds, orderedRunIndexById)) continue
 
-      const firstCoveredRunId = coveredRunIds[0]
+      const firstCoveredRunId = orderedCoveredRunIds[0]
       if (!firstCoveredRunId) continue
 
       const firstCoveredIndex = orderedRunIndexById.get(firstCoveredRunId)
       if (firstCoveredIndex === undefined) continue
 
-      const candidate: SessionSummaryCandidate = {
-        item,
-        content: item.content,
-        coveredRunIds,
-        firstCoveredIndex
-      }
-      const coverageKey = coveredRunIds.join(',')
+      const coverageKey = orderedCoveredRunIds.join(',')
       const existing = bestByCoverageKey.get(coverageKey)
-      if (!existing || compareContextItemsByPreference(candidate.item, existing.item) < 0) {
-        bestByCoverageKey.set(coverageKey, candidate)
+      if (!existing || compareContextItemsByPreference(item, existing.item) < 0) {
+        bestByCoverageKey.set(coverageKey, {
+          item,
+          coveredRunIds: orderedCoveredRunIds,
+          firstCoveredIndex
+        })
       }
     }
   }
 
-  const coveredRunIds = new Set<string>()
   return [...bestByCoverageKey.values()]
-    .sort((left, right) => {
-      return (left.firstCoveredIndex - right.firstCoveredIndex)
-        || (right.coveredRunIds.length - left.coveredRunIds.length)
-        || compareContextItemsByPreference(left.item, right.item)
-    })
-    .filter((candidate) => {
-      if (candidate.coveredRunIds.some((runId) => coveredRunIds.has(runId))) return false
-      for (const runId of candidate.coveredRunIds) coveredRunIds.add(runId)
-      return true
-    })
+    .map(({ item, coveredRunIds, firstCoveredIndex }) => ({
+      key: `session:${item.id}`,
+      insertionRunId: coveredRunIds[0]!,
+      orderIndex: firstCoveredIndex,
+      coveredRunIds,
+      content: item.content,
+      message: syntheticSessionSummaryMessage(item)
+    }))
+    .sort(compareContextCandidates)
 }
 
 export function assembleHistoryMessages(input: AssembleHistoryMessagesInput): Message[] {
@@ -226,55 +243,74 @@ export function assembleHistoryMessages(input: AssembleHistoryMessagesInput): Me
   const orderedRuns = input.runs
     .filter((run) => parentRunIds.has(run.id))
     .sort(compareRuns)
+  const orderedRunIndexById = new Map(orderedRuns.map((run, index) => [run.id, index]))
   const recentMessageRunCount = normalizeCount(input.recentMessageRunCount, DEFAULT_RECENT_MESSAGE_RUN_COUNT)
   const recentMessageRunIds = new Set(
     orderedRuns
       .slice(Math.max(0, orderedRuns.length - recentMessageRunCount))
       .map((run) => run.id)
   )
-  const contextCandidates: RunContextCandidate[] = []
+  const runContextCandidates: ContextCandidate[] = []
 
   for (const run of orderedRuns) {
+    const runMessages = (messagesByRunId.get(run.id) ?? []).sort(compareMessages)
+    const steps = input.stepsByRunId?.get(run.id) ?? []
     const persisted = persistedRunSummary(input.contextItemsByRunId?.get(run.id))
+
     if (persisted) {
-      contextCandidates.push({ run, content: persisted })
+      runContextCandidates.push({
+        key: `run:${run.id}`,
+        insertionRunId: run.id,
+        orderIndex: orderedRunIndexById.get(run.id) ?? 0,
+        coveredRunIds: [run.id],
+        content: persisted,
+        message: syntheticSummaryMessage(run, persisted, runMessages.at(-1))
+      })
       continue
     }
 
-    const runMessages = (messagesByRunId.get(run.id) ?? []).sort(compareMessages)
-    const steps = input.stepsByRunId?.get(run.id) ?? []
-    if (!shouldSummarizeRun(run, runMessages, steps)) continue
+    const hasMessages = runMessages.length > 0
+    const hasDynamicSummaryInputs = hasMessages || steps.length > 0 || Boolean(run.error)
+    const isRecentMessageOnlyRun = hasMessages && steps.length === 0 && !run.error && recentMessageRunIds.has(run.id)
+
+    if (!hasDynamicSummaryInputs || isRecentMessageOnlyRun) continue
 
     const summary = buildRunContextSummary({
       run,
       messages: runMessages,
       steps
     })
-    if (summary) contextCandidates.push({ run, content: summary })
+    if (!summary) continue
+
+    runContextCandidates.push({
+      key: `run:${run.id}`,
+      insertionRunId: run.id,
+      orderIndex: orderedRunIndexById.get(run.id) ?? 0,
+      coveredRunIds: [run.id],
+      content: summary,
+      message: syntheticSummaryMessage(run, summary, runMessages.at(-1))
+    })
   }
 
-  const selectedContextRunIds = selectContextCandidates(contextCandidates, input)
-  const contextByRunId = new Map(contextCandidates.map((candidate) => [candidate.run.id, candidate.content]))
   const sessionSummaryCandidates = collectSessionSummaryCandidates(orderedRuns, input.contextItemsByRunId, recentMessageRunIds)
-  const sessionSummaryByFirstRunId = new Map(sessionSummaryCandidates.map((candidate) => [candidate.coveredRunIds[0]!, candidate]))
-  const coveredBySessionSummaryRunIds = new Set(sessionSummaryCandidates.flatMap((candidate) => candidate.coveredRunIds))
+  const allContextCandidates = [...runContextCandidates, ...sessionSummaryCandidates].sort(compareContextCandidates)
+  const selectedContextCandidateKeys = selectContextCandidates(allContextCandidates, input)
+  const selectedCandidateByInsertionRunId = new Map(
+    allContextCandidates
+      .filter((candidate) => selectedContextCandidateKeys.has(candidate.key))
+      .map((candidate) => [candidate.insertionRunId, candidate] as const)
+  )
   const result: Message[] = [...unboundMessages.sort(compareMessages)]
 
   for (const run of orderedRuns) {
     const runMessages = (messagesByRunId.get(run.id) ?? []).sort(compareMessages)
-    const sessionSummary = sessionSummaryByFirstRunId.get(run.id)
-
-    if (sessionSummary) {
-      result.push(syntheticSessionSummaryMessage(sessionSummary.item))
-    }
     if (recentMessageRunIds.has(run.id)) {
       result.push(...runMessages)
     }
-    if (coveredBySessionSummaryRunIds.has(run.id)) continue
 
-    const context = contextByRunId.get(run.id)
-    if (context && selectedContextRunIds.has(run.id)) {
-      result.push(syntheticSummaryMessage(run, context, runMessages.at(-1)))
+    const selectedCandidate = selectedCandidateByInsertionRunId.get(run.id)
+    if (selectedCandidate) {
+      result.push(selectedCandidate.message)
     }
   }
 

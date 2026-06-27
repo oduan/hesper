@@ -277,6 +277,89 @@ describe('assembleHistoryMessages', () => {
     expect(result.map((item) => item.id)).not.toContain('m2')
   })
 
+  it('summarizes old message-only runs that fall outside the recent full-message window', () => {
+    const result = assembleHistoryMessages({
+      currentRunId: 'run-3',
+      runs: [
+        baseRun('run-1', { startedAt: '2026-06-25T02:00:00.000Z' }),
+        baseRun('run-2', { startedAt: '2026-06-25T02:00:05.000Z' }),
+        baseRun('run-3', { status: 'running', startedAt: '2026-06-25T02:00:10.000Z' })
+      ],
+      messages: [
+        message('m1', 'run-1', 'user', 'legacy request', '2026-06-25T02:00:00.000Z'),
+        message('m2', 'run-1', 'assistant', 'legacy answer', '2026-06-25T02:00:01.000Z'),
+        message('m3', 'run-2', 'user', 'recent follow up', '2026-06-25T02:00:05.000Z')
+      ],
+      stepsByRunId: new Map()
+    })
+
+    const historyIds = result.map((item) => item.id)
+    const historyContent = result.map((item) => item.content).join('\n')
+    expect(historyIds).toContain('context-summary-run-1')
+    expect(historyIds).toContain('m3')
+    expect(historyIds).not.toContain('m1')
+    expect(historyIds).not.toContain('m2')
+    expect(historyContent).toContain('legacy request')
+    expect(historyContent).toContain('legacy answer')
+  })
+
+  it('rejects session summaries that overlap the recent full-message window', () => {
+    const result = assembleHistoryMessages({
+      currentRunId: 'run-3',
+      runs: [
+        baseRun('run-1', { startedAt: '2026-06-25T02:00:00.000Z' }),
+        baseRun('run-2', { startedAt: '2026-06-25T02:00:05.000Z' }),
+        baseRun('run-3', { status: 'running', startedAt: '2026-06-25T02:00:10.000Z' })
+      ],
+      messages: [
+        message('m1', 'run-1', 'user', 'first', '2026-06-25T02:00:00.000Z'),
+        message('m2', 'run-2', 'user', 'recent second', '2026-06-25T02:00:05.000Z')
+      ],
+      contextItemsByRunId: new Map([
+        ['run-1', [contextItem('run-1', '<hesper_run_context run_id="run-1">\nsummary 1\n</hesper_run_context>')]],
+        ['run-2', [sessionSummaryItem('run-2', ['run-1', 'run-2'], 'overlapping session summary should be rejected')]]
+      ])
+    })
+
+    const historyIds = result.map((item) => item.id)
+    const historyContent = result.map((item) => item.content).join('\n')
+    expect(historyIds).toContain('context-summary-run-1')
+    expect(historyIds).toContain('m2')
+    expect(historyContent).toContain('summary 1')
+    expect(historyContent).not.toContain('overlapping session summary should be rejected')
+  })
+
+  it('applies the context item budget to session summaries', () => {
+    const run1Summary = '<hesper_run_context run_id="run-1">\nshort summary 1\n</hesper_run_context>'
+    const run2Summary = '<hesper_run_context run_id="run-2">\nshort summary 2\n</hesper_run_context>'
+
+    const result = assembleHistoryMessages({
+      currentRunId: 'run-4',
+      runs: [
+        baseRun('run-1', { startedAt: '2026-06-25T02:00:00.000Z' }),
+        baseRun('run-2', { startedAt: '2026-06-25T02:00:05.000Z' }),
+        baseRun('run-3', { startedAt: '2026-06-25T02:00:10.000Z' }),
+        baseRun('run-4', { status: 'running', startedAt: '2026-06-25T02:00:15.000Z' })
+      ],
+      messages: [],
+      contextItemsByRunId: new Map([
+        ['run-1', [contextItem('run-1', run1Summary)]],
+        ['run-2', [
+          contextItem('run-2', run2Summary),
+          sessionSummaryItem('run-2', ['run-1', 'run-2'], 'this session summary is intentionally much longer than the per-item budget allows')
+        ]]
+      ]),
+      maxContextItemChars: run1Summary.length
+    })
+
+    const historyIds = result.map((item) => item.id)
+    const historyContent = result.map((item) => item.content).join('\n')
+    expect(historyIds).toContain('context-summary-run-1')
+    expect(historyIds).not.toContain('context-summary-context-item-run-2-session-summary-v1')
+    expect(historyContent).toContain('short summary 1')
+    expect(historyContent).not.toContain('this session summary is intentionally much longer than the per-item budget allows')
+  })
+
   it('replaces covered old run summaries with a session summary deterministically', () => {
     const result = assembleHistoryMessages({
       currentRunId: 'run-4',
