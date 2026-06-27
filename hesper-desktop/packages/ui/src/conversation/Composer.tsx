@@ -39,6 +39,8 @@ export type ComposerProps = {
   skillMentions?: ComposerSkillMention[]
   value?: string
   running?: boolean
+  sendDisabled?: boolean
+  sendDisabledReason?: string
   modelCapabilities?: ModelCapability[]
   attachments?: ComposerDraftAttachment[]
   onDraftChange?: (value: string) => void
@@ -63,7 +65,7 @@ type ComposerSegment =
   | { kind: 'text'; text: string }
   | { kind: 'skill'; text: string; skill: SkillOption }
 
-const defaultModelOptions = ['mock/hesper-fast', 'openai/gpt-4o', 'anthropic/claude-sonnet-4-20250514']
+const emptyModelLabel = '未配置模型'
 const composerThinkingLevelStorageKey = 'hesper.composer.thinkingLevel'
 const defaultComposerThinkingLevel: ComposerThinkingLevel = 'high'
 const composerThinkingLevelOptions = [
@@ -85,12 +87,14 @@ const composerTextareaFallbackMinHeight = 96
 export function Composer({
   workspacePath,
   modelId,
-  modelOptions = defaultModelOptions,
+  modelOptions,
   modelOptionGroups,
   skillOptions = [],
   skillMentions: controlledSkillMentions,
   value: controlledValue,
   running = false,
+  sendDisabled = false,
+  sendDisabledReason,
   modelCapabilities,
   attachments = [],
   onDraftChange,
@@ -121,7 +125,10 @@ export function Composer({
   const attachmentMutationVersionRef = useRef(0)
   const imageInputSupported = composerSupportsImageInput(modelCapabilities)
   const visibleAttachments = useMemo(() => visibleComposerAttachments(attachments, imageInputSupported), [attachments, imageInputSupported])
+  const resolvedModelOptions = useMemo(() => modelOptions ?? (modelId.trim() ? [modelId] : []), [modelId, modelOptions])
+  const hasConfiguredModel = modelId.trim().length > 0
   const canSend = useMemo(() => value.trim().length > 0 || visibleAttachments.length > 0, [value, visibleAttachments])
+  const isSendDisabled = sendDisabled || !hasConfiguredModel
   const mentionToken = useMemo(() => findMentionToken(value, selectionStart), [selectionStart, value])
   const skillMentionRanges = useMemo(() => normalizeSkillMentionRanges(value, selectedSkillMentions), [selectedSkillMentions, value])
   const composerSegments = useMemo(() => createComposerSegments(value, skillMentionRanges), [skillMentionRanges, value])
@@ -283,6 +290,10 @@ export function Composer({
       return
     }
 
+    if (isSendDisabled) {
+      return
+    }
+
     const content = value.trim()
     const currentAttachments = attachmentsRef.current
     const sendableAttachments = visibleComposerAttachments(currentAttachments, imageInputSupported)
@@ -308,7 +319,7 @@ export function Composer({
       attachmentMutationVersionRef.current += 1
     }
     setActiveSkillIndex(0)
-  }, [imageInputSupported, onSend, onStop, replaceAttachmentsAfterDestructiveMutation, running, setComposerValue, skillOptions, thinkingLevel, value])
+  }, [imageInputSupported, isSendDisabled, onSend, onStop, replaceAttachmentsAfterDestructiveMutation, running, setComposerValue, skillOptions, thinkingLevel, value])
 
   useLayoutEffect(() => {
     syncTextareaHeight()
@@ -519,7 +530,8 @@ export function Composer({
             <ThemedSelect
               ariaLabel="选择模型"
               value={modelId}
-              options={modelOptions}
+              options={resolvedModelOptions}
+              emptyLabel={emptyModelLabel}
               {...(modelOptionGroups ? { optionGroups: modelOptionGroups } : {})}
               auxiliaryMenu={{
                 label: '思考强度',
@@ -539,12 +551,13 @@ export function Composer({
             type="button"
             className="hesper-send-button"
             aria-label={running ? '停止' : '发送'}
-            disabled={!running && !canSend}
+            title={!running && isSendDisabled ? sendDisabledReason ?? emptyModelLabel : undefined}
+            disabled={!running && (!canSend || isSendDisabled)}
             onClick={handleSend}
             style={{
               ...sendButtonStyle,
-              opacity: running || canSend ? 1 : 0.45,
-              cursor: running || canSend ? 'pointer' : 'not-allowed'
+              opacity: running || (canSend && !isSendDisabled) ? 1 : 0.45,
+              cursor: running || (canSend && !isSendDisabled) ? 'pointer' : 'not-allowed'
             }}
           >
             {running ? (

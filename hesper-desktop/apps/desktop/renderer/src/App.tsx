@@ -3,7 +3,7 @@ import { createId, defaultAppThemeId, nowIso, type AgentRun, type Message, type 
 import { AppShell, ConversationView, resolveThemeVariant, themeTokens, type AppSection, type ComposerDraftAttachment, type ComposerSendOptions, type ComposerSkillMention, type ConversationGitPanelProps, type ConversationShortcutCommand, type GitCommitDetailView, type GitGraphRowView, type SkillOption } from '@hesper/ui'
 import { AppStoreProvider, useAppStore, type SessionSpecialView } from './app-store'
 import { hesperApi } from './ipc-client'
-import { defaultFallbackModelId, fallbackSessionModelCatalog, loadAvailableModelCatalog, mergeModelOptions, type SessionModelCatalog } from './model-options'
+import { defaultFallbackModelId, fallbackSessionModelCatalog, isLegacyFallbackModelId, loadAvailableModelCatalog, mergeModelOptions, type SessionModelCatalog } from './model-options'
 import type { AppSettings, CreateSshKeyInput, CreateSshServerInput, DraftAttachment, GitCommitDetailDto, GitGraphRowDto, GitRefDto, GitRepositoryStateDto, ManagedRoleDto, SkillDto, SshKeyDto, SshServerDto, ToolCredentialStatus, ToolDto, UpdateSettingsInput, UpdateSshServerInput } from '../../electron/ipc-contract'
 import { AppearanceSettingsPanel } from './appearance-settings-panel'
 import { ProviderSettingsPanel } from './provider-settings-panel'
@@ -50,7 +50,7 @@ type GitUiStateBySession = Record<string, {
 type SettingsCategory = 'ai' | 'appearance' | 'ssh' | 'soul'
 
 const defaultAppSettings: AppSettings = {
-  defaultModelId: 'mock/hesper-fast',
+  defaultModelId: '',
   defaultOutputMode: 'markdown',
   themeMode: 'system',
   themeId: defaultAppThemeId,
@@ -302,8 +302,10 @@ function AppContent() {
   const runModelIdsRef = useRef<Record<string, string>>({})
   const pendingTitlePromptsBySessionRef = useRef<Record<string, string>>({})
   const titleGeneratedRunIdsRef = useRef<Set<string>>(new Set())
+  const sessionModelCatalogRef = useRef(sessionModelCatalog)
   const stateRef = useRef(state)
   gitUiStateRef.current = gitUiStateBySession
+  sessionModelCatalogRef.current = sessionModelCatalog
   const nextRenameRequestIdRef = useRef(0)
   const latestRenameRequestIdBySessionRef = useRef<Record<string, number>>({})
   const nextSettingsRequestIdRef = useRef(0)
@@ -793,23 +795,29 @@ function AppContent() {
           const modelId = runModelIdsRef.current[event.message.runId] ?? session?.defaultModelId ?? defaultFallbackModelId
 
           if (session && source?.userPrompt && !titleGeneratedRunIdsRef.current.has(event.message.runId)) {
-            setTitleGenerationError(undefined)
-            titleGeneratedRunIdsRef.current.add(event.message.runId)
-            void hesperApi.sessions.generateTitle({
-              id: session.id,
-              modelId,
-              userPrompt: source.userPrompt,
-              ...(source.assistantOutput ? { assistantOutput: source.assistantOutput } : {})
-            }).then((updatedSession) => {
-              dispatch({ type: 'session.updated', session: updatedSession })
-              titleGeneratedRunIdsRef.current.delete(event.message.runId!)
-            }).catch((error) => {
-              titleGeneratedRunIdsRef.current.delete(event.message.runId!)
-              console.warn('Failed to generate session title', error)
-              setTitleGenerationError(`标题生成失败：${error instanceof Error ? error.message : '未知错误'}`)
-            }).finally(() => {
+            const modelError = titleGenerationModelError(modelId, sessionModelCatalogRef.current)
+            if (modelError) {
+              setTitleGenerationError(`标题生成失败：${modelError}`)
               delete pendingTitlePromptsBySessionRef.current[event.message.sessionId]
-            })
+            } else {
+              setTitleGenerationError(undefined)
+              titleGeneratedRunIdsRef.current.add(event.message.runId)
+              void hesperApi.sessions.generateTitle({
+                id: session.id,
+                modelId,
+                userPrompt: source.userPrompt,
+                ...(source.assistantOutput ? { assistantOutput: source.assistantOutput } : {})
+              }).then((updatedSession) => {
+                dispatch({ type: 'session.updated', session: updatedSession })
+                titleGeneratedRunIdsRef.current.delete(event.message.runId!)
+              }).catch((error) => {
+                titleGeneratedRunIdsRef.current.delete(event.message.runId!)
+                console.warn('Failed to generate session title', error)
+                setTitleGenerationError(`标题生成失败：${error instanceof Error ? error.message : '未知错误'}`)
+              }).finally(() => {
+                delete pendingTitlePromptsBySessionRef.current[event.message.sessionId]
+              })
+            }
           }
         }
       }
@@ -985,10 +993,11 @@ function AppContent() {
     messagesByRun: state.childMessagesByRun,
     streamingByRun: state.streamingByRun
   }), [state.childMessagesByRun, state.runsById, state.stepsByRun, state.streamingByRun, state.workerInvocationIdByParentStepId, state.workerInvocationsById])
-  const activeModelId = activeSession ? resolveSessionModelId(activeSession.defaultModelId, sessionModelCatalog.preferredModelId, explicitModelSelectionSessionIdsRef.current.has(activeSession.id)) : sessionModelCatalog.preferredModelId
+  const activeModelId = activeSession ? resolveAvailableSessionModelId(activeSession.defaultModelId, sessionModelCatalog, explicitModelSelectionSessionIdsRef.current.has(activeSession.id)) : resolveAvailableSessionModelId(undefined, sessionModelCatalog)
   const activeModelConfig = sessionModelCatalog.modelsById[activeModelId]
   const activeModelCapabilities = activeModelConfig?.capabilities ?? []
-  const activeModelOptions = activeSession?.defaultModelId ? mergeModelOptions(sessionModelCatalog.options, [activeModelId, activeSession.defaultModelId]) : mergeModelOptions(sessionModelCatalog.options, [activeModelId])
+  const activeModelOptions = isAvailableSessionModel(activeModelId, sessionModelCatalog) ? mergeModelOptions(sessionModelCatalog.options, [activeModelId]) : sessionModelCatalog.options
+  const activeModelMissing = !isAvailableSessionModel(activeModelId, sessionModelCatalog)
 
   const loadGitRepositoryState = useCallback(async (sessionId: string, workspacePath: string): Promise<GitRepositoryStateDto | undefined> => {
     const requestId = (latestGitStateRequestIdRef.current[sessionId] ?? 0) + 1
@@ -1666,8 +1675,13 @@ function AppContent() {
       }
 
       const latestRunId = stateRef.current.latestRunIdBySession[sessionId]
-      const sessionModelId = resolveSessionModelId(session.defaultModelId, sessionModelCatalog.preferredModelId, explicitModelSelectionSessionIdsRef.current.has(session.id))
+      const sessionModelId = resolveTitleGenerationModelId(session.defaultModelId, sessionModelCatalog, explicitModelSelectionSessionIdsRef.current.has(session.id))
       const modelId = latestRunId ? runModelIdsRef.current[latestRunId] ?? sessionModelId : sessionModelId
+      const modelError = titleGenerationModelError(modelId, sessionModelCatalog)
+      if (modelError) {
+        setTitleGenerationError(`标题生成失败：${modelError}`)
+        return
+      }
       const updatedSession = await hesperApi.sessions.generateTitle({
         id: session.id,
         modelId,
@@ -1822,7 +1836,7 @@ function AppContent() {
 
   const createTrackedSession = async () => {
     const categoryId = stateRef.current.activeSessionSpecialView ? undefined : stateRef.current.activeSessionCategoryId
-    const session = await createSession(dispatch, sessionModelCatalog.preferredModelId, categoryId)
+    const session = await createSession(dispatch, defaultFallbackModelId, categoryId)
     createdNewSessionIdsRef.current.add(session.id)
   }
 
@@ -2038,6 +2052,8 @@ function AppContent() {
             modelOptionGroups={sessionModelCatalog.optionGroups}
             modelCapabilities={activeModelCapabilities}
             skillOptions={skills.map(toSkillOption)}
+            sendDisabled={activeModelMissing}
+            sendDisabledReason="未配置模型"
             draftValue={draftsBySession[activeSession.id] ?? ''}
             draftSkillMentions={draftSkillMentionsBySession[activeSession.id] ?? []}
             draftAttachments={draftAttachmentsBySession[activeSession.id] ?? []}
@@ -2082,6 +2098,13 @@ function AppContent() {
               })
             }}
             onModelChange={(modelId) => {
+              if (!isAvailableSessionModel(modelId, sessionModelCatalog)) {
+                setSendErrorsBySession((current) => ({
+                  ...current,
+                  [activeSession.id]: unavailableModelMessage(modelId)
+                }))
+                return
+              }
               explicitModelSelectionSessionIdsRef.current.add(activeSession.id)
               void updateSessionModel({
                 session: activeSession,
@@ -2094,12 +2117,17 @@ function AppContent() {
               })
             }}
             onSend={(content, sendOptions) => {
+              if (activeModelMissing) {
+                setSendErrorsBySession((current) => ({ ...current, [activeSession.id]: '未配置模型' }))
+                return
+              }
               pendingTitlePromptsBySessionRef.current[activeSession.id] = content
               void sendMessage({
                 session: activeSession,
                 modelId: activeModelId,
                 content,
                 modelCapabilities: activeModelCapabilities,
+                modelCatalog: sessionModelCatalog,
                 ...(sendOptions ? { sendOptions } : {}),
                 dispatch,
                 setSendErrorsBySession,
@@ -2112,6 +2140,7 @@ function AppContent() {
                 message,
                 run,
                 pendingTitlePromptsBySessionRef,
+                modelCatalog: sessionModelCatalog,
                 dispatch,
                 setSendErrorsBySession
               })
@@ -2184,11 +2213,59 @@ function useResolvedThemeMode(themeMode: AppSettings['themeMode']): 'light' | 'd
   return themeMode === 'system' ? systemThemeMode : themeMode
 }
 
+function isAvailableSessionModel(modelId: string | undefined, catalog: SessionModelCatalog): boolean {
+  const normalizedModelId = modelId?.trim() ?? ''
+  return Boolean(normalizedModelId && !isLegacyFallbackModelId(normalizedModelId) && catalog.modelsById[normalizedModelId])
+}
+
+function unavailableModelMessage(modelId: string | undefined): string {
+  const normalizedModelId = modelId?.trim() ?? ''
+  return normalizedModelId ? `模型不可用：${normalizedModelId}` : '未配置模型'
+}
+
+function titleGenerationModelError(modelId: string | undefined, catalog: SessionModelCatalog): string | undefined {
+  const normalizedModelId = modelId?.trim() ?? ''
+  if (!normalizedModelId || isLegacyFallbackModelId(normalizedModelId)) {
+    return '未配置模型'
+  }
+  return catalog.modelsById[normalizedModelId] ? undefined : `模型不可用：${normalizedModelId}`
+}
+
+function resolveTitleGenerationModelId(sessionModelId: string | undefined, catalog: SessionModelCatalog, useSessionModelId = false): string {
+  const normalizedSessionModelId = sessionModelId?.trim() ?? ''
+  const preferredModelId = isAvailableSessionModel(catalog.preferredModelId, catalog) ? catalog.preferredModelId.trim() : defaultFallbackModelId
+
+  if (useSessionModelId) {
+    return normalizedSessionModelId
+  }
+
+  if (!normalizedSessionModelId || normalizedSessionModelId === defaultFallbackModelId || isLegacyFallbackModelId(normalizedSessionModelId)) {
+    return preferredModelId
+  }
+
+  return normalizedSessionModelId
+}
+
+function resolveAvailableSessionModelId(sessionModelId: string | undefined, catalog: SessionModelCatalog, useSessionModelId = false): string {
+  const normalizedSessionModelId = sessionModelId?.trim() ?? ''
+  const preferredModelId = isAvailableSessionModel(catalog.preferredModelId, catalog) ? catalog.preferredModelId.trim() : defaultFallbackModelId
+
+  if (useSessionModelId) {
+    return isAvailableSessionModel(normalizedSessionModelId, catalog) ? normalizedSessionModelId : defaultFallbackModelId
+  }
+
+  if (!normalizedSessionModelId || normalizedSessionModelId === defaultFallbackModelId || isLegacyFallbackModelId(normalizedSessionModelId)) {
+    return preferredModelId
+  }
+
+  return isAvailableSessionModel(normalizedSessionModelId, catalog) ? normalizedSessionModelId : defaultFallbackModelId
+}
+
 function resolveSessionModelId(sessionModelId: string | undefined, preferredModelId: string, useSessionModelId = false): string {
   if (useSessionModelId && sessionModelId) {
     return sessionModelId
   }
-  if (!sessionModelId || sessionModelId === defaultFallbackModelId) {
+  if (!sessionModelId || sessionModelId === defaultFallbackModelId || isLegacyFallbackModelId(sessionModelId)) {
     return preferredModelId
   }
   return sessionModelId
@@ -2415,6 +2492,7 @@ function retryFailedRun({
   message,
   run,
   pendingTitlePromptsBySessionRef,
+  modelCatalog,
   dispatch,
   setSendErrorsBySession
 }: {
@@ -2422,6 +2500,7 @@ function retryFailedRun({
   message: Message
   run: AgentRun
   pendingTitlePromptsBySessionRef: { current: Record<string, string> }
+  modelCatalog: SessionModelCatalog
   dispatch: ReturnType<typeof useAppStore>['dispatch']
   setSendErrorsBySession: Dispatch<SetStateAction<Record<string, string>>>
 }) {
@@ -2430,6 +2509,7 @@ function retryFailedRun({
     session,
     modelId: run.modelId,
     content: message.content,
+    modelCatalog,
     dispatch,
     setSendErrorsBySession
   })
@@ -2477,6 +2557,7 @@ async function sendMessage({
   modelId,
   content,
   modelCapabilities = [],
+  modelCatalog,
   dispatch,
   sendOptions,
   setSendErrorsBySession,
@@ -2486,11 +2567,21 @@ async function sendMessage({
   modelId: string
   content: string
   modelCapabilities?: readonly string[]
+  modelCatalog?: SessionModelCatalog
   sendOptions?: ComposerSendOptions
   dispatch: ReturnType<typeof useAppStore>['dispatch']
   setSendErrorsBySession: Dispatch<SetStateAction<Record<string, string>>>
   setDraftAttachmentsBySession?: Dispatch<SetStateAction<Record<string, ComposerDraftAttachment[]>>>
 }) {
+  const normalizedModelId = modelId.trim()
+  if (!normalizedModelId || (modelCatalog && !isAvailableSessionModel(normalizedModelId, modelCatalog))) {
+    setSendErrorsBySession((current) => ({
+      ...current,
+      [session.id]: unavailableModelMessage(normalizedModelId)
+    }))
+    return
+  }
+
   setSendErrorsBySession((current) => clearSessionSendError(current, session.id))
   const draftAttachments = filterDraftAttachmentsForModel(sendOptions?.draftAttachments, modelCapabilities)
   const enqueueDraftAttachments = draftAttachments.map(toAgentEnqueueDraftAttachment)
@@ -2503,7 +2594,7 @@ async function sendMessage({
       sessionId: session.id,
       prompt: sendOptions?.prompt ?? content,
       ...(sendOptions?.displayPrompt ? { displayPrompt: sendOptions.displayPrompt } : {}),
-      modelId,
+      modelId: normalizedModelId,
       ...(sendOptions?.thinkingLevel ? { thinkingLevel: sendOptions.thinkingLevel } : {}),
       ...(enqueueDraftAttachments.length > 0 ? { draftAttachments: enqueueDraftAttachments } : {}),
       messageId: message.id,

@@ -428,7 +428,7 @@ describe('session settings and restore flow', () => {
 
     deferred.reject(new Error('save failed'))
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: '选择模型' })).toHaveTextContent('mock/hesper-fast')
+      expect(screen.getByRole('button', { name: '选择模型' })).toHaveTextContent('gpt-4o')
     })
   })
 })

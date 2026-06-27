@@ -42,43 +42,40 @@ describe('createModelProviderService', () => {
     }
   })
 
-  it('creates builtin providers and models while preserving the mock baseline', async () => {
+  it('does not seed providers or models into empty persistence', async () => {
     const persistence = await createInMemoryPersistence()
     const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
     const service = createModelProviderService({ persistence, credentialVaultService, now: () => now })
 
     await service.ensureBuiltinProviders()
 
-    expect((await service.listProviders()).map((provider) => provider.id)).toEqual(['mock', 'deepseek', 'openai', 'openai-compatible'])
-    expect(await service.getProvider('mock')).toMatchObject({ kind: 'mock', enabled: true, defaultModelId: 'mock/hesper-fast', hasApiKey: false })
-    expect(await service.getProvider('openai-compatible')).toMatchObject({ enabled: false, defaultModelId: 'openai-compatible/default' })
-    expect((await service.listModels()).map((model) => model.id)).toEqual(['mock/hesper-fast', 'deepseek-chat', 'gpt-4o', 'openai-compatible/default'])
-    expect((await service.listModels('mock')).map((model) => model.id)).toEqual(['mock/hesper-fast'])
+    expect(await service.listProviders()).toEqual([])
+    expect(await service.listModels()).toEqual([])
   })
 
-  it('seeds imageInput for vision-capable builtin models and keeps DeepSeek V4 text-only', async () => {
+  it('keeps empty persistence empty when listing providers and models', async () => {
     const persistence = await createInMemoryPersistence()
     const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
     const service = createModelProviderService({ persistence, credentialVaultService, now: () => now })
 
-    await service.ensureBuiltinProviders()
-    const models = await service.listModels()
-
-    expect(models.find((model) => model.id === 'gpt-4o')?.capabilities).toContain('imageInput')
-    expect(models.find((model) => model.id === 'deepseek-chat')?.capabilities).not.toContain('imageInput')
+    expect(await service.listProviders()).toEqual([])
+    expect(await service.listModels()).toEqual([])
   })
 
-  it('seeds builtin providers on first list without overwriting user configuration', async () => {
+  it('does not add default providers or overwrite user configuration after manual saves', async () => {
     const persistence = await createInMemoryPersistence()
     const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
     const service = createModelProviderService({ persistence, credentialVaultService, now: () => now })
 
     expect(await persistence.modelProviders.list()).toEqual([])
-    expect((await service.listProviders()).map((provider) => provider.id)).toEqual(['mock', 'deepseek', 'openai', 'openai-compatible'])
+    expect(await service.listProviders()).toEqual([])
 
     await service.saveProvider({ id: 'deepseek', name: 'DeepSeek Local', kind: 'deepseek', baseUrl: 'https://local.deepseek.test', enabled: false, defaultModelId: 'local-chat' })
+    await service.saveModel({ id: 'local-chat', providerId: 'deepseek', modelName: 'local-chat', displayName: 'Local Chat', capabilities: ['streaming'], enabled: true })
     await service.ensureBuiltinProviders()
 
+    expect((await service.listProviders()).map((provider) => provider.id)).toEqual(['deepseek'])
+    expect((await service.listModels()).map((model) => model.id)).toEqual(['local-chat'])
     expect(await service.getProvider('deepseek')).toMatchObject({
       name: 'DeepSeek Local',
       baseUrl: 'https://local.deepseek.test',
@@ -121,7 +118,7 @@ describe('createModelProviderService', () => {
     const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
     const service = createModelProviderService({ persistence, credentialVaultService, now: () => now })
 
-    await service.ensureBuiltinProviders()
+    await service.saveProvider({ id: 'openai', name: 'OpenAI', kind: 'openai', baseUrl: 'https://api.openai.com/v1', enabled: true, defaultModelId: 'gpt-4o' })
     await service.saveModel({
       id: 'gpt-4o',
       providerId: 'openai',
@@ -251,17 +248,21 @@ describe('createModelProviderService', () => {
     expect(await persistence.models.listByProvider('custom-api-example-com')).toMatchObject([{ id: 'example-chat' }])
   })
 
-  it('disables builtin providers when asked to delete them', async () => {
+  it('deletes manually saved providers that reuse former builtin ids', async () => {
     const persistence = await createInMemoryPersistence()
     const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
     const service = createModelProviderService({ persistence, credentialVaultService, now: () => now })
 
-    await service.ensureBuiltinProviders()
+    await service.saveProvider({ id: 'deepseek', name: 'DeepSeek', kind: 'deepseek', baseUrl: 'https://api.deepseek.com', enabled: true, defaultModelId: 'deepseek-chat' })
+    await service.saveModel({ id: 'deepseek-chat', providerId: 'deepseek', modelName: 'deepseek-chat', displayName: 'DeepSeek Chat', capabilities: ['streaming'], enabled: true })
+    await credentialVaultService.saveProviderApiKey({ providerId: 'deepseek', apiKey: 'sk-deepseek-secret' })
+
     const deleted = await service.deleteProvider('deepseek')
 
-    expect(deleted).toMatchObject({ id: 'deepseek', enabled: false })
-    expect(await persistence.modelProviders.get('deepseek')).toMatchObject({ enabled: false })
-    expect(await persistence.models.listByProvider('deepseek')).toMatchObject([{ id: 'deepseek-chat' }])
+    expect(deleted).toBeUndefined()
+    expect(await persistence.modelProviders.get('deepseek')).toBeUndefined()
+    expect(await persistence.models.listByProvider('deepseek')).toEqual([])
+    expect(await credentialVaultService.readProviderApiKey('deepseek')).toBeUndefined()
   })
 
   it('tests saved connections by probing the provider API without returning or persisting raw API keys', async () => {

@@ -298,6 +298,24 @@ describe('provider settings panel', () => {
     expect(screen.getByText('OpenAI')).toBeInTheDocument()
   })
 
+  it('shows an explicit empty state when no providers are configured', async () => {
+    const user = userEvent.setup()
+    listProviders.mockResolvedValue([])
+    listModels.mockResolvedValue([])
+    getSettings.mockResolvedValue({ defaultModelId: '', defaultOutputMode: 'markdown', themeMode: 'dark', themeId: 'catppuccin', fontSize: 14, soul: '' })
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: '设置' }))
+
+    expect(await screen.findByRole('region', { name: '模型来源设置' })).toBeInTheDocument()
+    expect(screen.getByText('还没有配置 AI 连接')).toBeInTheDocument()
+    expect(screen.getByText('添加连接后，可在会话中选择模型并开始发送消息。')).toBeInTheDocument()
+    expect(screen.queryByText('Mock')).not.toBeInTheDocument()
+    expect(screen.queryByText('DeepSeek')).not.toBeInTheDocument()
+    expect(screen.queryByText('OpenAI')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '+ 添加连接' })).toBeEnabled()
+  })
+
   it('renders provider connections as one block with unclipped menus', async () => {
     const user = userEvent.setup()
     render(<App />)

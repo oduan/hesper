@@ -72,21 +72,6 @@ export type ModelProviderService = {
   ensureBuiltinProviders(): Promise<void>
 }
 
-const providerPresets: SaveModelProviderInput[] = [
-  { id: 'mock', name: 'Mock', kind: 'mock', enabled: true, defaultModelId: 'mock/hesper-fast' },
-  { id: 'deepseek', name: 'DeepSeek', kind: 'deepseek', baseUrl: 'https://api.deepseek.com', enabled: true, defaultModelId: 'deepseek-chat' },
-  { id: 'openai', name: 'OpenAI', kind: 'openai', baseUrl: 'https://api.openai.com/v1', enabled: true, defaultModelId: 'gpt-4o' },
-  { id: 'openai-compatible', name: 'OpenAI Compatible', kind: 'openai-compatible', enabled: false, defaultModelId: 'openai-compatible/default' }
-]
-
-const modelPresets: SaveModelInput[] = [
-  { id: 'mock/hesper-fast', providerId: 'mock', modelName: 'mock/hesper-fast', displayName: 'Hesper Mock Fast', capabilities: ['streaming', 'toolCalls'], enabled: true },
-  { id: 'deepseek-chat', providerId: 'deepseek', modelName: 'deepseek-chat', displayName: 'DeepSeek Chat', capabilities: ['streaming', 'toolCalls'], enabled: true },
-  { id: 'gpt-4o', providerId: 'openai', modelName: 'gpt-4o', displayName: 'GPT-4o', capabilities: ['streaming', 'toolCalls', 'jsonOutput', 'imageInput'], enabled: true },
-  { id: 'openai-compatible/default', providerId: 'openai-compatible', modelName: 'model-name', displayName: 'Custom model', capabilities: ['streaming', 'toolCalls'], enabled: false }
-]
-
-const builtinProviderIds = new Set(providerPresets.map((provider) => provider.id))
 const inferredImageInputBackfillProviderIds = new Set(['openai', 'chatgpt-codex'])
 const validModelCapabilities = new Set<ModelConfig['capabilities'][number]>(['streaming', 'toolCalls', 'jsonOutput', 'reasoning', 'imageInput'])
 
@@ -488,17 +473,9 @@ export function createModelProviderService(options: {
     }
   }
 
+  // Keep the historical name for existing call sites. This no longer seeds
+  // built-in providers/models; it only backfills legacy model capability data.
   const ensureBuiltinProviders = async (): Promise<void> => {
-    for (const provider of providerPresets) {
-      if (!await options.persistence.modelProviders.get(provider.id)) {
-        await saveProviderInternal(provider)
-      }
-    }
-    for (const model of modelPresets) {
-      if (!await options.persistence.models.get(model.id)) {
-        await saveModelInternal(model)
-      }
-    }
     await backfillInferredImageInputCapabilities()
   }
 
@@ -549,9 +526,6 @@ export function createModelProviderService(options: {
       assertId(id)
       const existing = await options.persistence.modelProviders.get(id)
       if (!existing) throw new Error(`Model provider not found: ${id}`)
-      if (builtinProviderIds.has(id)) {
-        return this.disableProvider(id)
-      }
       await options.persistence.transaction(async () => {
         await options.persistence.models.deleteByProvider(id)
         await options.credentialVaultService.deleteProviderApiKey({ providerId: id })

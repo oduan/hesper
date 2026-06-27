@@ -1570,6 +1570,31 @@ describe('ui components', () => {
     expect(sendButton).toBeEnabled()
   })
 
+  it('shows an unconfigured model state and preserves draft when sending is disabled', async () => {
+    const user = userEvent.setup()
+    const onSend = vi.fn()
+
+    render(
+      <Composer
+        workspacePath="C:/dev/hesper"
+        modelId=""
+        modelOptions={[]}
+        onSend={onSend}
+        sendDisabled
+      />
+    )
+
+    expect(screen.getByRole('button', { name: '选择模型' })).toHaveTextContent('未配置模型')
+    await user.type(screen.getByLabelText('消息输入框'), '保留草稿')
+    const sendButton = screen.getByRole('button', { name: '发送' })
+    expect(sendButton).toBeDisabled()
+
+    await user.keyboard('{Control>}{Enter}{/Control}')
+
+    expect(onSend).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('消息输入框')).toHaveValue('保留草稿')
+  })
+
   it('grows the composer textarea up to fifteen rows before showing its own scrollbar', () => {
     render(<Composer workspacePath="C:/dev/hesper" modelId="mock/hesper-fast" onSend={() => undefined} />)
     const textarea = screen.getByLabelText('消息输入框') as HTMLTextAreaElement

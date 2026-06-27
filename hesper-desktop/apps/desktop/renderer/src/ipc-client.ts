@@ -41,7 +41,7 @@ import type {
 import { createId } from '@hesper/shared'
 
 const defaultSettings: AppSettings = {
-  defaultModelId: 'mock/hesper-fast',
+  defaultModelId: '',
   defaultOutputMode: 'markdown',
   themeMode: 'dark',
   themeId: 'catppuccin',
@@ -302,6 +302,8 @@ export function createFallbackHesperApi(): HesperDesktopApi {
     }
   }
   let tools: ToolDto[] = fallbackBuiltinTools.map((tool) => ({ ...tool }))
+  let modelProviders: ModelProviderDto[] = []
+  let modelRegistry: ModelDto[] = []
   const skills: SkillDto[] = [
     { id: 'Install Skills', name: 'Install Skills', description: 'Install reusable skills into the user skill directory.', source: 'builtin' },
     { id: 'Notes', name: 'Notes', source: 'builtin' },
@@ -549,41 +551,52 @@ export function createFallbackHesperApi(): HesperDesktopApi {
       })
     },
     providers: {
-      list: async (): Promise<ModelProviderDto[]> => {
-        const timestamp = new Date().toISOString()
-        return [
-          { id: 'mock', name: 'Mock', kind: 'mock', enabled: true, defaultModelId: 'mock/hesper-fast', apiKeyRef: 'provider:mock:api-key', hasApiKey: false, createdAt: timestamp, updatedAt: timestamp },
-          { id: 'deepseek', name: 'DeepSeek', kind: 'deepseek', baseUrl: 'https://api.deepseek.com', enabled: true, defaultModelId: 'deepseek-chat', apiKeyRef: 'provider:deepseek:api-key', hasApiKey: false, createdAt: timestamp, updatedAt: timestamp },
-          { id: 'openai', name: 'OpenAI', kind: 'openai', baseUrl: 'https://api.openai.com/v1', enabled: true, defaultModelId: 'gpt-4o', apiKeyRef: 'provider:openai:api-key', hasApiKey: false, createdAt: timestamp, updatedAt: timestamp },
-          { id: 'openai-compatible', name: 'OpenAI Compatible', kind: 'openai-compatible', enabled: false, defaultModelId: 'openai-compatible/default', apiKeyRef: 'provider:openai-compatible:api-key', hasApiKey: false, createdAt: timestamp, updatedAt: timestamp }
-        ]
-      },
+      list: async (): Promise<ModelProviderDto[]> => modelProviders.map((provider) => ({ ...provider })),
       save: async (input): Promise<ModelProviderDto> => {
         const timestamp = new Date().toISOString()
-        return withDefined({
+        const existing = modelProviders.find((provider) => provider.id === input.id)
+        const provider = withDefined({
+          ...(existing ?? {}),
           id: input.id,
           name: input.name,
           kind: input.kind,
-          apiKeyRef: `provider:${input.id}:api-key`,
-          hasApiKey: false,
-          enabled: input.enabled ?? true,
-          createdAt: timestamp,
+          apiKeyRef: existing?.apiKeyRef ?? `provider:${input.id}:api-key`,
+          hasApiKey: existing?.hasApiKey ?? false,
+          enabled: input.enabled ?? existing?.enabled ?? true,
+          createdAt: existing?.createdAt ?? timestamp,
           updatedAt: timestamp,
           ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
           ...(input.defaultModelId !== undefined ? { defaultModelId: input.defaultModelId } : {})
         }) as ModelProviderDto
+        modelProviders = modelProviders.some((candidate) => candidate.id === provider.id)
+          ? modelProviders.map((candidate) => candidate.id === provider.id ? provider : candidate)
+          : [...modelProviders, provider]
+        return { ...provider }
       },
-      disable: async (input) => ({
-        id: input.providerId,
-        name: input.providerId,
-        kind: 'custom',
-        apiKeyRef: `provider:${input.providerId}:api-key`,
-        hasApiKey: false,
-        enabled: false,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }),
-      delete: async (input) => ({ deleted: true as const, providerId: input.providerId }),
+      disable: async (input) => {
+        const timestamp = new Date().toISOString()
+        const existing = modelProviders.find((provider) => provider.id === input.providerId)
+        const provider = withDefined({
+          ...(existing ?? {}),
+          id: input.providerId,
+          name: existing?.name ?? input.providerId,
+          kind: existing?.kind ?? 'custom',
+          apiKeyRef: existing?.apiKeyRef ?? `provider:${input.providerId}:api-key`,
+          hasApiKey: existing?.hasApiKey ?? false,
+          enabled: false,
+          createdAt: existing?.createdAt ?? timestamp,
+          updatedAt: timestamp
+        }) as ModelProviderDto
+        modelProviders = modelProviders.some((candidate) => candidate.id === provider.id)
+          ? modelProviders.map((candidate) => candidate.id === provider.id ? provider : candidate)
+          : [...modelProviders, provider]
+        return { ...provider }
+      },
+      delete: async (input) => {
+        modelProviders = modelProviders.filter((provider) => provider.id !== input.providerId)
+        modelRegistry = modelRegistry.filter((model) => model.providerId !== input.providerId)
+        return { deleted: true as const, providerId: input.providerId }
+      },
       testConnection: async (input) => {
         const providerId = input.providerId ?? 'temporary-provider'
         return {
@@ -609,28 +622,28 @@ export function createFallbackHesperApi(): HesperDesktopApi {
     },
     models: {
       list: async (input = {}): Promise<ModelDto[]> => {
-        const timestamp = new Date().toISOString()
-        const models: ModelDto[] = [
-          { id: 'mock/hesper-fast', providerId: 'mock', modelName: 'mock/hesper-fast', displayName: 'Hesper Mock Fast', capabilities: ['streaming', 'toolCalls'], enabled: true, createdAt: timestamp, updatedAt: timestamp },
-          { id: 'deepseek-chat', providerId: 'deepseek', modelName: 'deepseek-chat', displayName: 'DeepSeek Chat', capabilities: ['streaming', 'toolCalls'], enabled: true, createdAt: timestamp, updatedAt: timestamp },
-          { id: 'gpt-4o', providerId: 'openai', modelName: 'gpt-4o', displayName: 'GPT-4o', capabilities: ['streaming', 'toolCalls', 'jsonOutput', 'imageInput'], enabled: true, createdAt: timestamp, updatedAt: timestamp },
-          { id: 'openai-compatible/default', providerId: 'openai-compatible', modelName: 'model-name', displayName: 'Custom model', capabilities: ['streaming', 'toolCalls'], enabled: false, createdAt: timestamp, updatedAt: timestamp }
-        ]
-        return input.providerId ? models.filter((model) => model.providerId === input.providerId) : models
+        const models = input.providerId ? modelRegistry.filter((model) => model.providerId === input.providerId) : modelRegistry
+        return models.map((model) => ({ ...model, capabilities: [...model.capabilities] }))
       },
       save: async (input): Promise<ModelDto> => {
         const timestamp = new Date().toISOString()
-        return withDefined({
+        const existing = modelRegistry.find((model) => model.id === input.id)
+        const model = withDefined({
+          ...(existing ?? {}),
           id: input.id,
           providerId: input.providerId,
           modelName: input.modelName,
           displayName: input.displayName,
-          capabilities: input.capabilities ?? ['streaming'],
-          enabled: input.enabled ?? true,
-          createdAt: timestamp,
+          capabilities: input.capabilities ?? existing?.capabilities ?? ['streaming'],
+          enabled: input.enabled ?? existing?.enabled ?? true,
+          createdAt: existing?.createdAt ?? timestamp,
           updatedAt: timestamp,
           ...(input.contextWindow !== undefined ? { contextWindow: input.contextWindow } : {})
         }) as ModelDto
+        modelRegistry = modelRegistry.some((candidate) => candidate.id === model.id)
+          ? modelRegistry.map((candidate) => candidate.id === model.id ? model : candidate)
+          : [...modelRegistry, model]
+        return { ...model, capabilities: [...model.capabilities] }
       }
     },
     tools: {

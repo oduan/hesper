@@ -632,6 +632,12 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
             <p style={sectionDescriptionStyle}>管理 AI 提供商连接。</p>
           </div>
           <div style={connectionListStyle}>
+            {visibleProviders.length === 0 ? (
+              <div role="status" style={connectionEmptyStateStyle}>
+                <strong>还没有配置 AI 连接</strong>
+                <span>添加连接后，可在会话中选择模型并开始发送消息。</span>
+              </div>
+            ) : null}
             {visibleProviders.map((provider, index) => (
               <Fragment key={provider.id}>
                 {index > 0 ? <div aria-hidden="true" data-hesper-connection-separator="true" style={connectionItemSeparatorStyle} /> : null}
@@ -1172,6 +1178,14 @@ const connectionListStyle: CSSProperties = {
   borderRadius: 16,
   background: surfaceMutedColor,
   overflow: 'visible'
+}
+
+const connectionEmptyStateStyle: CSSProperties = {
+  display: 'grid',
+  gap: 4,
+  padding: '18px 16px',
+  color: mutedTextColor,
+  lineHeight: 1.45
 }
 
 const connectionItemStyle: CSSProperties = {

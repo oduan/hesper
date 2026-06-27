@@ -28,6 +28,7 @@ export type ThemedSelectProps = {
   optionGroups?: readonly ThemedSelectOptionGroup[]
   auxiliaryMenu?: ThemedSelectAuxiliaryMenu
   onChange?: (value: string) => void
+  emptyLabel?: string
   minWidth?: number
   maxWidth?: number
   menuPlacement?: 'top' | 'bottom'
@@ -40,6 +41,7 @@ export function ThemedSelect({
   optionGroups,
   auxiliaryMenu,
   onChange,
+  emptyLabel,
   minWidth = 108,
   maxWidth = 240,
   menuPlacement = 'bottom'
@@ -57,7 +59,8 @@ export function ThemedSelect({
     ],
     [flatOptions, optionGroups]
   )
-  const selectedLabel = labeledOptions.find((option) => option.value === value)?.label ?? value
+  const fallbackSelectedLabel = value.trim() || emptyLabel || value
+  const selectedLabel = labeledOptions.find((option) => option.value === value)?.label ?? fallbackSelectedLabel
   const auxiliarySelectedLabel = auxiliaryMenu?.valueLabel ?? auxiliaryMenu?.options.find((option) => option.value === auxiliaryMenu.value)?.label ?? auxiliaryMenu?.value
   const hasGroups = (optionGroups?.length ?? 0) > 0
 

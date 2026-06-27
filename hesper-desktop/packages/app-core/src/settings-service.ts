@@ -22,7 +22,7 @@ type SettingsServiceOptions = {
 }
 
 const defaults: AppSettings = {
-  defaultModelId: 'mock/hesper-fast',
+  defaultModelId: '',
   defaultOutputMode: 'markdown',
   themeMode: 'system',
   themeId: defaultAppThemeId,

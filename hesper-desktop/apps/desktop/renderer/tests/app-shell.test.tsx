@@ -508,8 +508,12 @@ describe('renderer App', () => {
       createdAt: '2026-06-10T03:00:00.000Z',
       updatedAt: '2026-06-10T03:00:12.000Z'
     }))
-    listProviders.mockResolvedValue([])
-    listModels.mockResolvedValue([])
+    listProviders.mockResolvedValue([
+      { id: 'deepseek', name: 'DeepSeek', kind: 'deepseek', enabled: true, hasApiKey: true, defaultModelId: 'deepseek-chat', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+    ] as any)
+    listModels.mockResolvedValue([
+      { id: 'deepseek-chat', providerId: 'deepseek', modelName: 'deepseek-chat', displayName: 'DeepSeek Chat', capabilities: ['streaming', 'toolCalls'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+    ] as any)
     listTools.mockResolvedValue([
       {
         id: 'filesystem.read-file',
@@ -627,9 +631,9 @@ describe('renderer App', () => {
       createdAt: '2026-06-10T03:00:00.000Z',
       updatedAt: '2026-06-10T03:00:00.000Z'
     }))
-    getSettings.mockResolvedValue({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'dark', themeId: 'catppuccin', fontSize: 14, soul: '' })
+    getSettings.mockResolvedValue({ defaultModelId: 'deepseek-chat', defaultOutputMode: 'markdown', themeMode: 'dark', themeId: 'catppuccin', fontSize: 14, soul: '' })
     updateSettings.mockImplementation(async (input) => ({
-      defaultModelId: input.defaultModelId ?? 'mock/hesper-fast',
+      defaultModelId: input.defaultModelId ?? 'deepseek-chat',
       defaultOutputMode: input.defaultOutputMode ?? 'markdown',
       themeMode: input.themeMode ?? 'dark',
       themeId: input.themeId ?? 'catppuccin',
@@ -2501,6 +2505,14 @@ describe('renderer App', () => {
   it('regenerates titles for shift-selected sessions from the context menu', async () => {
     const user = userEvent.setup()
 
+    listProviders.mockResolvedValueOnce([
+      { id: 'provider', name: 'Provider', kind: 'openai', enabled: true, hasApiKey: true, defaultModelId: 'model-one', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+    ] as any)
+    listModels.mockResolvedValueOnce([
+      { id: 'model-one', providerId: 'provider', modelName: 'model-one', displayName: 'Model One', capabilities: ['streaming'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' },
+      { id: 'model-two', providerId: 'provider', modelName: 'model-two', displayName: 'Model Two', capabilities: ['streaming'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' },
+      { id: 'model-three', providerId: 'provider', modelName: 'model-three', displayName: 'Model Three', capabilities: ['streaming'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+    ] as any)
     listSessions.mockResolvedValueOnce([
       { id: 'session-1', title: 'Chat one', status: 'active', defaultModelId: 'model-one', outputMode: 'markdown', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:03.000Z' },
       { id: 'session-2', title: 'Chat two', status: 'active', defaultModelId: 'model-two', outputMode: 'markdown', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:02.000Z' },
@@ -2619,6 +2631,36 @@ describe('renderer App', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('标题生成失败：Model provider needs an API key: deepseek')
   })
 
+  it('does not regenerate a context-menu title when the session model is unavailable in an empty catalog', async () => {
+    const user = userEvent.setup()
+
+    listProviders.mockResolvedValueOnce([])
+    listModels.mockResolvedValueOnce([])
+    listSessions.mockResolvedValueOnce([
+      {
+        id: 'session-unavailable-model',
+        title: 'Unavailable model chat',
+        status: 'active',
+        defaultModelId: 'gpt-4o',
+        outputMode: 'markdown',
+        createdAt: '2026-06-10T02:00:00.000Z',
+        updatedAt: '2026-06-10T02:00:00.000Z'
+      }
+    ] as any)
+    listMessages.mockResolvedValue([
+      { id: 'message-user-1', sessionId: 'session-unavailable-model', role: 'user', content: '请总结今天的任务', contentType: 'plain', createdAt: '2026-06-10T02:05:01.000Z' }
+    ] as any)
+
+    render(<App />)
+
+    const row = await screen.findByRole('button', { name: 'Unavailable model chat' })
+    row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 120, clientY: 160 }))
+    await user.click(await screen.findByRole('menuitem', { name: '重新生成标题' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('标题生成失败：模型不可用：gpt-4o')
+    expect(generateTitle).not.toHaveBeenCalled()
+  })
+
   it('shows a visible error when no user message can seed title regeneration', async () => {
     const user = userEvent.setup()
 
@@ -2712,6 +2754,128 @@ describe('renderer App', () => {
       })
     })
     expect(await screen.findAllByText('模型生成标题')).not.toHaveLength(0)
+  })
+
+  it('does not automatically generate a title when the completed run model is unavailable', async () => {
+    const user = userEvent.setup()
+    let runtimeListener: ((event: { type: string; [key: string]: unknown }) => void) | undefined
+
+    listProviders.mockResolvedValueOnce([
+      { id: 'deepseek', name: 'DeepSeek', kind: 'deepseek', enabled: true, hasApiKey: true, defaultModelId: 'deepseek-chat', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+    ] as any)
+    listModels.mockResolvedValueOnce([
+      { id: 'deepseek-chat', providerId: 'deepseek', modelName: 'deepseek-chat', displayName: 'DeepSeek Chat', capabilities: ['streaming', 'toolCalls'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+    ] as any)
+    listSessions.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        title: 'New chat',
+        status: 'active',
+        defaultModelId: 'deepseek-chat',
+        outputMode: 'markdown',
+        createdAt: '2026-06-10T03:00:00.000Z',
+        updatedAt: '2026-06-10T03:00:00.000Z'
+      }
+    ] as any)
+    onEvent.mockImplementation(((listener: (event: { type: string; [key: string]: unknown }) => void) => {
+      runtimeListener = listener
+      return () => {
+        runtimeListener = undefined
+      }
+    }) as any)
+
+    render(<App />)
+
+    await user.type(await screen.findByPlaceholderText(/输入消息/), '请总结发布计划')
+    await user.click(screen.getByRole('button', { name: '发送' }))
+
+    runtimeListener?.({
+      type: 'run.created',
+      run: {
+        id: 'run-1',
+        sessionId: 'session-1',
+        status: 'running',
+        modelId: 'gpt-4o',
+        retryCount: 0,
+        maxRetries: 5
+      }
+    })
+    runtimeListener?.({
+      type: 'message.completed',
+      message: {
+        id: 'message-assistant-1',
+        sessionId: 'session-1',
+        role: 'assistant',
+        content: '发布计划可以分为预热、发布和复盘。',
+        contentType: 'markdown',
+        runId: 'run-1',
+        createdAt: '2026-06-10T03:00:10.000Z'
+      }
+    })
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('标题生成失败：模型不可用：gpt-4o')
+    expect(generateTitle).not.toHaveBeenCalled()
+  })
+
+  it('does not automatically generate a title for the legacy mock fallback model', async () => {
+    const user = userEvent.setup()
+    let runtimeListener: ((event: { type: string; [key: string]: unknown }) => void) | undefined
+
+    listProviders.mockResolvedValueOnce([
+      { id: 'deepseek', name: 'DeepSeek', kind: 'deepseek', enabled: true, hasApiKey: true, defaultModelId: 'deepseek-chat', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+    ] as any)
+    listModels.mockResolvedValueOnce([
+      { id: 'deepseek-chat', providerId: 'deepseek', modelName: 'deepseek-chat', displayName: 'DeepSeek Chat', capabilities: ['streaming', 'toolCalls'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+    ] as any)
+    listSessions.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        title: 'New chat',
+        status: 'active',
+        defaultModelId: 'deepseek-chat',
+        outputMode: 'markdown',
+        createdAt: '2026-06-10T03:00:00.000Z',
+        updatedAt: '2026-06-10T03:00:00.000Z'
+      }
+    ] as any)
+    onEvent.mockImplementation(((listener: (event: { type: string; [key: string]: unknown }) => void) => {
+      runtimeListener = listener
+      return () => {
+        runtimeListener = undefined
+      }
+    }) as any)
+
+    render(<App />)
+
+    await user.type(await screen.findByPlaceholderText(/输入消息/), '请总结会议纪要')
+    await user.click(screen.getByRole('button', { name: '发送' }))
+
+    runtimeListener?.({
+      type: 'run.created',
+      run: {
+        id: 'run-1',
+        sessionId: 'session-1',
+        status: 'running',
+        modelId: 'mock/hesper-fast',
+        retryCount: 0,
+        maxRetries: 5
+      }
+    })
+    runtimeListener?.({
+      type: 'message.completed',
+      message: {
+        id: 'message-assistant-1',
+        sessionId: 'session-1',
+        role: 'assistant',
+        content: '会议纪要包括结论、待办和风险。',
+        contentType: 'markdown',
+        runId: 'run-1',
+        createdAt: '2026-06-10T03:00:10.000Z'
+      }
+    })
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('标题生成失败：未配置模型')
+    expect(generateTitle).not.toHaveBeenCalled()
   })
 
   it('shows a visible error when automatic title generation fails', async () => {
@@ -2896,7 +3060,7 @@ describe('renderer App', () => {
     expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({
       sessionId: 'session-1',
       prompt: 'hello agent',
-      modelId: 'mock/hesper-fast',
+      modelId: 'deepseek-chat',
       workspacePath: 'C:/workspace'
     }))
     const enqueueInput = (enqueue as any).mock.calls[0]?.[0] as { messageId?: string; messageCreatedAt?: string } | undefined
@@ -3062,6 +3226,38 @@ describe('renderer App', () => {
     expect(screen.queryByText('hidden.png')).not.toBeInTheDocument()
   })
 
+  it('does not enqueue or clear the draft when no model is configured', async () => {
+    const user = userEvent.setup()
+    listProviders.mockResolvedValueOnce([])
+    listModels.mockResolvedValueOnce([])
+    getSettings.mockResolvedValueOnce({ defaultModelId: '', defaultOutputMode: 'markdown', themeMode: 'dark', themeId: 'catppuccin', fontSize: 14, soul: '' })
+    listSessions.mockResolvedValueOnce([
+      {
+        id: 'session-empty-model',
+        title: 'No model configured',
+        status: 'active',
+        workspacePath: 'C:/workspace',
+        defaultModelId: 'gpt-4o',
+        outputMode: 'markdown',
+        createdAt: '2026-06-10T03:00:00.000Z',
+        updatedAt: '2026-06-10T03:00:00.000Z'
+      }
+    ] as any)
+
+    render(<App />)
+
+    expect(await screen.findByRole('button', { name: '选择模型' })).toHaveTextContent('未配置模型')
+    await user.type(screen.getByLabelText('消息输入框'), 'draft without model')
+    const sendButton = screen.getByRole('button', { name: '发送' })
+    expect(sendButton).toBeDisabled()
+
+    await user.click(sendButton)
+    await user.keyboard('{Control>}{Enter}{/Control}')
+
+    expect(enqueue).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('消息输入框')).toHaveValue('draft without model')
+  })
+
   it('passes the selected thinking intensity when enqueueing a run', async () => {
     const user = userEvent.setup()
 
@@ -3121,7 +3317,13 @@ describe('renderer App', () => {
 
     render(<App />)
 
-    expect(await screen.findByRole('button', { name: '选择模型' })).toHaveTextContent('DeepSeek/deepseek-chat')
+    const modelButton = await screen.findByRole('button', { name: '选择模型' })
+    expect(modelButton).toHaveTextContent('DeepSeek/deepseek-chat')
+    await user.click(modelButton)
+    expect(screen.queryByRole('button', { name: '连接 Mock' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Mock/mock/hesper-fast' })).not.toBeInTheDocument()
+    await user.keyboard('{Escape}')
+
     await user.type(screen.getByPlaceholderText(/输入消息/), 'use configured model')
     await user.click(screen.getByRole('button', { name: '发送' }))
 
