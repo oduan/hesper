@@ -514,6 +514,63 @@ describe('PiCoreAgentAdapter', () => {
     }))
   })
 
+  it('maps maximum thinking to xhigh for gpt-5.x reasoning models', async () => {
+    const adapter = new PiCoreAgentAdapter({ modelResolver: resolverFor({ id: 'gpt-5.5', name: 'GPT-5.5', reasoning: true }, ['streaming', 'reasoning']) })
+
+    await adapter.run({
+      runId: 'run-thinking-max-gpt-5',
+      sessionId: 'session-1',
+      prompt: 'hello',
+      modelId: 'pi/gpt-5.5',
+      thinkingLevel: 'max',
+      signal: new AbortController().signal
+    }, vi.fn())
+
+    expect(Agent).toHaveBeenCalledWith(expect.objectContaining({
+      initialState: expect.objectContaining({
+        thinkingLevel: 'xhigh'
+      })
+    }))
+  })
+
+  it('maps maximum thinking to high for non-gpt-5.x reasoning models', async () => {
+    const adapter = new PiCoreAgentAdapter({ modelResolver: resolverFor({ id: 'gpt-4o', reasoning: true }, ['streaming', 'reasoning']) })
+
+    await adapter.run({
+      runId: 'run-thinking-max-non-gpt-5',
+      sessionId: 'session-1',
+      prompt: 'hello',
+      modelId: 'gpt-4o',
+      thinkingLevel: 'max',
+      signal: new AbortController().signal
+    }, vi.fn())
+
+    expect(Agent).toHaveBeenCalledWith(expect.objectContaining({
+      initialState: expect.objectContaining({
+        thinkingLevel: 'high'
+      })
+    }))
+  })
+
+  it('keeps maximum thinking off for non-reasoning models', async () => {
+    const adapter = new PiCoreAgentAdapter({ modelResolver: resolverFor({ id: 'gpt-5.5', reasoning: false }, ['streaming']) })
+
+    await adapter.run({
+      runId: 'run-thinking-max-non-reasoning',
+      sessionId: 'session-1',
+      prompt: 'hello',
+      modelId: 'pi/gpt-5.5',
+      thinkingLevel: 'max',
+      signal: new AbortController().signal
+    }, vi.fn())
+
+    expect(Agent).toHaveBeenCalledWith(expect.objectContaining({
+      initialState: expect.objectContaining({
+        thinkingLevel: 'off'
+      })
+    }))
+  })
+
   it('does not resolve a model or start pi core when the signal is already aborted', async () => {
     const resolver: ModelResolver = {
       resolve: vi.fn(async () => ({

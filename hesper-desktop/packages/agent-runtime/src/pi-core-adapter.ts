@@ -73,6 +73,18 @@ function supportsImageInput(resolved: ResolvedModel): boolean {
   return resolved.model.input?.includes('image') === true || resolved.modelConfig.capabilities?.includes('imageInput') === true
 }
 
+const gpt5SeriesModelPattern = /\bgpt-5(?:$|[._-])/iu
+
+function isGpt5SeriesModel(resolved: ResolvedModel): boolean {
+  return [
+    resolved.model.id,
+    resolved.model.name,
+    resolved.modelConfig.id,
+    resolved.modelConfig.modelName,
+    resolved.modelConfig.displayName
+  ].some((value) => gpt5SeriesModelPattern.test(value))
+}
+
 type RuntimeStreamOptions = SimpleStreamOptions & { serviceTier?: 'priority' }
 
 function createRuntimeStreamFn(runtimeOptions: ResolvedModel['runtimeOptions']): StreamFn | undefined {
@@ -120,6 +132,12 @@ function resolveThinkingLevel(input: AgentPromptInput, resolved: ResolvedModel):
 
   const reasoningModel = resolved.model.reasoning ? resolved.model : { ...resolved.model, reasoning: true }
   const requested = input.thinkingLevel ?? 'medium'
+  if (requested === 'max') {
+    return isGpt5SeriesModel(resolved)
+      ? 'xhigh'
+      : clampThinkingLevel(reasoningModel, 'high')
+  }
+
   if (requested === 'xhigh') {
     return getSupportedThinkingLevels(reasoningModel).includes('xhigh')
       ? 'xhigh'
