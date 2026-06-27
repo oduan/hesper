@@ -265,10 +265,11 @@ describe('ui components', () => {
     expect(appRoot.style.background).toContain('linear-gradient')
     expect(appRoot.style.background).toContain(themeTokens.color.background)
     expect(appRoot).toHaveStyle({ color: themeTokens.color.text })
-    expect(screen.getByLabelText('功能栏')).not.toHaveTextContent('hesper')
+    const activityRail = screen.getByLabelText('功能栏')
+    expect(activityRail).not.toHaveTextContent('hesper')
+    expect(activityRail).toHaveStyle({ background: 'transparent', boxSizing: 'border-box' })
     expect(screen.getByRole('heading', { name: '所有会话' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '所有会话' })).toHaveAttribute('aria-current', 'page')
-    expect(screen.getByLabelText('功能栏')).toHaveStyle({ boxSizing: 'border-box' })
     const entityListPane = screen.getByLabelText('实体列表')
     expectFloatingIslandBorder(entityListPane)
     expect(entityListPane).toHaveStyle({
