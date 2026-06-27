@@ -101,6 +101,8 @@ describe('built-in theme registry', () => {
     expect(darkTheme).toBe(themeTokens)
     expect(lightTheme.color.background).toBe('#f4f4f2')
     expect(lightTheme.color.accent).toBe('#b8b8b2')
+    expect(lightTheme.radius).toEqual({ sm: '5px', md: '7px', lg: '9px', xl: '12px' })
+    expect(themeTokens.radius).toEqual({ sm: '5px', md: '7px', lg: '9px', xl: '12px' })
     expect(themeTokens.color.accentContrast).toBe('var(--hesper-color-accent-contrast, #242421)')
     expect(themeTokens.color.previewBackground).toBe('var(--hesper-color-preview-background, #f4f4f2)')
     expect(themeTokens.color.scrollbarThumbActive).toBe('var(--hesper-color-scrollbar-thumb-active, rgba(112, 112, 106, 0.30))')

@@ -5,6 +5,15 @@ import { ActivityRail, type AppSection } from './ActivityRail'
 import { EntityListPane, type RoleListItem, type SessionCategoryListItem, type SettingsCategory, type SkillListItem } from './EntityListPane'
 import { TitleBar, type DesktopPlatform, type WindowControlAction } from './TitleBar'
 
+const shellBackground = [
+  'radial-gradient(circle at 18% 12%, rgba(255, 255, 255, 0.32), transparent 30%)',
+  'radial-gradient(circle at 82% 4%, rgba(210, 210, 206, 0.22), transparent 34%)',
+  'linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0%, rgba(244, 244, 242, 0) 54%, rgba(72, 72, 67, 0.03) 100%)',
+  themeTokens.color.background
+].join(', ')
+
+const paneSurfaceShadow = `0 18px 42px -34px ${themeTokens.color.shadow}`
+
 export type ToolListItem = ToolDefinition & { enabled: boolean }
 export type { RoleListItem, SessionCategoryListItem, SkillListItem } from './EntityListPane'
 
@@ -163,7 +172,7 @@ export function AppShell({
         height: '100vh',
         minHeight: 0,
         overflow: 'hidden',
-        background: themeTokens.color.background,
+        background: shellBackground,
         color: themeTokens.color.text,
         display: 'grid',
         gridTemplateRows: '36px minmax(0, 1fr)',
@@ -245,7 +254,8 @@ export function AppShell({
             flexDirection: 'column',
             overflow: 'hidden',
             borderRadius: themeTokens.radius.xl,
-            background: themeTokens.color.surface
+            background: themeTokens.color.surface,
+            boxShadow: paneSurfaceShadow
           }}
         >
           <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', padding: activeSection === 'sessions' ? 0 : themeTokens.spacing.lg }}>{children}</div>

@@ -372,9 +372,16 @@ describe('renderer App', () => {
     expect(rootBlock).toContain('--hesper-color-scrollbar-thumb: rgba(112, 112, 106, 0.10);')
     expect(rootBlock).toContain('--hesper-color-scrollbar-thumb-hover: rgba(112, 112, 106, 0.18);')
     expect(rootBlock).toContain('--hesper-color-scrollbar-thumb-active: rgba(112, 112, 106, 0.30);')
+    const navItemBlock = styles.match(/\.hesper-nav-item\s*{(?<body>[\s\S]*?)}/)?.groups?.body ?? ''
+    const listRowBlock = styles.match(/\.hesper-list-row\s*{(?<body>[\s\S]*?)}/)?.groups?.body ?? ''
+    const settingsRowBlock = styles.match(/\.hesper-settings-row\s*{(?<body>[\s\S]*?)}/)?.groups?.body ?? ''
+
     expect(styles).toContain('color: var(--hesper-color-text-muted);')
     expect(styles).toContain('background: var(--hesper-color-hover);')
     expect(styles).toContain('scrollbar-color: var(--hesper-color-scrollbar-thumb) transparent;')
+    expect(navItemBlock).toContain('border-radius: 7px;')
+    expect(listRowBlock).toContain('border-radius: 7px;')
+    expect(settingsRowBlock).toContain('border-radius: 9px;')
   })
 
   it('deletes cleared send-error entries instead of keeping undefined keys', () => {
@@ -1023,8 +1030,11 @@ describe('renderer App', () => {
 
     expect((await screen.findAllByText('Hesper')).length).toBeGreaterThan(0)
     expect(within(screen.getByLabelText('实体列表')).getByRole('heading', { name: '所有会话' })).toBeInTheDocument()
-    const appRoot = screen.getByLabelText('主工作区').parentElement
-    expect(appRoot).toHaveStyle({ background: themeTokens.color.background, color: themeTokens.color.text })
+    const appRoot = screen.getByLabelText('主工作区').parentElement as HTMLElement
+    expect(appRoot.style.background).toContain('radial-gradient')
+    expect(appRoot.style.background).toContain('linear-gradient')
+    expect(appRoot.style.background).toContain(themeTokens.color.background)
+    expect(appRoot).toHaveStyle({ color: themeTokens.color.text })
 
     await user.click(screen.getByRole('button', { name: '最小化窗口' }))
     await user.click(screen.getByRole('button', { name: '最大化窗口' }))

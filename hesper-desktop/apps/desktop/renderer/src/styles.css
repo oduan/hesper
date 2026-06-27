@@ -88,7 +88,7 @@ button {
   width: 100%;
   min-height: 32px;
   border: 0;
-  border-radius: 10px;
+  border-radius: 7px;
   background: transparent;
   color: var(--hesper-color-text-muted);
   padding: 5px 10px;
@@ -126,7 +126,7 @@ button {
   border: 0;
   outline: none;
   box-shadow: none;
-  border-radius: 10px;
+  border-radius: 7px;
   background: transparent;
   color: var(--hesper-color-text);
   padding: 7px 10px;
@@ -160,7 +160,7 @@ button {
   width: 100%;
   min-height: 58px;
   border: 0;
-  border-radius: 12px;
+  border-radius: 9px;
   background: transparent;
   color: var(--hesper-color-text);
   padding: 10px 12px;

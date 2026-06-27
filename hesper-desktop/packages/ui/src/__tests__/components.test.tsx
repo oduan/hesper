@@ -249,13 +249,25 @@ describe('ui components', () => {
     )
 
     const titleBar = screen.getByLabelText('窗口标题栏')
+    const appRoot = titleBar.parentElement as HTMLElement
+    const expectedPaneShadow = `0 18px 42px -34px ${themeTokens.color.shadow}`
     expect(titleBar).toHaveTextContent('Hesper')
     expect(titleBar).toHaveTextContent('构建 hesper MVP')
+    expect(appRoot.style.background).toContain('radial-gradient')
+    expect(appRoot.style.background).toContain('linear-gradient')
+    expect(appRoot.style.background).toContain(themeTokens.color.background)
+    expect(appRoot).toHaveStyle({ color: themeTokens.color.text })
     expect(screen.getByLabelText('功能栏')).not.toHaveTextContent('hesper')
     expect(screen.getByRole('heading', { name: '所有会话' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '所有会话' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByLabelText('功能栏')).toHaveStyle({ boxSizing: 'border-box' })
-    expect(screen.getByLabelText('实体列表')).toHaveStyle({ boxSizing: 'border-box' })
+    const entityListPane = screen.getByLabelText('实体列表')
+    expect(entityListPane).toHaveStyle({
+      boxSizing: 'border-box',
+      background: themeTokens.color.surface,
+      borderRadius: themeTokens.radius.xl,
+      boxShadow: expectedPaneShadow
+    })
     const sessionList = screen.getByLabelText('会话列表')
     expect(sessionList).toHaveClass('hesper-theme-scrollbar')
     expect(sessionList).toHaveStyle({
@@ -263,7 +275,13 @@ describe('ui components', () => {
       paddingRight: '16px'
     })
     expect(screen.getByLabelText('主工作区')).toHaveStyle({ gridTemplateColumns: '204px 427px minmax(0, 1fr)' })
-    expect(screen.getByLabelText('详情区域').firstElementChild).toHaveStyle({ padding: '0px' })
+    const detailPane = screen.getByLabelText('详情区域')
+    expect(detailPane).toHaveStyle({
+      background: themeTokens.color.surface,
+      borderRadius: themeTokens.radius.xl,
+      boxShadow: expectedPaneShadow
+    })
+    expect(detailPane.firstElementChild).toHaveStyle({ padding: '0px' })
     const sessionRow = screen.getByRole('button', { name: '视频脚本生成' })
     expect(sessionRow).toHaveStyle({ alignItems: 'center' })
     expect(sessionRow).toHaveTextContent('视频脚本生成')
@@ -274,7 +292,7 @@ describe('ui components', () => {
     fireEvent.contextMenu(sessionRow)
     expect(sessionRow).not.toHaveClass('is-selected')
     const menu = screen.getByRole('menu', { name: '会话操作' })
-    expect(menu).toHaveStyle({ background: themeTokens.color.surfaceMuted, borderRadius: '12px', padding: '4px 0' })
+    expect(menu).toHaveStyle({ background: themeTokens.color.surfaceMuted, borderRadius: themeTokens.radius.md, padding: '4px 0' })
     expect(menu).toHaveStyle({ boxShadow: `0 18px 50px ${themeTokens.color.shadow}` })
     expect(menu.querySelector('style')).toHaveTextContent('.hesper-session-menu-item:hover::after')
     expect(menu.querySelector('style')).toHaveTextContent(`background: ${themeTokens.color.hover};`)
@@ -1545,7 +1563,7 @@ describe('ui components', () => {
     expect(workspaceButton.querySelector('[data-hesper-workspace-icon="empty-house"]')).toBeInTheDocument()
 
     expect(sendButton).toBeDisabled()
-    expect(screen.getByLabelText('消息输入区')).toHaveStyle({ borderRadius: '20px' })
+    expect(screen.getByLabelText('消息输入区')).toHaveStyle({ borderRadius: themeTokens.radius.xl })
     expect(textarea).toHaveStyle({ borderRadius: '0' })
     expect(textarea).toHaveStyle({ boxSizing: 'border-box', fontSize: 'var(--hesper-font-size, 14px)', lineHeight: '1.5', padding: '0px 2px' })
     expect(textarea).not.toHaveStyle({ font: 'inherit' })
@@ -3551,7 +3569,7 @@ describe('ui components', () => {
     expect(within(toggle).queryByLabelText(/步骤状态/)).not.toBeInTheDocument()
     expect(toggle).toHaveStyle({ gridTemplateColumns: '18px 28px minmax(0, 1fr)', columnGap: '5px' })
     expect(within(toggle).getByText('▸')).toHaveStyle({ fontSize: '16px' })
-    expect(within(toggle).getByText('3')).toHaveStyle({ borderRadius: '8px' })
+    expect(within(toggle).getByText('3')).toHaveStyle({ borderRadius: themeTokens.radius.sm })
     expect(within(toggle).getByText('Searching repo')).not.toHaveAttribute('title')
     expect(screen.queryByText('Generated deterministic mock response')).not.toBeInTheDocument()
 

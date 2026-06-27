@@ -4,6 +4,8 @@ import { RunningStatusIcon } from '../conversation/RunningStatusIcon'
 import { themeTokens } from '../theme'
 import type { AppSection } from './ActivityRail'
 
+const paneSurfaceShadow = `0 18px 42px -34px ${themeTokens.color.shadow}`
+
 type ToolListItem = ToolDefinition & { enabled: boolean }
 
 export type RoleListItem = {
@@ -458,6 +460,7 @@ export function EntityListPane({
         boxSizing: 'border-box',
         background: themeTokens.color.surface,
         borderRadius: themeTokens.radius.xl,
+        boxShadow: paneSurfaceShadow,
         padding: themeTokens.spacing.lg,
         display: 'flex',
         flexDirection: 'column',

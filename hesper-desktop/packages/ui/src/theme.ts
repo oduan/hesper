@@ -52,7 +52,7 @@ export type BuiltinTheme = {
   variants: BuiltinThemeVariant[]
 }
 
-const radius = { sm: '8px', md: '12px', lg: '16px', xl: '20px' }
+const radius = { sm: '5px', md: '7px', lg: '9px', xl: '12px' }
 const spacing = { xs: '4px', sm: '8px', md: '12px', lg: '16px', xl: '24px' }
 
 const hexToRgb = (hex: string): [number, number, number] => {
