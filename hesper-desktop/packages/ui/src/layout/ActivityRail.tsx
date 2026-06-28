@@ -355,6 +355,7 @@ export function ActivityRail({
       <button
         type="button"
         className="hesper-nav-item hesper-nav-item-strong"
+        style={createSessionButtonStyle}
         aria-label="新建会话"
         onClick={() => {
           void onCreateSession?.()
@@ -604,16 +605,26 @@ const navCountStyle: CSSProperties = {
   textAlign: 'right',
   color: 'inherit',
   fontSize: 12,
-  fontWeight: 700,
+  fontWeight: 400,
   lineHeight: '16px',
   fontVariantNumeric: 'tabular-nums'
+}
+
+const createSessionButtonStyle: CSSProperties = {
+  borderColor: themeTokens.color.border,
+  borderStyle: 'solid',
+  borderWidth: '1px',
+  background: themeTokens.color.surfaceMuted,
+  boxShadow: `0 1px 4px -2px ${themeTokens.color.shadow}`,
+  fontWeight: 400
 }
 
 const navSectionButtonStyle: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 8,
-  minWidth: 0
+  minWidth: 0,
+  fontWeight: 400
 }
 
 const sessionsGroupStyle: CSSProperties = {
@@ -661,8 +672,10 @@ const allSessionsPrimaryButtonStyle: CSSProperties = {
   background: 'transparent',
   color: 'inherit',
   padding: 0,
-  font: 'inherit',
-  fontWeight: 600,
+  fontFamily: 'inherit',
+  fontSize: 'inherit',
+  lineHeight: 'inherit',
+  fontWeight: 400,
   cursor: 'pointer',
   textAlign: 'left'
 }
@@ -714,8 +727,10 @@ const categoryRowStyle: CSSProperties = {
   background: 'transparent',
   color: themeTokens.color.textMuted,
   padding: 0,
-  font: 'inherit',
-  fontWeight: 600,
+  fontFamily: 'inherit',
+  fontSize: 'inherit',
+  lineHeight: 'inherit',
+  fontWeight: 400,
   cursor: 'pointer',
   textAlign: 'left'
 }
@@ -742,8 +757,10 @@ const categoryRenameInputStyle: CSSProperties = {
   outline: 0,
   background: 'transparent',
   color: 'inherit',
-  font: 'inherit',
-  fontWeight: 600,
+  fontFamily: 'inherit',
+  fontSize: 'inherit',
+  lineHeight: 'inherit',
+  fontWeight: 400,
   padding: 0
 }
 

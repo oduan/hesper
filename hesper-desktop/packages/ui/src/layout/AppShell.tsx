@@ -214,7 +214,7 @@ export function AppShell({
         color: themeTokens.color.text,
         display: 'grid',
         gridTemplateRows: '36px minmax(0, 1fr)',
-        fontFamily: 'Inter, Segoe UI, sans-serif',
+        fontFamily: 'var(--hesper-font-family-sans, Inter, MiSans, "Segoe UI", sans-serif)',
         fontSize: themeTokens.typography.body
       }}
     >

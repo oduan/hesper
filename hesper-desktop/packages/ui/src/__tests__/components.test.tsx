@@ -139,7 +139,9 @@ describe('ui components', () => {
     expect(button).toBeInTheDocument()
     expect(button).toHaveTextContent('feature/git-log-panel')
 
-    const header = screen.getByRole('heading', { name: '测试会话' }).closest('header')
+    const conversationHeading = screen.getByRole('heading', { name: '测试会话' })
+    const header = conversationHeading.closest('header')
+    expect(conversationHeading).toHaveStyle({ fontWeight: '500' })
     expect(header).toHaveStyle({ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)' })
     expect(header?.querySelector('[data-hesper-git-entry-slot="true"]')).toContainElement(button)
   })
@@ -261,15 +263,21 @@ describe('ui components', () => {
     const expectedPaneShadow = `0 2px 6px -4px ${themeTokens.color.shadow}`
     expect(titleBar).toHaveTextContent('Hesper')
     expect(titleBar).toHaveTextContent('构建 hesper MVP')
+    expect(screen.getByText('构建 hesper MVP')).toHaveStyle({ fontWeight: '500' })
     expect(appRoot.style.background).toContain('radial-gradient')
     expect(appRoot.style.background).toContain('linear-gradient')
     expect(appRoot.style.background).toContain(themeTokens.color.background)
     expect(appRoot).toHaveStyle({ color: themeTokens.color.text })
+    expect(appRoot.style.fontFamily).toContain('--hesper-font-family-sans')
     const activityRail = screen.getByLabelText('功能栏')
     expect(activityRail).not.toHaveTextContent('hesper')
     expect(activityRail).toHaveStyle({ background: 'transparent', boxSizing: 'border-box' })
-    expect(screen.getByRole('heading', { name: '所有会话' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '所有会话' })).toHaveAttribute('aria-current', 'page')
+    const sessionPaneHeading = screen.getByRole('heading', { name: '所有会话' })
+    expect(sessionPaneHeading).toBeInTheDocument()
+    expect(sessionPaneHeading).toHaveStyle({ fontWeight: '500' })
+    const allSessionsNavButton = screen.getByRole('button', { name: '所有会话' })
+    expect(allSessionsNavButton).toHaveAttribute('aria-current', 'page')
+    expect(allSessionsNavButton).toHaveStyle({ fontWeight: '400' })
     const entityListPane = screen.getByLabelText('实体列表')
     expectFloatingIslandBorder(entityListPane)
     expect(entityListPane).toHaveStyle({
@@ -298,7 +306,9 @@ describe('ui components', () => {
     })
     expect(detailPane.firstElementChild).toHaveStyle({ padding: '0px' })
     const sessionRow = screen.getByRole('button', { name: '视频脚本生成' })
+    const sessionTitle = screen.getByText('视频脚本生成')
     expect(sessionRow).toHaveStyle({ alignItems: 'center' })
+    expect(sessionTitle.parentElement).toHaveStyle({ fontWeight: '400' })
     expect(sessionRow).toHaveTextContent('视频脚本生成')
     expect(sessionRow).not.toHaveTextContent('gpt-4o')
     expect(sessionRow).not.toHaveTextContent('C:/workspace')
@@ -323,6 +333,7 @@ describe('ui components', () => {
     await user.click(within(menu).getByRole('menuitem', { name: '重命名' }))
     const renameInput = await screen.findByLabelText('重命名会话标题')
     expect(renameInput).toHaveValue('视频脚本生成')
+    expect(renameInput).toHaveStyle({ fontWeight: '400' })
     await user.clear(renameInput)
     await user.type(renameInput, '短标题{Enter}')
     expect(onRenameSession).toHaveBeenCalledWith('session-list-1', '短标题')
@@ -347,7 +358,14 @@ describe('ui components', () => {
     expect(onWindowToggleMaximize).toHaveBeenCalledTimes(1)
     expect(onWindowClose).toHaveBeenCalledTimes(1)
 
-    await user.click(screen.getByRole('button', { name: '新建会话' }))
+    const createSessionButton = screen.getByRole('button', { name: '新建会话' })
+    expect(createSessionButton.style.background).toBe(themeTokens.color.surfaceMuted)
+    expect(createSessionButton.style.borderColor).toBe(themeTokens.color.border)
+    expect(createSessionButton.style.borderStyle).toBe('solid')
+    expect(createSessionButton.style.borderWidth).toBe('1px')
+    expect(createSessionButton.style.boxShadow).toBe(`0 1px 4px -2px ${themeTokens.color.shadow}`)
+    expect(createSessionButton.style.fontWeight).toBe('400')
+    await user.click(createSessionButton)
     expect(onCreateSession).toHaveBeenCalledTimes(1)
 
     await user.click(screen.getByRole('button', { name: '工具' }))
@@ -542,28 +560,34 @@ describe('ui components', () => {
 
     const allSessionsButton = screen.getByRole('button', { name: '所有会话' })
     expect(allSessionsButton).toHaveAccessibleName('所有会话')
+    expect(allSessionsButton).toHaveStyle({ fontWeight: '400' })
     expect(allSessionsButton.querySelector('[data-hesper-nav-icon="sessions"]')).toHaveAttribute('aria-hidden', 'true')
     const allSessionsCount = allSessionsButton.querySelector('[data-hesper-nav-count]') as HTMLElement
     expect(allSessionsCount).toHaveClass('hesper-nav-count')
     expect(allSessionsCount).toHaveAttribute('aria-hidden', 'true')
+    expect(allSessionsCount).toHaveStyle({ fontWeight: '400' })
     expect(allSessionsCount).toHaveTextContent(/^4$/)
 
     const productButton = screen.getByRole('button', { name: '产品图' })
     expect(productButton).toHaveAccessibleName('产品图')
+    expect(productButton).toHaveStyle({ fontWeight: '400' })
     expect(productButton.querySelector('[data-hesper-nav-icon="category"]')).toHaveAttribute('aria-hidden', 'true')
     expect(productButton.querySelector('[data-hesper-nav-count]')).toHaveTextContent(/^2$/)
 
     const avatarButton = screen.getByRole('button', { name: '头像' })
+    expect(avatarButton).toHaveStyle({ fontWeight: '400' })
     expect(avatarButton.querySelector('[data-hesper-nav-icon="category"]')).toHaveAttribute('aria-hidden', 'true')
     expect(avatarButton.querySelector('[data-hesper-nav-count]')).toHaveTextContent(/^1$/)
 
     const markedButton = screen.getByRole('button', { name: '已标记' })
     expect(markedButton).toHaveAccessibleName('已标记')
+    expect(markedButton).toHaveStyle({ fontWeight: '400' })
     expect(markedButton.querySelector('[data-hesper-nav-icon="marked"]')).toHaveAttribute('aria-hidden', 'true')
     expect(markedButton.querySelector('[data-hesper-nav-count]')).toHaveTextContent(/^2$/)
 
     const archivedButton = screen.getByRole('button', { name: '归档' })
     expect(archivedButton).toHaveAccessibleName('归档')
+    expect(archivedButton).toHaveStyle({ fontWeight: '400' })
     expect(archivedButton.querySelector('[data-hesper-nav-icon="archived"]')).toHaveAttribute('aria-hidden', 'true')
     expect(archivedButton.querySelector('[data-hesper-nav-count]')).toHaveTextContent(/^1$/)
 
@@ -575,6 +599,7 @@ describe('ui components', () => {
     ] as const) {
       const button = screen.getByRole('button', { name: label })
       expect(button).toHaveAccessibleName(label)
+      expect(button).toHaveStyle({ fontWeight: '400' })
       expect(button.querySelector(`[data-hesper-nav-icon="${iconName}"]`)).toHaveAttribute('aria-hidden', 'true')
     }
   })
@@ -1056,6 +1081,8 @@ describe('ui components', () => {
     expect(screen.getByLabelText('详情区域').firstElementChild).toHaveStyle({ padding: '16px' })
     expect(screen.getByLabelText('工具列表')).toHaveClass('hesper-theme-scrollbar')
     expect(screen.getByText('Read File').closest('[role="button"]')).toHaveClass('is-active')
+    expect(screen.getByRole('heading', { name: '工具' })).toHaveStyle({ fontWeight: '500' })
+    expect(screen.getByText('Read File')).toHaveStyle({ fontWeight: '400' })
     expect(screen.getByText('Read a text file from the selected workspace.')).toBeInTheDocument()
 
     const readSwitch = screen.getByRole('switch', { name: 'Read File 全局开关' })
@@ -1107,6 +1134,8 @@ describe('ui components', () => {
     )
 
     expect(screen.getByRole('button', { name: /运维助手/ })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('heading', { name: '角色' })).toHaveStyle({ fontWeight: '500' })
+    expect(screen.getByText('运维助手')).toHaveStyle({ fontWeight: '400' })
     expect(screen.getByText('执行命令')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '新建角色' })).not.toBeInTheDocument()
 
@@ -1135,13 +1164,34 @@ describe('ui components', () => {
     )
 
     expect(screen.getByRole('button', { name: '技能' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('heading', { name: '技能' })).toHaveStyle({ fontWeight: '500' })
     expect(screen.getByLabelText('技能列表')).toHaveClass('hesper-theme-scrollbar')
     expect(screen.getByRole('button', { name: '安装技能 安装可复用技能' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByText('安装技能')).toHaveStyle({ fontWeight: '400' })
     expect(screen.getByText('安装可复用技能')).toBeInTheDocument()
     expect(screen.getByText('暂无简介')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '写作助手 暂无简介' }))
     expect(onSelectSkill).toHaveBeenCalledWith('写作助手')
+  })
+
+  it('renders settings category rows with lightweight labels', () => {
+    render(
+      <AppShell
+        sessions={[]}
+        activeSection="settings"
+        title="设置"
+        activeSettingsCategory="ai"
+      >
+        <div>Settings detail</div>
+      </AppShell>
+    )
+
+    expect(screen.getByRole('button', { name: '设置' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('heading', { name: '设置' })).toHaveStyle({ fontWeight: '500' })
+    const aiSettingsButton = screen.getByRole('button', { name: 'AI 设置' })
+    expect(aiSettingsButton).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByText('AI')).toHaveStyle({ fontWeight: '400' })
   })
 
   it('renders fallback description for roles without description', async () => {
@@ -1451,7 +1501,7 @@ describe('ui components', () => {
     )
 
     expect(screen.getByRole('button', { name: '带更新时间的会话' })).toBeInTheDocument()
-    expect(screen.getByText('59秒')).toHaveStyle({ color: themeTokens.color.textMuted, opacity: '0.72' })
+    expect(screen.getByText('59秒')).toHaveStyle({ color: themeTokens.color.textMuted, fontWeight: '400', opacity: '0.72' })
 
     act(() => {
       vi.advanceTimersByTime(15_000)
@@ -1627,7 +1677,9 @@ describe('ui components', () => {
     )
 
     expect(screen.getByTestId('session-marked-icon-session-1')).toBeInTheDocument()
-    expect(screen.getByTestId('session-category-chip-session-1')).toHaveTextContent('很长很长的分类名称')
+    const sessionCategoryChip = screen.getByTestId('session-category-chip-session-1')
+    expect(sessionCategoryChip).toHaveTextContent('很长很长的分类名称')
+    expect(sessionCategoryChip).toHaveStyle({ fontWeight: '400' })
 
     fireEvent.contextMenu(screen.getByRole('button', { name: 'Plain chat' }))
     await user.click(within(screen.getByRole('menu', { name: '会话操作' })).getByRole('menuitem', { name: '标记' }))
@@ -2940,6 +2992,7 @@ describe('ui components', () => {
     const inlineCode = screen.getByText('inline code')
     expect(inlineCode.tagName).toBe('CODE')
     expect(inlineCode).toHaveStyle({ background: themeTokens.color.softControl, color: themeTokens.color.text })
+    expect(inlineCode.style.fontFamily).toContain('--hesper-font-family-mono')
     const list = screen.getByRole('list')
     expect(list).toBeInTheDocument()
     expect(within(list).getByText('first item')).toBeInTheDocument()
@@ -3258,6 +3311,7 @@ describe('ui components', () => {
 
     const codeBlock = screen.getByText('const value = 1').closest('pre')
     expect(codeBlock).toHaveStyle({ background: themeTokens.color.codeBackground, color: themeTokens.color.text })
+    expect(codeBlock?.style.fontFamily).toContain('--hesper-font-family-mono')
   })
 
   it('auto-expands running steps, shows elapsed time before the first tool intent, and stops when final output appears', () => {

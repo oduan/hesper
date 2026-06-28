@@ -1,3 +1,27 @@
+@font-face {
+  font-family: Inter;
+  src: url('./assets/fonts/InterVariable.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'MiSans';
+  src: url('./assets/fonts/MiSansVF.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('./assets/fonts/JetBrainsMono[wght].ttf') format('truetype');
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+}
+
 :root {
   color-scheme: light;
   /* Central bootstrap defaults before React/AppShell injects the selected theme variables. */
@@ -30,6 +54,8 @@
   --hesper-color-scrollbar-thumb-active: rgba(102, 114, 130, 0.28);
   --hesper-body-background: var(--hesper-color-background);
   --hesper-body-text: var(--hesper-color-text);
+  --hesper-font-family-sans: Inter, MiSans, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  --hesper-font-family-mono: 'JetBrains Mono', 'Cascadia Code', 'Cascadia Mono', SFMono-Regular, Menlo, Consolas, 'Noto Sans Mono CJK SC', 'Sarasa Mono SC', monospace;
 }
 
 *,
@@ -51,7 +77,7 @@ body {
   overflow: hidden;
   background: var(--hesper-body-background);
   color: var(--hesper-body-text);
-  font-family: Inter, 'Segoe UI', sans-serif;
+  font-family: var(--hesper-font-family-sans);
 }
 
 button,
@@ -94,7 +120,7 @@ button {
   padding: 5px 10px;
   text-align: left;
   font-size: var(--hesper-font-size, 14px);
-  font-weight: 600;
+  font-weight: 400;
   cursor: pointer;
   transition: background 120ms ease, color 120ms ease;
 }

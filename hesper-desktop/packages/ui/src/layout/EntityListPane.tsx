@@ -511,7 +511,7 @@ export function EntityListPane({
       }}
     >
       <header style={{ position: 'relative', minHeight: 24 }}>
-        <h2 style={{ margin: 0, fontSize: themeTokens.typography.body, lineHeight: '24px', textAlign: 'center', fontWeight: 700 }}>{heading}</h2>
+        <h2 style={{ margin: 0, fontSize: themeTokens.typography.body, lineHeight: '24px', textAlign: 'center', fontWeight: 500 }}>{heading}</h2>
       </header>
       {activeSection === 'sessions' ? (
         sessions.length > 0 ? (
@@ -724,7 +724,7 @@ export function EntityListPane({
                 aria-label={category.label}
                 onClick={() => onSelectSettingsCategory?.(category.id)}
               >
-                <span style={{ fontWeight: 700 }}>{category.title}</span>
+                <span style={{ fontWeight: 400 }}>{category.title}</span>
                 <span style={{ fontSize: themeTokens.typography.body, color: themeTokens.color.textMuted }}>{category.description}</span>
               </button>
             )
@@ -920,7 +920,7 @@ const roleNameStyle: CSSProperties = {
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
-  fontWeight: 700
+  fontWeight: 400
 }
 
 const roleDescriptionStyle: CSSProperties = {
@@ -944,7 +944,7 @@ const toolNameStyle: CSSProperties = {
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
-  fontWeight: 700
+  fontWeight: 400
 }
 
 const toolDescriptionStyle: CSSProperties = {
@@ -1007,7 +1007,7 @@ const sessionTitleRowStyle: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 6,
-  fontWeight: 600,
+  fontWeight: 400,
   overflow: 'hidden'
 }
 
@@ -1043,7 +1043,7 @@ const sessionCategoryChipStyle: CSSProperties = {
   whiteSpace: 'nowrap',
   color: themeTokens.color.textMuted,
   fontSize: 11,
-  fontWeight: 600,
+  fontWeight: 400,
   opacity: 0.82
 }
 
@@ -1051,7 +1051,7 @@ const sessionRelativeTimeStyle: CSSProperties = {
   flex: '0 0 auto',
   color: themeTokens.color.textMuted,
   fontSize: 11,
-  fontWeight: 600,
+  fontWeight: 400,
   opacity: 0.72,
   whiteSpace: 'nowrap'
 }
@@ -1073,8 +1073,10 @@ const renameInputStyle: CSSProperties = {
   borderRadius: 6,
   background: themeTokens.color.softControl,
   color: themeTokens.color.text,
-  font: 'inherit',
-  fontWeight: 600,
+  fontFamily: 'inherit',
+  fontSize: 'inherit',
+  lineHeight: 'inherit',
+  fontWeight: 400,
   padding: '4px 6px'
 }
 

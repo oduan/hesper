@@ -722,7 +722,7 @@ export function ConversationView({
           }}
         >
           <div aria-hidden="true" style={gitPanelHeaderSideStyle} />
-          <h2 style={{ margin: 0, maxWidth: '100%', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: themeTokens.typography.body, lineHeight: 1.2, textAlign: 'center', fontWeight: 700, justifySelf: 'center' }}>{session.title}</h2>
+          <h2 style={{ margin: 0, maxWidth: '100%', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: themeTokens.typography.body, lineHeight: 1.2, textAlign: 'center', fontWeight: 500, justifySelf: 'center' }}>{session.title}</h2>
           <div data-hesper-git-entry-slot="true" style={gitPanelEntrySlotStyle}>
             {shouldShowGitPanel && gitPanel ? (
               <button

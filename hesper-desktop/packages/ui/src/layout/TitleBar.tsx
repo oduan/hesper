@@ -49,7 +49,7 @@ export function TitleBar({ title, brandName = 'Hesper', platform = 'win32', onMi
     >
       {isMac ? <div className="titlebar-no-drag" style={macControlsSlotStyle}>{controls}</div> : null}
       <div style={brandStyle}>{brandName}</div>
-      <div style={{ fontSize: themeTokens.typography.body, fontWeight: 700, letterSpacing: '0.02em', pointerEvents: 'none' }}>{title}</div>
+      <div style={{ fontSize: themeTokens.typography.body, fontWeight: 500, letterSpacing: '0.02em', pointerEvents: 'none' }}>{title}</div>
       {!isMac ? <div className="titlebar-no-drag" style={windowsControlsSlotStyle}>{controls}</div> : null}
     </header>
   )

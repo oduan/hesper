@@ -376,7 +376,7 @@ const strongStyle: CSSProperties = {
 }
 
 const inlineCodeStyle: CSSProperties = {
-  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+  fontFamily: 'var(--hesper-font-family-mono, "JetBrains Mono", "Cascadia Code", SFMono-Regular, Menlo, Consolas, monospace)',
   fontSize: '1em',
   color: themeTokens.color.text,
   background: themeTokens.color.softControl,
@@ -394,7 +394,7 @@ const codeBlockStyle: CSSProperties = {
   borderRadius: themeTokens.radius.md,
   background: themeTokens.color.codeBackground,
   color: themeTokens.color.text,
-  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+  fontFamily: 'var(--hesper-font-family-mono, "JetBrains Mono", "Cascadia Code", SFMono-Regular, Menlo, Consolas, monospace)',
   fontSize: themeTokens.typography.body,
   lineHeight: 1.5,
   whiteSpace: 'pre'

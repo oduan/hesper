@@ -1,0 +1,14 @@
+Hesper desktop bundles the following fonts for consistent renderer typography:
+
+- Inter Variable
+  Source: https://rsms.me/inter/
+  License: SIL Open Font License 1.1
+
+- MiSans VF
+  Source: https://hyperos.mi.com/font/en/download/
+  License: MiSans Fonts Intellectual Property License Agreement
+  Notice: This software uses MiSans Fonts.
+
+- JetBrains Mono Variable
+  Source: https://www.jetbrains.com/lp/mono/
+  License: SIL Open Font License 1.1
