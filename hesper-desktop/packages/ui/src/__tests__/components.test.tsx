@@ -144,6 +144,9 @@ describe('ui components', () => {
     expect(conversationHeading).toHaveStyle({ fontWeight: '500' })
     expect(header).toHaveStyle({ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)' })
     expect(header?.querySelector('[data-hesper-git-entry-slot="true"]')).toContainElement(button)
+    const composerArea = screen.getByLabelText('消息输入区').parentElement as HTMLElement
+    expect(composerArea).toHaveAttribute('data-hesper-composer-area', 'true')
+    expect(composerArea).toHaveStyle({ boxSizing: 'border-box', maxHeight: 'min(45vh, 420px)', overflowX: 'hidden', overflowY: 'auto' })
   })
 
   it('shows a visible focus ring on the Git graph entry when reached by keyboard', async () => {

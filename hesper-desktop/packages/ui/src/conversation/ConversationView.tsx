@@ -950,7 +950,7 @@ export function ConversationView({
             </button>
           ) : null}
         </div>
-        <div style={composerAreaStyle}>
+        <div data-hesper-composer-area="true" style={composerAreaStyle}>
           <Composer
             {...(session.workspacePath ? { workspacePath: session.workspacePath } : {})}
             modelId={modelId}
@@ -1126,6 +1126,11 @@ const messagesAreaStyle = {
 } satisfies CSSProperties
 
 const composerAreaStyle = {
+  boxSizing: 'border-box',
+  minHeight: 0,
+  maxHeight: 'min(45vh, 420px)',
+  overflowX: 'hidden',
+  overflowY: 'auto',
   padding: `${themeTokens.spacing.md} ${themeTokens.spacing.lg} ${themeTokens.spacing.lg}`
 } satisfies CSSProperties
 
