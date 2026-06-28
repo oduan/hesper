@@ -163,11 +163,13 @@ describe('desktop runtime tooling', () => {
     expect(startElectronDevSource).toContain('electron')
   })
 
-  it('uses Hesper as the user-visible application name', () => {
+  it('uses Hesper as the packaged app name while labeling Vite development chrome as Hesper-dev', () => {
     const mainProcessSource = fs.readFileSync(mainProcessPath, 'utf8')
     const rendererFallbackSource = fs.readFileSync(rendererFallbackPath, 'utf8')
     const rendererIndexSource = fs.readFileSync(rendererIndexPath, 'utf8')
     const startElectronDevSource = fs.readFileSync(startElectronDevPath, 'utf8')
+    const appSource = fs.readFileSync(path.join(appRoot, 'renderer', 'src', 'App.tsx'), 'utf8')
+    const globalTypesSource = fs.readFileSync(path.join(appRoot, 'renderer', 'src', 'global.d.ts'), 'utf8')
 
     expect(desktopPackage.productName).toBe('Hesper')
     expect(rendererIndexSource).toContain('<title>Hesper</title>')
@@ -176,16 +178,37 @@ describe('desktop runtime tooling', () => {
     expect(startElectronDevSource).toContain("const expectedRendererTitle = 'Hesper'")
     expect(startElectronDevSource).not.toContain('hesper desktop')
     expect(mainProcessSource).toContain("app.setName('Hesper')")
+    expect(appSource).toContain("const appBrandName = import.meta.env.MODE === 'development' ? 'Hesper-dev' : 'Hesper'")
+    expect(appSource).toContain('brandName={appBrandName}')
+    expect(globalTypesSource).toContain('interface ImportMetaEnv')
+    expect(globalTypesSource).toContain('readonly MODE: string')
   })
 
-  it('uses the Hesper app name for the default user data directory while preserving explicit overrides', () => {
+  it('keeps production userData stable while giving unpackaged dev runs a -dev directory', () => {
     const mainProcessSource = fs.readFileSync(mainProcessPath, 'utf8').replace(/\r\n/g, '\n')
 
     expect(mainProcessSource).toContain("app.setName('Hesper')")
-    expect(mainProcessSource).toContain('const configuredUserDataPath = process.env.HESPER_USER_DATA_DIR')
-    expect(mainProcessSource).toContain("if (configuredUserDataPath) {\n  app.setPath('userData', configuredUserDataPath)\n}")
-    expect(mainProcessSource).not.toContain('defaultUserDataPath')
-    expect(mainProcessSource).not.toContain("'@hesper', 'desktop'")
+
+    const userDataBranchPattern = new RegExp(
+      [
+        String.raw`const\s+configuredUserDataPath\s*=\s*process\.env\.HESPER_USER_DATA_DIR`,
+        String.raw`if\s*\(\s*configuredUserDataPath\s*\)\s*\{\s*app\.setPath\(\s*['"]userData['"],\s*configuredUserDataPath\s*\)\s*\}`,
+        String.raw`else\s+if\s*\(\s*!\s*app\.isPackaged\s*\)\s*\{`,
+        String.raw`const\s+defaultUserDataPath\s*=\s*app\.getPath\(\s*['"]userData['"]\s*\)`,
+        String.raw`const\s+devUserDataPath\s*=\s*` + '`' + String.raw`\$\{defaultUserDataPath\}-dev` + '`',
+        String.raw`fs\.mkdirSync\(\s*devUserDataPath\s*,\s*\{\s*recursive:\s*true\s*\}\s*\)`,
+        String.raw`app\.setPath\(\s*['"]userData['"],\s*devUserDataPath\s*\)`,
+        String.raw`\}`
+      ].join(String.raw`\s*`)
+    )
+
+    expect(mainProcessSource).toMatch(userDataBranchPattern)
+
+    const configuredOverrideIndex = mainProcessSource.indexOf('if (configuredUserDataPath)')
+    const devUserDataBranchIndex = mainProcessSource.search(/else\s+if\s*\(\s*!\s*app\.isPackaged\s*\)/)
+
+    expect(configuredOverrideIndex).toBeGreaterThanOrEqual(0)
+    expect(devUserDataBranchIndex).toBeGreaterThan(configuredOverrideIndex)
   })
 
   it('fails dev startup instead of opening another app on the renderer dev port', () => {

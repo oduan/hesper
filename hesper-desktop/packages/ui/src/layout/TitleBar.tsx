@@ -6,19 +6,20 @@ export type WindowControlAction = () => unknown | Promise<unknown>
 
 export type TitleBarProps = {
   title: string
+  brandName?: string
   platform?: DesktopPlatform
   onMinimize?: WindowControlAction
   onToggleMaximize?: WindowControlAction
   onClose?: WindowControlAction
 }
 
-type WindowControlsProps = Omit<TitleBarProps, 'title'>
+type WindowControlsProps = Omit<TitleBarProps, 'title' | 'brandName'>
 
 function isMacPlatform(platform: DesktopPlatform | undefined): boolean {
   return platform === 'darwin'
 }
 
-export function TitleBar({ title, platform = 'win32', onMinimize, onToggleMaximize, onClose }: TitleBarProps) {
+export function TitleBar({ title, brandName = 'Hesper', platform = 'win32', onMinimize, onToggleMaximize, onClose }: TitleBarProps) {
   const isMac = isMacPlatform(platform)
   const controls = (
     <WindowControls
@@ -47,7 +48,7 @@ export function TitleBar({ title, platform = 'win32', onMinimize, onToggleMaximi
       }}
     >
       {isMac ? <div className="titlebar-no-drag" style={macControlsSlotStyle}>{controls}</div> : null}
-      <div style={brandStyle}>Hesper</div>
+      <div style={brandStyle}>{brandName}</div>
       <div style={{ fontSize: themeTokens.typography.body, fontWeight: 700, letterSpacing: '0.02em', pointerEvents: 'none' }}>{title}</div>
       {!isMac ? <div className="titlebar-no-drag" style={windowsControlsSlotStyle}>{controls}</div> : null}
     </header>

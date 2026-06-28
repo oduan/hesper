@@ -58,6 +58,7 @@ const defaultAppSettings: AppSettings = {
   soul: ''
 }
 
+const appBrandName = import.meta.env.MODE === 'development' ? 'Hesper-dev' : 'Hesper'
 const gitLogPageSize = 60
 
 export function clearSessionSendError(errors: Record<string, string>, sessionId: string): Record<string, string> {
@@ -1878,6 +1879,7 @@ function AppContent() {
       sessionScopeSourceSessions={effectiveSessions}
       activeSection={state.activeSection}
       title={isSessionsSection ? activeSessionListTitle === '所有会话' ? activeSession?.title ?? '新建会话' : activeSessionListTitle : getSectionTitle(state.activeSection)}
+      brandName={appBrandName}
       {...(isSessionsSection ? { entityListTitle: activeSessionListTitle } : {})}
       platform={hesperApi.window.platform}
       appearance={{ themeId: appSettings.themeId, themeMode: requestedThemeMode, fontSize: appSettings.fontSize }}

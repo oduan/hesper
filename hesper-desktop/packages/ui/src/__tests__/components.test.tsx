@@ -354,6 +354,21 @@ describe('ui components', () => {
     expect(onSelectSection).toHaveBeenCalledWith('tools')
   })
 
+  it('renders a custom app brand name in the window title bar', () => {
+    render(
+      <AppShell
+        sessions={[]}
+        activeSection="sessions"
+        title="Dev title"
+        brandName="Hesper-dev"
+      />
+    )
+
+    const titleBar = screen.getByText('Hesper-dev').closest('header') as HTMLElement
+    expect(titleBar).toHaveTextContent('Hesper-dev')
+    expect(titleBar).toHaveTextContent('Dev title')
+  })
+
   it('keeps the shell background theme-aware for non-Hesper dark themes', () => {
     render(
       <AppShell

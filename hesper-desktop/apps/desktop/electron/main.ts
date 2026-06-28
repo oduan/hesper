@@ -30,6 +30,11 @@ function resolveAppIconPath(): string | undefined {
 const configuredUserDataPath = process.env.HESPER_USER_DATA_DIR
 if (configuredUserDataPath) {
   app.setPath('userData', configuredUserDataPath)
+} else if (!app.isPackaged) {
+  const defaultUserDataPath = app.getPath('userData')
+  const devUserDataPath = `${defaultUserDataPath}-dev`
+  fs.mkdirSync(devUserDataPath, { recursive: true })
+  app.setPath('userData', devUserDataPath)
 }
 
 let mainWindow: BrowserWindow | null = null

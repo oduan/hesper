@@ -25,6 +25,7 @@ export type AppShellProps = {
   sessionScopeSourceSessions?: Session[]
   activeSection: AppSection
   title: string
+  brandName?: string
   platform?: DesktopPlatform
   activeSessionId?: string
   entityListTitle?: string
@@ -77,6 +78,7 @@ export function AppShell({
   sessionScopeSourceSessions,
   activeSection,
   title,
+  brandName,
   platform,
   activeSessionId,
   entityListTitle,
@@ -218,6 +220,7 @@ export function AppShell({
     >
       <TitleBar
         title={title}
+        {...(brandName ? { brandName } : {})}
         {...(platform ? { platform } : {})}
         {...(onWindowMinimize ? { onMinimize: onWindowMinimize } : {})}
         {...(onWindowToggleMaximize ? { onToggleMaximize: onWindowToggleMaximize } : {})}
