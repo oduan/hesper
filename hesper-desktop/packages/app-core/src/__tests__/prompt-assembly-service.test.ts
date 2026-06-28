@@ -456,6 +456,102 @@ describe('PromptAssemblyService', () => {
     expect(output.toolManifest).not.toContain('"required":["content","path"]')
   })
 
+  it('maps subagent terminology from skills to Hesper Worker Agents without granting extra capability', () => {
+    const service = createPromptAssemblyService()
+
+    const mainOutput = service.assembleMainPrompt({
+      session,
+      role: mainRole,
+      skills,
+      tools,
+      assignableWorkerAgentRoles: [reviewerRole]
+    })
+
+    expect(mainOutput.workerAgentRules).toContain('subagent')
+    expect(mainOutput.workerAgentRules).toContain('sub-agent')
+    expect(mainOutput.workerAgentRules).toContain('sub agent')
+    expect(mainOutput.workerAgentRules).toContain('subagent-driven')
+    expect(mainOutput.workerAgentRules).toContain('??agent')
+    expect(mainOutput.workerAgentRules).toContain('Worker Agent')
+    expect(mainOutput.workerAgentRules).toContain('agent.spawn-worker-agent')
+    expect(mainOutput.workerAgentRules).toContain('subject to all Worker Agent rules')
+
+    const unavailableOutput = service.assembleMainPrompt({
+      session: { ...session, enabledToolIds: ['filesystem.read-file'] },
+      role: mainRole,
+      skills,
+      tools: tools.filter((tool) => tool.id !== 'agent.spawn-worker-agent'),
+      assignableWorkerAgentRoles: [reviewerRole]
+    })
+
+    expect(unavailableOutput.workerAgentRules).toContain('subagent')
+    expect(unavailableOutput.workerAgentRules).toContain('Worker Agent spawning is not available')
+    expect(unavailableOutput.workerAgentRules).toContain('does not create Worker Agent capability')
+
+    const workerOutput = service.assembleWorkerAgentPrompt({
+      session,
+      role: reviewerRole,
+      skills,
+      tools,
+      task: 'Follow a subagent-driven review plan.',
+      allowedToolIds: ['filesystem.read-file'],
+      depth: 1,
+      maxDepth: 1,
+      maxWorkerAgentsPerRun: 0
+    })
+
+    expect(workerOutput.workerAgentRules).toContain('subagent')
+    expect(workerOutput.workerAgentRules).toContain('maps to Worker Agent behavior in Hesper')
+    expect(workerOutput.workerAgentRules).toContain('does not grant extra tools')
+  })
+
+  it('guides visual companion requests through local web previews or text fallbacks', () => {
+    const service = createPromptAssemblyService()
+
+    const mainOutput = service.assembleMainPrompt({
+      session,
+      role: mainRole,
+      skills,
+      tools,
+      assignableWorkerAgentRoles: [reviewerRole]
+    })
+
+    expect(mainOutput.systemPrompt).toContain('Capability fallback rules:')
+    expect(mainOutput.systemPrompt).toContain('visual companion')
+    expect(mainOutput.systemPrompt).toContain('browser')
+    expect(mainOutput.systemPrompt).toContain('canvas')
+    expect(mainOutput.systemPrompt).toContain('Coffee')
+    expect(mainOutput.systemPrompt).toContain('direct browser control')
+    expect(mainOutput.systemPrompt).toContain('local web service plus browser preview')
+    expect(mainOutput.systemPrompt).toContain('local web preview/server')
+    expect(mainOutput.systemPrompt).toContain('runtime/app capability')
+    expect(mainOutput.systemPrompt).toContain('user-opened visual aids')
+    expect(mainOutput.systemPrompt).toContain('does not require Coffee or browser-control tooling')
+    expect(mainOutput.systemPrompt).toContain('do not claim you can directly control the browser unless browser-control tooling is available')
+    expect(mainOutput.systemPrompt).toContain('do not claim')
+    expect(mainOutput.systemPrompt).toContain('Mermaid')
+    expect(mainOutput.systemPrompt).toContain('Markdown')
+    expect(mainOutput.systemPrompt).toContain('text diagrams')
+
+    const workerOutput = service.assembleWorkerAgentPrompt({
+      session,
+      role: reviewerRole,
+      skills,
+      tools,
+      task: 'Check whether the plan can use a browser visual companion.',
+      allowedToolIds: ['filesystem.read-file'],
+      depth: 1,
+      maxDepth: 1,
+      maxWorkerAgentsPerRun: 0
+    })
+
+    expect(workerOutput.systemPrompt).toContain('Capability fallback rules:')
+    expect(workerOutput.systemPrompt).toContain('local web service plus browser preview')
+    expect(workerOutput.systemPrompt).toContain('local web preview/server')
+    expect(workerOutput.systemPrompt).toContain('do not claim')
+    expect(workerOutput.systemPrompt).toContain('Mermaid')
+  })
+
   it('does not encourage Worker Agent calls when the tool is absent from the catalog', () => {
     const service = createPromptAssemblyService()
 
@@ -471,6 +567,9 @@ describe('PromptAssemblyService', () => {
     expect(output.workerAgentRules).toContain('do not attempt to call agent.spawn-worker-agent')
     expect(output.workerAgentRules).not.toContain('Use a Worker Agent only')
     expect(output.workerAgentRules).not.toContain('Every Worker Agent call must include')
+    expect(output.roleManifest).toContain('Worker Agent spawning is not available')
+    expect(output.roleManifest).not.toContain('temporaryRole on agent.spawn-worker-agent')
+    expect(output.systemPrompt).not.toContain('use temporaryRole on agent.spawn-worker-agent')
     expect(output.toolManifest).not.toContain('agent.spawn-worker-agent')
   })
 
@@ -606,7 +705,7 @@ describe('PromptAssemblyService', () => {
     const output = service.assembleMainPrompt({
       session: {
         ...session,
-        enabledToolIds: ['filesystem.read-file'],
+        enabledToolIds: ['filesystem.read-file', 'agent.spawn-worker-agent'],
         enabledSkillIds: ['Leaky Skill'],
         allowedWorkerAgentRoleIds: ['leaky-reviewer']
       },
@@ -643,7 +742,9 @@ describe('PromptAssemblyService', () => {
 
     expect(output.toolManifest).toBe('No tools are currently available to this agent.')
     expect(output.skillManifest).toBe('No skills are currently enabled for this agent.')
-    expect(output.roleManifest).toContain('All existing roles may be used as Worker Agent roleId')
+    expect(output.roleManifest).toContain('Worker Agent spawning is not available')
+    expect(output.roleManifest).not.toContain('All existing roles may be used as Worker Agent roleId')
+    expect(output.roleManifest).not.toContain('temporaryRole on agent.spawn-worker-agent')
     expect(output.roleManifest).not.toContain('reviewer')
   })
 

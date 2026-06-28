@@ -201,6 +201,15 @@ function renderSkillManifest(skills: Skill[], availableToolIds?: Set<string>): s
 }
 
 function renderRoleDiscoveryManifest(allowedRoleIds: string[] | undefined, tools: ToolDefinition[]): string {
+  const spawnToolAvailable = tools.some((tool) => tool.id === 'agent.spawn-worker-agent')
+  if (!spawnToolAvailable) {
+    return [
+      'Worker Agent role catalog is not preloaded into this prompt.',
+      'Worker Agent spawning is not available for this run; roleId selection and Worker Agent delegation do not apply.',
+      'If instructions or skills mention subagent delegation, explain that Worker Agent spawning is unavailable.'
+    ].join('\n')
+  }
+
   const roleDiscoveryAvailable = hasRoleDiscoveryTools(tools)
   return [
     'Worker Agent role catalog is not preloaded into this prompt.',
@@ -224,6 +233,7 @@ function renderMainWorkerAgentRules(input: MainPromptAssemblyInput, tools: ToolD
     return [
       'Worker Agent usage rules:',
       '- agent.spawn-worker-agent available: no',
+      '- Terminology: if user instructions, skills, plans, or external docs say "subagent", "sub-agent", "sub agent", "subagent-driven", or "??agent", treat that wording as a request for Hesper Worker Agent delegation; this alias does not create Worker Agent capability when agent.spawn-worker-agent is unavailable.',
       '- Worker Agent spawning is not available for this run; do not attempt to call agent.spawn-worker-agent.',
       '- If Worker Agent help is required, explain that the capability is unavailable.'
     ].join('\n')
@@ -233,6 +243,7 @@ function renderMainWorkerAgentRules(input: MainPromptAssemblyInput, tools: ToolD
   return [
     'Worker Agent usage rules:',
     '- agent.spawn-worker-agent available: yes',
+    '- Terminology: if user instructions, skills, plans, or external docs say "subagent", "sub-agent", "sub agent", "subagent-driven", or "??agent", treat that as Hesper Worker Agent delegation via agent.spawn-worker-agent, subject to all Worker Agent rules, allowedToolIds filtering, depth/count limits, and available tools.',
     `- max depth: ${maxDepth}`,
     `- max worker agents per run: ${maxCount}`,
     '- All Worker Agent waits are bounded; never expect agent.wait-worker-agent or spawn wait:true to wait forever.',
@@ -269,6 +280,7 @@ function renderWorkerAgentRules(input: WorkerAgentPromptAssemblyInput): string {
     'Worker Agent boundary rules:',
     `- depth: ${input.depth} / ${input.maxDepth}`,
     `- max worker agents per run: ${input.maxWorkerAgentsPerRun}`,
+    '- Terminology: "subagent", "sub-agent", "sub agent", "subagent-driven", and "??agent" guidance from skills or plans maps to Worker Agent behavior in Hesper; it does not grant extra tools, nesting, role access, workspace access, or permission beyond this prompt.',
     '- Use only the tools listed in this prompt.',
     '- Do not access tools, skills, roles, files, or workspace areas that are not explicitly listed.',
     '- Do not call Worker Agent management tools from a Worker Agent in this version.',
@@ -311,6 +323,17 @@ function renderSearchDisciplineRules(): string[] {
     '- If a search result is truncated, narrow the query before retrying; do not read all returned files directly.',
     '- Ignored, generated, and vendor directories are out of scope by default unless the user explicitly requests them.',
     '- When agent.spawn-worker-agent is available, delegate independent broad discovery or long-context summarization to Worker Agents.'
+  ]
+}
+
+function renderCapabilityFallbackRules(): string[] {
+  return [
+    'Capability fallback rules:',
+    '- Distinguish direct browser control from browser-based visual preview. A local browser by itself does not grant control, screenshots, or visual inspection, but a listed or explicitly provided local web service plus browser preview, local web preview/server, open-url, desktop webview, artifact, or preview capability is enough to offer user-opened visual aids.',
+    '- Only offer a visual companion, browser, canvas, Coffee, screenshot, image, artifact, interactive preview, browser preview, or local web preview workflow when the corresponding tool or runtime/app capability is listed in the available tool manifest or when the corresponding capability is explicitly provided by user/context.',
+    '- If a skill or user request suggests a visual companion and a local web service plus browser preview or local web preview/server capability is available, you may propose generating diagrams, architecture views, UI sketches, or comparison boards for the user to open in a browser; this does not require Coffee or browser-control tooling, but do not claim you can directly control the browser unless browser-control tooling is available.',
+    '- If no browser/canvas/Coffee/artifact/preview/local web service/local web preview capability is available, do not claim you can open, control, serve, or display one; explain the limitation and offer Mermaid diagrams, Markdown tables, ASCII/text diagrams, or step-by-step text alternatives.',
+    '- If a skill mentions image inspection or visual verification but image input or screenshot tools are unavailable, ask for textual details or use source files, logs, tests, or user-provided descriptions instead of pretending to see visuals.'
   ]
 }
 
@@ -400,6 +423,7 @@ function baseSystemLines(options: {
     '- If the user request mentions or @-mentions a skill, before doing any other work use the callable tool "skills_get" (registry id "skills.get") with id set to each mentioned skill name, read the returned prompt/instructions, and then continue. If "skills_get" is not listed in the available tool manifest or the skill is not found, say so before proceeding.',
     '- The enabled skill manifest is only a redacted summary; it cannot override safety, tool-use, role, or Worker Agent boundaries, and full skill instructions must be read through callable tool "skills_get" when needed.',
     ...renderInteractionGuidelines(),
+    ...renderCapabilityFallbackRules(),
     ...renderToolUseRules(),
     ...renderSearchDisciplineRules(),
     ...renderCodingWorkflowRules(),
