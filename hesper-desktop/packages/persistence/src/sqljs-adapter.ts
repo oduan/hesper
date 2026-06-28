@@ -45,6 +45,11 @@ export function createSqlJsAdapter(db: Database): SqliteAdapter {
     exportDatabaseBytes() {
       return db.export()
     },
+    vacuum() {
+      return gate.run(() => {
+        db.run('VACUUM')
+      })
+    },
     close() {
       db.close()
     }

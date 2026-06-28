@@ -287,8 +287,10 @@ describe('createSessionService', () => {
       status: 'archived'
     })
 
-    await service.deleteSession(created.id)
+    const deleted = await service.deleteSession(created.id)
+    expect(deleted).toMatchObject({ id: created.id, status: 'deleted' })
     await expect(service.getSession(created.id)).rejects.toThrow(`Session not found: ${created.id}`)
+    await expect(persistence.sessions.get(created.id)).resolves.toBeUndefined()
   })
 
   it('defaults createSession title to New chat and trims blank titles', async () => {

@@ -59,12 +59,10 @@ export function createSessionCategoryService(persistence: Persistence): SessionC
       return persistence.transaction(async () => {
         const category = await persistence.sessionCategories.get(id)
         if (!category) throw missingCategoryError(id)
-        const visibleSessions = await persistence.sessions.listVisible()
-        const deletedSessions: Session[] = visibleSessions
-          .filter((candidate) => candidate.status !== 'deleted' && candidate.categoryId === id)
-          .map((session) => ({ ...session, status: 'deleted', updatedAt: nowIso() }))
+        const deletedSessions: Session[] = (await persistence.sessions.listVisible())
+          .filter((candidate) => candidate.categoryId === id)
         for (const session of deletedSessions) {
-          await persistence.sessions.save(session)
+          await persistence.sessions.deleteGraph(session.id)
         }
         await persistence.sessionCategories.delete(id)
         return { category, deletedSessionIds: deletedSessions.map((session) => session.id) }

@@ -195,6 +195,18 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
     return parsed.data
   }
 
+  const deletePersistedSessionAttachments = async (sessionIds: string[]) => {
+    if (!options.attachmentStorage) return
+
+    for (const sessionId of sessionIds) {
+      try {
+        await options.attachmentStorage.deleteSessionAttachments({ sessionId })
+      } catch (error) {
+        console.warn('Failed to delete session attachments', sessionId, error)
+      }
+    }
+  }
+
   const markRuntimeCompletionUnread = async (runtimeEvent: unknown) => {
     const event = validateEvent(runtimeEvent)
     if (event.type === 'message.completed' && event.message.role === 'assistant') {
@@ -347,6 +359,7 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
     },
     [ipcChannels.sessionsDelete]: async (_event, payload) => {
       const session = await options.container.sessionService.deleteSession(sessionIdInputSchema.parse(payload))
+      await deletePersistedSessionAttachments([session.id])
       schedulePersistenceSave()
       return session
     },
@@ -398,6 +411,7 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
     },
     [ipcChannels.sessionCategoriesDelete]: async (_event, payload) => {
       const result = await options.container.sessionCategoryService.deleteCategory(sessionIdInputSchema.parse(payload))
+      await deletePersistedSessionAttachments(result.deletedSessionIds)
       schedulePersistenceSave()
       return deleteSessionCategoryResultSchema.parse(result)
     },

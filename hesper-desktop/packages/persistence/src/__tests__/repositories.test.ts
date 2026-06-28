@@ -549,6 +549,114 @@ describe('persistence repositories', () => {
     expect(messages[0]?.attachments).toEqual([{ id: 'attachment-image-1', kind: 'image', name: 'image.png', mimeType: 'image/png', bytes: 12, relativePath: 'attachments/session-attachments/message-attachments/attachment-image-1.png' }])
   })
 
+  it('hard deletes a session and its persisted graph', async () => {
+    const persistence = await createInMemoryPersistence()
+    await persistence.sessions.save({
+      id: 'session-delete',
+      title: 'Delete me',
+      status: 'active',
+      outputMode: 'markdown',
+      createdAt: now,
+      updatedAt: now
+    })
+    await persistence.sessions.save({
+      id: 'session-keep',
+      title: 'Keep me',
+      status: 'active',
+      outputMode: 'markdown',
+      createdAt: now,
+      updatedAt: now
+    })
+    await persistence.runs.save({ id: 'run-parent', sessionId: 'session-delete', status: 'running', modelId: 'mock/hesper-fast', retryCount: 0, maxRetries: 2 })
+    await persistence.runs.save({ id: 'run-child', sessionId: 'session-delete', parentRunId: 'run-parent', workerAgentInvocationId: 'worker-agent-delete', status: 'succeeded', modelId: 'mock/hesper-fast', retryCount: 0, maxRetries: 2 })
+    await persistence.runs.save({ id: 'run-keep', sessionId: 'session-keep', status: 'running', modelId: 'mock/hesper-fast', retryCount: 0, maxRetries: 2 })
+    await persistence.steps.save({ id: 'step-delete', runId: 'run-parent', type: 'thought', status: 'succeeded', title: 'Delete step', createdAt: now })
+    await persistence.steps.save({ id: 'step-keep', runId: 'run-keep', type: 'thought', status: 'succeeded', title: 'Keep step', createdAt: now })
+    await persistence.events.append({ type: 'run.started', runId: 'run-parent', startedAt: now })
+    await persistence.events.append({ type: 'run.started', runId: 'run-keep', startedAt: now })
+    await persistence.contextItems.save({
+      id: 'context-delete',
+      sessionId: 'session-delete',
+      runId: 'run-parent',
+      kind: 'run_summary',
+      version: 1,
+      content: 'delete context',
+      tokenEstimate: 2,
+      sourceHash: 'hash-delete',
+      createdAt: now
+    })
+    await persistence.contextItems.save({
+      id: 'context-keep',
+      sessionId: 'session-keep',
+      runId: 'run-keep',
+      kind: 'run_summary',
+      version: 1,
+      content: 'keep context',
+      tokenEstimate: 2,
+      sourceHash: 'hash-keep',
+      createdAt: now
+    })
+    await persistence.messages.save({ id: 'message-root', sessionId: 'session-delete', role: 'user', content: 'delete root', contentType: 'plain', runId: 'run-parent', createdAt: now })
+    await persistence.messages.save({ id: 'message-child', sessionId: 'session-delete', role: 'assistant', content: 'delete child', contentType: 'plain', runId: 'run-child', createdAt: now })
+    await persistence.messages.save({ id: 'message-keep', sessionId: 'session-keep', role: 'user', content: 'keep', contentType: 'plain', runId: 'run-keep', createdAt: now })
+    await persistence.workerAgentInvocations.save({
+      id: 'worker-agent-delete',
+      parentRunId: 'run-parent',
+      childRunId: 'run-child',
+      task: 'Delete worker metadata',
+      roleId: 'reviewer',
+      allowedToolIds: ['filesystem.read-file'],
+      status: 'succeeded',
+      createdAt: now
+    })
+    await persistence.sshExecutions.save({
+      id: 'ssh-exec-delete',
+      sessionId: 'session-delete',
+      runId: 'run-parent',
+      serverId: 'ssh-server-1',
+      serverName: 'Prod',
+      commands: ['pwd'],
+      stopOnError: true,
+      timeoutMs: 0,
+      status: 'succeeded',
+      startedAt: now,
+      updatedAt: now,
+      completedAt: now
+    })
+    await persistence.sshCommandResults.save({
+      executionId: 'ssh-exec-delete',
+      index: 0,
+      command: 'pwd',
+      status: 'succeeded',
+      stdout: '/tmp',
+      stderr: '',
+      exitCode: 0,
+      startedAt: now,
+      completedAt: now,
+      durationMs: 1
+    })
+
+    await persistence.sessions.deleteGraph('session-delete')
+
+    await expect(persistence.sessions.get('session-delete')).resolves.toBeUndefined()
+    await expect(persistence.messages.listBySession('session-delete')).resolves.toEqual([])
+    await expect(persistence.runs.get('run-parent')).resolves.toBeUndefined()
+    await expect(persistence.runs.get('run-child')).resolves.toBeUndefined()
+    await expect(persistence.steps.listByRun('run-parent')).resolves.toEqual([])
+    await expect(persistence.events.listByRun('run-parent')).resolves.toEqual([])
+    await expect(persistence.contextItems.listBySession('session-delete')).resolves.toEqual([])
+    await expect(persistence.workerAgentInvocations.get('worker-agent-delete')).resolves.toBeUndefined()
+    await expect(persistence.sshExecutions.listBySession('session-delete')).resolves.toEqual([])
+    await expect(persistence.sshCommandResults.listByExecution('ssh-exec-delete')).resolves.toEqual([])
+
+    await expect(persistence.sessions.get('session-keep')).resolves.toMatchObject({ id: 'session-keep' })
+    await expect(persistence.runs.get('run-keep')).resolves.toMatchObject({ id: 'run-keep' })
+    await expect(persistence.steps.listByRun('run-keep')).resolves.toEqual([expect.objectContaining({ id: 'step-keep' })])
+    await expect(persistence.events.listByRun('run-keep')).resolves.toEqual([expect.objectContaining({ type: 'run.started' })])
+    await expect(persistence.contextItems.listBySession('session-keep')).resolves.toEqual([expect.objectContaining({ id: 'context-keep' })])
+    await expect(persistence.messages.listBySession('session-keep')).resolves.toEqual([expect.objectContaining({ id: 'message-keep' })])
+  })
+
   it('persists Worker Agent invocation runtime events under the child run when available', async () => {
     const db = await createInMemoryPersistence()
     const now = '2026-06-20T05:31:00.000Z'

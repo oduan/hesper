@@ -61,6 +61,7 @@ export type SessionRepository = {
   save(session: Session): Promise<void>
   get(id: string): Promise<Session | undefined>
   listVisible(): Promise<Session[]>
+  deleteGraph(id: string): Promise<void>
 }
 
 export type SessionCategoryRepository = {
@@ -201,7 +202,8 @@ export type Persistence = {
   credentialRecords: CredentialRecordRepository
   transaction<T>(fn: () => Promise<T>): Promise<T>
   exportDatabaseBytes?: () => Uint8Array
-  checkpoint?(): void
+  checkpoint?(): Promise<void> | void
+  vacuum?(): Promise<void> | void
   close?(): void
 }
 
@@ -626,6 +628,12 @@ export async function createRepositories(db: SqliteAdapter): Promise<Persistence
   const exec = async (sql: string, params: unknown[] = []) => db.run(sql, params)
   const fetchAll = async (sql: string, params: unknown[] = []) => db.all(sql, params)
   const fetchOne = async (sql: string, params: unknown[] = []) => db.get(sql, params)
+  const placeholders = (values: readonly unknown[]) => values.map(() => '?').join(', ')
+  const stringIds = (rows: Array<{ id?: unknown }>) => rows.flatMap((row) => typeof row.id === 'string' ? [row.id] : [])
+  const deleteWhereIn = async (table: string, column: string, values: readonly string[]) => {
+    if (values.length === 0) return
+    await exec(`DELETE FROM ${table} WHERE ${column} IN (${placeholders(values)})`, [...values])
+  }
 
   let maxSequence = 0
   for (const table of sequencedTables) {
@@ -727,6 +735,32 @@ export async function createRepositories(db: SqliteAdapter): Promise<Persistence
       },
       async listVisible() {
         return (await fetchAll("SELECT * FROM sessions WHERE status != 'deleted' ORDER BY updated_at DESC, sort_seq ASC, id ASC")).map(toSession)
+      },
+      async deleteGraph(id) {
+        await db.transaction(async () => {
+          const runIds = stringIds(await fetchAll('SELECT id FROM agent_runs WHERE session_id = ?', [id]))
+          const sshExecutionIds = stringIds(await fetchAll('SELECT id FROM ssh_executions WHERE session_id = ?', [id]))
+
+          await deleteWhereIn('ssh_command_results', 'execution_id', sshExecutionIds)
+          await exec('DELETE FROM ssh_executions WHERE session_id = ?', [id])
+
+          if (runIds.length > 0) {
+            const runPlaceholders = placeholders(runIds)
+            await exec(
+              `DELETE FROM worker_agent_invocations WHERE parent_run_id IN (${runPlaceholders}) OR child_run_id IN (${runPlaceholders})`,
+              [...runIds, ...runIds]
+            )
+            await deleteWhereIn('runtime_events', 'run_id', runIds)
+            await deleteWhereIn('run_steps', 'run_id', runIds)
+            await exec(`DELETE FROM run_context_items WHERE session_id = ? OR run_id IN (${runPlaceholders})`, [id, ...runIds])
+          } else {
+            await exec('DELETE FROM run_context_items WHERE session_id = ?', [id])
+          }
+
+          await exec('DELETE FROM messages WHERE session_id = ?', [id])
+          await exec('DELETE FROM agent_runs WHERE session_id = ?', [id])
+          await exec('DELETE FROM sessions WHERE id = ?', [id])
+        })
       }
     },
     sessionCategories: {
@@ -1184,7 +1218,10 @@ export async function createRepositories(db: SqliteAdapter): Promise<Persistence
       return db.transaction(fn)
     },
     checkpoint() {
-      db.checkpoint?.()
+      return db.checkpoint?.()
+    },
+    vacuum() {
+      return db.vacuum?.()
     },
     close() {
       db.close?.()

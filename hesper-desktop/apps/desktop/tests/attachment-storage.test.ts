@@ -93,6 +93,41 @@ describe('attachment storage', () => {
     }
   })
 
+  it('removes all attachment files for a deleted session', async () => {
+    const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), 'hesper-attachments-'))
+    try {
+      const storage = createAttachmentStorage(userDataPath)
+      await storage.saveDraftAttachments({
+        sessionId: 'session-delete',
+        messageId: 'message-1',
+        draftAttachments: [
+          { kind: 'text', name: 'notes.txt', mimeType: 'text/plain', bytes: 5, content: 'hello' }
+        ]
+      })
+      await storage.saveDraftAttachments({
+        sessionId: 'session-delete',
+        messageId: 'message-2',
+        draftAttachments: [
+          { kind: 'text', name: 'more.txt', mimeType: 'text/plain', bytes: 4, content: 'more' }
+        ]
+      })
+      const [keptAttachment] = await storage.saveDraftAttachments({
+        sessionId: 'session-keep',
+        messageId: 'message-keep',
+        draftAttachments: [
+          { kind: 'text', name: 'keep.txt', mimeType: 'text/plain', bytes: 4, content: 'keep' }
+        ]
+      })
+
+      await storage.deleteSessionAttachments({ sessionId: 'session-delete' })
+
+      await expect(fs.access(path.join(userDataPath, 'attachments', 'session-delete'))).rejects.toThrow()
+      await expect(fs.readFile(path.join(userDataPath, ...keptAttachment!.relativePath.split('/')), 'utf8')).resolves.toBe('keep')
+    } finally {
+      await fs.rm(userDataPath, { recursive: true, force: true })
+    }
+  })
+
   it('rejects relative paths that traverse outside the attachments root', async () => {
     const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), 'hesper-attachments-'))
     try {

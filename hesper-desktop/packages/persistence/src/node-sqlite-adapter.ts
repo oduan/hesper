@@ -51,7 +51,14 @@ export function createNodeSqliteFileAdapter(filePath: string): SqliteAdapter {
       )
     },
     checkpoint() {
-      db.exec('PRAGMA wal_checkpoint(TRUNCATE)')
+      return gate.run(() => {
+        db.exec('PRAGMA wal_checkpoint(TRUNCATE)')
+      })
+    },
+    vacuum() {
+      return gate.run(() => {
+        db.exec('VACUUM')
+      })
     },
     close() {
       db.close()

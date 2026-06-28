@@ -42,6 +42,7 @@ export type AttachmentStorage = {
   readTextAttachment(relativePath: string): Promise<string>
   readImageAttachment(relativePath: string): Promise<Buffer>
   deleteMessageAttachments(input: { sessionId: string; messageId: string }): Promise<void>
+  deleteSessionAttachments(input: { sessionId: string }): Promise<void>
 }
 
 function assertSafePathSegment(value: string, label: string): string {
@@ -109,8 +110,12 @@ export function createAttachmentStorage(userDataPath: string): AttachmentStorage
     return resolved
   }
 
+  const resolveSessionDirectory = (sessionId: string): string => {
+    return path.join(attachmentRoot, assertSafePathSegment(sessionId, 'sessionId'))
+  }
+
   const resolveMessageDirectory = (sessionId: string, messageId: string): string => {
-    return path.join(attachmentRoot, assertSafePathSegment(sessionId, 'sessionId'), assertSafePathSegment(messageId, 'messageId'))
+    return path.join(resolveSessionDirectory(sessionId), assertSafePathSegment(messageId, 'messageId'))
   }
 
   return {
@@ -170,6 +175,10 @@ export function createAttachmentStorage(userDataPath: string): AttachmentStorage
 
     async deleteMessageAttachments({ sessionId, messageId }) {
       await fs.rm(resolveMessageDirectory(sessionId, messageId), { recursive: true, force: true })
+    },
+
+    async deleteSessionAttachments({ sessionId }) {
+      await fs.rm(resolveSessionDirectory(sessionId), { recursive: true, force: true })
     }
   }
 }

@@ -1713,6 +1713,46 @@ describe('registerIpcHandlers', () => {
     }
   })
 
+  it('hard deletes sessions through IPC and removes their attachment directory', async () => {
+    const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), 'hesper-ipc-delete-attachments-'))
+    try {
+      const persistence = await createInMemoryPersistence()
+      const container = createServiceContainer({ persistence, agentMode: 'mock' })
+      const storage = createAttachmentStorage(userDataPath)
+      const session = await container.sessionService.createSession({ title: 'Delete attachments' })
+      const [attachment] = await storage.saveDraftAttachments({
+        sessionId: session.id,
+        messageId: 'message-delete-attachments',
+        draftAttachments: [
+          { kind: 'text', name: 'notes.txt', mimeType: 'text/plain', bytes: 5, content: 'hello' }
+        ]
+      })
+      await persistence.messages.save({
+        id: 'message-delete-attachments',
+        sessionId: session.id,
+        role: 'user',
+        content: 'delete this',
+        contentType: 'plain',
+        createdAt: '2026-06-26T00:00:00.000Z',
+        attachments: [attachment!]
+      })
+      const schedulePersistenceSave = vi.fn()
+      const { handles } = registerTestIpcHandlers(container, { attachmentStorage: storage, schedulePersistenceSave })
+
+      await expect(handles.get(ipcChannels.sessionsDelete)?.({ sender: { id: 1 } }, session.id)).resolves.toMatchObject({
+        id: session.id,
+        status: 'deleted'
+      })
+
+      await expect(persistence.sessions.get(session.id)).resolves.toBeUndefined()
+      await expect(persistence.messages.listBySession(session.id)).resolves.toEqual([])
+      await expect(fs.access(path.join(userDataPath, 'attachments', session.id))).rejects.toThrow()
+      expect(schedulePersistenceSave).toHaveBeenCalledTimes(1)
+    } finally {
+      await fs.rm(userDataPath, { recursive: true, force: true })
+    }
+  })
+
   it('requires attachment storage when enqueueing draft attachments', async () => {
     const persistence = await createInMemoryPersistence()
     const container = createServiceContainer({ persistence, agentMode: 'mock' })

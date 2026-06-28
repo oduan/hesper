@@ -200,7 +200,9 @@ export function createSessionService(persistence: Persistence): SessionService {
     },
     async deleteSession(id) {
       const session = await loadSession(persistence, id)
-      return saveSession(persistence, session, 'deleted')
+      const deleted: Session = { ...session, status: 'deleted', updatedAt: nowIso() }
+      await persistence.sessions.deleteGraph(id)
+      return deleted
     }
   }
 }

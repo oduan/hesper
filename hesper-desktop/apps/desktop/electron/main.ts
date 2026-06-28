@@ -5,6 +5,7 @@ import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from 'electro
 import { createFilePersistence } from '@hesper/persistence'
 import { createAttachmentStorage } from './attachment-storage'
 import { createBeforeQuitHandler } from './before-quit'
+import { createDatabaseMaintenanceScheduler, type DatabaseMaintenanceScheduler } from './database-maintenance-scheduler'
 import { createElectronSafeStorageCredentialCodec } from './credential-codec'
 import { registerIpcHandlers } from './ipc-handlers'
 import { installNavigationGuards, resolveRendererLoadTarget } from './renderer-security'
@@ -39,10 +40,16 @@ if (configuredUserDataPath) {
 
 let mainWindow: BrowserWindow | null = null
 let container: ServiceContainer | null = null
+let databaseMaintenanceScheduler: DatabaseMaintenanceScheduler | undefined
 let disposeIpcHandlers: (() => void) | undefined
 
 function stopSkillAutoScan(): void {
   (container?.skillService as { stopAutoScan?: () => void } | undefined)?.stopAutoScan?.()
+}
+
+function stopDatabaseMaintenance(): void {
+  databaseMaintenanceScheduler?.stop()
+  databaseMaintenanceScheduler = undefined
 }
 
 async function savePersistence(): Promise<void> {
@@ -58,9 +65,10 @@ async function flushScheduledPersistence(): Promise<void> {
 }
 
 async function closePersistence(): Promise<void> {
+  stopDatabaseMaintenance()
   const persistence = container?.persistence
   try {
-    persistence?.checkpoint?.()
+    await persistence?.checkpoint?.()
   } catch (error) {
     console.error('Failed to checkpoint persistence before quit.', error)
   } finally {
@@ -107,6 +115,13 @@ async function loadRenderer(window: BrowserWindow): Promise<void> {
 async function bootstrap(): Promise<void> {
   const persistencePath = path.join(app.getPath('userData'), 'hesper.sqlite')
   const persistence = await createFilePersistence(persistencePath)
+  databaseMaintenanceScheduler = createDatabaseMaintenanceScheduler({
+    persistence,
+    logError: (message, error) => {
+      console.error(message, error)
+    }
+  })
+  databaseMaintenanceScheduler.start()
   const skillService = createElectronSkillService()
   await startSkillService(skillService)
   container = createServiceContainer({ persistence, agentMode: resolveAgentMode(), credentialCodec: createElectronSafeStorageCredentialCodec(safeStorage), skillService })
@@ -136,6 +151,7 @@ const beforeQuitHandler = createBeforeQuitHandler({
   closePersistence,
   disposeIpcHandlers: () => {
     stopSkillAutoScan()
+    stopDatabaseMaintenance()
     disposeIpcHandlers?.()
     disposeIpcHandlers = undefined
   },

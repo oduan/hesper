@@ -9,7 +9,8 @@ export type SqliteAdapter = {
   get(sql: string, params?: unknown[]): Promise<SqliteRow | undefined>
   transaction<T>(fn: () => Promise<T>): Promise<T>
   exportDatabaseBytes?: () => Uint8Array
-  checkpoint?: () => void
+  checkpoint?: () => Promise<void> | void
+  vacuum?: () => Promise<void> | void
   close?: () => void
 }
 
