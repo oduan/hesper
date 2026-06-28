@@ -266,6 +266,109 @@ describe('buildRunContextSummary', () => {
     expect(summary?.endsWith('</hesper_run_context>')).toBe(true)
   })
 
+  it('preserves the beginning of a long latest assistant markdown report when truncated', () => {
+    const report = [
+      '## 工程分析报告：Hesper',
+      '',
+      '### 关键结论',
+      '这是一份用于验证 run_summary 截断行为的长报告。',
+      ...Array.from({ length: 40 }, (_, index) => `- 详细分析 ${index + 1}：context compression quality 需要保留 assistant 报告开头，避免整段结果被丢弃。`)
+    ].join('\n')
+
+    const summary = buildRunContextSummary({
+      run: { id: 'run-ctx-long-assistant-report' },
+      maxChars: 520,
+      messages: [
+        createMessage({
+          id: 'msg-short-user',
+          role: 'user',
+          content: '请分析 Hesper 当前问题',
+          createdAt: '2026-06-25T06:00:00.000Z'
+        }),
+        createMessage({
+          id: 'msg-long-assistant-report',
+          role: 'assistant',
+          content: report,
+          createdAt: '2026-06-25T06:01:00.000Z'
+        })
+      ]
+    })
+
+    expect(summary).toBeDefined()
+    expect(summary).toContain('latest_user_request:')
+    expect(summary).toContain('latest_assistant_result:')
+    expect(summary).toContain('## 工程分析报告：Hesper')
+    expect(summary).toMatch(/\[truncated \d+ chars\]/)
+    expect(summary).not.toMatch(/latest_user_request:\n请分析 Hesper 当前问题\n\[truncated \d+ chars\]/)
+    expect(summary?.length ?? 0).toBeLessThanOrEqual(520)
+  })
+
+  it('preserves the beginning of a long latest user request and does not split non-BMP characters', () => {
+    const request = [
+      '用户请求开头：请继续分析 Hesper',
+      `${'a'.repeat(399)}🚀 boundary marker`,
+      ...Array.from({ length: 30 }, (_, index) => `补充背景 ${index + 1}：这段用户请求需要被截断，但开头内容和 emoji 不能损坏。`)
+    ].join('\n')
+
+    const summary = buildRunContextSummary({
+      run: { id: 'run-ctx-long-user-request' },
+      maxChars: 720,
+      messages: [
+        createMessage({
+          id: 'msg-long-user-request',
+          role: 'user',
+          content: request,
+          createdAt: '2026-06-25T06:10:00.000Z'
+        })
+      ]
+    })
+
+    expect(summary).toBeDefined()
+    expect(summary).toContain('latest_user_request:')
+    expect(summary).toContain('用户请求开头：请继续分析 Hesper')
+    expect(summary).toContain('🚀')
+    expect(summary).toMatch(/\[truncated \d+ chars\]/)
+    expect(summary).not.toMatch(/latest_user_request:\n\[truncated \d+ chars\]/)
+    expect(summary?.length ?? 0).toBeLessThanOrEqual(720)
+  })
+
+  it('omits an oversized tool_activity JSON entry rather than splitting it under tight maxChars', () => {
+    const summary = buildRunContextSummary({
+      run: { id: 'run-ctx-tight-tool-json' },
+      maxChars: 240,
+      steps: [
+        createStep({
+          id: 'step-oversized-tool-json',
+          type: 'tool_call',
+          status: 'succeeded',
+          title: `Oversized tool JSON ${'line '.repeat(120)}`,
+          createdAt: '2026-06-25T06:20:00.000Z',
+          detail: [
+            'Command: echo done',
+            'Exit code: 0',
+            '',
+            'stdout:',
+            'done'
+          ].join('\n')
+        })
+      ]
+    })
+
+    expect(summary).toBeDefined()
+    expect(summary).toContain('tool_activity:')
+    expect(summary).toMatch(/\[truncated \d+ chars\]/)
+    expect(() => extractToolActivity(summary ?? '')).not.toThrow()
+    expect(extractToolActivity(summary ?? '')).toEqual([])
+
+    const lines = (summary ?? '').split('\n')
+    const toolActivityIndex = lines.indexOf('tool_activity:')
+    expect(toolActivityIndex).toBeGreaterThanOrEqual(0)
+    const entryCandidateLines = lines
+      .slice(toolActivityIndex + 1)
+      .filter((line) => line && !line.startsWith('[truncated ') && line !== '</hesper_run_context>')
+    expect(entryCandidateLines).toEqual([])
+  })
+
   it('summarizes long tool output through the reducer and still applies maxChars truncation', () => {
     const detail = [
       'Command: cat logs/build.log',

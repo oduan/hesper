@@ -21,7 +21,7 @@ function createSession(overrides: Partial<any> = {}) {
     title: 'Current chat',
     status: 'active',
     workspacePath: 'C:/workspace',
-    defaultModelId: 'mock/hesper-fast',
+    defaultModelId: 'pi/gpt-5.4-mini',
     outputMode: 'markdown',
     createdAt: '2026-06-10T03:00:00.000Z',
     updatedAt: '2026-06-10T03:00:00.000Z',
@@ -49,9 +49,9 @@ const { listSessions, setWorkspace, setModel, setOutputMode, selectDirectory, on
   onEvent: vi.fn(() => () => undefined),
   enqueue: vi.fn(async () => ({ runId: 'run-1' })),
   stopRun: vi.fn(async () => undefined),
-  getSettings: vi.fn(async () => ({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'system', themeId: 'hesper', fontSize: 14, soul: '' })),
+  getSettings: vi.fn(async () => ({ defaultModelId: 'pi/gpt-5.4-mini', defaultOutputMode: 'markdown', themeMode: 'system', themeId: 'hesper', fontSize: 14, soul: '' })),
   updateSettings: vi.fn(async (input: Partial<{ defaultModelId: string; defaultOutputMode: 'markdown' | 'html'; themeMode: 'system' | 'light' | 'dark'; themeId: 'hesper' | 'catppuccin' | 'dracula' | 'tokyo-night'; fontSize: number; soul: string }>) => ({
-    defaultModelId: input.defaultModelId ?? 'mock/hesper-fast',
+    defaultModelId: input.defaultModelId ?? 'pi/gpt-5.4-mini',
     defaultOutputMode: input.defaultOutputMode ?? 'markdown',
     themeMode: input.themeMode ?? 'system',
     themeId: input.themeId ?? 'hesper',
@@ -59,9 +59,9 @@ const { listSessions, setWorkspace, setModel, setOutputMode, selectDirectory, on
     soul: input.soul ?? ''
   })),
   listModels: vi.fn(async () => [
-    { id: 'mock/hesper-fast', providerId: 'mock', modelName: 'mock/hesper-fast', displayName: 'Hesper Mock Fast', capabilities: ['streaming'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' },
+    { id: 'pi/gpt-5.4-mini', providerId: 'chatgpt-codex', modelName: 'gpt-5.4-mini', displayName: 'GPT-5.4 Mini', capabilities: ['streaming', 'toolCalls', 'reasoning'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' },
     { id: 'gpt-4o', providerId: 'openai', modelName: 'gpt-4o', displayName: 'GPT-4o', capabilities: ['streaming', 'toolCalls'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' },
-    { id: 'deepseek-chat', providerId: 'deepseek', modelName: 'deepseek-chat', displayName: 'DeepSeek Chat', capabilities: ['streaming', 'toolCalls'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+    { id: 'deepseek-v4-flash', providerId: 'deepseek', modelName: 'deepseek-v4-flash', displayName: 'DeepSeek V4 Flash', capabilities: ['streaming', 'toolCalls'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
   ]),
   listTools: vi.fn(async () => [
     {
@@ -165,9 +165,9 @@ describe('session settings and restore flow', () => {
     listRoles.mockResolvedValue([])
     enqueue.mockResolvedValue({ runId: 'run-1' })
     stopRun.mockResolvedValue(undefined)
-    getSettings.mockResolvedValue({ defaultModelId: 'mock/hesper-fast', defaultOutputMode: 'markdown', themeMode: 'system', themeId: 'hesper', fontSize: 14, soul: '' })
+    getSettings.mockResolvedValue({ defaultModelId: 'pi/gpt-5.4-mini', defaultOutputMode: 'markdown', themeMode: 'system', themeId: 'hesper', fontSize: 14, soul: '' })
     updateSettings.mockImplementation(async (input) => ({
-      defaultModelId: input.defaultModelId ?? 'mock/hesper-fast',
+      defaultModelId: input.defaultModelId ?? 'pi/gpt-5.4-mini',
       defaultOutputMode: input.defaultOutputMode ?? 'markdown',
       themeMode: input.themeMode ?? 'system',
       themeId: input.themeId ?? 'hesper',
@@ -355,7 +355,7 @@ describe('session settings and restore flow', () => {
     render(<App />)
 
     await screen.findByRole('heading', { name: 'Current chat' })
-    await chooseThemedOption(user, '选择模型', 'deepseek-chat')
+    await chooseThemedOption(user, '选择模型', 'deepseek-v4-flash')
     await chooseThemedOption(user, '选择模型', 'gpt-4o')
 
     second.resolve(createSession({ defaultModelId: 'gpt-4o', updatedAt: '2026-06-10T03:06:02.000Z' }))
@@ -363,7 +363,7 @@ describe('session settings and restore flow', () => {
       expect(screen.getByRole('button', { name: '选择模型' })).toHaveTextContent('gpt-4o')
     })
 
-    first.resolve(createSession({ defaultModelId: 'deepseek-chat', updatedAt: '2026-06-10T03:06:01.000Z' }))
+    first.resolve(createSession({ defaultModelId: 'deepseek-v4-flash', updatedAt: '2026-06-10T03:06:01.000Z' }))
     await waitFor(() => {
       expect(screen.getByRole('button', { name: '选择模型' })).toHaveTextContent('gpt-4o')
     })

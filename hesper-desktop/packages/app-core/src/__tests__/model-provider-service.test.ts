@@ -53,6 +53,140 @@ describe('createModelProviderService', () => {
     expect(await service.listModels()).toEqual([])
   })
 
+  it('backfills official context windows for persisted known models that are missing them', async () => {
+    const persistence = await createInMemoryPersistence()
+    const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
+    const service = createModelProviderService({ persistence, credentialVaultService, now: () => now })
+
+    await service.saveProvider({ id: 'deepseek', name: 'DeepSeek', kind: 'deepseek', enabled: true })
+    await service.saveProvider({ id: 'custom-api-deepseek-com', name: 'DeepSeek Custom API', kind: 'openai-compatible', enabled: true })
+    await service.saveProvider({ id: 'mimo', name: 'MiMo', kind: 'openai-compatible', enabled: true })
+    await service.saveProvider({ id: 'glm', name: 'GLM', kind: 'openai-compatible', enabled: true })
+    await service.saveProvider({ id: 'kimi', name: 'Kimi', kind: 'openai-compatible', enabled: true })
+
+    for (const model of [
+      { id: 'deepseek-v4-flash', providerId: 'deepseek', modelName: 'deepseek-v4-flash', displayName: 'DeepSeek V4 Flash' },
+      { id: 'custom-api-deepseek-com/deepseek-v4-pro', providerId: 'custom-api-deepseek-com', modelName: 'deepseek-v4-pro', displayName: 'DeepSeek V4 Pro' },
+      { id: 'mimo-v2.5', providerId: 'mimo', modelName: 'mimo-v2.5', displayName: 'MiMo V2.5' },
+      { id: 'mimo-v2.5-pro', providerId: 'mimo', modelName: 'mimo-v2.5-pro', displayName: 'MiMo V2.5 Pro' },
+      { id: 'glm-5.2', providerId: 'glm', modelName: 'glm-5.2', displayName: 'GLM 5.2' },
+      { id: 'kimi-k2.7-code', providerId: 'kimi', modelName: 'kimi-k2.7-code', displayName: 'Kimi K2.7 Code' },
+      { id: 'kimi-2.7', providerId: 'kimi', modelName: 'kimi-2.7', displayName: 'Kimi 2.7' }
+    ]) {
+      await service.saveModel({ ...model, capabilities: ['streaming', 'toolCalls'], enabled: true })
+    }
+
+    await service.ensureBuiltinProviders()
+
+    const modelsById = new Map((await service.listModels()).map((model) => [model.id, model]))
+    for (const id of ['deepseek-v4-flash', 'custom-api-deepseek-com/deepseek-v4-pro', 'mimo-v2.5', 'mimo-v2.5-pro', 'glm-5.2']) {
+      expect(modelsById.get(id)?.contextWindow).toBe(1_000_000)
+    }
+    for (const id of ['kimi-k2.7-code', 'kimi-2.7']) {
+      expect(modelsById.get(id)?.contextWindow).toBe(256_000)
+    }
+  })
+
+  it('preserves user customized context windows while backfilling known models', async () => {
+    const persistence = await createInMemoryPersistence()
+    const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
+    const service = createModelProviderService({ persistence, credentialVaultService, now: () => now })
+
+    await service.saveProvider({ id: 'glm', name: 'GLM', kind: 'openai-compatible', enabled: true })
+    await service.saveModel({
+      id: 'glm-5.2',
+      providerId: 'glm',
+      modelName: 'glm-5.2',
+      displayName: 'GLM 5.2',
+      capabilities: ['streaming', 'toolCalls'],
+      contextWindow: 512_000,
+      enabled: true
+    })
+
+    await service.ensureBuiltinProviders()
+
+    await expect(persistence.models.get('glm-5.2')).resolves.toMatchObject({ contextWindow: 512_000 })
+  })
+
+  it('disables retired and test models without deleting them', async () => {
+    const persistence = await createInMemoryPersistence()
+    const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
+    const service = createModelProviderService({ persistence, credentialVaultService, now: () => now })
+
+    await service.saveProvider({ id: 'deepseek', name: 'DeepSeek', kind: 'deepseek', enabled: true })
+    await service.saveProvider({ id: 'mock', name: 'Mock', kind: 'mock', enabled: true })
+    await service.saveModel({ id: 'deepseek-chat', providerId: 'deepseek', modelName: 'deepseek-chat', displayName: 'DeepSeek Chat', capabilities: ['streaming', 'toolCalls'], enabled: true })
+    await service.saveModel({ id: 'deepseek-reasoner', providerId: 'deepseek', modelName: 'deepseek-reasoner', displayName: 'DeepSeek Reasoner', capabilities: ['streaming', 'toolCalls', 'reasoning'], enabled: true })
+    await service.saveModel({ id: 'mock/hesper-fast', providerId: 'mock', modelName: 'hesper-fast', displayName: 'Hesper Mock Fast', capabilities: ['streaming', 'toolCalls'], enabled: true })
+
+    await service.ensureBuiltinProviders()
+
+    await expect(persistence.models.get('deepseek-chat')).resolves.toMatchObject({ id: 'deepseek-chat', enabled: false })
+    await expect(persistence.models.get('deepseek-reasoner')).resolves.toMatchObject({ id: 'deepseek-reasoner', enabled: false })
+    await expect(persistence.models.get('mock/hesper-fast')).resolves.toMatchObject({ id: 'mock/hesper-fast', enabled: false })
+  })
+
+  it('repairs provider defaults that point at retired models when a current model exists', async () => {
+    const persistence = await createInMemoryPersistence()
+    const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
+    const service = createModelProviderService({ persistence, credentialVaultService, now: () => now })
+
+    await service.saveProvider({ id: 'deepseek', name: 'DeepSeek', kind: 'deepseek', enabled: true, defaultModelId: 'deepseek-chat' })
+    await service.saveModel({ id: 'deepseek-chat', providerId: 'deepseek', modelName: 'deepseek-chat', displayName: 'DeepSeek Chat', capabilities: ['streaming', 'toolCalls'], enabled: true })
+    await service.saveModel({ id: 'deepseek-v4-flash', providerId: 'deepseek', modelName: 'deepseek-v4-flash', displayName: 'DeepSeek V4 Flash', capabilities: ['streaming', 'toolCalls'], enabled: true })
+
+    await service.ensureBuiltinProviders()
+
+    await expect(service.getProvider('deepseek')).resolves.toMatchObject({ defaultModelId: 'deepseek-v4-flash' })
+    await expect(persistence.models.get('deepseek-chat')).resolves.toMatchObject({ enabled: false })
+  })
+
+  it('prefers deepseek-v4-flash over earlier enabled models when repairing retired DeepSeek defaults', async () => {
+    const persistence = await createInMemoryPersistence()
+    const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
+    const service = createModelProviderService({ persistence, credentialVaultService, now: () => now })
+
+    await service.saveProvider({ id: 'deepseek', name: 'DeepSeek', kind: 'deepseek', enabled: true, defaultModelId: 'deepseek-chat' })
+    await service.saveModel({ id: 'deepseek-chat', providerId: 'deepseek', modelName: 'deepseek-chat', displayName: 'DeepSeek Chat', capabilities: ['streaming', 'toolCalls'], enabled: true })
+    await service.saveModel({ id: 'aaa-custom', providerId: 'deepseek', modelName: 'aaa-custom', displayName: 'AAA Custom', capabilities: ['streaming', 'toolCalls'], enabled: true })
+    await service.saveModel({ id: 'deepseek-v4-flash', providerId: 'deepseek', modelName: 'deepseek-v4-flash', displayName: 'DeepSeek V4 Flash', capabilities: ['streaming', 'toolCalls'], enabled: true })
+
+    await service.ensureBuiltinProviders()
+
+    await expect(service.getProvider('deepseek')).resolves.toMatchObject({ defaultModelId: 'deepseek-v4-flash' })
+    await expect(persistence.models.get('aaa-custom')).resolves.toMatchObject({ enabled: true })
+  })
+
+  it('does not treat custom provider models as retired merely because their model name is deepseek-chat', async () => {
+    const persistence = await createInMemoryPersistence()
+    const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
+    const service = createModelProviderService({ persistence, credentialVaultService, now: () => now })
+
+    await service.saveProvider({ id: 'custom-api-deepseek-com', name: 'DeepSeek Custom API', kind: 'openai-compatible', enabled: true, defaultModelId: 'custom-api-deepseek-com/deepseek-chat' })
+    await service.saveModel({ id: 'custom-api-deepseek-com/deepseek-chat', providerId: 'custom-api-deepseek-com', modelName: 'deepseek-chat', displayName: 'Custom DeepSeek Chat', capabilities: ['streaming', 'toolCalls'], enabled: true })
+    await service.saveModel({ id: 'custom-api-deepseek-com/aaa-custom', providerId: 'custom-api-deepseek-com', modelName: 'aaa-custom', displayName: 'AAA Custom', capabilities: ['streaming', 'toolCalls'], enabled: true })
+
+    await service.ensureBuiltinProviders()
+
+    await expect(service.getProvider('custom-api-deepseek-com')).resolves.toMatchObject({ defaultModelId: 'custom-api-deepseek-com/deepseek-chat' })
+    await expect(persistence.models.get('custom-api-deepseek-com/deepseek-chat')).resolves.toMatchObject({ enabled: true })
+  })
+
+  it('only disables the explicit mock/hesper-fast test model for the built-in mock provider', async () => {
+    const persistence = await createInMemoryPersistence()
+    const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
+    const service = createModelProviderService({ persistence, credentialVaultService, now: () => now })
+
+    await service.saveProvider({ id: 'mock', name: 'Mock', kind: 'mock', enabled: true, defaultModelId: 'mock/hesper-fast' })
+    await service.saveModel({ id: 'mock/hesper-fast', providerId: 'mock', modelName: 'hesper-fast', displayName: 'Hesper Mock Fast', capabilities: ['streaming', 'toolCalls'], enabled: true })
+    await service.saveModel({ id: 'mock/custom-fast', providerId: 'mock', modelName: 'custom-fast', displayName: 'Custom Fast', capabilities: ['streaming', 'toolCalls'], enabled: true })
+
+    await service.ensureBuiltinProviders()
+
+    await expect(persistence.models.get('mock/hesper-fast')).resolves.toMatchObject({ enabled: false })
+    await expect(persistence.models.get('mock/custom-fast')).resolves.toMatchObject({ enabled: true })
+  })
+
   it('keeps empty persistence empty when listing providers and models', async () => {
     const persistence = await createInMemoryPersistence()
     const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })

@@ -129,6 +129,8 @@ function safetyMarginForWindow(contextWindow: number): number {
   return Math.max(16, Math.min(512, Math.floor(contextWindow * 0.05)))
 }
 
+const DEFAULT_UNKNOWN_MODEL_CONTEXT_WINDOW = 128_000
+
 const RECENT_MESSAGE_RUN_COUNT = 1
 const SESSION_COMPACTION_MAX_CHARS_BY_ATTEMPT = [4000, 2000, 1000] as const
 const SESSION_COMPACTION_PENDING_TITLE = '正在进行压缩'
@@ -480,7 +482,7 @@ export class AgentRuntime {
 
   private async maybeApplyLocalSessionCompaction(currentRun: AgentRun, prompt: string, systemPrompt: string | undefined, attachments: MessageAttachment[] | undefined, attachmentReader: AttachmentReader | undefined, snapshot: SessionHistorySnapshot): Promise<SessionCompactionApplication> {
     const model = await this.persistence.models.get(currentRun.modelId)
-    if (model?.contextWindow === undefined) return this.unchangedSessionCompaction(snapshot)
+    const modelContextWindow = model?.contextWindow ?? DEFAULT_UNKNOWN_MODEL_CONTEXT_WINDOW
 
     const renderedAttachmentTextLengths = attachmentReader === undefined
       ? undefined
@@ -489,9 +491,9 @@ export class AgentRuntime {
         .map((attachment) => estimateRenderedTextAttachmentLength(attachment))
 
     const budget = checkContextBudget({
-      modelContextWindow: model.contextWindow,
-      reservedOutputTokens: reservedOutputTokensForWindow(model.contextWindow),
-      safetyMargin: safetyMarginForWindow(model.contextWindow),
+      modelContextWindow,
+      reservedOutputTokens: reservedOutputTokensForWindow(modelContextWindow),
+      safetyMargin: safetyMarginForWindow(modelContextWindow),
       prompt,
       ...(systemPrompt !== undefined ? { systemPrompt } : {}),
       historyMessages: snapshot.historyMessages,

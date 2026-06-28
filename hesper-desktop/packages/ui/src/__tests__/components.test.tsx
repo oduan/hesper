@@ -61,7 +61,7 @@ function renderConversationWithAssistant(content: string, loadLocalFilePreview?:
       ]}
       steps={[]}
       streamingText=""
-      modelId="mock/hesper-fast"
+      modelId="pi/gpt-5.4-mini"
       onSend={() => undefined}
       {...(loadLocalFilePreview ? { loadLocalFilePreview } : {})}
     />
@@ -110,7 +110,7 @@ function renderConversationWithGitPanel(gitPanel?: ConversationGitPanelProps) {
       messages={[]}
       steps={[]}
       streamingText=""
-      modelId="mock/hesper-fast"
+      modelId="pi/gpt-5.4-mini"
       onSend={() => undefined}
       {...(gitPanel ? { gitPanel } : {})}
     />
@@ -1716,7 +1716,7 @@ describe('ui components', () => {
 
   it('disables send button when composer is empty and keeps controls visually aligned', async () => {
     const user = userEvent.setup()
-    render(<Composer workspacePath="C:/dev/hesper" modelId="mock/hesper-fast" onSend={() => undefined} />)
+    render(<Composer workspacePath="C:/dev/hesper" modelId="pi/gpt-5.4-mini" onSend={() => undefined} />)
     const textarea = screen.getByPlaceholderText(/输入消息/)
     const workspaceButton = screen.getByRole('button', { name: '选择文件夹：hesper' })
     const modelSelect = screen.getByRole('button', { name: '选择模型' })
@@ -1758,7 +1758,7 @@ describe('ui components', () => {
     expect(modelListbox.querySelector('style')).toHaveTextContent(`background: ${themeTokens.color.hover} !important;`)
     expect(modelListbox.querySelector('style')).toHaveTextContent(`color: ${themeTokens.color.text} !important;`)
     expect(modelListbox.querySelector('style')).not.toHaveTextContent('background: var(--hesper-color-hover) !important;')
-    const modelOption = within(modelListbox).getByRole('option', { name: 'mock/hesper-fast' })
+    const modelOption = within(modelListbox).getByRole('option', { name: 'pi/gpt-5.4-mini' })
     expect(modelOption).toHaveClass('hesper-themed-select-option')
     expect(modelOption).toHaveStyle({ borderRadius: themeTokens.radius.sm })
 
@@ -1792,7 +1792,7 @@ describe('ui components', () => {
   })
 
   it('grows the composer textarea up to fifteen rows before showing its own scrollbar', () => {
-    render(<Composer workspacePath="C:/dev/hesper" modelId="mock/hesper-fast" onSend={() => undefined} />)
+    render(<Composer workspacePath="C:/dev/hesper" modelId="pi/gpt-5.4-mini" onSend={() => undefined} />)
     const textarea = screen.getByLabelText('消息输入框') as HTMLTextAreaElement
     const editorWrapper = textarea.parentElement as HTMLElement
 
@@ -1824,7 +1824,7 @@ describe('ui components', () => {
     const renderComposer = (attachments: ComposerDraftAttachment[]) => (
       <Composer
         workspacePath="C:/dev/hesper"
-        modelId="mock/hesper-fast"
+        modelId="pi/gpt-5.4-mini"
         attachments={attachments}
         onAttachmentsChange={onAttachmentsChange}
         onSend={onSend}
@@ -1873,7 +1873,7 @@ describe('ui components', () => {
     const renderComposer = (attachments: ComposerDraftAttachment[]) => (
       <Composer
         workspacePath="C:/dev/hesper"
-        modelId="mock/hesper-fast"
+        modelId="pi/gpt-5.4-mini"
         modelCapabilities={['imageInput']}
         attachments={attachments}
         onAttachmentsChange={onAttachmentsChange}
@@ -1918,7 +1918,7 @@ describe('ui components', () => {
     render(
       <Composer
         workspacePath="C:/dev/hesper"
-        modelId="mock/hesper-fast"
+        modelId="pi/gpt-5.4-mini"
         modelCapabilities={['imageInput']}
         attachments={[]}
         onAttachmentsChange={onAttachmentsChange}
@@ -2001,7 +2001,7 @@ describe('ui components', () => {
     render(
       <Composer
         workspacePath="C:/dev/hesper"
-        modelId="mock/hesper-fast"
+        modelId="pi/gpt-5.4-mini"
         modelCapabilities={['streaming']}
         value=""
         attachments={[textAttachment]}
@@ -2044,7 +2044,7 @@ describe('ui components', () => {
     render(
       <Composer
         workspacePath="C:/dev/hesper"
-        modelId="mock/hesper-fast"
+        modelId="pi/gpt-5.4-mini"
         attachments={[]}
         onAttachmentsChange={onAttachmentsChange}
         onSend={() => undefined}
@@ -2085,7 +2085,7 @@ describe('ui components', () => {
     render(
       <Composer
         workspacePath="C:/dev/hesper"
-        modelId="mock/hesper-fast"
+        modelId="pi/gpt-5.4-mini"
         attachments={[]}
         onAttachmentsChange={onAttachmentsChange}
         onSend={() => undefined}
@@ -2119,7 +2119,7 @@ describe('ui components', () => {
     render(
       <Composer
         workspacePath="C:/dev/hesper"
-        modelId="mock/hesper-fast"
+        modelId="pi/gpt-5.4-mini"
         attachments={[]}
         onAttachmentsChange={onAttachmentsChange}
         onSend={onSend}
@@ -2151,11 +2151,11 @@ describe('ui components', () => {
     render(
       <Composer
         workspacePath="C:/dev/hesper"
-        modelId="deepseek-chat"
-        modelOptions={['mock/hesper-fast', 'deepseek-chat', 'gpt-4o']}
+        modelId="deepseek-v4-flash"
+        modelOptions={['pi/gpt-5.4-mini', 'deepseek-v4-flash', 'gpt-4o']}
         modelOptionGroups={[
-          { id: 'mock', label: 'Mock', options: [{ value: 'mock/hesper-fast', label: 'Mock/mock/hesper-fast' }] },
-          { id: 'deepseek', label: 'DeepSeek', options: [{ value: 'deepseek-chat', label: 'DeepSeek/deepseek-chat' }] },
+          { id: 'chatgpt-codex', label: 'ChatGPT Codex', options: [{ value: 'pi/gpt-5.4-mini', label: 'ChatGPT Codex/gpt-5.4-mini' }] },
+          { id: 'deepseek', label: 'DeepSeek', options: [{ value: 'deepseek-v4-flash', label: 'DeepSeek/deepseek-v4-flash' }] },
           { id: 'openai', label: 'OpenAI', options: [{ value: 'gpt-4o', label: 'OpenAI/gpt-4o' }] }
         ]}
         onModelChange={onModelChange}
@@ -2164,14 +2164,14 @@ describe('ui components', () => {
     )
 
     const modelSelect = screen.getByRole('button', { name: '选择模型' })
-    expect(modelSelect).toHaveTextContent('DeepSeek/deepseek-chat')
+    expect(modelSelect).toHaveTextContent('DeepSeek/deepseek-v4-flash')
 
     await user.click(modelSelect)
     const groupedListbox = screen.getByRole('listbox', { name: '选择模型选项' })
     expect(groupedListbox).toBeInTheDocument()
     expect(groupedListbox.querySelector('style')).toHaveTextContent('.hesper-themed-select-group-button:hover')
     expect(screen.getByRole('button', { name: '连接 DeepSeek' })).toHaveClass('hesper-themed-select-group-button')
-    expect(screen.queryByRole('option', { name: 'DeepSeek/deepseek-chat' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'DeepSeek/deepseek-v4-flash' })).not.toBeInTheDocument()
 
     await user.hover(screen.getByRole('button', { name: '连接 OpenAI' }))
     const openAiSubmenu = await screen.findByLabelText('OpenAI 模型')
@@ -2191,7 +2191,7 @@ describe('ui components', () => {
     const user = userEvent.setup()
     const onSend = vi.fn()
 
-    render(<Composer workspacePath="C:/dev/hesper" modelId="mock/hesper-fast" onSend={onSend} />)
+    render(<Composer workspacePath="C:/dev/hesper" modelId="pi/gpt-5.4-mini" onSend={onSend} />)
 
     await user.click(screen.getByRole('button', { name: '选择模型' }))
     const modelListbox = screen.getByRole('listbox', { name: '选择模型选项' })
@@ -2223,7 +2223,7 @@ describe('ui components', () => {
     const onSend = vi.fn()
     window.localStorage.setItem('hesper.composer.thinkingLevel', 'medium')
 
-    render(<Composer workspacePath="C:/dev/hesper" modelId="mock/hesper-fast" onSend={onSend} />)
+    render(<Composer workspacePath="C:/dev/hesper" modelId="pi/gpt-5.4-mini" onSend={onSend} />)
 
     await user.click(screen.getByRole('button', { name: '选择模型' }))
     expect(screen.getByRole('button', { name: '思考强度：中' })).toBeInTheDocument()
@@ -2241,7 +2241,7 @@ describe('ui components', () => {
     const { container } = render(
       <Composer
         workspacePath="C:/dev/hesper"
-        modelId="mock/hesper-fast"
+        modelId="pi/gpt-5.4-mini"
         skillOptions={[
           { id: 'skill-research', name: 'Research', description: 'Find sources' },
           { id: 'skill-cn', name: '中文写作', description: '中文润色' },
@@ -2298,7 +2298,7 @@ describe('ui components', () => {
     const { container } = render(
       <Composer
         workspacePath="C:/dev/hesper"
-        modelId="mock/hesper-fast"
+        modelId="pi/gpt-5.4-mini"
         skillOptions={[{ id: 'skill-superpowers', name: 'using-superpowers' }]}
         onSend={() => undefined}
       />
@@ -2341,7 +2341,7 @@ describe('ui components', () => {
       return visible ? (
         <Composer
           workspacePath="C:/dev/hesper"
-          modelId="mock/hesper-fast"
+          modelId="pi/gpt-5.4-mini"
           skillOptions={skillOptions}
           skillMentions={skillMentions}
           value={draft}
@@ -2374,7 +2374,7 @@ describe('ui components', () => {
     const { container } = render(
       <Composer
         workspacePath="C:/dev/hesper"
-        modelId="mock/hesper-fast"
+        modelId="pi/gpt-5.4-mini"
         skillOptions={[{ id: 'skill-research', name: 'Research' }]}
         onSend={() => undefined}
       />
@@ -2400,7 +2400,7 @@ describe('ui components', () => {
     const { container } = render(
       <Composer
         workspacePath="C:/dev/hesper"
-        modelId="mock/hesper-fast"
+        modelId="pi/gpt-5.4-mini"
         skillOptions={[{ id: 'skill-research', name: 'Research' }]}
         onSend={() => undefined}
       />
@@ -2425,7 +2425,7 @@ describe('ui components', () => {
     const { container } = render(
       <Composer
         workspacePath="C:/dev/hesper"
-        modelId="mock/hesper-fast"
+        modelId="pi/gpt-5.4-mini"
         skillOptions={[{ id: 'skill-research', name: 'Research' }]}
         onSend={() => undefined}
       />
@@ -2454,7 +2454,7 @@ describe('ui components', () => {
       render(
         <Composer
           workspacePath="C:/dev/hesper"
-          modelId="mock/hesper-fast"
+          modelId="pi/gpt-5.4-mini"
           skillOptions={[
             { id: 'skill-research', name: 'Research' },
             { id: 'skill-code', name: 'Code Review' },
@@ -2491,7 +2491,7 @@ describe('ui components', () => {
     render(
       <Composer
         workspacePath="C:/dev/hesper"
-        modelId="mock/hesper-fast"
+        modelId="pi/gpt-5.4-mini"
         skillOptions={[{ id: 'skill-research', name: 'Research', description: 'Find sources' }]}
         onSend={onSend}
       />
@@ -2510,7 +2510,7 @@ describe('ui components', () => {
     const onSend = vi.fn()
     const onStop = vi.fn()
 
-    render(<Composer workspacePath="C:/dev/hesper" modelId="mock/hesper-fast" onSend={onSend} running onStop={onStop} />)
+    render(<Composer workspacePath="C:/dev/hesper" modelId="pi/gpt-5.4-mini" onSend={onSend} running onStop={onStop} />)
 
     expect(screen.queryByRole('button', { name: '发送' })).not.toBeInTheDocument()
     const stopButton = screen.getByRole('button', { name: '停止' })
@@ -2526,14 +2526,14 @@ describe('ui components', () => {
     const user = userEvent.setup()
     const onDraftChange = vi.fn()
 
-    const { rerender } = render(<Composer workspacePath="C:/dev/hesper" modelId="mock/hesper-fast" value="first draft" onDraftChange={onDraftChange} onSend={() => undefined} />)
+    const { rerender } = render(<Composer workspacePath="C:/dev/hesper" modelId="pi/gpt-5.4-mini" value="first draft" onDraftChange={onDraftChange} onSend={() => undefined} />)
     const textarea = screen.getByPlaceholderText(/输入消息/)
     expect(textarea).toHaveValue('first draft')
 
     await user.type(textarea, '!')
     expect(onDraftChange).toHaveBeenLastCalledWith('first draft!')
 
-    rerender(<Composer workspacePath="C:/dev/hesper" modelId="mock/hesper-fast" value="restored draft" onDraftChange={onDraftChange} onSend={() => undefined} />)
+    rerender(<Composer workspacePath="C:/dev/hesper" modelId="pi/gpt-5.4-mini" value="restored draft" onDraftChange={onDraftChange} onSend={() => undefined} />)
     expect(textarea).toHaveValue('restored draft')
   })
 
@@ -2541,7 +2541,7 @@ describe('ui components', () => {
     const user = userEvent.setup()
     const onSend = vi.fn()
     const renderComposer = (sendSignal: number) => (
-      <Composer workspacePath="C:/dev/hesper" modelId="mock/hesper-fast" onSend={onSend} sendSignal={sendSignal} />
+      <Composer workspacePath="C:/dev/hesper" modelId="pi/gpt-5.4-mini" onSend={onSend} sendSignal={sendSignal} />
     )
     const { rerender } = render(renderComposer(0))
     const textarea = screen.getByPlaceholderText(/输入消息/)
@@ -2569,7 +2569,7 @@ describe('ui components', () => {
     const renderComposer = (value: string) => (
       <Composer
         workspacePath="C:/dev/hesper"
-        modelId="mock/hesper-fast"
+        modelId="pi/gpt-5.4-mini"
         value={value}
         onDraftChange={noop}
         onSend={onSend}
@@ -3218,7 +3218,7 @@ describe('ui components', () => {
           }
         ]}
         streamingText=""
-        modelId="mock/hesper-fast"
+        modelId="pi/gpt-5.4-mini"
         onSend={() => undefined}
         loadLocalFilePreview={loadLocalFilePreview}
       />
@@ -3268,7 +3268,7 @@ describe('ui components', () => {
         steps={[]}
         stepsByRun={{ 'run-1': runningSteps }}
         streamingText=""
-        modelId="mock/hesper-fast"
+        modelId="pi/gpt-5.4-mini"
         onSend={() => undefined}
       />
     )
@@ -3334,7 +3334,7 @@ describe('ui components', () => {
       id: 'run-live-timer',
       sessionId: 'session-1',
       status: 'running',
-      modelId: 'mock/hesper-fast',
+      modelId: 'pi/gpt-5.4-mini',
       retryCount: 0,
       maxRetries: 2,
       startedAt: now
@@ -3348,7 +3348,7 @@ describe('ui components', () => {
         stepsByRun={{ 'run-live-timer': steps }}
         runsById={{ 'run-live-timer': runningRun }}
         streamingText=""
-        modelId="mock/hesper-fast"
+        modelId="pi/gpt-5.4-mini"
         onSend={() => undefined}
       />
     )
@@ -3364,7 +3364,7 @@ describe('ui components', () => {
         stepsByRun={{ 'run-live-timer': steps }}
         runsById={{ 'run-live-timer': { ...runningRun, status: 'succeeded', endedAt: '2026-06-10T03:00:07.000Z' } }}
         streamingText=""
-        modelId="mock/hesper-fast"
+        modelId="pi/gpt-5.4-mini"
         onSend={() => undefined}
       />
     )
@@ -3436,7 +3436,7 @@ describe('ui components', () => {
         messages={messages}
         steps={[]}
         streamingText=""
-        modelId="mock/hesper-fast"
+        modelId="pi/gpt-5.4-mini"
         onSend={() => undefined}
       />
     )
@@ -3499,7 +3499,7 @@ describe('ui components', () => {
         messages={messages}
         steps={[]}
         streamingText=""
-        modelId="mock/hesper-fast"
+        modelId="pi/gpt-5.4-mini"
         onSend={() => undefined}
       />
     )
@@ -3557,7 +3557,7 @@ describe('ui components', () => {
         messages={messages}
         steps={[]}
         streamingText=""
-        modelId="mock/hesper-fast"
+        modelId="pi/gpt-5.4-mini"
         onSend={() => undefined}
       />
     )
@@ -3611,7 +3611,7 @@ describe('ui components', () => {
         ]}
         steps={[]}
         streamingText=""
-        modelId="mock/hesper-fast"
+        modelId="pi/gpt-5.4-mini"
         onSend={() => undefined}
       />
     )
@@ -3687,7 +3687,7 @@ describe('ui components', () => {
         ]}
         steps={[]}
         streamingText=""
-        modelId="mock/hesper-fast"
+        modelId="pi/gpt-5.4-mini"
         onSend={() => undefined}
       />
     )
@@ -4108,7 +4108,7 @@ describe('ui components', () => {
         steps={[]}
         stepsByRun={{ 'run-1': runSteps }}
         streamingText=""
-        modelId="mock/hesper-fast"
+        modelId="pi/gpt-5.4-mini"
         onSend={() => undefined}
       />
     )
@@ -4317,7 +4317,7 @@ describe('ui components', () => {
       parentRunId: 'run-parent',
       workerAgentInvocationId: 'worker-invocation-1',
       status: 'running',
-      modelId: 'mock/hesper-fast',
+      modelId: 'pi/gpt-5.4-mini',
       retryCount: 0,
       maxRetries: 2,
       startedAt: now
@@ -4428,7 +4428,7 @@ describe('ui components', () => {
       parentRunId: 'run-parent',
       workerAgentInvocationId: 'worker-invocation-html-output',
       status: 'running',
-      modelId: 'mock/hesper-fast',
+      modelId: 'pi/gpt-5.4-mini',
       retryCount: 0,
       maxRetries: 2,
       startedAt: now

@@ -11,7 +11,7 @@ const tools = [
   { id: 'git.status', name: 'Git Status', description: 'Git status', category: 'git' as const, inputSchema: {}, enabled: true }
 ]
 
-const modelOptions = ['gpt-4o', 'deepseek-chat']
+const modelOptions = ['gpt-4o', 'deepseek-v4-flash']
 const modelOptionGroups = [
   {
     id: 'openai',
@@ -21,7 +21,7 @@ const modelOptionGroups = [
   {
     id: 'deepseek',
     label: 'DeepSeek',
-    options: [{ value: 'deepseek-chat', label: 'DeepSeek Chat' }]
+    options: [{ value: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' }]
   }
 ]
 
@@ -41,8 +41,8 @@ const reviewerRole = {
   description: '审查代码',
   systemPrompt: '你是审查助手。',
   defaultToolIds: ['filesystem.read-file'],
-  defaultModelId: 'deepseek-chat',
-  defaultModelRef: { providerId: 'deepseek', modelId: 'deepseek-chat' }
+  defaultModelId: 'deepseek-v4-flash',
+  defaultModelRef: { providerId: 'deepseek', modelId: 'deepseek-v4-flash' }
 }
 
 describe('RolesPanel', () => {
@@ -92,7 +92,7 @@ describe('RolesPanel', () => {
 
     expect(screen.getByLabelText('角色名称')).toHaveValue('审查助手')
     expect(screen.getByLabelText('角色简介')).toHaveValue('审查代码')
-    expect(screen.getByLabelText('默认模型')).toHaveValue('deepseek-chat')
+    expect(screen.getByLabelText('默认模型')).toHaveValue('deepseek-v4-flash')
     expect(screen.getByRole('button', { name: '保存修改' })).toBeDisabled()
   })
 
@@ -116,7 +116,7 @@ describe('RolesPanel', () => {
     expect(defaultModelSelect).toHaveValue('gpt-4o')
     expect(saveButton).toBeDisabled()
 
-    await user.selectOptions(defaultModelSelect, 'deepseek-chat')
+    await user.selectOptions(defaultModelSelect, 'deepseek-v4-flash')
 
     expect(saveButton).toBeEnabled()
   })
@@ -165,7 +165,7 @@ describe('RolesPanel', () => {
 
     await user.clear(screen.getByLabelText('角色名称'))
     await user.type(screen.getByLabelText('角色名称'), '更新角色')
-    await user.selectOptions(screen.getByLabelText('默认模型'), 'deepseek-chat')
+    await user.selectOptions(screen.getByLabelText('默认模型'), 'deepseek-v4-flash')
     await user.click(screen.getByLabelText('Read File'))
     await user.click(screen.getByRole('button', { name: '保存修改' }))
 
@@ -175,8 +175,8 @@ describe('RolesPanel', () => {
       description: '执行命令',
       systemPrompt: '你是运维助手。',
       defaultToolIds: expect.arrayContaining(['filesystem.read-file', 'git.status']),
-      defaultModelId: 'deepseek-chat',
-      defaultModelRef: { providerId: 'deepseek', modelId: 'deepseek-chat' }
+      defaultModelId: 'deepseek-v4-flash',
+      defaultModelRef: { providerId: 'deepseek', modelId: 'deepseek-v4-flash' }
     })
   })
 

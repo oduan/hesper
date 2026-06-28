@@ -530,10 +530,10 @@ describe('renderer App', () => {
       updatedAt: '2026-06-10T03:00:12.000Z'
     }))
     listProviders.mockResolvedValue([
-      { id: 'deepseek', name: 'DeepSeek', kind: 'deepseek', enabled: true, hasApiKey: true, defaultModelId: 'deepseek-chat', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+      { id: 'deepseek', name: 'DeepSeek', kind: 'deepseek', enabled: true, hasApiKey: true, defaultModelId: 'deepseek-v4-flash', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
     ] as any)
     listModels.mockResolvedValue([
-      { id: 'deepseek-chat', providerId: 'deepseek', modelName: 'deepseek-chat', displayName: 'DeepSeek Chat', capabilities: ['streaming', 'toolCalls'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+      { id: 'deepseek-v4-flash', providerId: 'deepseek', modelName: 'deepseek-v4-flash', displayName: 'DeepSeek V4 Flash', capabilities: ['streaming', 'toolCalls'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
     ] as any)
     listTools.mockResolvedValue([
       {
@@ -652,9 +652,9 @@ describe('renderer App', () => {
       createdAt: '2026-06-10T03:00:00.000Z',
       updatedAt: '2026-06-10T03:00:00.000Z'
     }))
-    getSettings.mockResolvedValue({ defaultModelId: 'deepseek-chat', defaultOutputMode: 'markdown', themeMode: 'system', themeId: 'hesper', fontSize: 14, soul: '' })
+    getSettings.mockResolvedValue({ defaultModelId: 'deepseek-v4-flash', defaultOutputMode: 'markdown', themeMode: 'system', themeId: 'hesper', fontSize: 14, soul: '' })
     updateSettings.mockImplementation(async (input) => ({
-      defaultModelId: input.defaultModelId ?? 'deepseek-chat',
+      defaultModelId: input.defaultModelId ?? 'deepseek-v4-flash',
       defaultOutputMode: input.defaultOutputMode ?? 'markdown',
       themeMode: input.themeMode ?? 'system',
       themeId: input.themeId ?? 'hesper',
@@ -2650,7 +2650,7 @@ describe('renderer App', () => {
         id: 'session-2',
         title: 'Dormant chat',
         status: 'active',
-        defaultModelId: 'deepseek-chat',
+        defaultModelId: 'deepseek-v4-flash',
         outputMode: 'markdown',
         createdAt: '2026-06-10T02:00:00.000Z',
         updatedAt: '2026-06-10T02:00:00.000Z'
@@ -2675,7 +2675,7 @@ describe('renderer App', () => {
       expect(listMessages).toHaveBeenCalledWith('session-2')
       expect(generateTitle).toHaveBeenCalledWith({
         id: 'session-2',
-        modelId: 'deepseek-chat',
+        modelId: 'deepseek-v4-flash',
         userPrompt: '最近一次用户输入',
         assistantOutput: '最近一次 Agent 回答'
       })
@@ -2690,7 +2690,7 @@ describe('renderer App', () => {
         id: 'session-2',
         title: 'Dormant chat',
         status: 'active',
-        defaultModelId: 'deepseek-chat',
+        defaultModelId: 'deepseek-v4-flash',
         outputMode: 'markdown',
         createdAt: '2026-06-10T02:00:00.000Z',
         updatedAt: '2026-06-10T02:00:00.000Z'
@@ -2774,14 +2774,14 @@ describe('renderer App', () => {
     ] as any)
     listModels.mockResolvedValueOnce([
       { id: 'deepseek-title', providerId: 'deepseek', modelName: 'deepseek-title', displayName: 'DeepSeek Title', capabilities: ['streaming'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' },
-      { id: 'deepseek-chat', providerId: 'deepseek', modelName: 'deepseek-chat', displayName: 'DeepSeek Chat', capabilities: ['streaming', 'toolCalls'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+      { id: 'deepseek-v4-flash', providerId: 'deepseek', modelName: 'deepseek-v4-flash', displayName: 'DeepSeek V4 Flash', capabilities: ['streaming', 'toolCalls'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
     ] as any)
     listSessions.mockResolvedValueOnce([
       {
         id: 'session-1',
         title: 'New chat',
         status: 'active',
-        defaultModelId: 'deepseek-chat',
+        defaultModelId: 'deepseek-v4-flash',
         outputMode: 'markdown',
         createdAt: '2026-06-10T03:00:00.000Z',
         updatedAt: '2026-06-10T03:00:00.000Z'
@@ -2806,7 +2806,7 @@ describe('renderer App', () => {
         id: 'run-1',
         sessionId: 'session-1',
         status: 'running',
-        modelId: 'deepseek-chat',
+        modelId: 'deepseek-v4-flash',
         retryCount: 0,
         maxRetries: 5
       }
@@ -2827,7 +2827,7 @@ describe('renderer App', () => {
     await waitFor(() => {
       expect(generateTitle).toHaveBeenCalledWith({
         id: 'session-1',
-        modelId: 'deepseek-chat',
+        modelId: 'deepseek-v4-flash',
         userPrompt: '请规划一个发布会视频脚本',
         assistantOutput: '可以，标题、分镜、旁白和镜头节奏可以这样安排。'
       })
@@ -2840,17 +2840,17 @@ describe('renderer App', () => {
     let runtimeListener: ((event: { type: string; [key: string]: unknown }) => void) | undefined
 
     listProviders.mockResolvedValueOnce([
-      { id: 'deepseek', name: 'DeepSeek', kind: 'deepseek', enabled: true, hasApiKey: true, defaultModelId: 'deepseek-chat', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+      { id: 'deepseek', name: 'DeepSeek', kind: 'deepseek', enabled: true, hasApiKey: true, defaultModelId: 'deepseek-v4-flash', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
     ] as any)
     listModels.mockResolvedValueOnce([
-      { id: 'deepseek-chat', providerId: 'deepseek', modelName: 'deepseek-chat', displayName: 'DeepSeek Chat', capabilities: ['streaming', 'toolCalls'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+      { id: 'deepseek-v4-flash', providerId: 'deepseek', modelName: 'deepseek-v4-flash', displayName: 'DeepSeek V4 Flash', capabilities: ['streaming', 'toolCalls'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
     ] as any)
     listSessions.mockResolvedValueOnce([
       {
         id: 'session-1',
         title: 'New chat',
         status: 'active',
-        defaultModelId: 'deepseek-chat',
+        defaultModelId: 'deepseek-v4-flash',
         outputMode: 'markdown',
         createdAt: '2026-06-10T03:00:00.000Z',
         updatedAt: '2026-06-10T03:00:00.000Z'
@@ -2901,17 +2901,17 @@ describe('renderer App', () => {
     let runtimeListener: ((event: { type: string; [key: string]: unknown }) => void) | undefined
 
     listProviders.mockResolvedValueOnce([
-      { id: 'deepseek', name: 'DeepSeek', kind: 'deepseek', enabled: true, hasApiKey: true, defaultModelId: 'deepseek-chat', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+      { id: 'deepseek', name: 'DeepSeek', kind: 'deepseek', enabled: true, hasApiKey: true, defaultModelId: 'deepseek-v4-flash', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
     ] as any)
     listModels.mockResolvedValueOnce([
-      { id: 'deepseek-chat', providerId: 'deepseek', modelName: 'deepseek-chat', displayName: 'DeepSeek Chat', capabilities: ['streaming', 'toolCalls'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+      { id: 'deepseek-v4-flash', providerId: 'deepseek', modelName: 'deepseek-v4-flash', displayName: 'DeepSeek V4 Flash', capabilities: ['streaming', 'toolCalls'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
     ] as any)
     listSessions.mockResolvedValueOnce([
       {
         id: 'session-1',
         title: 'New chat',
         status: 'active',
-        defaultModelId: 'deepseek-chat',
+        defaultModelId: 'deepseek-v4-flash',
         outputMode: 'markdown',
         createdAt: '2026-06-10T03:00:00.000Z',
         updatedAt: '2026-06-10T03:00:00.000Z'
@@ -3139,7 +3139,7 @@ describe('renderer App', () => {
     expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({
       sessionId: 'session-1',
       prompt: 'hello agent',
-      modelId: 'deepseek-chat',
+      modelId: 'deepseek-v4-flash',
       workspacePath: 'C:/workspace'
     }))
     const enqueueInput = (enqueue as any).mock.calls[0]?.[0] as { messageId?: string; messageCreatedAt?: string } | undefined
@@ -3375,11 +3375,11 @@ describe('renderer App', () => {
 
     listProviders.mockResolvedValueOnce([
       { id: 'mock', name: 'Mock', kind: 'mock', enabled: true, hasApiKey: false, defaultModelId: 'mock/hesper-fast', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' },
-      { id: 'deepseek', name: 'DeepSeek', kind: 'deepseek', enabled: true, hasApiKey: true, defaultModelId: 'deepseek-chat', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+      { id: 'deepseek', name: 'DeepSeek', kind: 'deepseek', enabled: true, hasApiKey: true, defaultModelId: 'deepseek-v4-flash', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
     ] as any)
     listModels.mockResolvedValueOnce([
       { id: 'mock/hesper-fast', providerId: 'mock', modelName: 'mock/hesper-fast', displayName: 'Hesper Mock Fast', capabilities: ['streaming'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' },
-      { id: 'deepseek-chat', providerId: 'deepseek', modelName: 'deepseek-chat', displayName: 'DeepSeek Chat', capabilities: ['streaming', 'toolCalls'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+      { id: 'deepseek-v4-flash', providerId: 'deepseek', modelName: 'deepseek-v4-flash', displayName: 'DeepSeek V4 Flash', capabilities: ['streaming', 'toolCalls'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
     ] as any)
     listSessions.mockResolvedValueOnce([
       {
@@ -3397,7 +3397,7 @@ describe('renderer App', () => {
     render(<App />)
 
     const modelButton = await screen.findByRole('button', { name: '选择模型' })
-    expect(modelButton).toHaveTextContent('DeepSeek/deepseek-chat')
+    expect(modelButton).toHaveTextContent('DeepSeek/deepseek-v4-flash')
     await user.click(modelButton)
     expect(screen.queryByRole('button', { name: '连接 Mock' })).not.toBeInTheDocument()
     expect(screen.queryByRole('option', { name: 'Mock/mock/hesper-fast' })).not.toBeInTheDocument()
@@ -3409,7 +3409,7 @@ describe('renderer App', () => {
     expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({
       sessionId: 'session-1',
       prompt: 'use configured model',
-      modelId: 'deepseek-chat'
+      modelId: 'deepseek-v4-flash'
     }))
   })
 
