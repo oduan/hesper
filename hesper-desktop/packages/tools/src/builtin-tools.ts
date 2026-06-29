@@ -388,7 +388,16 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
     {
       id: 'agent.spawn-worker-agent',
       name: 'Spawn Worker Agent',
-      description: 'Create a constrained Worker Agent child run with either any existing roleId or a one-off temporaryRole, task, limited tool set, and optional model override. Use roles.find or roles.list first when you need to inspect existing reusable roles. Use temporaryRole when no suitable existing role fits a single run; temporaryRole is not saved as a reusable role and is not written to the role library; the invocation persists a roleSnapshot for tracing. Do not call roles.create for one-off Worker Agent tasks; only create roles when the user explicitly approves adding a reusable role. Use models.list-available first to choose a provider-aware modelRef when possible; modelRef takes precedence over modelId, temporaryRole/default role defaults, and the parent run model. If no explicit model is provided, temporaryRole.defaultModelRef/default role defaultModelRef is used before temporaryRole.defaultModelId/default role defaultModelId, then the parent run model. By default waits only for a bounded timeout and returns a diagnosis if still running.',
+      description: [
+        'Purpose: Create a bounded Worker Agent child run for discovery, review, or an approved implementation handoff using either any existing roleId or a one-off temporaryRole, task, limited tool set, and optional model override.',
+        'Role selection: Use roles.find or roles.list first when you need to inspect existing reusable roles. Use temporaryRole when no suitable existing role fits a single run; temporaryRole is not saved as a reusable role and is not written to the role library; the invocation persists a roleSnapshot for tracing. Do not call roles.create for one-off Worker Agent tasks; only create roles when the user explicitly approves adding a reusable role.',
+        'Planning phase: If the parent task is still in a planning phase and user approval has not been received, spawn only read-only discovery Worker Agents when necessary; do not spawn Worker Agents to implement, edit files, or run modifying commands before the user approves the concrete plan.',
+        'Implementation handoff: For an approved implementation plan, delegate concrete Task N items to Worker Agents. Use a compact Worker Task Packet in task and expectedOutput with Task id, Goal, Context summary, Files/read scope, Write boundaries, Do not touch, Steps / focus, Acceptance criteria, Verification, Expected report format, Risk / rollback, and Constraints. Ask implementation workers to edit files directly when the delegated tools include the required edit/write capability.',
+        'Parallelism: Run Worker Agents in parallel only when tasks have independent write sets and do not require shared sequencing; otherwise run them sequentially and review each result before continuing.',
+        'Return expectation: Require Worker Agents to report Status, changed paths, verification performed, blockers, residual risks, and concise notes in the Expected report format.',
+        'Model selection: Use models.list-available first to choose a provider-aware modelRef when possible; modelRef takes precedence over modelId, temporaryRole/default role defaults, and the parent run model. If no explicit model is provided, temporaryRole.defaultModelRef/default role defaultModelRef is used before temporaryRole.defaultModelId/default role defaultModelId, then the parent run model.',
+        'Wait behavior: By default waits only for a bounded timeout and returns a diagnosis if still running.'
+      ].join(' '),
       category: 'agent',
       icon: '🧑‍💻',
       display: { name: 'Spawn Worker Agent', names: { 'zh-CN': '启动 Worker Agent' }, resourceFields: ['task'] },
@@ -438,8 +447,8 @@ export function createBuiltinToolDefinitions(): ToolDefinition[] {
             }
           },
           modelId: { type: 'string', description: 'Legacy model id override. Used only when modelRef is not provided; otherwise role defaults or the parent run model are used.' },
-          expectedOutput: { type: 'string', description: 'Expected result format.' },
-          contextSummary: { type: 'string', description: 'Relevant context from the parent run.' },
+          expectedOutput: { type: 'string', description: 'Expected result/report format. For Worker Task Packets, repeat the required final report fields here, such as Status, changed paths, verification performed, blockers, residual risks, and concise notes.' },
+          contextSummary: { type: 'string', description: 'Relevant context from the parent run. Keep this aligned with the Worker Task Packet Context summary when used.' },
           wait: { type: 'boolean', description: 'When true, wait for a bounded timeout. Defaults to true.' },
           timeoutMs: { type: 'number', description: 'Maximum wait duration in milliseconds. Defaults to 60000 and is capped at 300000.' },
           cancelOnTimeout: { type: 'boolean', description: 'Cancel the Worker Agent if the bounded wait times out. Defaults to false.' }

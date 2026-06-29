@@ -113,6 +113,44 @@ describe('builtin tools', () => {
     expect(spawnWorkerAgent?.description).toContain('modelRef')
     expect(spawnWorkerAgent?.description).toContain('modelId')
     expect(spawnWorkerAgent?.description).toContain('modelRef takes precedence')
+
+    for (const heading of ['Purpose:', 'Planning phase:', 'Implementation handoff:', 'Parallelism:', 'Return expectation:']) {
+      expect(spawnWorkerAgent?.description).toContain(heading)
+    }
+
+    for (const handoffKeyword of [
+      'Worker Task Packet',
+      'Task id',
+      'Goal',
+      'Context summary',
+      'Files/read scope',
+      'Write boundaries',
+      'Do not touch',
+      'Steps / focus',
+      'Acceptance criteria',
+      'Verification',
+      'Expected report format',
+      'Risk / rollback',
+      'Constraints',
+      'Write boundaries',
+      'Acceptance criteria',
+      'Verification',
+      'changed paths',
+      'blockers',
+      'residual risks',
+      'Status'
+    ]) {
+      expect(spawnWorkerAgent?.description).toContain(handoffKeyword)
+    }
+
+    expect(spawnWorkerAgent?.description).toContain('planning phase')
+    expect(spawnWorkerAgent?.description).toContain('user approval has not been received')
+    expect(spawnWorkerAgent?.description).toContain('read-only discovery Worker Agents')
+    expect(spawnWorkerAgent?.description).toContain('do not spawn Worker Agents to implement, edit files, or run modifying commands')
+    expect(spawnWorkerAgent?.description).toContain('approved implementation plan')
+    expect(spawnWorkerAgent?.description).toContain('concrete Task N items')
+    expect(spawnWorkerAgent?.description).toContain('edit files directly')
+    expect(spawnWorkerAgent?.description).toContain('delegated tools include the required edit/write capability')
     expect(spawnWorkerAgent).toMatchObject({
       inputSchema: {
         type: 'object',

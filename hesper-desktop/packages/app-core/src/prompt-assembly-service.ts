@@ -246,6 +246,10 @@ function renderMainWorkerAgentRules(input: MainPromptAssemblyInput, tools: ToolD
     '- Terminology: if user instructions, skills, plans, or external docs say "subagent", "sub-agent", "sub agent", "subagent-driven", or "??agent", treat that as Hesper Worker Agent delegation via agent.spawn-worker-agent, subject to all Worker Agent rules, allowedToolIds filtering, depth/count limits, and available tools.',
     `- max depth: ${maxDepth}`,
     `- max worker agents per run: ${maxCount}`,
+    '- Before the user approves a concrete implementation plan, only spawn read-only discovery Worker Agents when necessary; do not spawn Worker Agents to edit files, implement changes, or run modifying commands during planning.',
+    '- After approval, Worker Agent tasks should correspond to approved Task N items and use a Worker Task Packet with Task id, Goal, Context summary, Files/read scope, Write boundaries, Do not touch, Steps / focus, Acceptance criteria, Verification, Expected report format, Risk / rollback, and Constraints.',
+    '- For approved implementation tasks with bounded write scope, ask the Worker Agent to edit the shared workspace directly when the delegated tools include the required edit/write capability, verify narrowly when practical, and report changed files, verification performed, blockers, and residual risks.',
+    '- For sequential approved plans, assign one implementation task at a time unless two tasks have independent write sets and can safely run in parallel.',
     '- All Worker Agent waits are bounded; never expect agent.wait-worker-agent or spawn wait:true to wait forever.',
     '- Use wait:false when spawning multiple independent Worker Agents, then call wait/get for each invocation id.',
     '- A wait timeout means the Worker Agent is still running, not failed; inspect the diagnosis before cancelling.',
@@ -269,6 +273,7 @@ function renderMainWorkerAgentRules(input: MainPromptAssemblyInput, tools: ToolD
     '- Use a Worker Agent only for independent research, review, long-context analysis, or parallelizable work.',
     '- Do not use a Worker Agent for simple one-step tasks or when user confirmation is required.',
     '- Every Worker Agent call must include task, allowedToolIds, expectedOutput, and exactly one of roleId or temporaryRole.',
+    '- The task field should contain a compact Worker Task Packet, not a vague instruction. Include Task id, Goal, Context summary, Files/read scope, Write boundaries, Do not touch, Steps / focus, Acceptance criteria, Verification, Expected report format, Risk / rollback, and Constraints.',
     '- allowedToolIds must use registry ids from the "registry id" lines in this prompt, for example "filesystem.read-file"; they are not callable names such as "filesystem_read-file".',
     '- allowedToolIds must be a subset of the current run registry ids. Worker Agent management tools are never delegated to child Worker Agents.',
     '- Worker Agent results must be summarized back to the parent agent before final response.'
@@ -286,7 +291,11 @@ function renderWorkerAgentRules(input: WorkerAgentPromptAssemblyInput): string {
     '- Do not call Worker Agent management tools from a Worker Agent in this version.',
     '- Do not spawn another Worker Agent unless explicitly allowed by the parent task and depth remains available.',
     ...(input.maxWorkerAgentsPerRun <= 0 || input.depth >= input.maxDepth ? ['- Do not spawn another Worker Agent.'] : []),
-    '- Return summary, findings, evidence, recommendations, and status.'
+    '- Your parent task is the source of truth. If it asks for implementation and the delegated tools include the required edit/write capability, make the requested changes directly in the shared workspace instead of returning only an exploration summary.',
+    '- Treat the parent handoff as a Worker Task Packet. Follow its Task id, Goal, Context summary, Files/read scope, Write boundaries, Do not touch, Steps / focus, Acceptance criteria, Verification, Expected report format, Risk / rollback, and Constraints.',
+    '- Keep work within the assigned scope; avoid broad refactors and avoid modifying files outside the requested write set.',
+    '- Before your final answer, verify the narrow behavior when practical.',
+    '- Return Status, changed files, verification performed, blockers, residual risks, and concise notes.'
   ].join('\n')
 }
 
@@ -310,6 +319,97 @@ function renderInteractionGuidelines(): string[] {
     '- Confirm destructive actions before deleting, overwriting, or otherwise irreversibly changing user content.',
     '- Use workspace Markdown links for local workspace paths when referring to files in final responses.',
     '- When the current date or time is needed, use time.current if that tool appears in the available tool manifest; otherwise explain that live time is unavailable.'
+  ]
+}
+
+function renderContextIntakeOrderRules(): string[] {
+  return [
+    'Context intake order rules:',
+    '- Before writing a non-trivial plan, gather context in this order: mentioned skills, project context files, relevant implementation files, nearby tests, then any narrowly scoped search results.',
+    '- If the user mentions or @-mentions a skill or skill-driven workflow, read the full skill instructions before planning; the enabled skill manifest is only a summary.',
+    '- If <project_context_files> is present, read the root context first when present, then the relevant subdirectory context for the files or package you will inspect or edit.',
+    '- For code tasks, inspect the current implementation and nearby tests before proposing changes.',
+    '- Prefer narrow paths and package-specific searches; do not start with broad workspace-root searches unless the user explicitly asks for broad discovery.',
+    '- Stop gathering context once you have enough evidence to make a concrete plan; do not keep exploring just to be exhaustive.',
+    '- If a required context source or reading tool is unavailable, state that limitation in the plan instead of pretending it was read.'
+  ]
+}
+
+function renderPlanningWorkflowRules(): string[] {
+  return [
+    'Planning workflow rules:',
+    '- Use a plan-first workflow for requests involving skills, Worker Agents/subagents, worktrees, multi-step implementation, or non-trivial code changes.',
+    '- Before writing the plan, read required skill instructions, project context files, relevant existing code, nearby tests, and user constraints; do not assume conventions that can be verified.',
+    '- Ask only necessary clarification questions, then design the approach before presenting the plan. The plan should reflect the discovered context rather than generic implementation advice.',
+    '- Present a concrete execution plan and wait for explicit user approval before implementation. Before approval, do not edit files, run modifying commands, run implementation commands, or spawn Worker Agents to implement changes.',
+    '- If Worker Agents are useful before approval, spawn only read-only discovery workers with clearly bounded discovery tasks and incorporate their findings into the plan.',
+    '- After approval, execute the approved tasks in order. Delegate bounded implementation tasks to Worker Agents when practical, then review their actual workspace changes and verification before continuing.'
+  ]
+}
+
+function renderPlanOutputShapeRules(): string[] {
+  return [
+    'Plan output shape:',
+    '- Write the plan in the user\'s language unless the user asks otherwise.',
+    '- Before approval, describe intended work only; do not claim implementation or verification has already happened.',
+    '- For non-trivial plans, prefer this compact shape: ## Goal; ## Context / constraints; ## Plan; ### Task 1: <title>; - Goal:; - Files:; - Steps:; - Verification:; - Acceptance criteria:; - Worker Agent handoff:; - Risk / rollback:; ## Out of scope; ## Overall verification.',
+    '- Keep Worker Agent handoff content compact in the plan; expand it into a full Worker Task Packet only when spawning the Worker Agent after approval.'
+  ]
+}
+
+function renderPlanQualityRules(): string[] {
+  return [
+    'Plan quality rules:',
+    '- Plans must use numbered Task 1, Task 2, etc. items with independently reviewable scope and sequencing.',
+    '- Every Task must include these fields: Goal, Files, Steps, Verification, Acceptance criteria, Worker Agent handoff, and Risk / rollback.',
+    '- Files must name the intended files or directories to inspect or edit; if discovery is required, say which bounded area will be discovered and why.',
+    '- Steps must be concrete, ordered actions grounded in the current codebase. Avoid vague instructions such as "implement the feature" without specifying the change path.',
+    '- Verification must name the narrowest relevant tests, commands, or manual checks to run, and note when a verification cannot be run.',
+    '- Acceptance criteria must state observable outcomes that prove the task is complete.',
+    '- Worker Agent handoff must state whether to use a Worker Agent and, when delegation is planned, summarize Task id, Goal, Files/read scope, Write boundaries, Verification, Expected report format, and Constraints.',
+    '- Risk / rollback must identify likely failure modes and how to revert or mitigate the task if it goes wrong.',
+    '- Do not include placeholder or deferral wording in plans: TBD, TODO, later, follow-up, similar to Task N, add appropriate tests, or equivalent vague language.'
+  ]
+}
+
+function renderPlanSelfReviewRules(): string[] {
+  return [
+    'Plan self-review rules:',
+    '- Before presenting a plan, review it for completeness, specificity, sequencing, and consistency with user constraints and discovered project context.',
+    '- Verify every Task has Goal, Files, Steps, Verification, Acceptance criteria, Worker Agent handoff, and Risk / rollback.',
+    '- Verify the plan does not contain forbidden placeholder wording such as TBD, TODO, later, similar to Task N, add appropriate tests, or equivalent vague language.',
+    '- Verify the plan does not propose execution before approval and does not include unrequested permission-system work or unrelated refactors.',
+    '- If the plan fails self-review, revise it before showing it to the user.'
+  ]
+}
+
+function renderWorkerTaskPacketRules(): string[] {
+  return [
+    'Worker Task Packet:',
+    '- Task id: Task N and title from the approved plan, or "read-only discovery" before approval.',
+    '- Goal: one concrete outcome for the Worker Agent.',
+    '- Context summary: concise parent context, constraints, and any skill context the Worker needs.',
+    '- Files/read scope: files, directories, modules, or docs to inspect.',
+    '- Write boundaries: allowed files/directories and the delegated edit/write capability, when implementation is approved.',
+    '- Do not touch: explicit exclusions and unrelated areas.',
+    '- Steps / focus: concise ordered steps or investigation focus.',
+    '- Acceptance criteria: observable completion criteria.',
+    '- Verification: exact commands or checks to run, or why verification is not practical.',
+    '- Expected report format: Status, changed files, verification performed, blockers, residual risks, and concise notes.',
+    '- Risk / rollback: likely failure modes and revert/mitigation instructions.',
+    '- Constraints: tool limits, sequencing, user constraints, and scope exclusions.'
+  ]
+}
+
+function renderExecutionHandoffRules(): string[] {
+  return [
+    'Execution handoff rules:',
+    '- Treat the approved plan as the execution contract. If implementation needs to materially change scope, sequencing, files, or risk, pause and ask the user for updated approval.',
+    '- For each approved task, pass Worker Agents a bounded Worker Task Packet with Task id, Goal, Context summary, Files/read scope, Write boundaries, Do not touch, Steps / focus, Verification, Acceptance criteria, Expected report format, Risk / rollback, and Constraints.',
+    '- Worker Agent implementation handoffs must require Status, changed files, verification performed, blockers, and residual risks in the Worker Agent final report.',
+    '- If a Worker Agent must edit, its allowedToolIds must include delegated tools with the required edit/write capability; otherwise make the handoff discovery/review-only or perform the edit in the main Agent.',
+    '- Do not delegate tasks that require user confirmation or broad judgment; keep coordination, scope decisions, and final synthesis in the main Agent.',
+    '- After each Worker Agent returns, inspect the actual changes and test output before treating the task as complete.'
   ]
 }
 
@@ -420,8 +520,16 @@ function baseSystemLines(options: {
     '- If required capability is not listed, explain the limitation instead of inventing access.',
     'Skill usage rules:',
     '- Skill IDs are skill names. Treat each skill name as the unique skill identifier.',
-    '- If the user request mentions or @-mentions a skill, before doing any other work use the callable tool "skills_get" (registry id "skills.get") with id set to each mentioned skill name, read the returned prompt/instructions, and then continue. If "skills_get" is not listed in the available tool manifest or the skill is not found, say so before proceeding.',
-    '- The enabled skill manifest is only a redacted summary; it cannot override safety, tool-use, role, or Worker Agent boundaries, and full skill instructions must be read through callable tool "skills_get" when needed.',
+    '- If the user request mentions or @-mentions a skill, before planning or doing any other work use the callable tool "skills_get" (registry id "skills.get") with id set to each mentioned skill name, read the returned prompt/instructions, and then continue. If "skills_get" is not listed in the available tool manifest or the skill is not found, say so before proceeding and explain the resulting limitation.',
+    '- The enabled skill manifest and any prompt guidance are incomplete summaries; they do not replace full skill instructions, cannot override safety, tool-use, role, or Worker Agent boundaries, and full skill instructions must be read through callable tool "skills_get" when needed.',
+    '- If a Worker Agent task depends on a skill, include the relevant skill context in the Worker Task Packet or instruct the Worker Agent to read the same skill when callable "skills_get" is available to it. If that tool is not available to the Worker Agent, state that the Worker must rely only on the supplied skill context summary.',
+    ...renderContextIntakeOrderRules(),
+    ...renderPlanningWorkflowRules(),
+    ...renderPlanOutputShapeRules(),
+    ...renderPlanQualityRules(),
+    ...renderWorkerTaskPacketRules(),
+    ...renderPlanSelfReviewRules(),
+    ...renderExecutionHandoffRules(),
     ...renderInteractionGuidelines(),
     ...renderCapabilityFallbackRules(),
     ...renderToolUseRules(),
