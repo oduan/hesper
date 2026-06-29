@@ -235,6 +235,7 @@ export function AppShell({
           gap: themeTokens.spacing.sm,
           overflow: 'hidden',
           alignItems: 'stretch',
+          background: themeTokens.color.background,
           padding: `0 ${themeTokens.spacing.sm} ${themeTokens.spacing.sm} 0`
         }}
       >
