@@ -274,7 +274,8 @@ describe('ui components', () => {
     expect(appRoot.style.fontFamily).toContain('--hesper-font-family-sans')
     const activityRail = screen.getByLabelText('功能栏')
     expect(activityRail).not.toHaveTextContent('hesper')
-    expect(activityRail).toHaveStyle({ background: 'transparent', boxSizing: 'border-box' })
+    expect(titleBar).toHaveStyle({ background: themeTokens.color.background })
+    expect(activityRail).toHaveStyle({ background: themeTokens.color.background, boxSizing: 'border-box' })
     const sessionPaneHeading = screen.getByRole('heading', { name: '所有会话' })
     expect(sessionPaneHeading).toBeInTheDocument()
     expect(sessionPaneHeading).toHaveStyle({ fontWeight: '500' })
@@ -297,7 +298,12 @@ describe('ui components', () => {
       marginRight: '-16px',
       paddingRight: '16px'
     })
-    expect(screen.getByLabelText('主工作区')).toHaveStyle({ gridTemplateColumns: '204px 427px minmax(0, 1fr)', alignItems: 'stretch' })
+    const mainWorkspace = screen.getByLabelText('主工作区')
+    expect(mainWorkspace).toHaveStyle({
+      gridTemplateColumns: '204px 427px minmax(0, 1fr)',
+      alignItems: 'stretch',
+      background: themeTokens.color.background
+    })
     const detailPane = screen.getByLabelText('详情区域')
     expectFloatingIslandBorder(detailPane)
     expect(detailPane).toHaveStyle({

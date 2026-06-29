@@ -346,7 +346,7 @@ export function ActivityRail({
         minWidth: 0,
         boxSizing: 'border-box',
         padding: `${themeTokens.spacing.sm} ${themeTokens.spacing.sm} ${themeTokens.spacing.md}`,
-        background: 'transparent',
+        background: themeTokens.color.background,
         display: 'flex',
         flexDirection: 'column',
         gap: themeTokens.spacing.md
