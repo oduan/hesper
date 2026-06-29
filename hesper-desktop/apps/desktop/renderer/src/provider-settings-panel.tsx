@@ -499,8 +499,10 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
         await hesperApi.credentials.saveProviderApiKey({ providerId: provider.id, apiKey })
       }
 
+      const savedModelIds = new Set<string>()
       for (const modelId of modelIds) {
         const normalizedModelId = modelIdForProvider(provider.id, modelId)
+        savedModelIds.add(normalizedModelId)
         const normalizedModelName = displayModelIdForProvider(provider.id, normalizedModelId)
         const existingModel = models.find((model) => model.id === normalizedModelId && model.providerId === provider.id)
         await hesperApi.models.save({
@@ -513,6 +515,20 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
         })
       }
 
+      if (dialogState.mode === 'edit') {
+        const removedModels = models.filter((model) => model.providerId === provider.id && model.enabled !== false && !savedModelIds.has(model.id))
+        for (const model of removedModels) {
+          await hesperApi.models.save({
+            id: model.id,
+            providerId: model.providerId,
+            modelName: model.modelName,
+            displayName: model.displayName,
+            capabilities: model.capabilities,
+            ...(model.contextWindow !== undefined ? { contextWindow: model.contextWindow } : {}),
+            enabled: false
+          })
+        }
+      }
       if (!mountedRef.current) return
       setDialogState(undefined)
       setAddConnectionFlow(undefined)

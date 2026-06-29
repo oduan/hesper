@@ -1089,6 +1089,43 @@ describe('provider settings panel', () => {
     expect(saveProviderApiKey).not.toHaveBeenCalled()
   })
 
+  it('disables removed models when editing a connection model list', async () => {
+    const user = userEvent.setup()
+    listModels.mockResolvedValue([
+      ...baseModels,
+      {
+        id: 'deepseek-v4-pro',
+        providerId: 'deepseek',
+        modelName: 'deepseek-v4-pro',
+        displayName: 'DeepSeek V4 Pro',
+        capabilities: ['streaming', 'toolCalls', 'jsonOutput'],
+        enabled: true,
+        createdAt: now,
+        updatedAt: now
+      }
+    ])
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: '设置' }))
+    await user.click(await screen.findByRole('button', { name: '打开连接菜单 DeepSeek' }))
+    await user.click(screen.getByRole('menuitem', { name: '编辑' }))
+
+    const modelInput = await screen.findByLabelText('添加连接默认模型')
+    expect(modelInput).toHaveValue('deepseek-v4-flash, deepseek-v4-pro')
+
+    await user.clear(modelInput)
+    await user.type(modelInput, 'deepseek-v4-flash')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(saveModel).toHaveBeenCalledWith(expect.objectContaining({
+        id: 'deepseek-v4-pro',
+        providerId: 'deepseek',
+        enabled: false
+      }))
+    })
+  })
+
   it('deletes a connection from the menu', async () => {
     const user = userEvent.setup()
     render(<App />)
