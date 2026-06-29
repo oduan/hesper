@@ -265,8 +265,8 @@ describe('ui components', () => {
     const appRoot = titleBar.parentElement as HTMLElement
     const expectedPaneShadow = `0 2px 6px -4px ${themeTokens.color.shadow}`
     expect(titleBar).toHaveTextContent('Hesper')
-    expect(titleBar).toHaveTextContent('构建 hesper MVP')
-    expect(screen.getByText('构建 hesper MVP')).toHaveStyle({ fontWeight: '500' })
+    expect(titleBar).not.toHaveTextContent('构建 hesper MVP')
+    expect(screen.queryByText('构建 hesper MVP')).not.toBeInTheDocument()
     expect(appRoot.style.background).toContain('radial-gradient')
     expect(appRoot.style.background).toContain('linear-gradient')
     expect(appRoot.style.background).toContain(themeTokens.color.background)
@@ -387,7 +387,7 @@ describe('ui components', () => {
 
     const titleBar = screen.getByText('Hesper-dev').closest('header') as HTMLElement
     expect(titleBar).toHaveTextContent('Hesper-dev')
-    expect(titleBar).toHaveTextContent('Dev title')
+    expect(titleBar).not.toHaveTextContent('Dev title')
   })
 
   it('keeps the shell background theme-aware for non-Hesper dark themes', () => {
@@ -1753,6 +1753,35 @@ describe('ui components', () => {
     expect(onSetSessionCategory).toHaveBeenCalledWith('session-2', ['session-1', 'session-2'], 'category-avatar')
   })
 
+  it('aligns the session category submenu with the category menu item', () => {
+    const sessions = [{
+      id: 'session-category-menu-align',
+      title: 'Category menu align',
+      status: 'active' as const,
+      outputMode: 'markdown' as const,
+      createdAt: now,
+      updatedAt: now
+    }]
+
+    render(
+      <AppShell
+        sessions={sessions}
+        sessionCategories={[{ id: 'category-avatar', name: 'Avatar', createdAt: now, updatedAt: now }]}
+        activeSection="sessions"
+        title="All sessions"
+      />
+    )
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'Category menu align' }))
+    const menu = screen.getByRole('menu', { name: '会话操作' })
+    const categoryItem = within(menu).getByRole('menuitem', { name: '分类' })
+    Object.defineProperty(categoryItem, 'offsetTop', { configurable: true, value: 68 })
+
+    fireEvent.mouseEnter(categoryItem)
+
+    expect(screen.getByRole('menu', { name: '会话分类选项' })).toHaveStyle({ top: '68px' })
+  })
+
   it('moves an unselected session to uncategorized from the category submenu', async () => {
     const user = userEvent.setup()
     const onSetSessionCategory = vi.fn()
@@ -2239,6 +2268,8 @@ describe('ui components', () => {
     await user.click(modelSelect)
     const groupedListbox = screen.getByRole('listbox', { name: '选择模型选项' })
     expect(groupedListbox).toBeInTheDocument()
+    expect(groupedListbox.closest('[data-hesper-composer-area="true"]')).toBeNull()
+    expect(groupedListbox).toHaveStyle({ position: 'fixed' })
     expect(groupedListbox.querySelector('style')).toHaveTextContent('.hesper-themed-select-group-button:hover')
     expect(screen.getByRole('button', { name: '连接 DeepSeek' })).toHaveClass('hesper-themed-select-group-button')
     expect(screen.queryByRole('option', { name: 'DeepSeek/deepseek-v4-flash' })).not.toBeInTheDocument()
@@ -2265,6 +2296,8 @@ describe('ui components', () => {
 
     await user.click(screen.getByRole('button', { name: '选择模型' }))
     const modelListbox = screen.getByRole('listbox', { name: '选择模型选项' })
+    expect(modelListbox.closest('[data-hesper-composer-area="true"]')).toBeNull()
+    expect(modelListbox).toHaveStyle({ position: 'fixed' })
     const separator = within(modelListbox).getByRole('separator', { name: '模型和思考强度分割线' })
     const thinkingButton = within(modelListbox).getByRole('button', { name: '思考强度：高' })
     expect(separator).toHaveStyle({ marginLeft: '6px', marginRight: '6px' })
@@ -2272,6 +2305,7 @@ describe('ui components', () => {
 
     await user.hover(thinkingButton)
     const thinkingMenu = await screen.findByLabelText('思考强度选项')
+    expect(thinkingMenu.closest('[data-hesper-composer-area="true"]')).toBeNull()
     expect(thinkingMenu).toHaveStyle({
       position: 'absolute',
       right: 'calc(100% + 6px)',

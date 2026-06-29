@@ -1,4 +1,5 @@
-import { useId, useMemo, useState, type CSSProperties, type FocusEvent } from 'react'
+import { useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FocusEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { themeTokens } from '../theme'
 
 export type ThemedSelectOption = {
@@ -49,6 +50,9 @@ export function ThemedSelect({
   const [open, setOpen] = useState(false)
   const [expandedGroupId, setExpandedGroupId] = useState<string>()
   const [auxiliaryMenuExpanded, setAuxiliaryMenuExpanded] = useState(false)
+  const [menuPosition, setMenuPosition] = useState<CSSProperties>()
+  const wrapRef = useRef<HTMLDivElement | null>(null)
+  const menuRef = useRef<HTMLDivElement | null>(null)
   const listboxId = useId()
   const groupedValues = useMemo(() => new Set((optionGroups ?? []).flatMap((group) => group.options.map((option) => option.value))), [optionGroups])
   const flatOptions = useMemo(() => options.filter((option) => !groupedValues.has(option)), [groupedValues, options])
@@ -65,7 +69,8 @@ export function ThemedSelect({
   const hasGroups = (optionGroups?.length ?? 0) > 0
 
   const handleBlur = (event: FocusEvent<HTMLDivElement>) => {
-    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+    const nextTarget = event.relatedTarget as Node | null
+    if (!event.currentTarget.contains(nextTarget) && !menuRef.current?.contains(nextTarget)) {
       setOpen(false)
       setExpandedGroupId(undefined)
       setAuxiliaryMenuExpanded(false)
@@ -99,8 +104,160 @@ export function ThemedSelect({
     })
   }
 
+  useLayoutEffect(() => {
+    if (!open) {
+      setMenuPosition(undefined)
+      return undefined
+    }
+
+    const updateMenuPosition = () => {
+      const wrap = wrapRef.current
+      if (!wrap) return
+      const rect = wrap.getBoundingClientRect()
+      setMenuPosition({
+        left: rect.left,
+        minWidth: rect.width,
+        ...(menuPlacement === 'top'
+          ? { bottom: window.innerHeight - rect.top + 6 }
+          : { top: rect.bottom + 6 })
+      })
+    }
+
+    updateMenuPosition()
+    window.addEventListener('resize', updateMenuPosition)
+    window.addEventListener('scroll', updateMenuPosition, true)
+    return () => {
+      window.removeEventListener('resize', updateMenuPosition)
+      window.removeEventListener('scroll', updateMenuPosition, true)
+    }
+  }, [menuPlacement, open])
+
+  const menu = open && menuPosition ? createPortal(
+    <div
+      ref={menuRef}
+      id={listboxId}
+      role="listbox"
+      aria-label={`${ariaLabel}选项`}
+      style={{
+        ...selectMenuStyle,
+        ...menuPosition
+      }}
+      onBlur={handleBlur}
+    >
+      <style>{themedSelectHoverCss}</style>
+      {hasGroups ? optionGroups?.map((group) => {
+        const expanded = expandedGroupId === group.id
+        return (
+          <div key={group.id} role="group" aria-label={group.label} style={selectGroupStyle}>
+            <button
+              type="button"
+              className="hesper-themed-select-group-button"
+              aria-label={`连接 ${group.label}`}
+              onMouseEnter={() => {
+                setExpandedGroupId(group.id)
+                setAuxiliaryMenuExpanded(false)
+              }}
+              onFocus={() => {
+                setExpandedGroupId(group.id)
+                setAuxiliaryMenuExpanded(false)
+              }}
+              style={selectGroupButtonStyle}
+            >
+              <span style={selectValueStyle}>{group.label}</span>
+              <span aria-hidden="true" style={selectGroupArrowStyle}>‹</span>
+            </button>
+            {expanded ? (
+              <div role="group" aria-label={`${group.label} 模型`} style={{ ...selectGroupOptionsStyle, ...selectGroupOptionsPlacementStyle(menuPlacement) }}>
+                {group.options.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="option"
+                    className="hesper-themed-select-option"
+                    aria-selected={option.value === value}
+                    onClick={() => handleSelect(option.value)}
+                    style={{
+                      ...selectOptionStyle,
+                      ...(option.value === value ? activeSelectOptionStyle : {})
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        )
+      }) : null}
+      {flatOptions.map((option) => (
+        <button
+          key={option}
+          type="button"
+          role="option"
+          className="hesper-themed-select-option"
+          aria-selected={option === value}
+          onMouseEnter={() => setAuxiliaryMenuExpanded(false)}
+          onFocus={() => setAuxiliaryMenuExpanded(false)}
+          onClick={() => handleSelect(option)}
+          style={{
+            ...selectOptionStyle,
+            ...(option === value ? activeSelectOptionStyle : {})
+          }}
+        >
+          {option}
+        </button>
+      ))}
+      {auxiliaryMenu ? (
+        <>
+          <div role="separator" aria-label={`${ariaLabel.replace(/^选择/, '')}和${auxiliaryMenu.label}分割线`} style={selectMenuSeparatorStyle} />
+          <div role="group" aria-label={auxiliaryMenu.label} style={selectGroupStyle}>
+            <button
+              type="button"
+              className="hesper-themed-select-group-button"
+              aria-label={`${auxiliaryMenu.label}：${auxiliarySelectedLabel}`}
+              onMouseEnter={() => {
+                setExpandedGroupId(undefined)
+                setAuxiliaryMenuExpanded(true)
+              }}
+              onFocus={() => {
+                setExpandedGroupId(undefined)
+                setAuxiliaryMenuExpanded(true)
+              }}
+              style={selectGroupButtonStyle}
+            >
+              <span style={selectValueStyle}>{auxiliaryMenu.label}</span>
+              <span style={selectAuxiliaryValueStyle}>{auxiliarySelectedLabel}</span>
+              <span aria-hidden="true" style={selectGroupArrowStyle}>‹</span>
+            </button>
+            {auxiliaryMenuExpanded ? (
+              <div role="group" aria-label={auxiliaryMenu.ariaLabel} style={{ ...selectGroupOptionsStyle, ...selectGroupOptionsPlacementStyle(menuPlacement) }}>
+                {auxiliaryMenu.options.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="option"
+                    className="hesper-themed-select-option"
+                    aria-selected={option.value === auxiliaryMenu.value}
+                    onClick={() => handleAuxiliarySelect(option.value)}
+                    style={{
+                      ...selectOptionStyle,
+                      ...(option.value === auxiliaryMenu.value ? activeSelectOptionStyle : {})
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </>
+      ) : null}
+    </div>,
+    document.body
+  ) : null
+
   return (
-    <div style={{ ...selectWrapStyle, minWidth, maxWidth }} onBlur={handleBlur}>
+    <div ref={wrapRef} style={{ ...selectWrapStyle, minWidth, maxWidth }} onBlur={handleBlur}>
       <button
         type="button"
         aria-haspopup="listbox"
@@ -115,126 +272,7 @@ export function ThemedSelect({
           <path d="M4 6.25 8 10.25 12 6.25" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </button>
-      {open ? (
-        <div
-          id={listboxId}
-          role="listbox"
-          aria-label={`${ariaLabel}选项`}
-          style={{
-            ...selectMenuStyle,
-            ...(menuPlacement === 'top' ? { bottom: 'calc(100% + 6px)' } : { top: 'calc(100% + 6px)' })
-          }}
-        >
-          <style>{themedSelectHoverCss}</style>
-          {hasGroups ? optionGroups?.map((group) => {
-            const expanded = expandedGroupId === group.id
-            return (
-              <div key={group.id} role="group" aria-label={group.label} style={selectGroupStyle}>
-                <button
-                  type="button"
-                  className="hesper-themed-select-group-button"
-                  aria-label={`连接 ${group.label}`}
-                  onMouseEnter={() => {
-                    setExpandedGroupId(group.id)
-                    setAuxiliaryMenuExpanded(false)
-                  }}
-                  onFocus={() => {
-                    setExpandedGroupId(group.id)
-                    setAuxiliaryMenuExpanded(false)
-                  }}
-                  style={selectGroupButtonStyle}
-                >
-                  <span style={selectValueStyle}>{group.label}</span>
-                  <span aria-hidden="true" style={selectGroupArrowStyle}>‹</span>
-                </button>
-                {expanded ? (
-                  <div role="group" aria-label={`${group.label} 模型`} style={{ ...selectGroupOptionsStyle, ...selectGroupOptionsPlacementStyle(menuPlacement) }}>
-                    {group.options.map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        role="option"
-                        className="hesper-themed-select-option"
-                        aria-selected={option.value === value}
-                        onClick={() => handleSelect(option.value)}
-                        style={{
-                          ...selectOptionStyle,
-                          ...(option.value === value ? activeSelectOptionStyle : {})
-                        }}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            )
-          }) : null}
-          {flatOptions.map((option) => (
-            <button
-              key={option}
-              type="button"
-              role="option"
-              className="hesper-themed-select-option"
-              aria-selected={option === value}
-              onMouseEnter={() => setAuxiliaryMenuExpanded(false)}
-              onFocus={() => setAuxiliaryMenuExpanded(false)}
-              onClick={() => handleSelect(option)}
-              style={{
-                ...selectOptionStyle,
-                ...(option === value ? activeSelectOptionStyle : {})
-              }}
-            >
-              {option}
-            </button>
-          ))}
-          {auxiliaryMenu ? (
-            <>
-              <div role="separator" aria-label={`${ariaLabel.replace(/^选择/, '')}和${auxiliaryMenu.label}分割线`} style={selectMenuSeparatorStyle} />
-              <div role="group" aria-label={auxiliaryMenu.label} style={selectGroupStyle}>
-                <button
-                  type="button"
-                  className="hesper-themed-select-group-button"
-                  aria-label={`${auxiliaryMenu.label}：${auxiliarySelectedLabel}`}
-                  onMouseEnter={() => {
-                    setExpandedGroupId(undefined)
-                    setAuxiliaryMenuExpanded(true)
-                  }}
-                  onFocus={() => {
-                    setExpandedGroupId(undefined)
-                    setAuxiliaryMenuExpanded(true)
-                  }}
-                  style={selectGroupButtonStyle}
-                >
-                  <span style={selectValueStyle}>{auxiliaryMenu.label}</span>
-                  <span style={selectAuxiliaryValueStyle}>{auxiliarySelectedLabel}</span>
-                  <span aria-hidden="true" style={selectGroupArrowStyle}>‹</span>
-                </button>
-                {auxiliaryMenuExpanded ? (
-                  <div role="group" aria-label={auxiliaryMenu.ariaLabel} style={{ ...selectGroupOptionsStyle, ...selectGroupOptionsPlacementStyle(menuPlacement) }}>
-                    {auxiliaryMenu.options.map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        role="option"
-                        className="hesper-themed-select-option"
-                        aria-selected={option.value === auxiliaryMenu.value}
-                        onClick={() => handleAuxiliarySelect(option.value)}
-                        style={{
-                          ...selectOptionStyle,
-                          ...(option.value === auxiliaryMenu.value ? activeSelectOptionStyle : {})
-                        }}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            </>
-          ) : null}
-        </div>
-      ) : null}
+      {menu}
     </div>
   )
 }
@@ -293,10 +331,8 @@ const selectArrowStyle: CSSProperties = {
 }
 
 const selectMenuStyle: CSSProperties = {
-  position: 'absolute',
+  position: 'fixed',
   zIndex: 30,
-  left: 0,
-  minWidth: '100%',
   width: 'max-content',
   maxWidth: 280,
   display: 'grid',

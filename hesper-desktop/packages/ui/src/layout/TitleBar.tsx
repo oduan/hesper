@@ -1,7 +1,19 @@
 import type { CSSProperties } from 'react'
 import { themeTokens } from '../theme'
 
-export type DesktopPlatform = 'aix' | 'android' | 'darwin' | 'freebsd' | 'haiku' | 'linux' | 'openbsd' | 'sunos' | 'win32' | 'cygwin' | 'netbsd'
+export type DesktopPlatform =
+  | 'aix'
+  | 'android'
+  | 'darwin'
+  | 'freebsd'
+  | 'haiku'
+  | 'linux'
+  | 'openbsd'
+  | 'sunos'
+  | 'win32'
+  | 'cygwin'
+  | 'netbsd'
+
 export type WindowControlAction = () => unknown | Promise<unknown>
 
 export type TitleBarProps = {
@@ -13,13 +25,13 @@ export type TitleBarProps = {
   onClose?: WindowControlAction
 }
 
-type WindowControlsProps = Omit<TitleBarProps, 'title' | 'brandName'>
+type WindowControlsProps = Omit<TitleBarProps, 'brandName' | 'title'>
 
 function isMacPlatform(platform: DesktopPlatform | undefined): boolean {
   return platform === 'darwin'
 }
 
-export function TitleBar({ title, brandName = 'Hesper', platform = 'win32', onMinimize, onToggleMaximize, onClose }: TitleBarProps) {
+export function TitleBar({ brandName = 'Hesper', platform = 'win32', onMinimize, onToggleMaximize, onClose }: TitleBarProps) {
   const isMac = isMacPlatform(platform)
   const controls = (
     <WindowControls
@@ -34,23 +46,19 @@ export function TitleBar({ title, brandName = 'Hesper', platform = 'win32', onMi
     <header
       className="titlebar-drag"
       aria-label="窗口标题栏"
-      style={{
-        position: 'relative',
-        height: 36,
-        minHeight: 36,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderBottom: 0,
-        background: themeTokens.color.background,
-        color: themeTokens.color.text,
-        userSelect: 'none'
-      }}
+      style={titleBarStyle}
     >
-      {isMac ? <div className="titlebar-no-drag" style={macControlsSlotStyle}>{controls}</div> : null}
-      <div style={brandStyle}>{brandName}</div>
-      <div style={{ fontSize: themeTokens.typography.body, fontWeight: 500, letterSpacing: '0.02em', pointerEvents: 'none' }}>{title}</div>
-      {!isMac ? <div className="titlebar-no-drag" style={windowsControlsSlotStyle}>{controls}</div> : null}
+      {isMac ? (
+        <div className="titlebar-no-drag" style={macControlsSlotStyle}>
+          {controls}
+        </div>
+      ) : null}
+      <div style={centeredBrandStyle}>{brandName}</div>
+      {!isMac ? (
+        <div className="titlebar-no-drag" style={windowsControlsSlotStyle}>
+          {controls}
+        </div>
+      ) : null}
     </header>
   )
 }
@@ -58,24 +66,65 @@ export function TitleBar({ title, brandName = 'Hesper', platform = 'win32', onMi
 function WindowControls({ platform, onMinimize, onToggleMaximize, onClose }: WindowControlsProps) {
   if (isMacPlatform(platform)) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        {/* macOS traffic light colors intentionally match native window controls. */}
-        <button type="button" aria-label="关闭窗口" onClick={() => { void onClose?.() }} style={{ ...macControlStyle, background: '#ff5f57' }} />
-        <button type="button" aria-label="最小化窗口" onClick={() => { void onMinimize?.() }} style={{ ...macControlStyle, background: '#ffbd2e' }} />
-        <button type="button" aria-label="最大化窗口" onClick={() => { void onToggleMaximize?.() }} style={{ ...macControlStyle, background: '#28c840' }} />
+      <div style={macControlsRowStyle}>
+        <button
+          type="button"
+          aria-label="关闭窗口"
+          onClick={() => {
+            void onClose?.()
+          }}
+          style={{ ...macControlStyle, background: '#ff5f57' }}
+        />
+        <button
+          type="button"
+          aria-label="最小化窗口"
+          onClick={() => {
+            void onMinimize?.()
+          }}
+          style={{ ...macControlStyle, background: '#ffbd2e' }}
+        />
+        <button
+          type="button"
+          aria-label="最大化窗口"
+          onClick={() => {
+            void onToggleMaximize?.()
+          }}
+          style={{ ...macControlStyle, background: '#28c840' }}
+        />
       </div>
     )
   }
 
   return (
-    <div style={{ display: 'flex', height: '100%' }}>
-      <button type="button" aria-label="最小化窗口" onClick={() => { void onMinimize?.() }} style={windowsControlStyle}>
+    <div style={windowsControlsRowStyle}>
+      <button
+        type="button"
+        aria-label="最小化窗口"
+        onClick={() => {
+          void onMinimize?.()
+        }}
+        style={windowsControlStyle}
+      >
         <MinimizeIcon />
       </button>
-      <button type="button" aria-label="最大化窗口" onClick={() => { void onToggleMaximize?.() }} style={windowsControlStyle}>
+      <button
+        type="button"
+        aria-label="最大化窗口"
+        onClick={() => {
+          void onToggleMaximize?.()
+        }}
+        style={windowsControlStyle}
+      >
         <MaximizeIcon />
       </button>
-      <button type="button" aria-label="关闭窗口" onClick={() => { void onClose?.() }} style={windowsControlStyle}>
+      <button
+        type="button"
+        aria-label="关闭窗口"
+        onClick={() => {
+          void onClose?.()
+        }}
+        style={windowsControlStyle}
+      >
         <CloseIcon />
       </button>
     </div>
@@ -84,7 +133,16 @@ function WindowControls({ platform, onMinimize, onToggleMaximize, onClose }: Win
 
 function MinimizeIcon() {
   return (
-    <svg aria-hidden="true" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+    <svg
+      aria-hidden="true"
+      width="14"
+      height="14"
+      viewBox="0 0 14 14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+    >
       <path d="M3.25 7h7.5" />
     </svg>
   )
@@ -92,7 +150,16 @@ function MinimizeIcon() {
 
 function MaximizeIcon() {
   return (
-    <svg aria-hidden="true" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round">
+    <svg
+      aria-hidden="true"
+      width="14"
+      height="14"
+      viewBox="0 0 14 14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinejoin="round"
+    >
       <rect x="3.5" y="3.5" width="7" height="7" rx="0.8" />
     </svg>
   )
@@ -100,22 +167,46 @@ function MaximizeIcon() {
 
 function CloseIcon() {
   return (
-    <svg aria-hidden="true" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
-      <path d="M4 4l6 6M10 4l-6 6" />
+    <svg
+      aria-hidden="true"
+      width="14"
+      height="14"
+      viewBox="0 0 14 14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+    >
+      <path d="M4 4l6 6" />
+      <path d="M10 4l-6 6" />
     </svg>
   )
 }
 
-const brandStyle: CSSProperties = {
-  position: 'absolute',
-  left: 16,
-  top: 0,
-  height: '100%',
+const titleBarStyle: CSSProperties = {
+  position: 'relative',
+  height: 36,
+  minHeight: 36,
   display: 'flex',
   alignItems: 'center',
+  justifyContent: 'center',
+  borderBottom: 0,
+  background: themeTokens.color.background,
+  color: themeTokens.color.text,
+  userSelect: 'none'
+}
+
+const centeredBrandStyle: CSSProperties = {
+  position: 'absolute',
+  left: '50%',
+  top: 0,
+  height: '100%',
+  transform: 'translateX(-50%)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
   fontSize: themeTokens.typography.body,
   fontWeight: 700,
-  letterSpacing: '0.02em',
   color: themeTokens.color.text,
   pointerEvents: 'none'
 }
@@ -134,6 +225,17 @@ const macControlsSlotStyle: CSSProperties = {
   height: '100%',
   display: 'flex',
   alignItems: 'center'
+}
+
+const windowsControlsRowStyle: CSSProperties = {
+  display: 'flex',
+  height: '100%'
+}
+
+const macControlsRowStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8
 }
 
 const windowsControlStyle: CSSProperties = {

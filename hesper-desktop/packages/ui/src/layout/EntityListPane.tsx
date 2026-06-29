@@ -176,6 +176,7 @@ export function EntityListPane({
   const heading = title ?? (activeSection === 'sessions' ? '所有会话' : activeSection === 'settings' ? '设置' : activeSection === 'tools' ? '工具' : activeSection === 'roles' ? '角色' : activeSection === 'skills' ? '技能' : '列表')
   const [sessionMenu, setSessionMenu] = useState<SessionMenuState>()
   const [sessionCategorySubmenuOpen, setSessionCategorySubmenuOpen] = useState(false)
+  const [sessionCategorySubmenuTop, setSessionCategorySubmenuTop] = useState(0)
   const [roleMenu, setRoleMenu] = useState<RoleMenuState>()
   const [editingSession, setEditingSession] = useState<EditingSessionState>()
   const [selectedSessionIds, setSelectedSessionIds] = useState<string[]>([])
@@ -378,6 +379,7 @@ export function EntityListPane({
 
     setRoleMenu(undefined)
     setSessionCategorySubmenuOpen(false)
+    setSessionCategorySubmenuTop(0)
     setSessionMenu({ sessionId, sessionIds, x, y })
   }
 
@@ -396,6 +398,7 @@ export function EntityListPane({
 
     setSessionMenu(undefined)
     setSessionCategorySubmenuOpen(false)
+    setSessionCategorySubmenuTop(0)
     setRoleMenu({ roleId, roleIds, x, y })
   }
 
@@ -441,14 +444,21 @@ export function EntityListPane({
     ]
   }
 
-  const handleMenuAction = (action: SessionMenuItemKey, menuState: SessionMenuState) => {
+  const openSessionCategorySubmenu = (trigger: HTMLElement) => {
+    setSessionCategorySubmenuTop(trigger.offsetTop)
+    setSessionCategorySubmenuOpen(true)
+  }
+
+  const handleMenuAction = (action: SessionMenuItemKey, menuState: SessionMenuState, trigger?: HTMLElement) => {
     if (action === 'category') {
-      setSessionCategorySubmenuOpen(true)
+      if (trigger) openSessionCategorySubmenu(trigger)
+      else setSessionCategorySubmenuOpen(true)
       return
     }
 
     setSessionMenu(undefined)
     setSessionCategorySubmenuOpen(false)
+    setSessionCategorySubmenuTop(0)
     switch (action) {
       case 'rename':
         startRenameSession(menuState.sessionId)
@@ -754,9 +764,9 @@ export function EntityListPane({
               aria-haspopup={item.hasSubmenu ? 'menu' : undefined}
               aria-expanded={item.hasSubmenu ? sessionCategorySubmenuOpen : undefined}
               className="hesper-session-menu-item"
-              onClick={() => handleMenuAction(item.key, sessionMenu)}
-              onMouseEnter={() => item.key === 'category' ? setSessionCategorySubmenuOpen(true) : setSessionCategorySubmenuOpen(false)}
-              onFocus={() => item.key === 'category' ? setSessionCategorySubmenuOpen(true) : setSessionCategorySubmenuOpen(false)}
+              onClick={(event) => handleMenuAction(item.key, sessionMenu, event.currentTarget)}
+              onMouseEnter={(event) => item.key === 'category' ? openSessionCategorySubmenu(event.currentTarget) : setSessionCategorySubmenuOpen(false)}
+              onFocus={(event) => item.key === 'category' ? openSessionCategorySubmenu(event.currentTarget) : setSessionCategorySubmenuOpen(false)}
               style={{
                 ...sessionMenuItemStyle,
                 ...(item.danger ? { color: themeTokens.color.danger } : {})
@@ -767,7 +777,7 @@ export function EntityListPane({
             </button>
           ))}
           {sessionCategorySubmenuOpen ? (
-            <div role="menu" aria-label="会话分类选项" style={sessionCategorySubmenuStyle}>
+            <div role="menu" aria-label="会话分类选项" style={{ ...sessionCategorySubmenuStyle, top: sessionCategorySubmenuTop }}>
               <button
                 type="button"
                 role="menuitem"
