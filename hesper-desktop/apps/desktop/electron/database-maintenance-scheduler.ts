@@ -94,25 +94,3 @@ export function createDatabaseMaintenanceScheduler({
 
   return { start, stop, runCheckpoint, runVacuum }
 }
-  function start(): void {
-    if (!checkpointTimer) {
-      checkpointTimer = scheduleInterval(checkpointIntervalMs, runCheckpoint, 'Failed to checkpoint persistence database.')
-    }
-    if (!vacuumTimer) {
-      vacuumTimer = scheduleInterval(vacuumIntervalMs, runVacuum, 'Failed to vacuum persistence database.')
-    }
-  }
-
-  function stop(): void {
-    if (checkpointTimer) {
-      clearInterval(checkpointTimer)
-      checkpointTimer = undefined
-    }
-    if (vacuumTimer) {
-      clearInterval(vacuumTimer)
-      vacuumTimer = undefined
-    }
-  }
-
-  return { start, stop, runCheckpoint, runVacuum }
-}

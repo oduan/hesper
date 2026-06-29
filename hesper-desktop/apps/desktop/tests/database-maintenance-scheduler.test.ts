@@ -203,33 +203,3 @@ describe('createDatabaseMaintenanceScheduler', () => {
     expect(logError).toHaveBeenCalledWith('Failed to vacuum persistence database.', error)
   })
 })
-    expect(vacuum).toHaveBeenCalledTimes(1)
-
-    resolveVacuum?.()
-    await tick()
-    await vi.advanceTimersByTimeAsync(100)
-    await tick()
-
-    expect(vacuum).toHaveBeenCalledTimes(2)
-  })
-
-  it('logs maintenance failures without throwing from timer callbacks', async () => {
-    vi.useFakeTimers()
-    const error = new Error('vacuum failed')
-    const checkpoint = vi.fn()
-    const vacuum = vi.fn(() => { throw error })
-    const logError = vi.fn()
-    const scheduler = createDatabaseMaintenanceScheduler({
-      persistence: { checkpoint, vacuum },
-      checkpointIntervalMs: 0,
-      vacuumIntervalMs: 100,
-      logError
-    })
-
-    scheduler.start()
-    await vi.advanceTimersByTimeAsync(100)
-    await tick()
-
-    expect(logError).toHaveBeenCalledWith('Failed to vacuum persistence database.', error)
-  })
-})
