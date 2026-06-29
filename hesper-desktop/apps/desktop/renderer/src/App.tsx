@@ -713,15 +713,17 @@ function AppContent() {
               .filter((invocation) => invocation.childRunId)
               .map(async (invocation) => {
                 const childRunId = invocation.childRunId!
+                const childRun = runs.find((run) => run.id === childRunId)
                 const [childSteps, childMessages] = await Promise.all([
                   conversationApi.listSteps(childRunId),
                   conversationApi.listMessagesByRun({ sessionId, runId: childRunId })
                 ])
-                return [childRunId, { invocation, childSteps, childMessages }] as const
+                return [childRunId, { invocation, childRun, childSteps, childMessages }] as const
               }))
 
             return {
               invocations,
+              runs: childRunEntries.flatMap(([, entry]) => entry.childRun ? [entry.childRun] : []),
               stepsByRun: Object.fromEntries(childRunEntries.map(([childRunId, entry]) => [childRunId, entry.childSteps])) as Record<string, RunStep[]>,
               messagesByRun: Object.fromEntries(childRunEntries.map(([childRunId, entry]) => [childRunId, entry.childMessages])) as Record<string, Message[]>
             }
@@ -732,12 +734,12 @@ function AppContent() {
           }
 
           const invocations = workerHistoryResults.flatMap((result) => result.invocations)
+          const childRuns = workerHistoryResults.flatMap((result) => result.runs)
           const childStepsByRun = Object.fromEntries(workerHistoryResults.flatMap((result) => Object.entries(result.stepsByRun))) as Record<string, RunStep[]>
           const childMessagesByRun = Object.fromEntries(workerHistoryResults.flatMap((result) => Object.entries(result.messagesByRun))) as Record<string, Message[]>
 
-          dispatch({ type: 'worker.history.loaded', invocations, stepsByRun: childStepsByRun, messagesByRun: childMessagesByRun })
+          dispatch({ type: 'worker.history.loaded', invocations, runs: childRuns, stepsByRun: childStepsByRun, messagesByRun: childMessagesByRun })
         }
-
         if (cancelled) {
           return
         }

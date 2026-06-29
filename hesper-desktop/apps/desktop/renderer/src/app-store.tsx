@@ -39,7 +39,7 @@ export type AppAction =
   | { type: 'session.touch-reverted'; sessionId: string; optimisticUpdatedAt: string; previousUpdatedAt: string }
   | { type: 'session.selected'; sessionId: string }
   | { type: 'history.loaded'; sessionId: string; messages: Message[]; runs: AgentRun[]; stepsByRun: Record<string, RunStep[]> }
-  | { type: 'worker.history.loaded'; invocations: WorkerAgentInvocation[]; stepsByRun: Record<string, RunStep[]>; messagesByRun: Record<string, Message[]> }
+  | { type: 'worker.history.loaded'; invocations: WorkerAgentInvocation[]; runs: AgentRun[]; stepsByRun: Record<string, RunStep[]>; messagesByRun: Record<string, Message[]> }
   | { type: 'message.optimistic'; message: Message }
   | { type: 'message.run-linked'; sessionId: string; messageId: string; runId: string }
   | { type: 'message.removed'; sessionId: string; messageId: string }
@@ -249,6 +249,32 @@ function createFailureStep(event: Extract<AgentRuntimeEvent, { type: 'run.failed
   }
 }
 
+function failRunningSteps(steps: RunStep[], completedAt: string): RunStep[] {
+  let changed = false
+  const nextSteps = steps.map((step) => {
+    if (step.status !== 'running') return step
+    changed = true
+    return { ...step, status: 'failed' as const, completedAt: step.completedAt ?? completedAt }
+  })
+  return changed ? nextSteps : steps
+}
+
+function runForHistory(run: AgentRun, existingRun: AgentRun | undefined): AgentRun {
+  if (run.status !== 'running' || existingRun?.status === 'running') return run
+  const endedAt = run.endedAt ?? createTimestamp()
+  return {
+    ...run,
+    status: 'failed',
+    endedAt,
+    error: run.error ?? { code: 'stream_interrupted', message: 'Run was interrupted before the app restored history.', retryable: false }
+  }
+}
+
+function stepsForRunHistory(run: AgentRun, steps: RunStep[]): RunStep[] {
+  if (run.status === 'running') return steps
+  return failRunningSteps(steps, run.endedAt ?? createTimestamp())
+}
+
 export function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
     case 'sessions.loaded': {
@@ -363,13 +389,16 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const nextRunSessionIds = { ...state.runSessionIds }
       const nextRunsById = { ...state.runsById }
 
-      for (const run of action.runs) {
+      for (const persistedRun of action.runs) {
+        const run = runForHistory(persistedRun, state.runsById[persistedRun.id])
         nextRunSessionIds[run.id] = run.sessionId
         nextRunsById[run.id] = run
-        nextStepsByRun[run.id] = mergeManyByIdChronologically(action.stepsByRun[run.id] ?? [], nextStepsByRun[run.id] ?? [])
+        const mergedSteps = mergeManyByIdChronologically(action.stepsByRun[run.id] ?? [], nextStepsByRun[run.id] ?? [])
+        nextStepsByRun[run.id] = stepsForRunHistory(run, mergedSteps)
       }
 
       for (const [runId, steps] of Object.entries(action.stepsByRun)) {
+        if (action.runs.some((run) => run.id === runId)) continue
         nextStepsByRun[runId] = mergeManyByIdChronologically(steps, nextStepsByRun[runId] ?? [])
       }
 
@@ -395,6 +424,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const nextWorkerInvocationsById = { ...state.workerInvocationsById }
       const nextWorkerInvocationIdsByParentRun = { ...state.workerInvocationIdsByParentRun }
       const nextWorkerInvocationIdByParentStepId = { ...state.workerInvocationIdByParentStepId }
+      const nextRunsById = { ...state.runsById }
+      const nextRunSessionIds = { ...state.runSessionIds }
       const nextStepsByRun = { ...state.stepsByRun }
       const nextChildMessagesByRun = { ...state.childMessagesByRun }
 
@@ -406,8 +437,16 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         }
       }
 
+      for (const persistedRun of action.runs) {
+        const run = runForHistory(persistedRun, state.runsById[persistedRun.id])
+        nextRunsById[run.id] = run
+        nextRunSessionIds[run.id] = run.sessionId
+      }
+
       for (const [runId, steps] of Object.entries(action.stepsByRun)) {
-        nextStepsByRun[runId] = mergeManyByIdChronologically(steps, nextStepsByRun[runId] ?? [])
+        const run = nextRunsById[runId]
+        const mergedSteps = mergeManyByIdChronologically(steps, nextStepsByRun[runId] ?? [])
+        nextStepsByRun[runId] = run ? stepsForRunHistory(run, mergedSteps) : mergedSteps
       }
 
       for (const [runId, messages] of Object.entries(action.messagesByRun)) {
@@ -418,6 +457,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         ...state,
         stepsByRun: nextStepsByRun,
         childMessagesByRun: nextChildMessagesByRun,
+        runsById: nextRunsById,
+        runSessionIds: nextRunSessionIds,
         workerInvocationsById: nextWorkerInvocationsById,
         workerInvocationIdsByParentRun: nextWorkerInvocationIdsByParentRun,
         workerInvocationIdByParentStepId: nextWorkerInvocationIdByParentStepId
@@ -580,7 +621,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
               : state.runsById,
             stepsByRun: {
               ...state.stepsByRun,
-              [event.runId]: mergeByIdChronologically(state.stepsByRun[event.runId] ?? [], failureStep)
+              [event.runId]: mergeByIdChronologically(failRunningSteps(state.stepsByRun[event.runId] ?? [], endedAt ?? failureStep.completedAt ?? createTimestamp()), failureStep)
             },
             streamingByRun: clearStreamingByRun(state.streamingByRun, event.runId)
           }
@@ -599,11 +640,16 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         case 'run.succeeded': {
           const currentRun = state.runsById[event.runId]
           if (!currentRun) return state
+          const endedAt = event.endedAt ?? currentRun.endedAt ?? createTimestamp()
           return {
             ...state,
             runsById: {
               ...state.runsById,
-              [event.runId]: { ...currentRun, status: 'succeeded', ...(event.endedAt ? { endedAt: event.endedAt } : currentRun.endedAt ? { endedAt: currentRun.endedAt } : {}) }
+              [event.runId]: { ...currentRun, status: 'succeeded', endedAt }
+            },
+            stepsByRun: {
+              ...state.stepsByRun,
+              [event.runId]: failRunningSteps(state.stepsByRun[event.runId] ?? [], endedAt)
             },
             streamingByRun: clearStreamingByRun(state.streamingByRun, event.runId)
           }
@@ -611,11 +657,16 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         case 'run.cancelled': {
           const currentRun = state.runsById[event.runId]
           if (!currentRun) return state
+          const endedAt = event.endedAt ?? currentRun.endedAt ?? createTimestamp()
           return {
             ...state,
             runsById: {
               ...state.runsById,
-              [event.runId]: { ...currentRun, status: 'cancelled', ...(event.endedAt ? { endedAt: event.endedAt } : currentRun.endedAt ? { endedAt: currentRun.endedAt } : {}) }
+              [event.runId]: { ...currentRun, status: 'cancelled', endedAt }
+            },
+            stepsByRun: {
+              ...state.stepsByRun,
+              [event.runId]: failRunningSteps(state.stepsByRun[event.runId] ?? [], endedAt)
             },
             streamingByRun: clearStreamingByRun(state.streamingByRun, event.runId)
           }
