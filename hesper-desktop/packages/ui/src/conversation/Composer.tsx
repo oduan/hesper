@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent, type CSSProperties, type DragEvent, type KeyboardEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { createId, type ModelCapability, type ModelThinkingLevel } from '@hesper/shared'
 import { themeTokens } from '../theme'
 import { ThemedSelect, type ThemedSelectOptionGroup } from './ThemedSelect'
@@ -115,6 +116,7 @@ export function Composer({
   const [internalSkillMentions, setInternalSkillMentions] = useState<SkillMentionRange[]>([])
   const [thinkingLevel, setThinkingLevel] = useState<ComposerThinkingLevel>(() => readStoredComposerThinkingLevel())
   const [draggingFiles, setDraggingFiles] = useState(false)
+  const composerRootRef = useRef<HTMLElement | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const skillOptionRefs = useRef<Array<HTMLButtonElement | null>>([])
   const value = controlledValue ?? internalValue
@@ -140,6 +142,7 @@ export function Composer({
     return skillOptions.filter((skill) => skill.name.toLocaleLowerCase().includes(query))
   }, [mentionToken, skillOptions])
   const showSkillMenu = Boolean(mentionToken && mentionToken.start !== dismissedMentionStart && filteredSkills.length > 0)
+  const [skillMenuPosition, setSkillMenuPosition] = useState<CSSProperties>()
   const selectedThinkingLevelLabel = composerThinkingLevelOptions.find((option) => option.value === thinkingLevel)?.label ?? '高'
   const workspaceDisplayName = useMemo(() => formatWorkspaceDisplayName(workspacePath), [workspacePath])
 
@@ -356,12 +359,69 @@ export function Composer({
   }, [activeSkillIndex, filteredSkills.length])
 
   useEffect(() => {
-    if (!showSkillMenu) return
+    if (!showSkillMenu || !skillMenuPosition) return
     skillOptionRefs.current[activeSkillIndex]?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
-  }, [activeSkillIndex, filteredSkills.length, showSkillMenu])
+  }, [activeSkillIndex, filteredSkills.length, showSkillMenu, skillMenuPosition])
+
+  useLayoutEffect(() => {
+    if (!showSkillMenu) {
+      setSkillMenuPosition(undefined)
+      return undefined
+    }
+
+    const updateSkillMenuPosition = () => {
+      const root = composerRootRef.current
+      if (!root) return
+      const rect = root.getBoundingClientRect()
+      setSkillMenuPosition({
+        left: rect.left + parseCssPixelValue(themeTokens.spacing.md),
+        bottom: window.innerHeight - rect.top - 14
+      })
+    }
+
+    updateSkillMenuPosition()
+    window.addEventListener('resize', updateSkillMenuPosition)
+    window.addEventListener('scroll', updateSkillMenuPosition, true)
+    return () => {
+      window.removeEventListener('resize', updateSkillMenuPosition)
+      window.removeEventListener('scroll', updateSkillMenuPosition, true)
+    }
+  }, [showSkillMenu])
+
+  const skillMenu = showSkillMenu && skillMenuPosition ? createPortal(
+    <div role="listbox" aria-label="技能提及建议" className="hesper-skill-mention-menu" style={{ ...skillMenuStyle, ...skillMenuPosition }}>
+      {filteredSkills.map((skill, index) => {
+        const selected = index === activeSkillIndex
+        const label = skill.description ? `选择技能 ${skill.name}：${skill.description}` : `选择技能 ${skill.name}`
+        return (
+          <button
+            key={skill.id}
+            type="button"
+            role="option"
+            aria-label={label}
+            aria-selected={selected}
+            className="hesper-skill-mention-option"
+            ref={(node) => {
+              skillOptionRefs.current[index] = node
+            }}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => confirmSkill(skill)}
+            style={{
+              ...skillOptionStyle,
+              ...(selected ? skillOptionSelectedStyle : {})
+            }}
+          >
+            <span style={skillNameStyle}>{skill.name}</span>
+          </button>
+        )
+      })}
+    </div>,
+    document.body
+  ) : null
 
   return (
     <section
+      ref={composerRootRef}
       aria-label="消息输入区"
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
@@ -381,38 +441,8 @@ export function Composer({
         position: 'relative'
       }}
     >
-      {showSkillMenu ? (
-        <>
-          <style>{skillMenuScrollbarCss}</style>
-          <div role="listbox" aria-label="技能提及建议" className="hesper-skill-mention-menu" style={skillMenuStyle}>
-          {filteredSkills.map((skill, index) => {
-            const selected = index === activeSkillIndex
-            const label = skill.description ? `选择技能 ${skill.name}：${skill.description}` : `选择技能 ${skill.name}`
-            return (
-              <button
-                key={skill.id}
-                type="button"
-                role="option"
-                aria-label={label}
-                aria-selected={selected}
-                className="hesper-skill-mention-option"
-                ref={(node) => {
-                  skillOptionRefs.current[index] = node
-                }}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => confirmSkill(skill)}
-                style={{
-                  ...skillOptionStyle,
-                  ...(selected ? skillOptionSelectedStyle : {})
-                }}
-              >
-                <span style={skillNameStyle}>{skill.name}</span>
-              </button>
-            )
-          })}
-          </div>
-        </>
-      ) : null}
+      {showSkillMenu ? <style>{skillMenuScrollbarCss}</style> : null}
+      {skillMenu}
       {draggingFiles || visibleAttachments.length > 0 ? (
         <div aria-label="附件预览" style={attachmentPreviewAreaStyle}>
           {draggingFiles ? <div style={attachmentDropHintStyle}>松开即可添加附件</div> : null}
@@ -962,11 +992,9 @@ const skillMentionSelectionCss = `
 `
 
 const skillMenuStyle = {
-  position: 'absolute',
-  left: themeTokens.spacing.md,
+  position: 'fixed',
   width: '20%',
   boxSizing: 'border-box',
-  bottom: 'calc(100% - 14px)',
   zIndex: 20,
   display: 'grid',
   gap: 2,
@@ -981,7 +1009,6 @@ const skillMenuStyle = {
   boxShadow: `0 4px 10px -6px ${themeTokens.color.shadow}`,
   padding: 6
 } satisfies CSSProperties
-
 const skillOptionStyle = {
   width: '100%',
   border: 0,

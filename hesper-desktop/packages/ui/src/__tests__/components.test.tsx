@@ -2362,6 +2362,32 @@ describe('ui components', () => {
     expect(sendOptions.prompt).not.toContain('call skills.get')
   })
 
+  it('renders skill mention suggestions outside the scroll-clipped conversation composer area', async () => {
+    const user = userEvent.setup()
+
+    render(
+      <ConversationView
+        session={baseSession}
+        messages={[]}
+        steps={[]}
+        streamingText=""
+        modelId="pi/gpt-5.4-mini"
+        skillOptions={[
+          { id: 'skill-research', name: 'Research' },
+          { id: 'skill-code', name: 'Code Review' }
+        ]}
+        onSend={() => undefined}
+      />
+    )
+
+    const textarea = screen.getByLabelText('消息输入框')
+    await user.type(textarea, '@')
+
+    const listbox = screen.getByRole('listbox', { name: '技能提及建议' })
+    expect(listbox.closest('[data-hesper-composer-area="true"]')).toBeNull()
+    expect(listbox).toHaveStyle({ position: 'fixed', width: '20%' })
+    expect(within(listbox).getAllByRole('option')).toHaveLength(2)
+  })
   it('keeps native textarea text visible while skill mention highlighting renders as a background layer', async () => {
     const user = userEvent.setup()
 
