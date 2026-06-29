@@ -740,6 +740,7 @@ describe('app-store reducer', () => {
     const hydrated = appReducer(workerIndexed, {
       type: 'worker.history.loaded',
       invocations: [{ ...workerInvocation, status: 'succeeded', lastEventAt: '2026-06-10T03:00:04.000Z' }],
+      runs: [{ id: 'run-child', sessionId: 'session-1', parentRunId: 'run-root', workerAgentInvocationId: 'worker-invocation-1', status: 'succeeded', modelId: 'mock/hesper-fast', retryCount: 0, maxRetries: 2 }],
       stepsByRun: {
         'run-child': [childStep]
       },
@@ -850,6 +851,179 @@ describe('app-store reducer', () => {
       status: 'cancelled',
       endedAt: '2026-06-10T03:00:05.000Z'
     })
+  })
+
+  it('marks running steps as failed when their run fails', () => {
+    const runningStep = {
+      id: 'step-running-tool',
+      runId: 'run-failed-with-tool',
+      type: 'tool_call',
+      status: 'running',
+      title: 'Search Files',
+      summary: 'Searching repo',
+      createdAt: '2026-06-10T03:00:01.000Z'
+    } satisfies RunStep
+
+    const runningState = appReducer(initialAppState, {
+      type: 'agent.event',
+      event: {
+        type: 'run.created',
+        run: {
+          id: 'run-failed-with-tool',
+          sessionId: 'session-1',
+          status: 'running',
+          modelId: 'mock/hesper-fast',
+          retryCount: 0,
+          maxRetries: 2,
+          startedAt: '2026-06-10T03:00:00.000Z'
+        }
+      }
+    })
+
+    const withRunningStep = appReducer(runningState, {
+      type: 'agent.event',
+      event: { type: 'step.created', step: runningStep }
+    })
+
+    const failedState = appReducer(withRunningStep, {
+      type: 'agent.event',
+      event: {
+        type: 'run.failed',
+        runId: 'run-failed-with-tool',
+        endedAt: '2026-06-10T03:00:05.000Z',
+        error: {
+          code: 'stream_interrupted',
+          message: 'Session stopped while the tool was running.',
+          retryable: false
+        }
+      }
+    })
+
+    expect(failedState.stepsByRun['run-failed-with-tool']).toEqual([
+      {
+        ...runningStep,
+        status: 'failed',
+        completedAt: '2026-06-10T03:00:05.000Z'
+      },
+      {
+        id: 'failed-run-failed-with-tool',
+        runId: 'run-failed-with-tool',
+        type: 'warning',
+        status: 'failed',
+        title: '运行失败：stream_interrupted',
+        detail: 'Session stopped while the tool was running.',
+        createdAt: '2026-06-10T03:00:05.000Z',
+        completedAt: '2026-06-10T03:00:05.000Z'
+      }
+    ])
+  })
+
+  it('marks restored running steps as failed when their persisted run was interrupted by app shutdown', () => {
+    const restoredRunningStep = {
+      id: 'step-stale-tool',
+      runId: 'run-restored-failed',
+      type: 'tool_call',
+      status: 'running',
+      title: 'Read File',
+      summary: 'Reading a file when the app quit',
+      createdAt: '2026-06-10T03:00:02.000Z'
+    } satisfies RunStep
+
+    const restoredState = appReducer(initialAppState, {
+      type: 'history.loaded',
+      sessionId: 'session-1',
+      messages: [],
+      runs: [
+        {
+          id: 'run-restored-failed',
+          sessionId: 'session-1',
+          status: 'running',
+          modelId: 'mock/hesper-fast',
+          retryCount: 0,
+          maxRetries: 2,
+          startedAt: '2026-06-10T03:00:00.000Z'
+        }
+      ],
+      stepsByRun: {
+        'run-restored-failed': [restoredRunningStep]
+      }
+    })
+
+    const restoredRunEndedAt = restoredState.runsById['run-restored-failed']?.endedAt
+    expect(restoredRunEndedAt).toBeDefined()
+    expect(restoredState.stepsByRun['run-restored-failed']).toEqual([
+      {
+        ...restoredRunningStep,
+        status: 'failed',
+        completedAt: restoredRunEndedAt
+      }
+    ])
+    expect(restoredState.runsById['run-restored-failed']).toMatchObject({
+      status: 'failed',
+      error: { code: 'stream_interrupted', retryable: false }
+    })
+  })
+
+  it('does not let existing stale running steps override failed restored steps', () => {
+    const staleStep = {
+      id: 'step-stale-existing',
+      runId: 'run-restored-terminal',
+      type: 'tool_call',
+      status: 'running',
+      title: 'Read File',
+      summary: 'Existing stale step from the live view',
+      createdAt: '2026-06-10T03:00:02.000Z'
+    } satisfies RunStep
+
+    const staleState = appReducer(initialAppState, {
+      type: 'agent.event',
+      event: {
+        type: 'run.created',
+        run: {
+          id: 'run-restored-terminal',
+          sessionId: 'session-1',
+          status: 'running',
+          modelId: 'mock/hesper-fast',
+          retryCount: 0,
+          maxRetries: 2,
+          startedAt: '2026-06-10T03:00:00.000Z'
+        }
+      }
+    })
+    const staleStepState = appReducer(staleState, {
+      type: 'agent.event',
+      event: { type: 'step.created', step: staleStep }
+    })
+
+    const restoredState = appReducer(staleStepState, {
+      type: 'history.loaded',
+      sessionId: 'session-1',
+      messages: [],
+      runs: [
+        {
+          id: 'run-restored-terminal',
+          sessionId: 'session-1',
+          status: 'failed',
+          modelId: 'mock/hesper-fast',
+          retryCount: 0,
+          maxRetries: 2,
+          startedAt: '2026-06-10T03:00:00.000Z',
+          endedAt: '2026-06-10T03:00:05.000Z',
+          error: { code: 'stream_interrupted', message: 'stream disconnected', retryable: true }
+        }
+      ],
+      stepsByRun: {
+        'run-restored-terminal': [staleStep]
+      }
+    })
+
+    expect(restoredState.stepsByRun['run-restored-terminal']).toEqual([
+      {
+        ...staleStep,
+        status: 'failed',
+        completedAt: '2026-06-10T03:00:05.000Z'
+      }
+    ])
   })
 
   it('uses durable run.succeeded endedAt instead of assistant message timestamp for live timers', () => {
