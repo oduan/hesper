@@ -71,11 +71,22 @@ export type SleepOptions = {
   signal?: AbortSignal
 }
 
+type ExecFileRunnerOptions = {
+  cwd?: string
+  timeout: number
+  maxBuffer: number
+  signal?: AbortSignal
+  windowsHide?: boolean
+}
+
+type ExecFileRunner = (file: string, args: string[], options: ExecFileRunnerOptions) => Promise<{ stdout: string; stderr: string }>
+
 export type BuiltinToolExecutorOptions = {
   maxReadBytes?: number
   gitTimeoutMs?: number
   fetchTimeoutMs?: number
   runGitStatus?: (workspacePath: string, options: GitStatusOptions) => Promise<string>
+  execFile?: ExecFileRunner
   readToolApiKey?: (toolId: string) => Promise<string | undefined>
   fetch?: typeof fetch
   showNotification?: (message: string) => Promise<void> | void
@@ -87,6 +98,7 @@ export type BuiltinToolExecutorOptions = {
   soulTools?: SoulToolHandlers
   now?: () => string
   sleep?: (durationMs: number, options?: SleepOptions) => Promise<void>
+  platform?: NodeJS.Platform
 }
 
 const defaultMaxReadBytes = 256 * 1024
@@ -755,7 +767,8 @@ class GitIgnoreFilter {
       const target = rootRelative && rootRelative !== '.' ? rootRelative : '.'
       const { stdout } = await execFileAsync('git', ['-C', workspacePath, 'ls-files', '--cached', '--others', '--exclude-standard', '-z', '--', target], {
         timeout: 10_000,
-        maxBuffer: 16 * 1024 * 1024
+        maxBuffer: 16 * 1024 * 1024,
+        windowsHide: true
       })
       const trackedAndUntracked = stdout ? stdout.split('\0').filter(Boolean) : []
       this.visibleFiles = new Set(trackedAndUntracked.map((f) => f.replace(/\\/g, '/')))
@@ -1275,11 +1288,11 @@ async function defaultRunGitStatus(workspacePath: string, options: GitStatusOpti
   const result = await execFileAsync('git', ['-C', safeWorkspacePath, 'status', '--short', '--branch'], {
     timeout: options.timeoutMs,
     maxBuffer: 256 * 1024,
+    windowsHide: true,
     ...(options.signal !== undefined ? { signal: options.signal } : {})
   })
   return result.stdout || result.stderr
 }
-
 async function gitStatus(tool: ToolDefinition, context: ToolExecutionContext, runGitStatus: (workspacePath: string, options: GitStatusOptions) => Promise<string>, timeoutMs: number): Promise<ToolExecutionResult> {
   const workspacePath = await realWorkspacePath(context)
   const content = await runGitStatus(workspacePath, { timeoutMs, ...(context.signal !== undefined ? { signal: context.signal } : {}) })
@@ -1309,12 +1322,13 @@ function commandErrorToResult(error: unknown): CommandResult {
   return { stdout: '', stderr: String(error), exitCode: 1 }
 }
 
-async function execFileCommand(file: string, args: string[], options: { cwd?: string; timeoutMs: number; signal?: AbortSignal; maxBuffer?: number }): Promise<CommandResult> {
+async function execFileCommand(file: string, args: string[], options: { cwd?: string; timeoutMs: number; signal?: AbortSignal; maxBuffer?: number }, execFileRunner: ExecFileRunner): Promise<CommandResult> {
   try {
-    const result = await execFileAsync(file, args, {
+    const result = await execFileRunner(file, args, {
       ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
       timeout: options.timeoutMs,
       maxBuffer: options.maxBuffer ?? 1024 * 1024,
+      windowsHide: true,
       ...(options.signal !== undefined ? { signal: options.signal } : {})
     })
     return { stdout: result.stdout, stderr: result.stderr, exitCode: 0 }
@@ -1377,12 +1391,12 @@ async function validateGitRunArgs(args: string[], workspacePath: string): Promis
   }
 }
 
-async function gitRun(tool: ToolDefinition, args: unknown, context: ToolExecutionContext, defaultTimeoutMs: number): Promise<ToolExecutionResult> {
+async function gitRun(tool: ToolDefinition, args: unknown, context: ToolExecutionContext, defaultTimeoutMs: number, execFileRunner: ExecFileRunner): Promise<ToolExecutionResult> {
   const workspacePath = await realWorkspacePath(context)
   const gitArgs = stringArrayArg(args, 'args')
   await validateGitRunArgs(gitArgs, workspacePath)
   const timeoutMs = numberArg(args, 'timeoutMs', defaultTimeoutMs, { min: 1, max: 60_000, integer: true })
-  const result = await execFileCommand('git', ['-C', workspacePath, ...gitArgs], { cwd: workspacePath, timeoutMs, ...(context.signal !== undefined ? { signal: context.signal } : {}) })
+  const result = await execFileCommand('git', ['-C', workspacePath, ...gitArgs], { cwd: workspacePath, timeoutMs, ...(context.signal !== undefined ? { signal: context.signal } : {}) }, execFileRunner)
   return {
     content: formatCommandResult(`git ${gitArgs.join(' ')}`, result),
     details: { toolId: tool.id, workspacePath, args: gitArgs, ...result },
@@ -1398,13 +1412,26 @@ function bashSingleQuoted(value: string): string {
   return `'${value.replace(/'/g, `'"'"'`)}'`
 }
 
-function shellCommandForWorkspace(workspacePath: string, command: string): { file: string; args: string[]; displayShell: string; displayCommand: string } {
-  if (process.platform === 'win32') {
-    const displayCommand = `Set-Location -LiteralPath ${powershellSingleQuoted(workspacePath)}; ${command}`
+
+function shellCommandForWorkspace(workspacePath: string, command: string, platform: NodeJS.Platform = process.platform): { file: string; args: string[]; displayShell: string; displayCommand: string } {
+  if (platform === 'win32') {
+    const normalizedCommand = command.trimStart()
+    const firstToken = normalizedCommand.split(/\s+/)[0]?.toLocaleLowerCase() ?? ''
+    const knownShims = new Set(['pnpm', 'npm', 'npx', 'yarn'])
+    const isShimCommand = knownShims.has(firstToken) || firstToken.endsWith('.cmd') || firstToken.endsWith('.bat')
+    if (isShimCommand) {
+      return {
+        file: 'cmd.exe',
+        args: ['/d', '/s', '/c', command],
+        displayShell: 'cmd.exe',
+        displayCommand: command
+      }
+    }
+    const displayCommand = `cd ${powershellSingleQuoted(workspacePath)}; ${command}`
     return {
       file: 'powershell.exe',
       args: ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', displayCommand],
-      displayShell: 'PowerShell',
+      displayShell: 'powershell.exe',
       displayCommand
     }
   }
@@ -1418,18 +1445,18 @@ function shellCommandForWorkspace(workspacePath: string, command: string): { fil
   }
 }
 
-async function executeCommand(tool: ToolDefinition, args: unknown, context: ToolExecutionContext): Promise<ToolExecutionResult> {
+async function executeCommand(tool: ToolDefinition, args: unknown, context: ToolExecutionContext, execFileRunner: ExecFileRunner, platform: NodeJS.Platform): Promise<ToolExecutionResult> {
   const workspacePath = await realWorkspacePath(context)
   const command = stringArg(args, 'command')
   if (command.includes('\0')) {
     throw new Error('Tool argument must not contain null bytes: command')
   }
   const timeoutMs = numberArg(args, 'timeoutMs', defaultCommandTimeoutMs, { min: 1, max: 120_000, integer: true })
-  const shell = shellCommandForWorkspace(workspacePath, command)
-  const result = await execFileCommand(shell.file, shell.args, { cwd: workspacePath, timeoutMs, ...(context.signal !== undefined ? { signal: context.signal } : {}), maxBuffer: 1024 * 1024 })
+  const shell = shellCommandForWorkspace(workspacePath, command, platform)
+  const result = await execFileCommand(shell.file, shell.args, { cwd: workspacePath, timeoutMs, ...(context.signal !== undefined ? { signal: context.signal } : {}), maxBuffer: 1024 * 1024 }, execFileRunner)
   return {
     content: formatCommandResult(command, result),
-    details: { toolId: tool.id, workspacePath, platform: process.platform, shell: shell.displayShell, command, executedCommand: shell.displayCommand, ...result },
+    details: { toolId: tool.id, workspacePath, platform, shell: shell.displayShell, command, executedCommand: shell.displayCommand, ...result },
     isError: result.exitCode !== 0
   }
 }
@@ -1738,9 +1765,11 @@ export function createBuiltinToolExecutor(options: BuiltinToolExecutorOptions = 
   const gitTimeoutMs = options.gitTimeoutMs ?? defaultGitTimeoutMs
   const fetchTimeoutMs = options.fetchTimeoutMs ?? defaultFetchTimeoutMs
   const runGitStatus = options.runGitStatus ?? defaultRunGitStatus
+  const execFileRunner = options.execFile ?? execFileAsync
   const fetchImpl = options.fetch ?? globalThis.fetch
   const now = options.now ?? (() => new Date().toISOString())
   const sleep = options.sleep ?? defaultSleep
+  const platform = options.platform ?? process.platform
 
   return {
     async execute(tool, args, context) {
@@ -1764,7 +1793,7 @@ export function createBuiltinToolExecutor(options: BuiltinToolExecutorOptions = 
         case 'git.status':
           return gitStatus(tool, context, runGitStatus, gitTimeoutMs)
         case 'git.run':
-          return gitRun(tool, args, context, gitTimeoutMs)
+          return gitRun(tool, args, context, gitTimeoutMs, execFileRunner)
         case 'web.fetch-url':
           return tinyFishFetchUrl(tool, args, context, fetchImpl, options.readToolApiKey, now)
         case 'web.search':
@@ -1802,7 +1831,7 @@ export function createBuiltinToolExecutor(options: BuiltinToolExecutorOptions = 
         case 'time.wait-until':
           return waitUntilTool(tool, args, context, now, sleep)
         case 'system.execute-command':
-          return executeCommand(tool, args, context)
+          return executeCommand(tool, args, context, execFileRunner, platform)
         case 'system.show-notification':
           return showNotification(tool, args, options.showNotification)
         case 'agent.spawn-worker-agent':
