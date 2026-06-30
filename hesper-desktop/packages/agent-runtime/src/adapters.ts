@@ -84,12 +84,24 @@ function normalizeRunErrorCode(code: unknown): RunError['code'] {
     : 'unknown'
 }
 
+function isTransientUpstreamErrorMessage(message: string): boolean {
+  return /\b(?:502|503|504)\b/.test(message) ||
+    /\b(?:bad gateway|service unavailable|gateway timeout)\b/i.test(message) ||
+    /\bupstream\b.*\b(?:temporar(?:y|ily)? unavailable|unavailable|timeout|timed out|failed)\b/i.test(message) ||
+    /\b(?:temporar(?:y|ily)? unavailable|unavailable|timeout|timed out)\b.*\b(?:upstream|provider|service)\b/i.test(message)
+}
+
 export function normalizeUnknownError(error: unknown): RunError {
   if (isRunErrorLike(error)) {
     const code = normalizeRunErrorCode(error.code)
+    const message = String(error.message)
+    if (code === 'unknown' && isTransientUpstreamErrorMessage(message)) {
+      return { code: 'network_error', message: redactSensitiveText(message), retryable: true }
+    }
+
     return {
       code,
-      message: redactSensitiveText(String(error.message)),
+      message: redactSensitiveText(message),
       retryable: code === 'unknown' ? false : error.retryable === true
     }
   }
@@ -100,7 +112,7 @@ export function normalizeUnknownError(error: unknown): RunError {
   if (error instanceof Error && /timeout/i.test(error.message)) {
     return { code: 'timeout', message: redactSensitiveText(error.message), retryable: true }
   }
-  if (error instanceof Error && /network|fetch|socket|econnreset|temporar/i.test(error.message)) {
+  if (error instanceof Error && (/network|fetch|socket|econnreset|temporar/i.test(error.message) || isTransientUpstreamErrorMessage(error.message))) {
     return { code: 'network_error', message: redactSensitiveText(error.message), retryable: true }
   }
 

@@ -20,6 +20,26 @@ describe('normalizeUnknownError', () => {
     expect(error.message).not.toContain('wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY')
   })
 
+  it('normalizes 502 upstream Error messages to retryable network errors', () => {
+    expect(normalizeUnknownError(new Error('502 Upstream service temporarily unavailable'))).toEqual({
+      code: 'network_error',
+      message: '502 Upstream service temporarily unavailable',
+      retryable: true
+    })
+  })
+
+  it('normalizes unknown provider upstream wrappers to retryable network errors', () => {
+    expect(normalizeUnknownError({
+      code: 'provider_error',
+      message: 'Bad gateway from upstream provider',
+      retryable: false
+    })).toEqual({
+      code: 'network_error',
+      message: 'Bad gateway from upstream provider',
+      retryable: true
+    })
+  })
+
   it('preserves non-secret provider guidance in normalized errors', () => {
     expect(normalizeUnknownError(new Error('Model provider needs an API key: openai')).message).toBe('Model provider needs an API key: openai')
   })
