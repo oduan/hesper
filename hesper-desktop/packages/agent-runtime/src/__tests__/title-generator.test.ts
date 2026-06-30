@@ -97,7 +97,7 @@ describe('session title generator', () => {
       usedModelId: 'deepseek-chat',
       userPrompt: '请帮我设计一个视频脚本',
       assistantOutput: '可以围绕开场钩子、三段式分镜和结尾行动号召来规划。'
-    })
+    } as any)
 
     expect(resolve).toHaveBeenCalledWith({ modelId: 'deepseek-reasoner', providerId: 'deepseek' })
     expect(complete).toHaveBeenCalledTimes(1)
@@ -118,7 +118,9 @@ describe('session title generator', () => {
     expect(prompt).toContain('输入示例')
     expect(prompt).toContain('JSON 输出示例')
     expect(prompt).toContain('{"title":"修复登录按钮无响应"}')
-    expect(prompt).toContain('Agent 最终输出：可以围绕开场钩子、三段式分镜和结尾行动号召来规划。')
+    expect(prompt).toContain('用户输入：请帮我设计一个视频脚本')
+    expect(prompt).not.toContain('Agent 最终输出')
+    expect(prompt).not.toContain('可以围绕开场钩子、三段式分镜和结尾行动号召来规划。')
     expect(prompt).not.toContain('中文标题建议 6-18 个汉字')
     expect(prompt).not.toContain('英文标题不超过 8 个词')
 
@@ -188,7 +190,6 @@ describe('session title generator', () => {
     const result = await generator.generateTitle({
       usedModelId: 'pi/gpt-5.5',
       userPrompt: '使用 ChatGPT 账户授权模型时无法生成会话标题',
-      assistantOutput: '已定位为 Codex Responses 请求带了 ChatGPT 后端不稳定支持的结构化响应控制。'
     })
 
     const options = (complete.mock.calls[0] as unknown[] | undefined)?.[2] as { temperature?: number; serviceTier?: string; onPayload?: (payload: unknown, model: unknown) => unknown | Promise<unknown> } | undefined

@@ -301,8 +301,7 @@ function AppContent() {
   const createdNewSessionIdsRef = useRef<Set<string>>(new Set())
   const explicitModelSelectionSessionIdsRef = useRef<Set<string>>(new Set())
   const runModelIdsRef = useRef<Record<string, string>>({})
-  const pendingTitlePromptsBySessionRef = useRef<Record<string, string>>({})
-  const titleGeneratedRunIdsRef = useRef<Set<string>>(new Set())
+  const titleGenerationSessionIdsRef = useRef<Set<string>>(new Set())
   const sessionModelCatalogRef = useRef(sessionModelCatalog)
   const stateRef = useRef(state)
   gitUiStateRef.current = gitUiStateBySession
@@ -786,45 +785,6 @@ function AppContent() {
         }
       }
 
-      if (event.type === 'message.completed' && event.message.role === 'assistant' && event.message.runId) {
-        const completedRun = stateRef.current.runsById[event.message.runId]
-        if (!completedRun?.parentRunId) {
-          const session = stateRef.current.sessions.find((candidate) => candidate.id === event.message.sessionId)
-          const messages = stateRef.current.messagesBySession[event.message.sessionId] ?? []
-          const fallbackPrompt = pendingTitlePromptsBySessionRef.current[event.message.sessionId]
-          const source = session && isDefaultSessionTitle(session.title)
-            ? firstUserTitleSource(messages, event.message.content) ?? (fallbackPrompt ? { userPrompt: fallbackPrompt, assistantOutput: event.message.content } : undefined)
-            : undefined
-          const modelId = runModelIdsRef.current[event.message.runId] ?? session?.defaultModelId ?? defaultFallbackModelId
-
-          if (session && source?.userPrompt && !titleGeneratedRunIdsRef.current.has(event.message.runId)) {
-            const modelError = titleGenerationModelError(modelId, sessionModelCatalogRef.current)
-            if (modelError) {
-              setTitleGenerationError(`标题生成失败：${modelError}`)
-              delete pendingTitlePromptsBySessionRef.current[event.message.sessionId]
-            } else {
-              setTitleGenerationError(undefined)
-              titleGeneratedRunIdsRef.current.add(event.message.runId)
-              void hesperApi.sessions.generateTitle({
-                id: session.id,
-                modelId,
-                userPrompt: source.userPrompt,
-                ...(source.assistantOutput ? { assistantOutput: source.assistantOutput } : {})
-              }).then((updatedSession) => {
-                dispatch({ type: 'session.updated', session: updatedSession })
-                titleGeneratedRunIdsRef.current.delete(event.message.runId!)
-              }).catch((error) => {
-                titleGeneratedRunIdsRef.current.delete(event.message.runId!)
-                console.warn('Failed to generate session title', error)
-                setTitleGenerationError(`标题生成失败：${error instanceof Error ? error.message : '未知错误'}`)
-              }).finally(() => {
-                delete pendingTitlePromptsBySessionRef.current[event.message.sessionId]
-              })
-            }
-          }
-        }
-      }
-
       dispatch({ type: 'agent.event', event })
     })
   }, [dispatch])
@@ -896,9 +856,6 @@ function AppContent() {
     latestGitDetailRequestIdRef.current = Object.fromEntries(
       Object.entries(latestGitDetailRequestIdRef.current).filter(([sessionId]) => visible.has(sessionId))
     )
-    pendingTitlePromptsBySessionRef.current = Object.fromEntries(
-      Object.entries(pendingTitlePromptsBySessionRef.current).filter(([sessionId]) => visible.has(sessionId))
-    )
 
     const visibleRunIds = new Set(Object.values(state.runsById)
       .filter((run) => visible.has(run.sessionId))
@@ -906,7 +863,7 @@ function AppContent() {
     runModelIdsRef.current = Object.fromEntries(
       Object.entries(runModelIdsRef.current).filter(([runId]) => visibleRunIds.has(runId))
     )
-    titleGeneratedRunIdsRef.current = new Set([...titleGeneratedRunIdsRef.current].filter((runId) => visibleRunIds.has(runId)))
+    titleGenerationSessionIdsRef.current = new Set([...titleGenerationSessionIdsRef.current].filter((sessionId) => visible.has(sessionId)))
   }, [state.runsById, state.sessions])
 
   const createSettingsRequestToken = (sessionId: string, field: SessionSettingsField) => {
@@ -1688,8 +1645,7 @@ function AppContent() {
       const updatedSession = await hesperApi.sessions.generateTitle({
         id: session.id,
         modelId,
-        userPrompt: source.userPrompt,
-        ...(source.assistantOutput ? { assistantOutput: source.assistantOutput } : {})
+        userPrompt: source.userPrompt
       })
       dispatch({ type: 'session.updated', session: updatedSession })
     } catch (error) {
@@ -1866,6 +1822,35 @@ function AppContent() {
     } catch (error) {
       console.warn('Failed to delete empty new session', error)
     }
+  }
+
+  const generateDefaultSessionTitleAfterEnqueue = (sessionId: string, modelId: string, userPrompt: string) => {
+    const session = stateRef.current.sessions.find((candidate) => candidate.id === sessionId)
+    const trimmedPrompt = userPrompt.trim()
+    if (!session || !trimmedPrompt || !isDefaultSessionTitle(session.title) || titleGenerationSessionIdsRef.current.has(sessionId)) {
+      return
+    }
+
+    const modelError = titleGenerationModelError(modelId, sessionModelCatalogRef.current)
+    if (modelError) {
+      setTitleGenerationError(`标题生成失败：${modelError}`)
+      return
+    }
+
+    setTitleGenerationError(undefined)
+    titleGenerationSessionIdsRef.current.add(sessionId)
+    void hesperApi.sessions.generateTitle({
+      id: session.id,
+      modelId,
+      userPrompt: trimmedPrompt
+    }).then((updatedSession) => {
+      dispatch({ type: 'session.updated', session: updatedSession })
+    }).catch((error) => {
+      console.warn('Failed to generate session title', error)
+      setTitleGenerationError(`标题生成失败：${error instanceof Error ? error.message : '未知错误'}`)
+    }).finally(() => {
+      titleGenerationSessionIdsRef.current.delete(sessionId)
+    })
   }
 
   const selectSession = async (sessionId: string) => {
@@ -2126,7 +2111,6 @@ function AppContent() {
                 setSendErrorsBySession((current) => ({ ...current, [activeSession.id]: '未配置模型' }))
                 return
               }
-              pendingTitlePromptsBySessionRef.current[activeSession.id] = content
               void sendMessage({
                 session: activeSession,
                 modelId: activeModelId,
@@ -2136,7 +2120,8 @@ function AppContent() {
                 ...(sendOptions ? { sendOptions } : {}),
                 dispatch,
                 setSendErrorsBySession,
-                setDraftAttachmentsBySession
+                setDraftAttachmentsBySession,
+                onEnqueueSuccess: generateDefaultSessionTitleAfterEnqueue
               })
             }}
             onRetryRun={(message, run) => {
@@ -2144,7 +2129,7 @@ function AppContent() {
                 session: activeSession,
                 message,
                 run,
-                pendingTitlePromptsBySessionRef,
+                onEnqueueSuccess: generateDefaultSessionTitleAfterEnqueue,
                 modelCatalog: sessionModelCatalog,
                 dispatch,
                 setSendErrorsBySession
@@ -2283,28 +2268,16 @@ function isDefaultSessionTitle(title: string): boolean {
 
 type TitleSource = {
   userPrompt: string
-  assistantOutput?: string
 }
 
-function latestAssistantOutputAfter(messages: Message[], userMessage: Message): string | undefined {
-  const latestAssistant = [...messages]
-    .filter((message) => message.role === 'assistant' && message.content.trim() && message.createdAt.localeCompare(userMessage.createdAt) >= 0)
-    .sort((left, right) => {
-      const byCreatedAt = right.createdAt.localeCompare(left.createdAt)
-      return byCreatedAt === 0 ? right.id.localeCompare(left.id) : byCreatedAt
-    })[0]
-
-  return latestAssistant?.content.trim() || undefined
-}
-
-function firstUserTitleSource(messages: Message[], assistantOutput?: string): TitleSource | undefined {
+function firstUserTitleSource(messages: Message[]): TitleSource | undefined {
   const userMessages = messages.filter((message) => message.role === 'user')
   if (userMessages.length !== 1) {
     return undefined
   }
 
   const userPrompt = userMessages[0]?.content.trim()
-  return userPrompt ? { userPrompt, ...(assistantOutput?.trim() ? { assistantOutput: assistantOutput.trim() } : {}) } : undefined
+  return userPrompt ? { userPrompt } : undefined
 }
 
 function latestTitleSource(messages: Message[]): TitleSource | undefined {
@@ -2320,11 +2293,7 @@ function latestTitleSource(messages: Message[]): TitleSource | undefined {
   const userPrompt = latestUser.content.trim()
   if (!userPrompt) return undefined
 
-  const assistantOutput = latestAssistantOutputAfter(messages, latestUser)
-  return {
-    userPrompt,
-    ...(assistantOutput ? { assistantOutput } : {})
-  }
+  return { userPrompt }
 }
 
 function SectionPlaceholder({ section }: { section: AppSection }) {
@@ -2496,7 +2465,7 @@ function retryFailedRun({
   session,
   message,
   run,
-  pendingTitlePromptsBySessionRef,
+  onEnqueueSuccess,
   modelCatalog,
   dispatch,
   setSendErrorsBySession
@@ -2504,19 +2473,19 @@ function retryFailedRun({
   session: Pick<Session, 'id' | 'workspacePath' | 'updatedAt'>
   message: Message
   run: AgentRun
-  pendingTitlePromptsBySessionRef: { current: Record<string, string> }
+  onEnqueueSuccess: (sessionId: string, modelId: string, userPrompt: string) => void
   modelCatalog: SessionModelCatalog
   dispatch: ReturnType<typeof useAppStore>['dispatch']
   setSendErrorsBySession: Dispatch<SetStateAction<Record<string, string>>>
 }) {
-  pendingTitlePromptsBySessionRef.current[session.id] = message.content
   void sendMessage({
     session,
     modelId: run.modelId,
     content: message.content,
     modelCatalog,
     dispatch,
-    setSendErrorsBySession
+    setSendErrorsBySession,
+    onEnqueueSuccess
   })
 }
 
@@ -2566,7 +2535,8 @@ async function sendMessage({
   dispatch,
   sendOptions,
   setSendErrorsBySession,
-  setDraftAttachmentsBySession
+  setDraftAttachmentsBySession,
+  onEnqueueSuccess
 }: {
   session: Pick<Session, 'id' | 'workspacePath' | 'updatedAt'>
   modelId: string
@@ -2577,6 +2547,7 @@ async function sendMessage({
   dispatch: ReturnType<typeof useAppStore>['dispatch']
   setSendErrorsBySession: Dispatch<SetStateAction<Record<string, string>>>
   setDraftAttachmentsBySession?: Dispatch<SetStateAction<Record<string, ComposerDraftAttachment[]>>>
+  onEnqueueSuccess?: (sessionId: string, modelId: string, userPrompt: string) => void
 }) {
   const normalizedModelId = modelId.trim()
   if (!normalizedModelId || (modelCatalog && !isAvailableSessionModel(normalizedModelId, modelCatalog))) {
@@ -2607,6 +2578,7 @@ async function sendMessage({
       ...(session.workspacePath ? { workspacePath: session.workspacePath } : {})
     })
     dispatch({ type: 'message.run-linked', sessionId: session.id, messageId: message.id, runId: result.runId })
+    onEnqueueSuccess?.(session.id, normalizedModelId, content)
     if (draftAttachments.length > 0) {
       await replaceOptimisticMessageWithPersistedMessage({
         sessionId: session.id,
@@ -2697,7 +2669,6 @@ function createOptimisticUserMessage({ session, content }: { session: { id: stri
     createdAt: nowIso()
   }
 }
-
 const primaryButtonStyle: CSSProperties = {
   border: 0,
   borderRadius: 10,

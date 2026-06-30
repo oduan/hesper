@@ -2617,19 +2617,16 @@ describe('renderer App', () => {
       id: 'session-1',
       modelId: 'model-one',
       userPrompt: 'Prompt session-1',
-      assistantOutput: 'Output session-1'
     })
     expect(generateTitle).toHaveBeenNthCalledWith(2, {
       id: 'session-2',
       modelId: 'model-two',
       userPrompt: 'Prompt session-2',
-      assistantOutput: 'Output session-2'
     })
     expect(generateTitle).toHaveBeenNthCalledWith(3, {
       id: 'session-3',
       modelId: 'model-three',
       userPrompt: 'Prompt session-3',
-      assistantOutput: 'Output session-3'
     })
   })
 
@@ -2677,7 +2674,6 @@ describe('renderer App', () => {
         id: 'session-2',
         modelId: 'deepseek-v4-flash',
         userPrompt: '最近一次用户输入',
-        assistantOutput: '最近一次 Agent 回答'
       })
     })
   })
@@ -2765,8 +2761,9 @@ describe('renderer App', () => {
     expect(generateTitle).not.toHaveBeenCalled()
   })
 
-  it('generates a concise title after the first assistant turn completes', async () => {
+  it('generates a concise title after enqueue succeeds before assistant completion', async () => {
     const user = userEvent.setup()
+    const enqueueDeferred = createDeferred<{ runId: string }>()
     let runtimeListener: ((event: { type: string; [key: string]: unknown }) => void) | undefined
 
     listProviders.mockResolvedValueOnce([
@@ -2787,6 +2784,7 @@ describe('renderer App', () => {
         updatedAt: '2026-06-10T03:00:00.000Z'
       }
     ] as any)
+    enqueue.mockReturnValueOnce(enqueueDeferred.promise as any)
     onEvent.mockImplementation(((listener: (event: { type: string; [key: string]: unknown }) => void) => {
       runtimeListener = listener
       return () => {
@@ -2799,6 +2797,26 @@ describe('renderer App', () => {
     await user.type(await screen.findByPlaceholderText(/输入消息/), '请规划一个发布会视频脚本')
     await user.click(screen.getByRole('button', { name: '发送' }))
     expect(await screen.findByText('请规划一个发布会视频脚本')).toBeInTheDocument()
+    await waitFor(() => expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: 'session-1',
+      modelId: 'deepseek-v4-flash',
+      prompt: '请规划一个发布会视频脚本'
+    })))
+    expect(generateTitle).not.toHaveBeenCalled()
+
+    await act(async () => {
+      enqueueDeferred.resolve({ runId: 'run-1' })
+      await enqueueDeferred.promise
+    })
+
+    await waitFor(() => {
+      expect(generateTitle).toHaveBeenCalledWith({
+        id: 'session-1',
+        modelId: 'deepseek-v4-flash',
+        userPrompt: '请规划一个发布会视频脚本',
+      })
+    })
+    expect(generateTitle).toHaveBeenCalledTimes(1)
 
     runtimeListener?.({
       type: 'run.created',
@@ -2824,20 +2842,12 @@ describe('renderer App', () => {
       }
     })
 
-    await waitFor(() => {
-      expect(generateTitle).toHaveBeenCalledWith({
-        id: 'session-1',
-        modelId: 'deepseek-v4-flash',
-        userPrompt: '请规划一个发布会视频脚本',
-        assistantOutput: '可以，标题、分镜、旁白和镜头节奏可以这样安排。'
-      })
-    })
+    expect(generateTitle).toHaveBeenCalledTimes(1)
     expect(await screen.findAllByText('模型生成标题')).not.toHaveLength(0)
   })
 
-  it('does not automatically generate a title when the completed run model is unavailable', async () => {
+  it('does not enqueue or automatically generate a title when the selected model is unavailable', async () => {
     const user = userEvent.setup()
-    let runtimeListener: ((event: { type: string; [key: string]: unknown }) => void) | undefined
 
     listProviders.mockResolvedValueOnce([
       { id: 'deepseek', name: 'DeepSeek', kind: 'deepseek', enabled: true, hasApiKey: true, defaultModelId: 'deepseek-v4-flash', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
@@ -2850,55 +2860,26 @@ describe('renderer App', () => {
         id: 'session-1',
         title: 'New chat',
         status: 'active',
-        defaultModelId: 'deepseek-v4-flash',
+        defaultModelId: 'gpt-4o',
         outputMode: 'markdown',
         createdAt: '2026-06-10T03:00:00.000Z',
         updatedAt: '2026-06-10T03:00:00.000Z'
       }
     ] as any)
-    onEvent.mockImplementation(((listener: (event: { type: string; [key: string]: unknown }) => void) => {
-      runtimeListener = listener
-      return () => {
-        runtimeListener = undefined
-      }
-    }) as any)
 
     render(<App />)
 
     await user.type(await screen.findByPlaceholderText(/输入消息/), '请总结发布计划')
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '发送' })).toBeDisabled())
     await user.click(screen.getByRole('button', { name: '发送' }))
 
-    runtimeListener?.({
-      type: 'run.created',
-      run: {
-        id: 'run-1',
-        sessionId: 'session-1',
-        status: 'running',
-        modelId: 'gpt-4o',
-        retryCount: 0,
-        maxRetries: 5
-      }
-    })
-    runtimeListener?.({
-      type: 'message.completed',
-      message: {
-        id: 'message-assistant-1',
-        sessionId: 'session-1',
-        role: 'assistant',
-        content: '发布计划可以分为预热、发布和复盘。',
-        contentType: 'markdown',
-        runId: 'run-1',
-        createdAt: '2026-06-10T03:00:10.000Z'
-      }
-    })
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('标题生成失败：模型不可用：gpt-4o')
+    expect(enqueue).not.toHaveBeenCalled()
     expect(generateTitle).not.toHaveBeenCalled()
   })
 
-  it('does not automatically generate a title for the legacy mock fallback model', async () => {
+  it('automatically generates a title after enqueue succeeds for a legacy mock fallback session', async () => {
     const user = userEvent.setup()
-    let runtimeListener: ((event: { type: string; [key: string]: unknown }) => void) | undefined
 
     listProviders.mockResolvedValueOnce([
       { id: 'deepseek', name: 'DeepSeek', kind: 'deepseek', enabled: true, hasApiKey: true, defaultModelId: 'deepseek-v4-flash', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
@@ -2911,55 +2892,32 @@ describe('renderer App', () => {
         id: 'session-1',
         title: 'New chat',
         status: 'active',
-        defaultModelId: 'deepseek-v4-flash',
+        defaultModelId: 'mock/hesper-fast',
         outputMode: 'markdown',
         createdAt: '2026-06-10T03:00:00.000Z',
         updatedAt: '2026-06-10T03:00:00.000Z'
       }
     ] as any)
-    onEvent.mockImplementation(((listener: (event: { type: string; [key: string]: unknown }) => void) => {
-      runtimeListener = listener
-      return () => {
-        runtimeListener = undefined
-      }
-    }) as any)
 
     render(<App />)
 
     await user.type(await screen.findByPlaceholderText(/输入消息/), '请总结会议纪要')
     await user.click(screen.getByRole('button', { name: '发送' }))
 
-    runtimeListener?.({
-      type: 'run.created',
-      run: {
-        id: 'run-1',
-        sessionId: 'session-1',
-        status: 'running',
-        modelId: 'mock/hesper-fast',
-        retryCount: 0,
-        maxRetries: 5
-      }
-    })
-    runtimeListener?.({
-      type: 'message.completed',
-      message: {
-        id: 'message-assistant-1',
-        sessionId: 'session-1',
-        role: 'assistant',
-        content: '会议纪要包括结论、待办和风险。',
-        contentType: 'markdown',
-        runId: 'run-1',
-        createdAt: '2026-06-10T03:00:10.000Z'
-      }
-    })
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('标题生成失败：未配置模型')
-    expect(generateTitle).not.toHaveBeenCalled()
+    await waitFor(() => expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: 'session-1',
+      modelId: 'deepseek-v4-flash',
+      prompt: '请总结会议纪要'
+    })))
+    await waitFor(() => expect(generateTitle).toHaveBeenCalledWith({
+      id: 'session-1',
+      modelId: 'deepseek-v4-flash',
+      userPrompt: '请总结会议纪要'
+    }))
   })
 
-  it('shows a visible error when automatic title generation fails', async () => {
+  it('shows a visible error when automatic title generation after enqueue succeeds fails', async () => {
     const user = userEvent.setup()
-    let runtimeListener: ((event: { type: string; [key: string]: unknown }) => void) | undefined
 
     listProviders.mockResolvedValueOnce([
       { id: 'chatgpt-codex', name: 'ChatGPT Codex', kind: 'pi', authType: 'oauth', piAuthProvider: 'openai-codex', enabled: true, hasApiKey: true, defaultModelId: 'pi/gpt-5.5', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
@@ -2979,42 +2937,17 @@ describe('renderer App', () => {
       }
     ] as any)
     generateTitle.mockRejectedValueOnce(new Error('Unsupported parameter: temperature'))
-    onEvent.mockImplementation(((listener: (event: { type: string; [key: string]: unknown }) => void) => {
-      runtimeListener = listener
-      return () => {
-        runtimeListener = undefined
-      }
-    }) as any)
 
     render(<App />)
 
     await user.type(await screen.findByPlaceholderText(/输入消息/), '你好')
     await user.click(screen.getByRole('button', { name: '发送' }))
 
-    runtimeListener?.({
-      type: 'run.created',
-      run: {
-        id: 'run-1',
-        sessionId: 'session-1',
-        status: 'running',
-        modelId: 'pi/gpt-5.5',
-        retryCount: 0,
-        maxRetries: 5
-      }
-    })
-    runtimeListener?.({
-      type: 'message.completed',
-      message: {
-        id: 'message-assistant-1',
-        sessionId: 'session-1',
-        role: 'assistant',
-        content: '你好，请说。',
-        contentType: 'markdown',
-        runId: 'run-1',
-        createdAt: '2026-06-10T03:00:10.000Z'
-      }
-    })
-
+    await waitFor(() => expect(generateTitle).toHaveBeenCalledWith({
+      id: 'session-1',
+      modelId: 'pi/gpt-5.5',
+      userPrompt: '你好',
+    }))
     expect(await screen.findByRole('alert')).toHaveTextContent('标题生成失败：Unsupported parameter: temperature')
   })
 

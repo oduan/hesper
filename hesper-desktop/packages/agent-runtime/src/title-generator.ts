@@ -6,7 +6,6 @@ import { parseLegacyModelId, type ModelRegistryReader, type ModelResolver } from
 export type SessionTitleGenerationInput = {
   usedModelId: string
   userPrompt: string
-  assistantOutput?: string
   signal?: AbortSignal
 }
 
@@ -178,22 +177,19 @@ async function resolveTitleModel(registry: ModelRegistryReader, usedModelId: str
 }
 
 function createTitlePrompt(input: SessionTitleGenerationInput): string {
-  const assistantOutput = input.assistantOutput?.trim()
   return [
-    '请根据下面的用户输入和 Agent 最终输出生成会话标题。',
+    '请只根据下面的用户输入生成会话标题。',
     '',
     '要求：',
-    '1. 标题要反映用户正在做的具体事情和 Agent 最终输出中的实际结果，让人一眼看出这个对话用途。',
+    '1. 标题要反映用户正在做的具体事情，让人一眼看出这个对话用途。',
     '2. 不要输出“新会话”“新对话”“会话”“对话”“聊天”“总结”等泛化标题。',
     '3. 只返回 JSON，不要 Markdown，不要代码块，不要额外解释。',
     '4. JSON 格式必须是：{"title":"标题"}',
     '',
     '输入示例：帮我修复登录按钮点击无响应的问题',
-    'Agent 最终输出示例：已定位为按钮事件被遮罩层拦截，并给出修复方案。',
     'JSON 输出示例：{"title":"修复登录按钮无响应"}',
     '',
     `用户输入：${normalizeText(input.userPrompt, 1600)}`,
-    assistantOutput ? `Agent 最终输出：${normalizeText(assistantOutput, 4000)}` : undefined,
     '',
     '只返回 JSON：'
   ].filter((line): line is string => line !== undefined).join('\n')

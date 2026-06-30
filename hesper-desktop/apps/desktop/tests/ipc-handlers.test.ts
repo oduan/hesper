@@ -937,7 +937,7 @@ describe('registerIpcHandlers', () => {
       showOpenDialog: vi.fn(async () => ({ canceled: true, filePaths: [] }))
     }
     const session = await container.sessionService.createSession({ title: 'Keep this title' })
-    vi.spyOn(container.sessionTitleGenerator, 'generateTitle').mockResolvedValueOnce(undefined as Awaited<ReturnType<typeof container.sessionTitleGenerator.generateTitle>>)
+    const generateTitleSpy = vi.spyOn(container.sessionTitleGenerator, 'generateTitle').mockResolvedValueOnce(undefined as Awaited<ReturnType<typeof container.sessionTitleGenerator.generateTitle>>)
 
     registerIpcHandlers({ ipcMain, dialog, container, savePersistence })
 
@@ -946,6 +946,11 @@ describe('registerIpcHandlers', () => {
       modelId: 'mock/hesper-fast',
       userPrompt: 'empty output'
     })).resolves.toMatchObject({ id: session.id, title: 'Keep this title' })
+    expect(generateTitleSpy).toHaveBeenCalledWith({
+      usedModelId: 'mock/hesper-fast',
+      userPrompt: 'empty output'
+    })
+    expect(generateTitleSpy.mock.calls[0]?.[0]).not.toHaveProperty('assistantOutput')
     await expect(container.sessionService.getSession(session.id)).resolves.toMatchObject({ title: 'Keep this title' })
     expect(savePersistence).not.toHaveBeenCalled()
   })
