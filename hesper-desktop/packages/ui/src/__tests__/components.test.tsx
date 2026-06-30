@@ -3455,12 +3455,88 @@ describe('ui components', () => {
     expect(screen.getByRole('dialog', { name: '步骤全屏查看' })).toBeInTheDocument()
   })
 
-  it('renders markdown code blocks with semantic theme colors', () => {
-    render(<OutputBlock content={'```ts\nconst value = 1\n```'} contentType="markdown" />)
+  it('renders markdown code blocks with title bars, copy buttons, and semantic theme colors', async () => {
+    const user = userEvent.setup()
+    const writeText = vi.fn()
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
 
-    const codeBlock = screen.getByText('const value = 1').closest('pre')
+    const { container } = render(<OutputBlock content={`\`\`\`ts
+const value = 1
+\`\`\`
+
+\`\`\`python
+print("hi")
+\`\`\`
+
+\`\`\`foo
+const ignored = 2
+\`\`\`
+
+\`\`\`
+plain text
+\`\`\``} contentType="markdown" />)
+
+    expect(screen.getByText('TS')).toBeInTheDocument()
+    expect(screen.getByText('Python')).toBeInTheDocument()
+    expect(screen.getByText('FOO')).toBeInTheDocument()
+    expect(screen.getByText('Text')).toBeInTheDocument()
+
+    const titleBar = screen.getByText('TS').parentElement as HTMLElement
+    const codeBlock = titleBar.nextElementSibling as HTMLElement
+    expect(codeBlock).toHaveAttribute('data-hesper-markdown-code-scroll', 'true')
+    expect(codeBlock).toHaveClass('hesper-theme-scrollbar')
     expect(codeBlock).toHaveStyle({ background: themeTokens.color.codeBackground, color: themeTokens.color.text })
-    expect(codeBlock?.style.fontFamily).toContain('--hesper-font-family-mono')
+    expect(codeBlock).toHaveStyle({ maxWidth: '100%', minWidth: '0px', overflowX: 'auto', whiteSpace: 'pre' })
+    expect(codeBlock.style.fontFamily).toContain('--hesper-font-family-mono')
+    const highlightedCode = codeBlock.querySelector('code') as HTMLElement
+    expect(highlightedCode).toHaveTextContent('const value = 1')
+    expect(highlightedCode).toHaveClass('hljs', 'language-typescript')
+    expect(highlightedCode.querySelector('.hljs-keyword')).toHaveTextContent('const')
+    expect(codeBlock.firstElementChild?.tagName).toBe('CODE')
+
+    const pythonCodeBlock = (screen.getByText('Python').parentElement?.nextElementSibling as HTMLElement).querySelector('code') as HTMLElement
+    expect(pythonCodeBlock).toHaveClass('hljs', 'language-python')
+    expect(pythonCodeBlock.querySelector('.hljs-built_in')).toHaveTextContent('print')
+
+    const unknownCodeBlock = screen.getByText('FOO').parentElement?.nextElementSibling as HTMLElement
+    const unknownCode = unknownCodeBlock.querySelector('code') as HTMLElement
+    expect(unknownCode).toHaveTextContent('const ignored = 2')
+    expect(unknownCode).not.toHaveClass('hljs')
+    expect(unknownCode.querySelector('[class^="hljs-"]')).not.toBeInTheDocument()
+
+    const plainCode = (screen.getByText('Text').parentElement?.nextElementSibling as HTMLElement).querySelector('code') as HTMLElement
+    expect(plainCode).toHaveTextContent('plain text')
+    expect(plainCode).not.toHaveClass('hljs')
+
+    const highlightStyle = [...container.querySelectorAll('style')].find((style) => style.textContent?.includes('.hljs-keyword'))
+    expect(highlightStyle).toHaveTextContent('[data-hesper-markdown-code-scroll="true"] code .hljs-keyword')
+    expect(highlightStyle).toHaveTextContent('[data-hesper-markdown-code-scroll="true"] code .hljs-string')
+    expect(highlightStyle).toHaveTextContent('@media (prefers-color-scheme: dark)')
+    expect(highlightStyle?.textContent).not.toContain('background:')
+
+    const codeBlockWrap = codeBlock.parentElement as HTMLElement
+    expect(codeBlockWrap).toHaveStyle({
+      maxWidth: '100%',
+      minWidth: '0px',
+      background: themeTokens.color.codeBackground,
+      borderRadius: themeTokens.radius.md,
+      boxShadow: `0 2px 6px -4px ${themeTokens.color.shadow}`
+    })
+    expect(codeBlockWrap.style.border).toBe(`1px solid ${themeTokens.color.border}`)
+    expect(titleBar).toHaveStyle({ background: themeTokens.color.softControl, color: themeTokens.color.textMuted })
+    expect(titleBar.style.borderBottom).toBe(`1px solid ${themeTokens.color.borderSubtle}`)
+    expect(titleBar.nextElementSibling).toBe(codeBlock)
+
+    const copyButtons = screen.getAllByRole('button', { name: '复制代码块' })
+    expect(copyButtons).toHaveLength(4)
+    expect(copyButtons[0]?.style.border).toBe('0px')
+    expect(copyButtons[0]?.style.background).toBe('transparent')
+    expect(copyButtons[0]?.style.padding).toBe('0px')
+    expect(copyButtons[0]).toHaveTextContent('')
+    expect(copyButtons[0]?.querySelector('svg[aria-hidden="true"]')).toBeInTheDocument()
+
+    await user.click(copyButtons[0]!)
+    expect(writeText).toHaveBeenCalledWith('const value = 1')
   })
 
   it('auto-expands running steps, shows elapsed time before the first tool intent, and stops when final output appears', () => {
