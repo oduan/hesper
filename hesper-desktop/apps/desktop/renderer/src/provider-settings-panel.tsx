@@ -15,7 +15,17 @@ import { modelNameFromNamespacedId, namespaceModelId } from './model-options'
 
 type ProtocolMode = 'openai-compatible' | 'anthropic-compatible'
 type ConnectionDialogMode = 'add' | 'edit'
-type AddConnectionFlow = 'picker' | 'custom' | 'codex'
+type AddConnectionFlow = 'picker' | 'custom' | 'codex' | 'preset'
+type PresetConnectionId = 'deepseek' | 'mimo'
+
+type PresetConnectionConfig = {
+  id: PresetConnectionId
+  name: string
+  kind: SaveModelProviderInput['kind']
+  baseUrl: string
+  defaultModelId: string
+  models: Array<{ id: string; displayName?: string }>
+}
 
 type ConnectionFormState = {
   apiKey: string
@@ -43,6 +53,33 @@ type CodexOAuthState = {
 
 const initialCodexOAuthState: CodexOAuthState = { connectionName: 'ChatGPT Codex', status: 'idle' }
 const codexOAuthStatusPollIntervalMs = 600
+
+const presetConnections: Record<PresetConnectionId, PresetConnectionConfig> = {
+  deepseek: {
+    id: 'deepseek',
+    name: 'DeepSeek',
+    kind: 'deepseek',
+    baseUrl: 'https://api.deepseek.com/v1',
+    defaultModelId: 'deepseek-v4-flash',
+    models: [
+      { id: 'deepseek-v4-flash' },
+      { id: 'deepseek-v4-pro' }
+    ]
+  },
+  mimo: {
+    id: 'mimo',
+    name: 'MiMo Code Plan',
+    kind: 'openai-compatible',
+    baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1',
+    defaultModelId: 'mimo-v2.5',
+    models: [
+      { id: 'mimo-v2.5' },
+      { id: 'mimo-v2.5-pro' }
+    ]
+  }
+}
+
+const presetConnectionOptions = [presetConnections.deepseek, presetConnections.mimo]
 
 function isCodexOAuthProvider(provider: ModelProviderDto): boolean {
   return provider.kind === 'pi' && provider.authType === 'oauth' && provider.piAuthProvider === 'openai-codex'
@@ -175,6 +212,8 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
   const [models, setModels] = useState<ModelDto[]>([])
   const [dialogState, setDialogState] = useState<ConnectionDialogState>()
   const [addConnectionFlow, setAddConnectionFlow] = useState<AddConnectionFlow>()
+  const [selectedPresetConnection, setSelectedPresetConnection] = useState<PresetConnectionConfig>()
+  const [presetApiKey, setPresetApiKey] = useState('')
   const [openMenuProviderId, setOpenMenuProviderId] = useState<string>()
   const [connectionMenuPosition, setConnectionMenuPosition] = useState<{ top: number; left: number }>()
   const [hoveredProviderId, setHoveredProviderId] = useState<string>()
@@ -266,6 +305,8 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
     setConnectionResult(undefined)
     setOpenMenuProviderId(undefined)
     setDialogState(undefined)
+    setSelectedPresetConnection(undefined)
+    setPresetApiKey('')
     resetCodexOAuthState({ cancel: true })
     setAddConnectionFlow('picker')
   }
@@ -275,9 +316,23 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
     setMessage(undefined)
     setConnectionResult(undefined)
     setOpenMenuProviderId(undefined)
+    setSelectedPresetConnection(undefined)
+    setPresetApiKey('')
     resetCodexOAuthState({ cancel: true })
     setAddConnectionFlow('custom')
     setDialogState({ mode: 'add', form: createConnectionForm() })
+  }
+
+  const openPresetConnection = (preset: PresetConnectionConfig) => {
+    setError(undefined)
+    setMessage(undefined)
+    setConnectionResult(undefined)
+    setOpenMenuProviderId(undefined)
+    setDialogState(undefined)
+    setPresetApiKey('')
+    resetCodexOAuthState({ cancel: true })
+    setSelectedPresetConnection(preset)
+    setAddConnectionFlow('preset')
   }
 
   const openCodexConnection = (connectionName = initialCodexOAuthState.connectionName) => {
@@ -286,6 +341,8 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
     setConnectionResult(undefined)
     setOpenMenuProviderId(undefined)
     setDialogState(undefined)
+    setSelectedPresetConnection(undefined)
+    setPresetApiKey('')
     resetCodexOAuthState({ cancel: true, connectionName })
     setAddConnectionFlow('codex')
   }
@@ -306,6 +363,8 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
     setMessage(undefined)
     setConnectionResult(undefined)
     setOpenMenuProviderId(undefined)
+    setSelectedPresetConnection(undefined)
+    setPresetApiKey('')
     setAddConnectionFlow(undefined)
     setDialogState({ mode: 'edit', providerId: provider.id, form: createConnectionForm(provider, models) })
   }
@@ -563,6 +622,72 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
     }
   }
 
+  const testPresetConnection = async () => {
+    if (!selectedPresetConnection) return
+
+    setError(undefined)
+    setMessage(undefined)
+    setConnectionResult(undefined)
+    try {
+      const result = await hesperApi.providers.testConnection({
+        providerId: selectedPresetConnection.id,
+        kind: selectedPresetConnection.kind,
+        baseUrl: selectedPresetConnection.baseUrl,
+        ...(presetApiKey.trim() ? { apiKey: presetApiKey.trim() } : {}),
+        modelId: selectedPresetConnection.defaultModelId
+      })
+      if (!mountedRef.current) return
+      setConnectionResult(result)
+      setMessage(undefined)
+    } catch (testError) {
+      setError(testError instanceof Error ? testError.message : '连接测试失败')
+    }
+  }
+
+  const savePresetConnection = async () => {
+    if (!selectedPresetConnection) return
+
+    const apiKey = presetApiKey.trim()
+    setError(undefined)
+    setMessage(undefined)
+    setConnectionResult(undefined)
+    setPresetApiKey('')
+
+    try {
+      const provider = await hesperApi.providers.save({
+        id: selectedPresetConnection.id,
+        name: selectedPresetConnection.name,
+        kind: selectedPresetConnection.kind,
+        baseUrl: selectedPresetConnection.baseUrl,
+        defaultModelId: selectedPresetConnection.defaultModelId,
+        enabled: true
+      })
+
+      if (apiKey) {
+        await hesperApi.credentials.saveProviderApiKey({ providerId: provider.id, apiKey })
+      }
+
+      for (const presetModel of selectedPresetConnection.models) {
+        await hesperApi.models.save({
+          id: presetModel.id,
+          providerId: provider.id,
+          modelName: presetModel.id,
+          displayName: presetModel.displayName ?? presetModel.id,
+          capabilities: capabilitiesForModelName(presetModel.id),
+          enabled: true
+        })
+      }
+
+      if (!mountedRef.current) return
+      setSelectedPresetConnection(undefined)
+      setAddConnectionFlow(undefined)
+      setMessage(`已添加连接：${provider.name}`)
+      await loadProviderSettings()
+      await onModelRegistryChanged?.()
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : '连接保存失败')
+    }
+  }
   const startRenameConnection = (provider: ModelProviderDto) => {
     setError(undefined)
     setMessage(undefined)
@@ -808,6 +933,7 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
       {addConnectionFlow === 'picker' ? (
         <ConnectionTypePicker
           onSelectCodex={() => openCodexConnection()}
+          onSelectPreset={openPresetConnection}
           onSelectCustom={openCustomConnection}
           onCancel={() => setAddConnectionFlow(undefined)}
         />
@@ -819,6 +945,23 @@ export function ProviderSettingsPanel({ onModelRegistryChanged }: ProviderSettin
           onBack={backFromCodexConnection}
           onCancel={closeCodexConnection}
           onRetry={() => void startCodexOAuth()}
+        />
+      ) : null}
+
+      {addConnectionFlow === 'preset' && selectedPresetConnection ? (
+        <PresetConnectionDialog
+          preset={selectedPresetConnection}
+          apiKey={presetApiKey}
+          {...(connectionResult ? { connectionResult } : {})}
+          onApiKeyChange={setPresetApiKey}
+          onCancel={() => {
+            setConnectionResult(undefined)
+            setPresetApiKey('')
+            setSelectedPresetConnection(undefined)
+            setAddConnectionFlow('picker')
+          }}
+          onTest={() => void testPresetConnection()}
+          onSave={() => void savePresetConnection()}
         />
       ) : null}
 
@@ -933,10 +1076,12 @@ function FullWindowDialogShell({
 
 function ConnectionTypePicker({
   onSelectCodex,
+  onSelectPreset,
   onSelectCustom,
   onCancel
 }: {
   onSelectCodex: () => void
+  onSelectPreset: (preset: PresetConnectionConfig) => void
   onSelectCustom: () => void
   onCancel: () => void
 }) {
@@ -955,6 +1100,15 @@ function ConnectionTypePicker({
             icon={<OpenAIIcon />}
             onClick={onSelectCodex}
           />
+          {presetConnectionOptions.map((preset) => (
+            <ConnectionTypeRow
+              key={preset.id}
+              title={`${preset.name} 连接`}
+              description="使用预设 Endpoint 和默认模型。"
+              icon={<PresetProviderIcon label={preset.name} />}
+              onClick={() => onSelectPreset(preset)}
+            />
+          ))}
           <ConnectionTypeRow
             title="自定义连接"
             description="手动填写 API Key、Endpoint 和模型。"
@@ -998,6 +1152,10 @@ function HesperMark() {
 
 function OpenAIIcon() {
   return <span aria-hidden="true" style={openAIIconStyle}>◎</span>
+}
+
+function PresetProviderIcon({ label }: { label: string }) {
+  return <span aria-hidden="true" style={customProviderIconStyle}>{label.slice(0, 1).toUpperCase()}</span>
 }
 
 function CustomProviderIcon() {
@@ -1062,6 +1220,61 @@ function CodexAuthorizationPage({
             {state.status === 'failed' ? null : <SpinnerIcon />}
             <span>{statusLabel}</span>
           </button>
+        </footer>
+      </div>
+    </FullWindowDialogShell>
+  )
+}
+
+function PresetConnectionDialog({
+  preset,
+  apiKey,
+  connectionResult,
+  onApiKeyChange,
+  onCancel,
+  onTest,
+  onSave
+}: {
+  preset: PresetConnectionConfig
+  apiKey: string
+  connectionResult?: ProviderConnectionTestResult
+  onApiKeyChange: (value: string) => void
+  onCancel: () => void
+  onTest: () => void
+  onSave: () => void
+}) {
+  return (
+    <FullWindowDialogShell ariaLabel="API 配置" onClose={onCancel}>
+      <div style={overlayFormStyle}>
+        <header style={{ textAlign: 'center', marginBottom: 24 }}>
+          <h2 style={{ margin: 0, fontSize: bodyFontSize }}>{preset.name}</h2>
+          <p style={{ margin: '12px 0 0', color: mutedTextColor, lineHeight: 1.5 }}>
+            Enter the API key for this preset connection. Saved keys are not displayed.
+          </p>
+        </header>
+        <label style={fieldStyle}>
+          API Key
+          <input
+            aria-label="添加连接 API key"
+            type="password"
+            value={apiKey}
+            onChange={(event) => onApiKeyChange(event.target.value)}
+            placeholder="Paste your key here..."
+            style={inputStyle}
+          />
+        </label>
+        {connectionResult ? (
+          <p
+            role={connectionResult.status === 'ok' ? 'status' : 'alert'}
+            style={{ ...connectionFeedbackTextStyle, ...(connectionResult.status === 'ok' ? statusTextStyle : errorTextStyle) }}
+          >
+            {connectionResult.message}
+          </p>
+        ) : null}
+        <footer style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginTop: 22 }}>
+          <button type="button" onClick={onCancel} style={secondaryActionStyle}>Back</button>
+          <button type="button" onClick={onTest} style={secondaryActionStyle}>Test</button>
+          <button type="button" onClick={onSave} style={primaryActionStyle}>Save</button>
         </footer>
       </div>
     </FullWindowDialogShell>

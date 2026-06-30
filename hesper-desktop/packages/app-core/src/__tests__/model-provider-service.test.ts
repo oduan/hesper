@@ -494,6 +494,30 @@ describe('createModelProviderService', () => {
     expect(Buffer.from(exportDatabaseBytes(persistence)).toString('latin1')).not.toContain('sk-inline-secret')
   })
 
+  it('tests MiMo Code Plan transient connections as OpenAI-compatible without saving them', async () => {
+    const persistence = await createInMemoryPersistence()
+    const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => createJsonResponse({ choices: [{ message: { content: 'hesper-ok' } }] }))
+    const service = createModelProviderService({ persistence, credentialVaultService, now: () => now, fetch: fetchMock as unknown as typeof fetch })
+
+    const result = await service.testProviderConnection({
+      providerId: 'mimo',
+      kind: 'openai-compatible',
+      baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1',
+      apiKey: 'sk-mimo-inline-secret',
+      modelId: 'mimo-v2.5'
+    })
+
+    expect(result).toMatchObject({ providerId: 'mimo', status: 'ok', hasApiKey: true })
+    const [requestUrl, requestInit] = fetchMock.mock.calls[0]!
+    expect(requestUrl).toBe('https://token-plan-cn.xiaomimimo.com/v1/chat/completions')
+    expect((requestInit as RequestInit).headers).toMatchObject({ authorization: 'Bearer sk-mimo-inline-secret' })
+    expect(JSON.parse(String((requestInit as RequestInit).body))).toMatchObject({ model: 'mimo-v2.5' })
+    expect(JSON.stringify(result)).not.toContain('sk-mimo-inline-secret')
+    expect(await persistence.modelProviders.get('mimo')).toBeUndefined()
+    expect(Buffer.from(exportDatabaseBytes(persistence)).toString('latin1')).not.toContain('sk-mimo-inline-secret')
+  })
+
   it('redacts inline API keys from failed connection test results', async () => {
     const persistence = await createInMemoryPersistence()
     const credentialVaultService = createCredentialVaultService({ persistence, codec: createMockCodec(), now: () => now })

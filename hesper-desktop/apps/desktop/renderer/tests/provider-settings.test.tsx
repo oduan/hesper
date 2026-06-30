@@ -447,6 +447,125 @@ describe('provider settings panel', () => {
     })
   })
 
+  it('shows built-in API key preset options in the add connection picker', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: '设置' }))
+    await user.click(await screen.findByRole('button', { name: '+ 添加连接' }))
+
+    const picker = await screen.findByRole('dialog', { name: '添加连接' })
+    expect(within(picker).getByRole('button', { name: /ChatGPT\/Codex 连接/ })).toBeInTheDocument()
+    expect(within(picker).getByRole('button', { name: /DeepSeek 连接/ })).toBeInTheDocument()
+    expect(within(picker).getByRole('button', { name: /MiMo Code Plan 连接/ })).toBeInTheDocument()
+    expect(within(picker).getByRole('button', { name: /自定义连接/ })).toBeInTheDocument()
+  })
+
+  it('adds a DeepSeek preset connection from the API key-only dialog', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: '设置' }))
+    await user.click(await screen.findByRole('button', { name: '+ 添加连接' }))
+    await user.click(await screen.findByRole('button', { name: /DeepSeek 连接/ }))
+    testConnection.mockResolvedValueOnce({ providerId: 'deepseek', status: 'ok', hasApiKey: true, message: '连接成功' })
+
+    const apiDialog = await screen.findByRole('dialog', { name: 'API 配置' })
+    await user.type(within(apiDialog).getByLabelText('添加连接 API key'), 'sk-deepseek-value')
+    expect(within(apiDialog).queryByLabelText('添加连接 Endpoint')).not.toBeInTheDocument()
+    expect(within(apiDialog).queryByLabelText('添加连接协议')).not.toBeInTheDocument()
+    expect(within(apiDialog).queryByLabelText('添加连接默认模型')).not.toBeInTheDocument()
+
+    await user.click(within(apiDialog).getByRole('button', { name: 'Test' }))
+    await waitFor(() => {
+      expect(testConnection).toHaveBeenCalledWith({
+        providerId: 'deepseek',
+        kind: 'deepseek',
+        baseUrl: 'https://api.deepseek.com/v1',
+        apiKey: 'sk-deepseek-value',
+        modelId: 'deepseek-v4-flash'
+      })
+    })
+    expect(await within(apiDialog).findByRole('status')).toHaveTextContent('连接成功')
+
+    await user.click(within(apiDialog).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(saveProvider).toHaveBeenCalledWith(expect.objectContaining({
+        id: 'deepseek',
+        name: 'DeepSeek',
+        kind: 'deepseek',
+        baseUrl: 'https://api.deepseek.com/v1',
+        defaultModelId: 'deepseek-v4-flash'
+      }))
+    })
+    expect(saveProviderApiKey).toHaveBeenCalledWith({ providerId: 'deepseek', apiKey: 'sk-deepseek-value' })
+    expect(saveModel).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'deepseek-v4-flash',
+      providerId: 'deepseek',
+      modelName: 'deepseek-v4-flash',
+      displayName: 'deepseek-v4-flash'
+    }))
+    expect(saveModel).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'deepseek-v4-pro',
+      providerId: 'deepseek',
+      modelName: 'deepseek-v4-pro',
+      displayName: 'deepseek-v4-pro'
+    }))
+  })
+  it('adds a MiMo Code Plan preset connection from the API key-only dialog', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: '设置' }))
+    await user.click(await screen.findByRole('button', { name: '+ 添加连接' }))
+    await user.click(await screen.findByRole('button', { name: /MiMo Code Plan 连接/ }))
+    testConnection.mockResolvedValueOnce({ providerId: 'mimo', status: 'ok', hasApiKey: true, message: '连接成功' })
+    saveProviderApiKey.mockResolvedValueOnce({ providerId: 'mimo', apiKeyRef: 'provider:mimo:api-key', hasApiKey: true, encryptionAvailable: true })
+
+    const apiDialog = await screen.findByRole('dialog', { name: 'API 配置' })
+    await user.type(within(apiDialog).getByLabelText('添加连接 API key'), 'sk-mimo-value')
+    expect(within(apiDialog).queryByLabelText('添加连接 Endpoint')).not.toBeInTheDocument()
+    expect(within(apiDialog).queryByLabelText('添加连接协议')).not.toBeInTheDocument()
+    expect(within(apiDialog).queryByLabelText('添加连接默认模型')).not.toBeInTheDocument()
+
+    await user.click(within(apiDialog).getByRole('button', { name: 'Test' }))
+    await waitFor(() => {
+      expect(testConnection).toHaveBeenCalledWith({
+        providerId: 'mimo',
+        kind: 'openai-compatible',
+        baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1',
+        apiKey: 'sk-mimo-value',
+        modelId: 'mimo-v2.5'
+      })
+    })
+    expect(await within(apiDialog).findByRole('status')).toHaveTextContent('连接成功')
+
+    await user.click(within(apiDialog).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(saveProvider).toHaveBeenCalledWith(expect.objectContaining({
+        id: 'mimo',
+        name: 'MiMo Code Plan',
+        kind: 'openai-compatible',
+        baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1',
+        defaultModelId: 'mimo-v2.5'
+      }))
+    })
+    expect(saveProviderApiKey).toHaveBeenCalledWith({ providerId: 'mimo', apiKey: 'sk-mimo-value' })
+    expect(saveModel).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'mimo-v2.5',
+      providerId: 'mimo',
+      modelName: 'mimo-v2.5',
+      displayName: 'mimo-v2.5'
+    }))
+    expect(saveModel).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'mimo-v2.5-pro',
+      providerId: 'mimo',
+      modelName: 'mimo-v2.5-pro',
+      displayName: 'mimo-v2.5-pro'
+    }))
+  })
   it('shows Codex OAuth connection actions without opening the custom API editor', async () => {
     const user = userEvent.setup()
     testConnection.mockResolvedValueOnce({
@@ -934,6 +1053,8 @@ describe('provider settings panel', () => {
     await waitFor(() => expect(picker).toHaveFocus())
 
     const codexButton = within(picker).getByRole('button', { name: /ChatGPT\/Codex 连接/ })
+    const deepSeekButton = within(picker).getByRole('button', { name: /DeepSeek 连接/ })
+    const mimoButton = within(picker).getByRole('button', { name: /MiMo Code Plan 连接/ })
     const customButton = within(picker).getByRole('button', { name: /自定义连接/ })
     const backButton = within(picker).getByRole('button', { name: 'Back' })
     backButton.focus()
@@ -944,6 +1065,10 @@ describe('provider settings panel', () => {
     expect(backButton).toHaveFocus()
 
     codexButton.focus()
+    await user.keyboard('{Tab}')
+    expect(deepSeekButton).toHaveFocus()
+    await user.keyboard('{Tab}')
+    expect(mimoButton).toHaveFocus()
     await user.keyboard('{Tab}')
     expect(customButton).toHaveFocus()
   })

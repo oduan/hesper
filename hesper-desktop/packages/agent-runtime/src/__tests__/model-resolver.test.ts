@@ -175,6 +175,52 @@ describe('ModelResolver', () => {
     expect(resolved.getApiKey?.('deepseek')).toBeUndefined()
   })
 
+  it('resolves MiMo Code Plan as a saved OpenAI-compatible provider', async () => {
+    const getPiModel = vi.fn(() => piModel())
+    const mimoProvider = provider({
+      id: 'mimo',
+      name: 'MiMo Code Plan',
+      kind: 'openai-compatible',
+      baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1',
+      defaultModelId: 'mimo-v2.5'
+    })
+    const mimoModel = model({
+      id: 'mimo-v2.5',
+      providerId: 'mimo',
+      modelName: 'mimo-v2.5',
+      displayName: 'MIMO V2.5',
+      capabilities: ['streaming', 'toolCalls'],
+      contextWindow: 1_000_000
+    })
+    const resolver = createRegistryModelResolver({
+      registry: registry({ providers: [mimoProvider], models: [mimoModel] }),
+      readProviderApiKey: vi.fn(async () => 'sk-mimo'),
+      getPiModel
+    })
+
+    const resolved = await resolver.resolve({ modelId: 'mimo-v2.5' })
+
+    expect(getPiModel).not.toHaveBeenCalled()
+    expect(resolved.model).toEqual(expect.objectContaining({
+      id: 'mimo-v2.5',
+      name: 'MIMO V2.5',
+      api: 'openai-completions',
+      provider: 'mimo',
+      baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1',
+      contextWindow: 1_000_000,
+      compat: expect.objectContaining({
+        supportsDeveloperRole: false,
+        supportsStore: false,
+        supportsUsageInStreaming: false,
+        maxTokensField: 'max_tokens'
+      })
+    }))
+    expect(resolved.modelConfig).toMatchObject({ id: 'mimo-v2.5', modelName: 'mimo-v2.5' })
+    await expect(resolved.getApiKey?.('mimo')).resolves.toBe('sk-mimo')
+    await expect(resolved.getApiKey?.('openai')).resolves.toBe('sk-mimo')
+    expect(resolved.getApiKey?.('deepseek')).toBeUndefined()
+  })
+
   it('uses a faux model factory for mock providers and never requires a key', async () => {
     const mockProvider = provider({ id: 'mock', name: 'Mock', kind: 'mock', defaultModelId: 'mock/hesper-fast' })
     const mockModel = model({ id: 'mock/hesper-fast', providerId: 'mock', modelName: 'mock/hesper-fast', displayName: 'Hesper Mock Fast' })
