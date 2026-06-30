@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../src/App'
@@ -140,9 +140,11 @@ vi.mock('../src/ipc-client', () => ({
 describe('session settings and restore flow', () => {
   afterEach(() => {
     cleanup()
+    window.localStorage.clear()
   })
 
   beforeEach(() => {
+    window.localStorage.clear()
     listSessions.mockReset()
     setWorkspace.mockClear()
     setModel.mockClear()
@@ -150,9 +152,6 @@ describe('session settings and restore flow', () => {
     selectDirectory.mockClear()
     onEvent.mockReset()
     enqueue.mockReset()
-    stopRun.mockReset()
-    getSettings.mockReset()
-    updateSettings.mockReset()
     listModels.mockClear()
     listTools.mockClear()
     setToolEnabled.mockClear()
@@ -257,6 +256,9 @@ describe('session settings and restore flow', () => {
     await screen.findByRole('heading', { name: 'Current chat' })
 
     await user.click(screen.getByRole('button', { name: /^选择文件夹/ }))
+    expect(screen.getByRole('menu', { name: '工作目录选项' })).toBeInTheDocument()
+    expect(selectDirectory).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('menuitem', { name: '选择目录' }))
     expect(selectDirectory).toHaveBeenCalledTimes(1)
     await waitFor(() => {
       expect(setWorkspace).toHaveBeenCalledWith({ id: 'session-1', workspacePath: 'D:/updated-workspace' })
@@ -271,9 +273,103 @@ describe('session settings and restore flow', () => {
     const sessionRow = screen.getByRole('button', { name: 'Current chat' })
     expect(sessionRow).toHaveTextContent('Current chat')
     expect(sessionRow).not.toHaveTextContent('gpt-4o')
-
     expect(screen.queryByRole('button', { name: '选择输出模式' })).not.toBeInTheDocument()
     expect(setOutputMode).not.toHaveBeenCalled()
+  })
+
+  it('switches to a recent workspace without opening the directory picker and removes recent entries', async () => {
+    const user = userEvent.setup()
+    window.localStorage.setItem('hesper.recentWorkspacePaths', JSON.stringify(['D:/recent/product', 'E:/recent/archive']))
+    listSessions.mockResolvedValueOnce([createSession()] as any)
+
+    render(<App />)
+
+    await screen.findByRole('heading', { name: 'Current chat' })
+    await user.click(screen.getByRole('button', { name: /^选择文件夹/ }))
+
+    const menu = screen.getByRole('menu', { name: '工作目录选项' })
+    await user.click(within(menu).getByRole('menuitem', { name: '切换到目录：product' }))
+
+    expect(selectDirectory).not.toHaveBeenCalled()
+    await waitFor(() => {
+      expect(setWorkspace).toHaveBeenCalledWith({ id: 'session-1', workspacePath: 'D:/recent/product' })
+    })
+    expect(screen.getByRole('button', { name: '选择文件夹：product' })).toHaveTextContent('product')
+
+    await user.click(screen.getByRole('button', { name: /^选择文件夹/ }))
+    fireEvent.click(within(screen.getByRole('menu', { name: '工作目录选项' })).getByRole('button', { name: '移除目录 archive' }))
+
+    expect(JSON.parse(window.localStorage.getItem('hesper.recentWorkspacePaths') ?? '[]')).toContain('D:/recent/product')
+    expect(JSON.parse(window.localStorage.getItem('hesper.recentWorkspacePaths') ?? '[]')).not.toContain('E:/recent/archive')
+    expect(setWorkspace).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: '选择文件夹：product' })).toHaveTextContent('product')
+  })
+
+  it('initializes recent workspace options from existing sessions once', async () => {
+    const user = userEvent.setup()
+    listSessions.mockResolvedValueOnce([
+      createSession({ id: 'session-1', title: 'Current chat', workspacePath: 'C:/workspace/current', updatedAt: '2026-06-10T03:02:00.000Z' }),
+      createSession({ id: 'session-2', title: 'Earlier chat', workspacePath: 'D:/client/product', updatedAt: '2026-06-10T03:01:00.000Z' }),
+      createSession({ id: 'session-3', title: 'Older chat', workspacePath: 'E:/archive/research', updatedAt: '2026-06-10T03:00:00.000Z' })
+    ] as any)
+
+    render(<App />)
+
+    await screen.findByRole('heading', { name: 'Current chat' })
+    await user.click(screen.getByRole('button', { name: /^选择文件夹/ }))
+
+    const menu = screen.getByRole('menu', { name: '工作目录选项' })
+    expect(within(menu).getByRole('menuitem', { name: '切换到目录：product' })).toBeInTheDocument()
+    expect(within(menu).getByRole('menuitem', { name: '切换到目录：research' })).toBeInTheDocument()
+    expect(JSON.parse(window.localStorage.getItem('hesper.recentWorkspacePaths') ?? '[]')).toEqual([
+      'C:/workspace/current',
+      'D:/client/product',
+      'E:/archive/research'
+    ])
+    expect(window.localStorage.getItem('hesper.recentWorkspacePaths.initializedFromSessions.v2')).toBe('true')
+  })
+
+  it('reinitializes recent workspace options when only the legacy migration marker exists', async () => {
+    const user = userEvent.setup()
+    window.localStorage.setItem('hesper.recentWorkspacePaths.initializedFromSessions', 'true')
+    listSessions.mockResolvedValueOnce([
+      createSession({ id: 'session-1', title: 'Current chat', workspacePath: 'C:/workspace/current', updatedAt: '2026-06-10T03:02:00.000Z' }),
+      createSession({ id: 'session-2', title: 'Earlier chat', workspacePath: 'D:/client/product', updatedAt: '2026-06-10T03:01:00.000Z' })
+    ] as any)
+
+    render(<App />)
+
+    await screen.findByRole('heading', { name: 'Current chat' })
+    await user.click(screen.getByRole('button', { name: /^选择文件夹/ }))
+
+    const menu = screen.getByRole('menu', { name: '工作目录选项' })
+    expect(within(menu).getByRole('menuitem', { name: '切换到目录：product' })).toBeInTheDocument()
+    expect(JSON.parse(window.localStorage.getItem('hesper.recentWorkspacePaths') ?? '[]')).toEqual([
+      'C:/workspace/current',
+      'D:/client/product'
+    ])
+    expect(window.localStorage.getItem('hesper.recentWorkspacePaths.initializedFromSessions.v2')).toBe('true')
+  })
+  it('shows session workspace history even after the session migration marker exists', async () => {
+    const user = userEvent.setup()
+    window.localStorage.setItem('hesper.recentWorkspacePaths.initializedFromSessions.v2', 'true')
+    listSessions.mockResolvedValueOnce([
+      createSession({ id: 'session-1', title: 'Current chat', workspacePath: 'C:/workspace/current', updatedAt: '2026-06-10T03:02:00.000Z' }),
+      createSession({ id: 'session-2', title: 'Earlier chat', workspacePath: 'D:/client/product', updatedAt: '2026-06-10T03:01:00.000Z' })
+    ] as any)
+
+    render(<App />)
+
+    await screen.findByRole('heading', { name: 'Current chat' })
+    await user.click(screen.getByRole('button', { name: /^选择文件夹/ }))
+
+    const menu = screen.getByRole('menu', { name: '工作目录选项' })
+    expect(within(menu).getByRole('menuitem', { name: '切换到目录：product' })).toBeInTheDocument()
+    expect(window.localStorage.getItem('hesper.recentWorkspacePaths')).toBeNull()
+
+    fireEvent.click(within(menu).getByRole('button', { name: '移除目录 product' }))
+    expect(within(menu).queryByRole('menuitem', { name: '切换到目录：product' })).not.toBeInTheDocument()
+    expect(JSON.parse(window.localStorage.getItem('hesper.dismissedRecentWorkspacePathKeys') ?? '[]')).toEqual(['d:/client/product'])
   })
 
   it('uses the newly selected model immediately when the session update is still in flight', async () => {
@@ -311,6 +407,7 @@ describe('session settings and restore flow', () => {
     await screen.findByRole('heading', { name: 'Current chat' })
 
     await user.click(screen.getByRole('button', { name: /^选择文件夹/ }))
+    await user.click(screen.getByRole('menuitem', { name: '选择目录' }))
     await user.type(screen.getByPlaceholderText(/输入消息/), 'send with new workspace')
     await user.click(screen.getByRole('button', { name: '发送' }))
 
@@ -387,7 +484,9 @@ describe('session settings and restore flow', () => {
 
     await screen.findByRole('heading', { name: 'Current chat' })
     await user.click(screen.getByRole('button', { name: /^选择文件夹/ }))
+    await user.click(screen.getByRole('menuitem', { name: '选择目录' }))
     await user.click(screen.getByRole('button', { name: /^选择文件夹/ }))
+    await user.click(screen.getByRole('menuitem', { name: '选择目录' }))
 
     second.resolve(createSession({ workspacePath: 'E:/workspace-two', updatedAt: '2026-06-10T03:05:02.000Z' }))
     await waitFor(() => {

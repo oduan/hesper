@@ -50,6 +50,9 @@ export type ComposerProps = {
   onSend: (content: string, options?: ComposerSendOptions) => void
   onStop?: () => void
   onSelectWorkspace?: () => void
+  recentWorkspacePaths?: string[]
+  onSelectRecentWorkspace?: (path: string) => void
+  onRemoveRecentWorkspace?: (path: string) => void
   onModelChange?: (modelId: string) => void
   sendSignal?: number
 }
@@ -105,6 +108,9 @@ export function Composer({
   onSend,
   onStop,
   onSelectWorkspace,
+  recentWorkspacePaths = [],
+  onSelectRecentWorkspace,
+  onRemoveRecentWorkspace,
   onModelChange,
   sendSignal = 0
 }: ComposerProps) {
@@ -116,7 +122,10 @@ export function Composer({
   const [internalSkillMentions, setInternalSkillMentions] = useState<SkillMentionRange[]>([])
   const [thinkingLevel, setThinkingLevel] = useState<ComposerThinkingLevel>(() => readStoredComposerThinkingLevel())
   const [draggingFiles, setDraggingFiles] = useState(false)
+  const [showWorkspaceMenu, setShowWorkspaceMenu] = useState(false)
+  const [workspaceMenuPosition, setWorkspaceMenuPosition] = useState<CSSProperties>()
   const composerRootRef = useRef<HTMLElement | null>(null)
+  const workspaceButtonRef = useRef<HTMLButtonElement | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const skillOptionRefs = useRef<Array<HTMLButtonElement | null>>([])
   const value = controlledValue ?? internalValue
@@ -145,6 +154,16 @@ export function Composer({
   const [skillMenuPosition, setSkillMenuPosition] = useState<CSSProperties>()
   const selectedThinkingLevelLabel = composerThinkingLevelOptions.find((option) => option.value === thinkingLevel)?.label ?? '高'
   const workspaceDisplayName = useMemo(() => formatWorkspaceDisplayName(workspacePath), [workspacePath])
+  const recentWorkspaceOptions = useMemo(() => {
+    const current = normalizeWorkspacePathForComparison(workspacePath)
+    const seen = new Set<string>()
+    return recentWorkspacePaths.flatMap((path) => {
+      const normalized = normalizeWorkspacePathForComparison(path)
+      if (!normalized || normalized === current || seen.has(normalized)) return []
+      seen.add(normalized)
+      return [path]
+    })
+  }, [recentWorkspacePaths, workspacePath])
 
   const syncTextareaHeight = useCallback(() => {
     const textarea = textareaRef.current
@@ -388,6 +407,55 @@ export function Composer({
     }
   }, [showSkillMenu])
 
+  useLayoutEffect(() => {
+    if (!showWorkspaceMenu) {
+      setWorkspaceMenuPosition(undefined)
+      return undefined
+    }
+
+    const updateWorkspaceMenuPosition = () => {
+      const button = workspaceButtonRef.current
+      if (!button) return
+      const rect = button.getBoundingClientRect()
+      setWorkspaceMenuPosition({
+        left: rect.left,
+        bottom: window.innerHeight - rect.top + 6,
+        width: Math.max(rect.width, 240)
+      })
+    }
+
+    updateWorkspaceMenuPosition()
+    window.addEventListener('resize', updateWorkspaceMenuPosition)
+    window.addEventListener('scroll', updateWorkspaceMenuPosition, true)
+    return () => {
+      window.removeEventListener('resize', updateWorkspaceMenuPosition)
+      window.removeEventListener('scroll', updateWorkspaceMenuPosition, true)
+    }
+  }, [showWorkspaceMenu])
+
+  useEffect(() => {
+    if (!showWorkspaceMenu) return undefined
+
+    const closeWorkspaceMenu = (event: MouseEvent) => {
+      const target = event.target
+      if (!(target instanceof Node)) return
+      if (workspaceButtonRef.current?.contains(target)) return
+      if ((target as Element).closest?.('[data-hesper-workspace-menu="true"]')) return
+      setShowWorkspaceMenu(false)
+    }
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowWorkspaceMenu(false)
+      }
+    }
+
+    document.addEventListener('mousedown', closeWorkspaceMenu)
+    window.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('mousedown', closeWorkspaceMenu)
+      window.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [showWorkspaceMenu])
   const skillMenu = showSkillMenu && skillMenuPosition ? createPortal(
     <div role="listbox" aria-label="技能提及建议" className="hesper-skill-mention-menu" style={{ ...skillMenuStyle, ...skillMenuPosition }}>
       {filteredSkills.map((skill, index) => {
@@ -419,6 +487,60 @@ export function Composer({
     document.body
   ) : null
 
+  const workspaceMenu = showWorkspaceMenu && workspaceMenuPosition ? createPortal(
+    <div
+      role="menu"
+      aria-label="工作目录选项"
+      data-hesper-workspace-menu="true"
+      className="hesper-workspace-menu"
+      style={{ ...workspaceMenuStyle, ...workspaceMenuPosition }}
+    >
+      {workspacePath ? (
+        <>
+          <WorkspaceMenuRow
+            path={workspacePath}
+            label={formatWorkspaceDisplayName(workspacePath)}
+            detail={formatWorkspaceParentDisplayName(workspacePath)}
+            current
+            onSelect={(path) => {
+              setShowWorkspaceMenu(false)
+              onSelectRecentWorkspace?.(path)
+            }}
+            {...(onRemoveRecentWorkspace ? { onRemove: onRemoveRecentWorkspace } : {})}
+          />
+          <div role="separator" aria-label="当前目录和最近目录分割线" style={workspaceMenuSeparatorStyle} />
+        </>
+      ) : null}
+      {recentWorkspaceOptions.map((path) => (
+        <WorkspaceMenuRow
+          key={path}
+          path={path}
+          label={formatWorkspaceDisplayName(path)}
+          detail={formatWorkspaceParentDisplayName(path)}
+          onSelect={(selectedPath) => {
+            setShowWorkspaceMenu(false)
+            onSelectRecentWorkspace?.(selectedPath)
+          }}
+          {...(onRemoveRecentWorkspace ? { onRemove: onRemoveRecentWorkspace } : {})}
+        />
+      ))}
+      <div role="separator" aria-label="选择目录分割线" style={workspaceMenuSeparatorStyle} />
+      <button
+        type="button"
+        role="menuitem"
+        className="hesper-workspace-menu-row"
+        onClick={() => {
+          setShowWorkspaceMenu(false)
+          onSelectWorkspace?.()
+        }}
+        style={workspaceMenuSelectButtonStyle}
+      >
+        选择目录
+      </button>
+    </div>,
+    document.body
+  ) : null
+
   return (
     <section
       ref={composerRootRef}
@@ -442,7 +564,9 @@ export function Composer({
       }}
     >
       {showSkillMenu ? <style>{skillMenuScrollbarCss}</style> : null}
+      {showWorkspaceMenu ? <style>{workspaceMenuCss}</style> : null}
       {skillMenu}
+      {workspaceMenu}
       {draggingFiles || visibleAttachments.length > 0 ? (
         <div aria-label="附件预览" style={attachmentPreviewAreaStyle}>
           {draggingFiles ? <div style={attachmentDropHintStyle}>松开即可添加附件</div> : null}
@@ -547,10 +671,13 @@ export function Composer({
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: themeTokens.spacing.md, alignItems: 'center', flexWrap: 'wrap' }}>
         <button
+          ref={workspaceButtonRef}
           type="button"
           className="hesper-soft-control"
           aria-label={`选择文件夹：${workspaceDisplayName}`}
-          onClick={() => onSelectWorkspace?.()}
+          aria-haspopup="menu"
+          aria-expanded={showWorkspaceMenu ? 'true' : 'false'}
+          onClick={() => setShowWorkspaceMenu((visible) => !visible)}
           style={{ ...controlButtonStyle, ...workspaceButtonStyle }}
         >
           <svg data-hesper-workspace-icon="empty-house" aria-hidden="true" viewBox="0 0 16 16" style={workspaceIconStyle}>
@@ -742,6 +869,72 @@ function formatWorkspaceDisplayName(workspacePath?: string): string {
   return segments.at(-1) ?? normalized
 }
 
+function normalizeWorkspacePathForComparison(workspacePath?: string): string {
+  return workspacePath?.trim().replace(/[\\/]+$/u, '').toLocaleLowerCase() ?? ''
+}
+
+function formatWorkspaceParentDisplayName(workspacePath?: string): string {
+  const trimmed = workspacePath?.trim()
+  if (!trimmed) {
+    return ''
+  }
+
+  const withoutTrailingSeparators = trimmed.replace(/[\\/]+$/u, '')
+  const normalized = withoutTrailingSeparators || trimmed
+  const segments = normalized.split(/[\\/]/u).filter(Boolean)
+  const currentName = segments.at(-1) ?? normalized
+  const parentName = segments.length > 1 ? segments.at(-2) : undefined
+  return parentName ? `${parentName}/${currentName}` : currentName
+}
+
+type WorkspaceMenuRowProps = {
+  path: string
+  label: string
+  detail: string
+  current?: boolean
+  onSelect: (path: string) => void
+  onRemove?: (path: string) => void
+}
+
+function WorkspaceMenuRow({ path, label, detail, current = false, onSelect, onRemove }: WorkspaceMenuRowProps) {
+  return (
+    <div className="hesper-workspace-menu-row" role="none" style={workspaceMenuRowWrapperStyle}>
+      <button
+        type="button"
+        role="menuitem"
+        title={path}
+        aria-label={current ? `当前目录：${label}` : `切换到目录：${label}`}
+        onClick={() => onSelect(path)}
+        style={workspaceMenuItemButtonStyle}
+      >
+        <span aria-hidden="true" style={workspaceMenuFolderIconStyle}>
+          <svg width="15" height="15" viewBox="0 0 16 16" focusable="false" style={workspaceMenuFolderSvgStyle}>
+            <path d="M1.75 4.25A1.25 1.25 0 0 1 3 3h3.15c.37 0 .72.16.96.44l.74.87c.1.12.25.19.41.19H13A1.25 1.25 0 0 1 14.25 5.75v5.75A1.5 1.5 0 0 1 12.75 13h-9.5a1.5 1.5 0 0 1-1.5-1.5V4.25Z" />
+          </svg>
+        </span>
+        <span style={workspaceMenuItemTextStyle}>
+          <span style={workspaceMenuItemLabelStyle}>{label}</span>
+          <span style={workspaceMenuItemDetailStyle}>{detail}</span>
+        </span>
+      </button>
+      {onRemove ? (
+        <button
+          type="button"
+          aria-label={`移除目录 ${label}`}
+          title="移除目录"
+          className="hesper-workspace-remove-button"
+          onClick={(event) => {
+            event.stopPropagation()
+            onRemove(path)
+          }}
+          style={workspaceMenuRemoveButtonStyle}
+        >
+          <span aria-hidden="true">×</span>
+        </button>
+      ) : null}
+    </div>
+  )
+}
 function resolveComposerTextareaMinHeight(textarea: HTMLTextAreaElement): number {
   const computedStyle = window.getComputedStyle(textarea)
   const cssMinHeight = parseCssPixelValue(computedStyle.minHeight, composerTextareaFallbackMinHeight)
@@ -991,6 +1184,39 @@ const skillMentionSelectionCss = `
 }
 `
 
+const workspaceMenuCss = `
+.hesper-workspace-menu {
+  scrollbar-width: thin;
+  scrollbar-color: ${themeTokens.color.border} transparent;
+}
+.hesper-workspace-menu::-webkit-scrollbar {
+  width: 6px;
+}
+.hesper-workspace-menu::-webkit-scrollbar-track {
+  background: transparent;
+}
+.hesper-workspace-menu::-webkit-scrollbar-thumb {
+  background: ${themeTokens.color.border};
+  border-radius: 999px;
+}
+.hesper-workspace-menu::-webkit-scrollbar-thumb:hover {
+  background: ${themeTokens.color.scrollbarThumbHover};
+}
+.hesper-workspace-menu-row:hover,
+.hesper-workspace-menu-row:focus-within {
+  background: ${themeTokens.color.hover};
+}
+.hesper-workspace-menu-row:hover .hesper-workspace-remove-button,
+.hesper-workspace-menu-row:focus-within .hesper-workspace-remove-button,
+.hesper-workspace-remove-button:focus-visible {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+.hesper-workspace-remove-button:hover,
+.hesper-workspace-remove-button:focus-visible {
+  background: ${themeTokens.color.softControl} !important;
+}
+`
 const skillMenuStyle = {
   position: 'fixed',
   width: '20%',
@@ -1249,6 +1475,127 @@ const workspaceLabelStyle = {
   whiteSpace: 'nowrap'
 } satisfies CSSProperties
 
+const workspaceMenuStyle = {
+  position: 'fixed',
+  boxSizing: 'border-box',
+  zIndex: 21,
+  display: 'grid',
+  gap: 1,
+  maxHeight: 260,
+  overflowY: 'auto',
+  overflowX: 'hidden',
+  borderColor: themeTokens.color.border,
+  borderStyle: 'solid',
+  borderWidth: '1px',
+  borderRadius: themeTokens.radius.md,
+  background: 'var(--hesper-color-surface, #1f2335)',
+  boxShadow: `0 6px 14px -8px ${themeTokens.color.shadow}`,
+  padding: 3,
+  color: themeTokens.color.text,
+  fontFamily: 'inherit',
+  fontSize: 12
+} satisfies CSSProperties
+
+const workspaceMenuRowWrapperStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'minmax(0, 1fr) 24px',
+  alignItems: 'center',
+  borderRadius: themeTokens.radius.sm,
+  minHeight: 30
+} satisfies CSSProperties
+
+const workspaceMenuItemButtonStyle = {
+  minWidth: 0,
+  width: '100%',
+  border: 0,
+  outline: 0,
+  background: 'transparent',
+  color: themeTokens.color.text,
+  cursor: 'pointer',
+  font: 'inherit',
+  textAlign: 'left',
+  padding: '3px 7px',
+  overflow: 'hidden',
+  display: 'grid',
+  gridTemplateColumns: '14px minmax(0, 1fr)',
+  alignItems: 'center',
+  gap: 5,
+  lineHeight: 1.3
+} satisfies CSSProperties
+
+const workspaceMenuFolderIconStyle = {
+  width: 14,
+  height: 14,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  color: themeTokens.color.textMuted,
+  flex: '0 0 auto'
+} satisfies CSSProperties
+
+const workspaceMenuFolderSvgStyle = {
+  display: 'block',
+  fill: 'currentColor'
+} satisfies CSSProperties
+
+const workspaceMenuItemTextStyle = {
+  display: 'block',
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap'
+} satisfies CSSProperties
+
+const workspaceMenuItemLabelStyle = {
+  display: 'inline'
+} satisfies CSSProperties
+
+const workspaceMenuItemDetailStyle = {
+  display: 'inline',
+  marginLeft: 5,
+  color: themeTokens.color.textMuted,
+  fontSize: 'inherit',
+  lineHeight: 'inherit'
+} satisfies CSSProperties
+
+const workspaceMenuRemoveButtonStyle = {
+  width: 20,
+  height: 20,
+  border: 0,
+  outline: 0,
+  borderRadius: themeTokens.radius.sm,
+  background: 'transparent',
+  color: themeTokens.color.text,
+  cursor: 'pointer',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  lineHeight: 1,
+  fontSize: 14,
+  opacity: 0,
+  pointerEvents: 'none',
+  transition: 'opacity 120ms ease, background-color 120ms ease'
+} satisfies CSSProperties
+
+const workspaceMenuSeparatorStyle = {
+  height: 1,
+  background: themeTokens.color.borderSubtle,
+  margin: '2px 6px'
+} satisfies CSSProperties
+
+const workspaceMenuSelectButtonStyle = {
+  width: '100%',
+  border: 0,
+  outline: 0,
+  borderRadius: themeTokens.radius.sm,
+  background: 'transparent',
+  color: themeTokens.color.text,
+  cursor: 'pointer',
+  font: 'inherit',
+  textAlign: 'left',
+  padding: '3px 7px',
+  lineHeight: 1.3
+} satisfies CSSProperties
 const modelControlStyle = {
   display: 'flex',
   alignItems: 'center',

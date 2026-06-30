@@ -258,6 +258,116 @@ function visibleSessionsForScope(sessions: Session[], categoryId: string | undef
   return sessions.filter((session) => session.status === 'active')
 }
 
+const recentWorkspaceStorageKey = 'hesper.recentWorkspacePaths'
+const recentWorkspaceMigrationStorageKey = 'hesper.recentWorkspacePaths.initializedFromSessions.v2'
+const dismissedRecentWorkspaceStorageKey = 'hesper.dismissedRecentWorkspacePathKeys'
+const maxRecentWorkspacePaths = 8
+
+function normalizeWorkspacePath(value: string): string | undefined {
+  const trimmed = value.trim()
+  return trimmed || undefined
+}
+
+function normalizeWorkspacePathKey(value: string): string {
+  return value.trim().replace(/[\\/]+$/u, '').toLocaleLowerCase()
+}
+
+function normalizeRecentWorkspacePaths(paths: readonly string[]): string[] {
+  const seen = new Set<string>()
+  return paths.flatMap((path) => {
+    const normalized = normalizeWorkspacePath(path)
+    if (!normalized) return []
+    const key = normalizeWorkspacePathKey(normalized)
+    if (seen.has(key)) return []
+    seen.add(key)
+    return [normalized]
+  }).slice(0, maxRecentWorkspacePaths)
+}
+
+function readRecentWorkspacePaths(): string[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(recentWorkspaceStorageKey) ?? '[]')
+    return Array.isArray(parsed) ? normalizeRecentWorkspacePaths(parsed.filter((item): item is string => typeof item === 'string')) : []
+  } catch {
+    return []
+  }
+}
+
+function writeRecentWorkspacePaths(paths: readonly string[]): string[] {
+  const normalized = normalizeRecentWorkspacePaths(paths)
+  if (typeof window !== 'undefined') {
+    try {
+      window.localStorage.setItem(recentWorkspaceStorageKey, JSON.stringify(normalized))
+    } catch {
+      // Ignore storage failures so workspace selection remains usable.
+    }
+  }
+  return normalized
+}
+
+function readDismissedRecentWorkspacePathKeys(): string[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(dismissedRecentWorkspaceStorageKey) ?? '[]')
+    return Array.isArray(parsed) ? [...new Set(parsed.filter((item): item is string => typeof item === 'string').map(normalizeWorkspacePathKey).filter(Boolean))] : []
+  } catch {
+    return []
+  }
+}
+
+function writeDismissedRecentWorkspacePathKeys(keys: readonly string[]): string[] {
+  const normalized = [...new Set(keys.map(normalizeWorkspacePathKey).filter(Boolean))]
+  if (typeof window !== 'undefined') {
+    try {
+      window.localStorage.setItem(dismissedRecentWorkspaceStorageKey, JSON.stringify(normalized))
+    } catch {
+      // Ignore storage failures so workspace selection remains usable.
+    }
+  }
+  return normalized
+}
+
+function addRecentWorkspacePath(paths: readonly string[], workspacePath: string): string[] {
+  return writeRecentWorkspacePaths([workspacePath, ...paths])
+}
+
+function mergeRecentWorkspacePaths(paths: readonly string[], nextPaths: readonly string[]): string[] {
+  return writeRecentWorkspacePaths([...paths, ...nextPaths])
+}
+
+function hasInitializedRecentWorkspacePathsFromSessions(): boolean {
+  if (typeof window === 'undefined') return true
+  try {
+    return window.localStorage.getItem(recentWorkspaceMigrationStorageKey) === 'true'
+  } catch {
+    return true
+  }
+}
+
+function markRecentWorkspacePathsInitializedFromSessions(): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(recentWorkspaceMigrationStorageKey, 'true')
+  } catch {
+    // Ignore storage failures so workspace selection remains usable.
+  }
+}
+
+function removeRecentWorkspacePath(paths: readonly string[], workspacePath: string): string[] {
+  const removeKey = normalizeWorkspacePathKey(workspacePath)
+  return writeRecentWorkspacePaths(paths.filter((path) => normalizeWorkspacePathKey(path) !== removeKey))
+}
+
+function addDismissedRecentWorkspacePathKey(keys: readonly string[], workspacePath: string): string[] {
+  return writeDismissedRecentWorkspacePathKeys([...keys, normalizeWorkspacePathKey(workspacePath)])
+}
+
+function removeDismissedRecentWorkspacePathKey(keys: readonly string[], workspacePath: string): string[] {
+  const removeKey = normalizeWorkspacePathKey(workspacePath)
+  return writeDismissedRecentWorkspacePathKeys(keys.filter((key) => normalizeWorkspacePathKey(key) !== removeKey))
+}
+
 function AppContent() {
   const { state, dispatch } = useAppStore()
   const [loadError, setLoadError] = useState<string>()
@@ -267,6 +377,8 @@ function AppContent() {
   const [draftSkillMentionsBySession, setDraftSkillMentionsBySession] = useState<Record<string, ComposerSkillMention[]>>({})
   const [draftAttachmentsBySession, setDraftAttachmentsBySession] = useState<Record<string, ComposerDraftAttachment[]>>({})
   const [pendingSettingsBySession, setPendingSettingsBySession] = useState<Record<string, SessionSettingsOverride>>({})
+  const [recentWorkspacePaths, setRecentWorkspacePaths] = useState<string[]>(() => readRecentWorkspacePaths())
+  const [dismissedRecentWorkspacePathKeys, setDismissedRecentWorkspacePathKeys] = useState<string[]>(() => readDismissedRecentWorkspacePathKeys())
   const [shortcutCommand, setShortcutCommand] = useState<ConversationShortcutCommand>()
   const [sessionModelCatalog, setSessionModelCatalog] = useState<SessionModelCatalog>(fallbackSessionModelCatalog)
   const [historyErrorsBySession, setHistoryErrorsBySession] = useState<Record<string, string>>({})
@@ -661,6 +773,10 @@ function AppContent() {
         if (!cancelled) {
           setLoadError(undefined)
           dispatch({ type: 'sessions.loaded', sessions })
+          if (!hasInitializedRecentWorkspacePathsFromSessions()) {
+            setRecentWorkspacePaths((current) => mergeRecentWorkspacePaths(current, sessions.flatMap((session) => session.workspacePath ? [session.workspacePath] : [])))
+            markRecentWorkspacePathsInitializedFromSessions()
+          }
           dispatch({ type: 'sessionCategories.loaded', categories })
         }
       } catch (error) {
@@ -969,6 +1085,13 @@ function AppContent() {
       ? '归档'
       : activeSessionCategory?.name ?? '所有会话'
   const activeSendError = activeSession ? sendErrorsBySession[activeSession.id] : undefined
+  const visibleRecentWorkspacePaths = useMemo(() => {
+    const dismissedKeys = new Set(dismissedRecentWorkspacePathKeys)
+    return normalizeRecentWorkspacePaths([
+      ...recentWorkspacePaths,
+      ...effectiveSessions.flatMap((session) => session.workspacePath ? [session.workspacePath] : [])
+    ]).filter((path) => !dismissedKeys.has(normalizeWorkspacePathKey(path)))
+  }, [dismissedRecentWorkspacePathKeys, effectiveSessions, recentWorkspacePaths])
   const activeHistoryError = activeSession ? historyErrorsBySession[activeSession.id] : undefined
   const isSessionsSection = state.activeSection === 'sessions'
   const runningSessionIds = useMemo(() => {
@@ -2092,6 +2215,7 @@ function AppContent() {
               if (!activeRunningRunId) return
               void stopActiveRun({ sessionId: activeSession.id, runId: activeRunningRunId, setSendErrorsBySession })
             }}
+            recentWorkspacePaths={visibleRecentWorkspacePaths}
             onSelectWorkspace={() => {
               void updateSessionWorkspace({
                 session: activeSession,
@@ -2099,8 +2223,31 @@ function AppContent() {
                 setPendingSettingsBySession,
                 createRequestToken: createSettingsRequestToken,
                 isLatestRequest: isLatestSettingsRequest,
-                clearLatestRequest: clearLatestSettingsRequest
+                clearLatestRequest: clearLatestSettingsRequest,
+                onWorkspaceSaved: (workspacePath) => {
+                  setRecentWorkspacePaths((current) => addRecentWorkspacePath(current, workspacePath))
+                  setDismissedRecentWorkspacePathKeys((current) => removeDismissedRecentWorkspacePathKey(current, workspacePath))
+                }
               })
+            }}
+            onSelectRecentWorkspace={(workspacePath) => {
+              void setSessionWorkspace({
+                session: activeSession,
+                workspacePath,
+                dispatch,
+                setPendingSettingsBySession,
+                createRequestToken: createSettingsRequestToken,
+                isLatestRequest: isLatestSettingsRequest,
+                clearLatestRequest: clearLatestSettingsRequest,
+                onWorkspaceSaved: (savedPath) => {
+                  setRecentWorkspacePaths((current) => addRecentWorkspacePath(current, savedPath))
+                  setDismissedRecentWorkspacePathKeys((current) => removeDismissedRecentWorkspacePathKey(current, savedPath))
+                }
+              })
+            }}
+            onRemoveRecentWorkspace={(workspacePath) => {
+              setRecentWorkspacePaths((current) => removeRecentWorkspacePath(current, workspacePath))
+              setDismissedRecentWorkspacePathKeys((current) => addDismissedRecentWorkspacePathKey(current, workspacePath))
             }}
             onModelChange={(modelId) => {
               if (!isAvailableSessionModel(modelId, sessionModelCatalog)) {
@@ -2401,7 +2548,8 @@ async function updateSessionWorkspace({
   setPendingSettingsBySession,
   createRequestToken,
   isLatestRequest,
-  clearLatestRequest
+  clearLatestRequest,
+  onWorkspaceSaved
 }: {
   session: Pick<Session, 'id' | 'workspacePath'>
   dispatch: ReturnType<typeof useAppStore>['dispatch']
@@ -2409,21 +2557,54 @@ async function updateSessionWorkspace({
   createRequestToken: (sessionId: string, field: SessionSettingsField) => number
   isLatestRequest: (sessionId: string, field: SessionSettingsField, requestId: number) => boolean
   clearLatestRequest: (sessionId: string, field: SessionSettingsField, requestId: number) => void
+  onWorkspaceSaved?: (workspacePath: string) => void
 }) {
   const result = await hesperApi.dialog.selectDirectory()
   if (result.canceled || !result.path) {
     return
   }
 
+  await setSessionWorkspace({
+    session,
+    workspacePath: result.path,
+    dispatch,
+    setPendingSettingsBySession,
+    createRequestToken,
+    isLatestRequest,
+    clearLatestRequest,
+    ...(onWorkspaceSaved ? { onWorkspaceSaved } : {})
+  })
+}
+
+async function setSessionWorkspace({
+  session,
+  workspacePath,
+  dispatch,
+  setPendingSettingsBySession,
+  createRequestToken,
+  isLatestRequest,
+  clearLatestRequest,
+  onWorkspaceSaved
+}: {
+  session: Pick<Session, 'id' | 'workspacePath'>
+  workspacePath: string
+  dispatch: ReturnType<typeof useAppStore>['dispatch']
+  setPendingSettingsBySession: Dispatch<SetStateAction<Record<string, SessionSettingsOverride>>>
+  createRequestToken: (sessionId: string, field: SessionSettingsField) => number
+  isLatestRequest: (sessionId: string, field: SessionSettingsField, requestId: number) => boolean
+  clearLatestRequest: (sessionId: string, field: SessionSettingsField, requestId: number) => void
+  onWorkspaceSaved?: (workspacePath: string) => void
+}) {
   const requestId = createRequestToken(session.id, 'workspacePath')
-  setPendingSettingsBySession((current) => mergeSessionOverride(current, session.id, { workspacePath: result.path! }))
+  setPendingSettingsBySession((current) => mergeSessionOverride(current, session.id, { workspacePath }))
 
   try {
-    const updatedSession = await hesperApi.sessions.setWorkspace({ id: session.id, workspacePath: result.path })
+    const updatedSession = await hesperApi.sessions.setWorkspace({ id: session.id, workspacePath })
     if (!isLatestRequest(session.id, 'workspacePath', requestId)) {
       return
     }
     dispatch({ type: 'session.updated', session: updatedSession })
+    onWorkspaceSaved?.(updatedSession.workspacePath ?? workspacePath)
     setPendingSettingsBySession((current) => clearSessionOverrideFields(current, session.id, ['workspacePath']))
     clearLatestRequest(session.id, 'workspacePath', requestId)
   } catch {
