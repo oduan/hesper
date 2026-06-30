@@ -1,5 +1,25 @@
 import { createElement, memo, useMemo, type CSSProperties, type MouseEvent, type ReactNode } from 'react'
+import hljs from 'highlight.js/lib/core'
+import bash from 'highlight.js/lib/languages/bash'
+import css from 'highlight.js/lib/languages/css'
+import javascript from 'highlight.js/lib/languages/javascript'
+import json from 'highlight.js/lib/languages/json'
+import markdown from 'highlight.js/lib/languages/markdown'
+import python from 'highlight.js/lib/languages/python'
+import typescript from 'highlight.js/lib/languages/typescript'
+import xml from 'highlight.js/lib/languages/xml'
+import yaml from 'highlight.js/lib/languages/yaml'
 import { themeTokens } from '../theme'
+
+hljs.registerLanguage('bash', bash)
+hljs.registerLanguage('css', css)
+hljs.registerLanguage('javascript', javascript)
+hljs.registerLanguage('json', json)
+hljs.registerLanguage('markdown', markdown)
+hljs.registerLanguage('python', python)
+hljs.registerLanguage('typescript', typescript)
+hljs.registerLanguage('xml', xml)
+hljs.registerLanguage('yaml', yaml)
 
 type MarkdownBlock =
   | { type: 'heading'; level: 1 | 2 | 3 | 4 | 5 | 6; text: string }
@@ -286,6 +306,87 @@ function renderInline(text: string, keyPrefix: string, onLocalFileClick?: ((path
   return nodes
 }
 
+function normalizeCodeLanguage(language: string | undefined): string | undefined {
+  const normalized = (language ?? '').trim().toLowerCase().split(/\s+/)[0] ?? ''
+  if (!normalized) return undefined
+
+  switch (normalized) {
+    case 'js':
+    case 'javascript':
+    case 'jsx':
+      return 'javascript'
+    case 'ts':
+    case 'typescript':
+    case 'tsx':
+      return 'typescript'
+    case 'py':
+    case 'python':
+      return 'python'
+    case 'md':
+    case 'markdown':
+      return 'markdown'
+    case 'sh':
+    case 'shell':
+    case 'bash':
+      return 'bash'
+    case 'html':
+    case 'xml':
+      return 'xml'
+    case 'yml':
+    case 'yaml':
+      return 'yaml'
+    case 'json':
+    case 'css':
+      return normalized
+    default:
+      return undefined
+  }
+}
+
+function highlightCodeBlock(block: Extract<MarkdownBlock, { type: 'code' }>): { language: string; html: string } | undefined {
+  const language = normalizeCodeLanguage(block.language)
+  if (!language) return undefined
+
+  try {
+    return { language, html: hljs.highlight(block.text, { language, ignoreIllegals: true }).value }
+  } catch {
+    return undefined
+  }
+}
+
+function codeLanguageLabel(language: string | undefined): string {
+  const normalized = (language ?? '').trim().toLowerCase().split(/\s+/)[0] ?? ''
+  if (!normalized) return 'Text'
+
+  switch (normalized) {
+    case 'js':
+    case 'javascript':
+      return 'JS'
+    case 'ts':
+    case 'typescript':
+      return 'TS'
+    case 'py':
+    case 'python':
+      return 'Python'
+    case 'md':
+    case 'markdown':
+      return 'Markdown'
+    case 'json':
+      return 'JSON'
+    default:
+      return normalized.length <= 4 ? normalized.toUpperCase() : `${normalized[0]!.toUpperCase()}${normalized.slice(1)}`
+  }
+}
+
+function CopyCodeIcon() {
+  return (
+    <svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="5.5" y="5.5" width="7" height="7" rx="1.4" />
+      <path d="M3.5 10.5H3a1.5 1.5 0 0 1-1.5-1.5V3A1.5 1.5 0 0 1 3 1.5h6A1.5 1.5 0 0 1 10.5 3v.5" />
+    </svg>
+  )
+}
+
 function renderBlock(block: MarkdownBlock, index: number, onLocalFileClick?: ((path: string) => void) | undefined): ReactNode {
   switch (block.type) {
     case 'heading': {
@@ -298,12 +399,33 @@ function renderBlock(block: MarkdownBlock, index: number, onLocalFileClick?: ((p
       return <ul key={index} style={listStyle}>{block.items.map((item, itemIndex) => <li key={itemIndex} style={listItemStyle}>{renderInline(item, `ul-${index}-${itemIndex}`, onLocalFileClick)}</li>)}</ul>
     case 'ordered-list':
       return <ol key={index} style={listStyle}>{block.items.map((item, itemIndex) => <li key={itemIndex} style={listItemStyle}>{renderInline(item, `ol-${index}-${itemIndex}`, onLocalFileClick)}</li>)}</ol>
-    case 'code':
+    case 'code': {
+      const highlightedCode = highlightCodeBlock(block)
       return (
-        <pre key={index} data-hesper-markdown-code-scroll="true" style={codeBlockStyle}>
-          <code>{block.text}</code>
-        </pre>
+        <div key={index} style={codeBlockWrapStyle}>
+          <div style={codeBlockTitleBarStyle}>
+            <span style={codeBlockLanguageStyle}>{codeLanguageLabel(block.language)}</span>
+            <button
+              type="button"
+              aria-label="复制代码块"
+              style={codeBlockCopyButtonStyle}
+              onClick={() => {
+                void navigator.clipboard?.writeText(block.text)
+              }}
+            >
+              <CopyCodeIcon />
+            </button>
+          </div>
+          <pre data-hesper-markdown-code-scroll="true" style={codeBlockStyle} className="hesper-theme-scrollbar">
+            {highlightedCode ? (
+              <code className={`hljs language-${highlightedCode.language}`} dangerouslySetInnerHTML={{ __html: highlightedCode.html }} />
+            ) : (
+              <code>{block.text}</code>
+            )}
+          </pre>
+        </div>
       )
+    }
     case 'blockquote':
       return <blockquote key={index} style={blockquoteStyle}>{renderInline(block.text, `blockquote-${index}`, onLocalFileClick)}</blockquote>
     case 'table':
@@ -336,7 +458,12 @@ function renderBlock(block: MarkdownBlock, index: number, onLocalFileClick?: ((p
 
 export const MarkdownOutput = memo(function MarkdownOutput({ content, onLocalFileClick }: MarkdownOutputProps) {
   const blocks = useMemo(() => parseMarkdown(content), [content])
-  return <div style={rootStyle}>{blocks.map((block, index) => renderBlock(block, index, onLocalFileClick))}</div>
+  return (
+    <div style={rootStyle}>
+      <style>{codeHighlightStyle}</style>
+      {blocks.map((block, index) => renderBlock(block, index, onLocalFileClick))}
+    </div>
+  )
 })
 
 const rootStyle: CSSProperties = {
@@ -384,14 +511,126 @@ const inlineCodeStyle: CSSProperties = {
   padding: '1px 5px'
 }
 
-const codeBlockStyle: CSSProperties = {
+const codeHighlightStyle = `
+[data-hesper-markdown-code-scroll="true"] code .hljs-keyword,
+[data-hesper-markdown-code-scroll="true"] code .hljs-selector-tag,
+[data-hesper-markdown-code-scroll="true"] code .hljs-built_in {
+  color: #8f4bb8;
+}
+[data-hesper-markdown-code-scroll="true"] code .hljs-string,
+[data-hesper-markdown-code-scroll="true"] code .hljs-attr,
+[data-hesper-markdown-code-scroll="true"] code .hljs-template-variable {
+  color: #2f7d32;
+}
+[data-hesper-markdown-code-scroll="true"] code .hljs-number,
+[data-hesper-markdown-code-scroll="true"] code .hljs-literal,
+[data-hesper-markdown-code-scroll="true"] code .hljs-symbol {
+  color: #986801;
+}
+[data-hesper-markdown-code-scroll="true"] code .hljs-title,
+[data-hesper-markdown-code-scroll="true"] code .hljs-function,
+[data-hesper-markdown-code-scroll="true"] code .hljs-selector-id,
+[data-hesper-markdown-code-scroll="true"] code .hljs-selector-class {
+  color: #2563b8;
+}
+[data-hesper-markdown-code-scroll="true"] code .hljs-comment,
+[data-hesper-markdown-code-scroll="true"] code .hljs-quote {
+  color: #6b7280;
+}
+[data-hesper-markdown-code-scroll="true"] code .hljs-meta,
+[data-hesper-markdown-code-scroll="true"] code .hljs-tag,
+[data-hesper-markdown-code-scroll="true"] code .hljs-name {
+  color: #a2412f;
+}
+@media (prefers-color-scheme: dark) {
+  [data-hesper-markdown-code-scroll="true"] code .hljs-keyword,
+  [data-hesper-markdown-code-scroll="true"] code .hljs-selector-tag,
+  [data-hesper-markdown-code-scroll="true"] code .hljs-built_in {
+    color: #d6a3f0;
+  }
+  [data-hesper-markdown-code-scroll="true"] code .hljs-string,
+  [data-hesper-markdown-code-scroll="true"] code .hljs-attr,
+  [data-hesper-markdown-code-scroll="true"] code .hljs-template-variable {
+    color: #8fd694;
+  }
+  [data-hesper-markdown-code-scroll="true"] code .hljs-number,
+  [data-hesper-markdown-code-scroll="true"] code .hljs-literal,
+  [data-hesper-markdown-code-scroll="true"] code .hljs-symbol {
+    color: #f2c97d;
+  }
+  [data-hesper-markdown-code-scroll="true"] code .hljs-title,
+  [data-hesper-markdown-code-scroll="true"] code .hljs-function,
+  [data-hesper-markdown-code-scroll="true"] code .hljs-selector-id,
+  [data-hesper-markdown-code-scroll="true"] code .hljs-selector-class {
+    color: #8ab4f8;
+  }
+  [data-hesper-markdown-code-scroll="true"] code .hljs-comment,
+  [data-hesper-markdown-code-scroll="true"] code .hljs-quote {
+    color: #9ca3af;
+  }
+  [data-hesper-markdown-code-scroll="true"] code .hljs-meta,
+  [data-hesper-markdown-code-scroll="true"] code .hljs-tag,
+  [data-hesper-markdown-code-scroll="true"] code .hljs-name {
+    color: #f0a08d;
+  }
+}
+`
+
+const codeBlockWrapStyle: CSSProperties = {
   maxWidth: '100%',
   minWidth: 0,
   margin: '0 0 10px',
+  overflow: 'hidden',
+  border: `1px solid ${themeTokens.color.border}`,
+  borderRadius: themeTokens.radius.md,
+  background: themeTokens.color.codeBackground,
+  boxShadow: `0 2px 6px -4px ${themeTokens.color.shadow}`
+}
+
+const codeBlockTitleBarStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: themeTokens.spacing.sm,
+  minWidth: 0,
+  minHeight: 30,
+  padding: `0 ${themeTokens.spacing.md}`,
+  borderBottom: `1px solid ${themeTokens.color.borderSubtle}`,
+  background: themeTokens.color.softControl,
+  color: themeTokens.color.textMuted
+}
+
+const codeBlockLanguageStyle: CSSProperties = {
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  fontSize: '12px',
+  lineHeight: 1,
+  fontWeight: 600
+}
+
+const codeBlockCopyButtonStyle: CSSProperties = {
+  display: 'inline-grid',
+  placeItems: 'center',
+  flex: '0 0 auto',
+  width: 24,
+  height: 24,
+  padding: 0,
+  border: 0,
+  borderRadius: themeTokens.radius.sm,
+  background: 'transparent',
+  color: themeTokens.color.textMuted,
+  cursor: 'pointer'
+}
+
+const codeBlockStyle: CSSProperties = {
+  maxWidth: '100%',
+  minWidth: 0,
+  margin: 0,
   padding: themeTokens.spacing.md,
   overflowX: 'auto',
   overflowY: 'hidden',
-  borderRadius: themeTokens.radius.md,
   background: themeTokens.color.codeBackground,
   color: themeTokens.color.text,
   fontFamily: 'var(--hesper-font-family-mono, "JetBrains Mono", "Cascadia Code", SFMono-Regular, Menlo, Consolas, monospace)',
