@@ -1824,8 +1824,21 @@ function AppContent() {
     const session = stateRef.current.sessions.find((candidate) => candidate.id === sessionId)
     if (!session) return
 
-    const updatedSession = await hesperApi.sessions.delete(session.id)
-    dispatch({ type: 'session.updated', session: updatedSession })
+    dispatch({ type: 'session.updated', session: { ...session, status: 'deleted', updatedAt: new Date().toISOString() } })
+
+    try {
+      const updatedSession = await hesperApi.sessions.delete(session.id)
+      dispatch({ type: 'session.updated', session: updatedSession })
+    } catch (error) {
+      console.warn('Failed to delete session', session.id, error)
+      try {
+        const sessions = await hesperApi.sessions.list()
+        dispatch({ type: 'sessions.loaded', sessions })
+      } catch (reloadError) {
+        console.warn('Failed to reload sessions after delete failure', session.id, reloadError)
+        dispatch({ type: 'session.updated', session })
+      }
+    }
   }
 
   const normalizeSessionActionIds = (sessionId: string, sessionIds?: string[]): string[] => {
@@ -1840,7 +1853,6 @@ function AppContent() {
       await regenerateSessionTitle(targetSessionId)
     }
   }
-
   const deleteSessions = async (sessionId: string, sessionIds?: string[]) => {
     const targetSessionIds = normalizeSessionActionIds(sessionId, sessionIds)
     if (targetSessionIds.length === 1) {
@@ -1848,18 +1860,31 @@ function AppContent() {
       return
     }
 
-    const deletedSessionIds: string[] = []
-    for (const targetSessionId of targetSessionIds) {
-      try {
-        await hesperApi.sessions.delete(targetSessionId)
-        deletedSessionIds.push(targetSessionId)
-      } catch (error) {
-        console.warn('Failed to delete session', targetSessionId, error)
+    const targetIdSet = new Set(targetSessionIds)
+    const failedSessionSnapshots = stateRef.current.sessions.filter((session) => targetIdSet.has(session.id))
+    dispatch({ type: 'sessions.deleted', sessionIds: targetSessionIds })
+
+    const results = await Promise.allSettled(targetSessionIds.map((targetSessionId) => hesperApi.sessions.delete(targetSessionId)))
+    const failedSessionIds: string[] = []
+    for (const [index, result] of results.entries()) {
+      if (result.status === 'rejected') {
+        const targetSessionId = targetSessionIds[index]!
+        failedSessionIds.push(targetSessionId)
+        console.warn('Failed to delete session', targetSessionId, result.reason)
       }
     }
 
-    if (deletedSessionIds.length > 0) {
-      dispatch({ type: 'sessions.deleted', sessionIds: deletedSessionIds })
+    if (failedSessionIds.length === 0) return
+
+    try {
+      const sessions = await hesperApi.sessions.list()
+      dispatch({ type: 'sessions.loaded', sessions })
+    } catch (reloadError) {
+      console.warn('Failed to reload sessions after delete failure', failedSessionIds, reloadError)
+      const failedIdSet = new Set(failedSessionIds)
+      for (const session of failedSessionSnapshots) {
+        if (failedIdSet.has(session.id)) dispatch({ type: 'session.updated', session })
+      }
     }
   }
 

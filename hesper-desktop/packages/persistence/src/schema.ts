@@ -1,5 +1,18 @@
 import type { SqliteAdapter } from './sqlite-adapter'
 
+const deleteGraphIndexes = [
+  'CREATE INDEX IF NOT EXISTS idx_agent_runs_session_id ON agent_runs(session_id)',
+  'CREATE INDEX IF NOT EXISTS idx_ssh_executions_session_id ON ssh_executions(session_id)',
+  'CREATE INDEX IF NOT EXISTS idx_ssh_command_results_execution_id ON ssh_command_results(execution_id)',
+  'CREATE INDEX IF NOT EXISTS idx_worker_agent_invocations_parent_run_id ON worker_agent_invocations(parent_run_id)',
+  'CREATE INDEX IF NOT EXISTS idx_worker_agent_invocations_child_run_id ON worker_agent_invocations(child_run_id)',
+  'CREATE INDEX IF NOT EXISTS idx_runtime_events_run_id ON runtime_events(run_id)',
+  'CREATE INDEX IF NOT EXISTS idx_run_steps_run_id ON run_steps(run_id)',
+  'CREATE INDEX IF NOT EXISTS idx_run_context_items_session_id ON run_context_items(session_id)',
+  'CREATE INDEX IF NOT EXISTS idx_run_context_items_run_id ON run_context_items(run_id)',
+  'CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id)'
+]
+
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,
@@ -264,6 +277,7 @@ CREATE TABLE IF NOT EXISTS app_settings (
   soul TEXT NOT NULL DEFAULT '',
   updated_at TEXT NOT NULL
 );
+${deleteGraphIndexes.join(';\n')};
 `
 
 const migrationColumns: Record<string, string[]> = {
@@ -347,6 +361,9 @@ export async function migrateDatabaseSchema(db: SqliteAdapter): Promise<void> {
     }
   }
 
+  for (const statement of deleteGraphIndexes) {
+    await db.run(statement)
+  }
   const roleColumns = await tableColumns(db, 'roles')
   if (roleColumns.has('can_be_subagent') && roleColumns.has('can_be_worker_agent')) {
     await db.run('UPDATE roles SET can_be_worker_agent = can_be_subagent WHERE can_be_subagent IS NOT NULL')
