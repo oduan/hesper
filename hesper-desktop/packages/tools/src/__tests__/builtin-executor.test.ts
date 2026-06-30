@@ -265,7 +265,7 @@ describe('createBuiltinToolExecutor', () => {
   it('executes a platform shell command from the selected workspace', async () => {
     const root = await workspace()
     const executor = createBuiltinToolExecutor()
-    const command = process.platform === 'win32' ? 'Write-Output hello' : 'printf hello'
+    const command = process.platform === 'win32' ? 'echo hello' : 'printf hello'
 
     const result = await executor.execute(tool('system.execute-command'), { command }, {
       runId: 'run-1',
@@ -279,6 +279,86 @@ describe('createBuiltinToolExecutor', () => {
     expect(result.details).toMatchObject({ toolId: 'system.execute-command', workspacePath: root, exitCode: 0, platform: process.platform })
   })
 
+  it('hides the Windows console window when running git commands', async () => {
+    const root = await workspace()
+    const execFile = vi.fn(async (_file: string, _args: string[], _options: object) => ({ stdout: 'git version test\n', stderr: '' }))
+    const executor = createBuiltinToolExecutor({ execFile })
+
+    await executor.execute(tool('git.run'), { args: ['--version'] }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['git.run']
+    })
+
+    expect(execFile).toHaveBeenCalledTimes(1)
+    expect(execFile.mock.calls[0]?.[2]).toMatchObject({ windowsHide: true })
+  })
+
+  it('hides the Windows shell window when executing local commands', async () => {
+    const root = await workspace()
+    const execFile = vi.fn(async (_file: string, _args: string[], _options: object) => ({ stdout: 'hello\n', stderr: '' }))
+    const executor = createBuiltinToolExecutor({ execFile })
+
+    await executor.execute(tool('system.execute-command'), { command: 'echo hello' }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['system.execute-command']
+    })
+
+    expect(execFile).toHaveBeenCalledTimes(1)
+    expect(execFile.mock.calls[0]?.[2]).toMatchObject({ windowsHide: true })
+  })
+
+  it('uses cmd.exe for shim commands like pnpm on injected Windows platform', async () => {
+    const root = await workspace()
+    const execFile = vi.fn(async (_file: string, _args: string[], _options: object) => ({ stdout: 'pnpm 9.0.0\n', stderr: '' }))
+    const executor = createBuiltinToolExecutor({ execFile, platform: 'win32' })
+
+    const result = await executor.execute(tool('system.execute-command'), { command: 'pnpm --version' }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['system.execute-command']
+    })
+
+    expect(execFile).toHaveBeenCalledTimes(1)
+    const call = execFile.mock.calls[0]
+    expect(call).toBeDefined()
+    const [file, args, options] = call!
+    expect(file).toBe('cmd.exe')
+    expect(args).toContain('/d')
+    expect(args).toContain('/s')
+    expect(args).toContain('/c')
+    expect(args.some((a: string) => a.includes('pnpm --version'))).toBe(true)
+    expect(options).toMatchObject({ windowsHide: true })
+    expect(result.details).toMatchObject({ shell: 'cmd.exe' })
+  })
+
+  it('uses PowerShell for normal commands on injected Windows platform', async () => {
+    const root = await workspace()
+    const execFile = vi.fn(async (_file: string, _args: string[], _options: object) => ({ stdout: 'hello from PowerShell\n', stderr: '' }))
+    const executor = createBuiltinToolExecutor({ execFile, platform: 'win32' })
+
+    const result = await executor.execute(tool('system.execute-command'), { command: 'Write-Output hello' }, {
+      runId: 'run-1',
+      sessionId: 'session-1',
+      workspacePath: root,
+      allowedToolIds: ['system.execute-command']
+    })
+
+    expect(execFile).toHaveBeenCalledTimes(1)
+    const call = execFile.mock.calls[0]
+    expect(call).toBeDefined()
+    const [file, args, options] = call!
+    expect(file).toBe('powershell.exe')
+    expect(args).toContain('-NoProfile')
+    expect(args).toContain('-Command')
+    expect(args.some((a: string) => a.includes('Write-Output hello'))).toBe(true)
+    expect(options).toMatchObject({ windowsHide: true })
+    expect(result.details).toMatchObject({ shell: 'powershell.exe' })
+  })
   it('fetches URLs through TinyFish Fetch with a stored tool API key', async () => {
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
       results: [
