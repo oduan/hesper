@@ -1713,6 +1713,40 @@ describe('registerIpcHandlers', () => {
     }
   })
 
+  it('returns from session delete before slow attachment cleanup finishes', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock' })
+    const session = await container.sessionService.createSession({ title: 'Slow attachment cleanup' })
+    let resolveCleanup!: () => void
+    const cleanupPromise = new Promise<void>((resolve) => {
+      resolveCleanup = resolve
+    })
+    const attachmentStorage = {
+      saveDraftAttachments: vi.fn(async () => []),
+      readAttachmentDataUrl: vi.fn(async () => ({ dataUrl: '' })),
+      readTextAttachment: vi.fn(async () => ''),
+      readImageAttachment: vi.fn(async () => Buffer.from([])),
+      deleteMessageAttachments: vi.fn(async () => undefined),
+      deleteSessionAttachments: vi.fn(() => cleanupPromise)
+    }
+    const schedulePersistenceSave = vi.fn()
+    const { handles } = registerTestIpcHandlers(container, { attachmentStorage, schedulePersistenceSave })
+
+    const deletePromise = handles.get(ipcChannels.sessionsDelete)?.({ sender: { id: 1 } }, session.id) as Promise<{ id: string; status: string }>
+    await vi.waitFor(() => expect(attachmentStorage.deleteSessionAttachments).toHaveBeenCalledWith({ sessionId: session.id }))
+    const result = await Promise.race([
+      deletePromise.then((deletedSession) => ({ completed: true as const, deletedSession })),
+      new Promise<{ completed: false }>((resolve) => setTimeout(() => resolve({ completed: false }), 25))
+    ])
+
+    expect(result).toMatchObject({ completed: true, deletedSession: { id: session.id, status: 'deleted' } })
+    expect(attachmentStorage.deleteSessionAttachments).toHaveBeenCalledWith({ sessionId: session.id })
+    expect(schedulePersistenceSave).toHaveBeenCalledTimes(1)
+
+    resolveCleanup()
+    await cleanupPromise
+  })
+
   it('hard deletes sessions through IPC and removes their attachment directory', async () => {
     const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), 'hesper-ipc-delete-attachments-'))
     try {
@@ -1746,7 +1780,9 @@ describe('registerIpcHandlers', () => {
 
       await expect(persistence.sessions.get(session.id)).resolves.toBeUndefined()
       await expect(persistence.messages.listBySession(session.id)).resolves.toEqual([])
-      await expect(fs.access(path.join(userDataPath, 'attachments', session.id))).rejects.toThrow()
+      await vi.waitFor(async () => {
+        await expect(fs.access(path.join(userDataPath, 'attachments', session.id))).rejects.toThrow()
+      })
       expect(schedulePersistenceSave).toHaveBeenCalledTimes(1)
     } finally {
       await fs.rm(userDataPath, { recursive: true, force: true })

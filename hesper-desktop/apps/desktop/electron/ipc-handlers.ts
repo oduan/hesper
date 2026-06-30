@@ -359,7 +359,7 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
     },
     [ipcChannels.sessionsDelete]: async (_event, payload) => {
       const session = await options.container.sessionService.deleteSession(sessionIdInputSchema.parse(payload))
-      await deletePersistedSessionAttachments([session.id])
+      void deletePersistedSessionAttachments([session.id])
       schedulePersistenceSave()
       return session
     },

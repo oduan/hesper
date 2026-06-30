@@ -2486,6 +2486,8 @@ describe('renderer App', () => {
   it('deletes a session from the context menu without confirmation', async () => {
     const user = userEvent.setup()
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const deleteDeferred = createDeferred<any>()
+    deleteSession.mockReturnValueOnce(deleteDeferred.promise)
 
     listSessions.mockResolvedValueOnce([
       {
@@ -2507,10 +2509,72 @@ describe('renderer App', () => {
     expect(confirmSpy).not.toHaveBeenCalled()
     expect(deleteSession).toHaveBeenCalledWith('session-1')
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Delete me' })).not.toBeInTheDocument())
+
+    await act(async () => {
+      deleteDeferred.resolve({
+        id: 'session-1',
+        title: 'Deleted chat',
+        status: 'deleted',
+        outputMode: 'markdown',
+        createdAt: '2026-06-10T03:00:00.000Z',
+        updatedAt: '2026-06-10T03:00:12.000Z'
+      })
+      await deleteDeferred.promise
+    })
+    expect(screen.queryByRole('button', { name: 'Delete me' })).not.toBeInTheDocument()
   })
 
-  it('deletes shift-selected sessions from the context menu without deleting unselected sessions', async () => {
+  it('restores a session when single context-menu delete fails', async () => {
     const user = userEvent.setup()
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const deleteDeferred = createDeferred<any>()
+    const deleteError = new Error('delete failed')
+    deleteSession.mockReturnValueOnce(deleteDeferred.promise)
+
+    listSessions.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        title: 'Delete me',
+        status: 'active',
+        outputMode: 'markdown',
+        createdAt: '2026-06-10T03:00:00.000Z',
+        updatedAt: '2026-06-10T03:00:00.000Z'
+      }
+    ] as any)
+    listSessions.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        title: 'Updated while deleting',
+        status: 'active',
+        outputMode: 'markdown',
+        createdAt: '2026-06-10T03:00:00.000Z',
+        updatedAt: '2026-06-10T03:00:30.000Z'
+      }
+    ] as any)
+
+    render(<App />)
+
+    const row = (await screen.findAllByRole('button', { name: 'Delete me' }))[0]!
+    row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 120, clientY: 160 }))
+    await user.click(await screen.findByRole('menuitem', { name: '删除' }))
+
+    expect(deleteSession).toHaveBeenCalledWith('session-1')
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Delete me' })).not.toBeInTheDocument())
+
+    await act(async () => {
+      deleteDeferred.reject(deleteError)
+      await deleteDeferred.promise.catch(() => undefined)
+    })
+
+    expect(warnSpy).toHaveBeenCalledWith('Failed to delete session', 'session-1', deleteError)
+    expect(listSessions).toHaveBeenCalledTimes(2)
+    expect(await screen.findByRole('button', { name: 'Updated while deleting' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Delete me' })).not.toBeInTheDocument()
+  })
+
+  it('deletes shift-selected sessions optimistically and starts all deletes concurrently', async () => {
+    const user = userEvent.setup()
+    const deleteDeferreds = new Map<string, ReturnType<typeof createDeferred<any>>>()
 
     listSessions.mockResolvedValueOnce([
       { id: 'session-1', title: 'Chat one', status: 'active', outputMode: 'markdown', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:04.000Z' },
@@ -2518,6 +2582,11 @@ describe('renderer App', () => {
       { id: 'session-3', title: 'Chat three', status: 'active', outputMode: 'markdown', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:02.000Z' },
       { id: 'session-4', title: 'Chat four', status: 'active', outputMode: 'markdown', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:01.000Z' }
     ] as any)
+    deleteSession.mockImplementation((id: string) => {
+      const deferred = createDeferred<any>()
+      deleteDeferreds.set(id, deferred)
+      return deferred.promise
+    })
 
     render(<App />)
 
@@ -2529,16 +2598,36 @@ describe('renderer App', () => {
     fireEvent.contextMenu(secondRow)
     await user.click(await screen.findByRole('menuitem', { name: '删除' }))
 
-    await waitFor(() => expect(deleteSession).toHaveBeenCalledTimes(3))
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Chat one' })).not.toBeInTheDocument())
+    expect(screen.queryByRole('button', { name: 'Chat two' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Chat three' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Chat four' })).toBeInTheDocument()
+    expect(deleteSession).toHaveBeenCalledTimes(3)
     expect(deleteSession).toHaveBeenNthCalledWith(1, 'session-1')
     expect(deleteSession).toHaveBeenNthCalledWith(2, 'session-2')
     expect(deleteSession).toHaveBeenNthCalledWith(3, 'session-3')
     expect(deleteSession).not.toHaveBeenCalledWith('session-4')
+    expect([...deleteDeferreds.keys()]).toEqual(['session-1', 'session-2', 'session-3'])
+
+    await act(async () => {
+      for (const [id, deferred] of deleteDeferreds) {
+        deferred.resolve({
+          id,
+          title: 'Deleted chat',
+          status: 'deleted',
+          outputMode: 'markdown',
+          createdAt: '2026-06-10T03:00:00.000Z',
+          updatedAt: '2026-06-10T03:00:12.000Z'
+        })
+      }
+      await Promise.all([...deleteDeferreds.values()].map((deferred) => deferred.promise))
+    })
   })
 
-  it('keeps failed bulk-delete sessions visible and only removes successful ones', async () => {
+  it('restores failed bulk-delete sessions from a fresh list and only keeps successful ones removed', async () => {
     const user = userEvent.setup()
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const deleteError = new Error('delete session-2 failed')
 
     listSessions.mockResolvedValueOnce([
       { id: 'session-1', title: 'Chat one', status: 'active', outputMode: 'markdown', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:04.000Z' },
@@ -2546,9 +2635,13 @@ describe('renderer App', () => {
       { id: 'session-3', title: 'Chat three', status: 'active', outputMode: 'markdown', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:02.000Z' },
       { id: 'session-4', title: 'Chat four', status: 'active', outputMode: 'markdown', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:01.000Z' }
     ] as any)
+    listSessions.mockResolvedValueOnce([
+      { id: 'session-2', title: 'Chat two refreshed after failure', status: 'active', outputMode: 'markdown', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:30.000Z' },
+      { id: 'session-4', title: 'Chat four', status: 'active', outputMode: 'markdown', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:01.000Z' }
+    ] as any)
     deleteSession.mockImplementation(async (id: string) => {
       if (id === 'session-2') {
-        throw new Error('delete session-2 failed')
+        throw deleteError
       }
       return {
         id,
@@ -2570,12 +2663,14 @@ describe('renderer App', () => {
     fireEvent.contextMenu(secondRow)
     await user.click(await screen.findByRole('menuitem', { name: '删除' }))
 
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Chat two' })).not.toBeInTheDocument())
     await waitFor(() => expect(deleteSession).toHaveBeenCalledTimes(3))
     expect(deleteSession).toHaveBeenNthCalledWith(1, 'session-1')
     expect(deleteSession).toHaveBeenNthCalledWith(2, 'session-2')
     expect(deleteSession).toHaveBeenNthCalledWith(3, 'session-3')
-    expect(warnSpy).toHaveBeenCalledWith('Failed to delete session', 'session-2', expect.any(Error))
-    expect(await screen.findByRole('button', { name: 'Chat two' })).toHaveAttribute('aria-current', 'true')
+    expect(warnSpy).toHaveBeenCalledWith('Failed to delete session', 'session-2', deleteError)
+    expect(listSessions).toHaveBeenCalledTimes(2)
+    expect(await screen.findByRole('button', { name: 'Chat two refreshed after failure' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Chat one' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Chat three' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Chat four' })).toBeInTheDocument()

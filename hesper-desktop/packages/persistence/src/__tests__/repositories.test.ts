@@ -10,6 +10,48 @@ const require = createRequire(import.meta.url)
 const initSqlJs = require('sql.js') as () => Promise<{ Database: new (data?: Uint8Array) => any }>
 const now = '2026-06-10T03:00:00.000Z'
 
+const deleteGraphIndexes = [
+  { name: 'idx_agent_runs_session_id', table: 'agent_runs', columns: ['session_id'] },
+  { name: 'idx_ssh_executions_session_id', table: 'ssh_executions', columns: ['session_id'] },
+  { name: 'idx_ssh_command_results_execution_id', table: 'ssh_command_results', columns: ['execution_id'] },
+  { name: 'idx_worker_agent_invocations_parent_run_id', table: 'worker_agent_invocations', columns: ['parent_run_id'] },
+  { name: 'idx_worker_agent_invocations_child_run_id', table: 'worker_agent_invocations', columns: ['child_run_id'] },
+  { name: 'idx_runtime_events_run_id', table: 'runtime_events', columns: ['run_id'] },
+  { name: 'idx_run_steps_run_id', table: 'run_steps', columns: ['run_id'] },
+  { name: 'idx_run_context_items_session_id', table: 'run_context_items', columns: ['session_id'] },
+  { name: 'idx_run_context_items_run_id', table: 'run_context_items', columns: ['run_id'] },
+  { name: 'idx_messages_session_id', table: 'messages', columns: ['session_id'] }
+]
+
+function listIndexes(db: { prepare(sql: string): any }): Array<{ name?: unknown, tbl_name?: unknown, sql?: unknown }> {
+  const rows: Array<{ name?: unknown, tbl_name?: unknown, sql?: unknown }> = []
+  const stmt = db.prepare("SELECT name, tbl_name, sql FROM sqlite_master WHERE type = 'index' AND sql IS NOT NULL ORDER BY name")
+  try {
+    while (stmt.step()) rows.push(stmt.getAsObject())
+  } finally {
+    stmt.free()
+  }
+  return rows
+}
+
+function expectDeleteGraphIndexes(rows: Array<{ name?: unknown, tbl_name?: unknown, sql?: unknown }>, expectedIndexes = deleteGraphIndexes): void {
+  for (const index of expectedIndexes) {
+    const row = rows.find((candidate) => candidate.name === index.name)
+    expect(row).toBeDefined()
+    expect(row?.tbl_name).toBe(index.table)
+    expect(row?.sql).toBe(`CREATE INDEX ${index.name} ON ${index.table}(${index.columns.join(', ')})`)
+  }
+}
+
+async function indexesFromDatabaseBytes(bytes: Uint8Array): Promise<Array<{ name?: unknown, tbl_name?: unknown, sql?: unknown }>> {
+  const SQL = await initSqlJs()
+  const db = new SQL.Database(bytes)
+  try {
+    return listIndexes(db)
+  } finally {
+    db.close()
+  }
+}
 function deferred<T = void>(): { promise: Promise<T>; resolve(value: T | PromiseLike<T>): void; reject(error: unknown): void } {
   let resolve!: (value: T | PromiseLike<T>) => void
   let reject!: (error: unknown) => void
@@ -857,6 +899,23 @@ describe('persistence repositories', () => {
     }
 
     expect(rows).toEqual([{ name: 'run_context_items' }])
+  })
+
+  it('creates deleteGraph path indexes in fresh databases', async () => {
+    const SQL = await initSqlJs()
+    const db = new SQL.Database()
+    try {
+      db.run(schemaSql)
+      expectDeleteGraphIndexes(listIndexes(db))
+    } finally {
+      db.close()
+    }
+  })
+
+  it('migrates legacy databases with deleteGraph path indexes', async () => {
+    const migrated = await createInMemoryPersistence(await createLegacyDatabaseBytes())
+
+    expectDeleteGraphIndexes(await indexesFromDatabaseBytes(exportDatabaseBytes(migrated)))
   })
 
   it('round-trips model providers and models without raw API keys', async () => {
