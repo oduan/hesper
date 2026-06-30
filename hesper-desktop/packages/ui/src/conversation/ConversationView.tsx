@@ -69,6 +69,9 @@ export type ConversationViewProps = {
   onRetryRun?: (message: Message, run: AgentRun) => void
   onStop?: () => void
   onSelectWorkspace?: () => void
+  recentWorkspacePaths?: string[]
+  onSelectRecentWorkspace?: (path: string) => void
+  onRemoveRecentWorkspace?: (path: string) => void
   onModelChange?: (modelId: string) => void
   loadLocalFilePreview?: (path: string) => Promise<LocalFilePreview>
   loadAttachmentDataUrl?: (attachment: MessageAttachment) => Promise<string>
@@ -364,6 +367,9 @@ export function ConversationView({
   onRetryRun,
   onStop,
   onSelectWorkspace,
+  recentWorkspacePaths,
+  onSelectRecentWorkspace,
+  onRemoveRecentWorkspace,
   onModelChange,
   loadLocalFilePreview,
   loadAttachmentDataUrl,
@@ -969,6 +975,9 @@ export function ConversationView({
             {...(onDraftAttachmentsChange ? { onAttachmentsChange: onDraftAttachmentsChange } : {})}
             {...(onStop ? { onStop } : {})}
             {...(onSelectWorkspace ? { onSelectWorkspace } : {})}
+            {...(recentWorkspacePaths ? { recentWorkspacePaths } : {})}
+            {...(onSelectRecentWorkspace ? { onSelectRecentWorkspace } : {})}
+            {...(onRemoveRecentWorkspace ? { onRemoveRecentWorkspace } : {})}
             {...(onModelChange ? { onModelChange } : {})}
             onSend={onSend}
             sendSignal={shortcutCommand?.type === 'send' ? shortcutCommand.nonce : 0}

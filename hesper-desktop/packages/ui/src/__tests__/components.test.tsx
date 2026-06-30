@@ -1860,7 +1860,6 @@ describe('ui components', () => {
       boxShadow: `0 4px 10px -6px ${themeTokens.color.shadow}`
     })
     expect(modelListbox.querySelector('style')).toHaveTextContent('.hesper-themed-select-option:hover')
-    expect(modelListbox.querySelector('style')).toHaveTextContent(`background: ${themeTokens.color.hover} !important;`)
     expect(modelListbox.querySelector('style')).toHaveTextContent(`color: ${themeTokens.color.text} !important;`)
     expect(modelListbox.querySelector('style')).not.toHaveTextContent('background: var(--hesper-color-hover) !important;')
     const modelOption = within(modelListbox).getByRole('option', { name: 'pi/gpt-5.4-mini' })
@@ -1869,6 +1868,87 @@ describe('ui components', () => {
 
     await user.type(textarea, 'hello')
     expect(sendButton).toBeEnabled()
+  })
+
+  it('opens workspace choices above the workspace button and keeps folder labels compact', async () => {
+    const user = userEvent.setup()
+    const onSelectWorkspace = vi.fn()
+
+    render(
+      <Composer
+        workspacePath="C:/dev/hesper"
+        recentWorkspacePaths={['C:/dev/hesper', 'D:/client/product', 'E:/archive/research']}
+        modelId="pi/gpt-5.4-mini"
+        onSelectWorkspace={onSelectWorkspace}
+        onSend={() => undefined}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: '选择文件夹：hesper' }))
+
+    const menu = screen.getByRole('menu', { name: '工作目录选项' })
+    expect(menu.closest('[data-hesper-composer-area="true"]')).toBeNull()
+    expect(menu).toHaveStyle({ position: 'fixed' })
+    expect(within(menu).getByRole('menuitem', { name: '当前目录：hesper' })).toHaveTextContent('hesper')
+    expect(within(menu).getByRole('menuitem', { name: '当前目录：hesper' })).toHaveTextContent('dev/hesper')
+    expect(within(menu).getByRole('separator', { name: '当前目录和最近目录分割线' })).toHaveStyle({ height: '1px' })
+    expect(within(menu).getByRole('menuitem', { name: '切换到目录：product' })).toHaveTextContent('product')
+    expect(within(menu).getByRole('menuitem', { name: '切换到目录：product' })).toHaveTextContent('client/product')
+    expect(within(menu).getByRole('menuitem', { name: '切换到目录：research' })).toHaveTextContent('research')
+    expect(within(menu).getByRole('menuitem', { name: '切换到目录：research' })).toHaveTextContent('archive/research')
+    expect(menu.querySelectorAll('svg[viewBox="0 0 16 16"]')).toHaveLength(3)
+    expect(within(menu).queryByText('D:/client/product')).not.toBeInTheDocument()
+    expect(within(menu).queryByText('E:/archive/research')).not.toBeInTheDocument()
+    expect(within(menu).getByRole('separator', { name: '选择目录分割线' })).toHaveStyle({ height: '1px' })
+
+    await user.click(within(menu).getByRole('menuitem', { name: '选择目录' }))
+
+    expect(onSelectWorkspace).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('menu', { name: '工作目录选项' })).not.toBeInTheDocument()
+  })
+
+  it('selects and removes recent workspace rows without leaking remove clicks', async () => {
+    const user = userEvent.setup()
+    const onSelectRecentWorkspace = vi.fn()
+    const onRemoveRecentWorkspace = vi.fn()
+
+    render(
+      <Composer
+        workspacePath="C:/dev/hesper"
+        recentWorkspacePaths={['D:/client/product']}
+        modelId="pi/gpt-5.4-mini"
+        onSelectRecentWorkspace={onSelectRecentWorkspace}
+        onRemoveRecentWorkspace={onRemoveRecentWorkspace}
+        onSend={() => undefined}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: '选择文件夹：hesper' }))
+    const menu = screen.getByRole('menu', { name: '工作目录选项' })
+    const removeButtonElement = menu.querySelector<HTMLButtonElement>('button[aria-label="移除目录 product"]')
+    expect(removeButtonElement).toBeTruthy()
+    const removeButton = removeButtonElement as HTMLButtonElement
+    expect(removeButton.getAttribute('style')).toContain('border: 0')
+    expect(removeButton.getAttribute('style')).toContain('background: transparent')
+    expect(removeButton.getAttribute('style')).toContain('opacity: 0')
+    expect(removeButton.getAttribute('style')).toContain('pointer-events: none')
+    expect(removeButton.getAttribute('style')).toContain('visibility: hidden')
+    const workspaceMenuStyles = [...document.querySelectorAll('style')].map((style) => style.textContent ?? '').join('\n')
+    expect(workspaceMenuStyles).toContain('.hesper-workspace-menu::-webkit-scrollbar')
+    expect(workspaceMenuStyles).toContain('width: 6px;')
+    expect(workspaceMenuStyles).toContain(`scrollbar-color: ${themeTokens.color.border} transparent;`)
+    expect(workspaceMenuStyles).toContain('.hesper-workspace-menu-row:hover .hesper-workspace-remove-button')
+    expect(workspaceMenuStyles).toContain('visibility: visible !important')
+    expect(workspaceMenuStyles).toContain('.hesper-workspace-remove-button:hover')
+    expect(workspaceMenuStyles).toContain(`background: ${themeTokens.color.softControl} !important;`)
+    fireEvent.click(removeButton)
+
+    expect(onRemoveRecentWorkspace).toHaveBeenCalledWith('D:/client/product')
+    expect(onSelectRecentWorkspace).not.toHaveBeenCalled()
+
+    await user.click(within(menu).getByRole('menuitem', { name: '切换到目录：product' }))
+
+    expect(onSelectRecentWorkspace).toHaveBeenCalledWith('D:/client/product')
   })
 
   it('shows an unconfigured model state and preserves draft when sending is disabled', async () => {
