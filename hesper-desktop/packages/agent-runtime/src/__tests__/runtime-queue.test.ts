@@ -50,6 +50,15 @@ class AlwaysFailsRetryableAdapter implements AgentAdapter {
   }
 }
 
+class AlwaysFails502UpstreamAdapter implements AgentAdapter {
+  readonly inputs: AgentPromptInput[] = []
+
+  async run(input: AgentPromptInput): Promise<void> {
+    this.inputs.push(input)
+    throw new Error('502 Upstream service temporarily unavailable')
+  }
+}
+
 class FailsAfterContextAdapter implements AgentAdapter {
   readonly inputs: AgentPromptInput[] = []
 
@@ -1647,6 +1656,43 @@ describe('AgentRuntime queue', () => {
     expect(storedRun?.status).toBe('succeeded')
     expect(storedRun?.retryCount).toBe(2)
     expect(events.filter((event) => event === 'run.retrying')).toHaveLength(2)
+  })
+
+  it('marks 502 upstream errors failed after five retries are exhausted', async () => {
+    const persistence = await createInMemoryPersistence()
+    await persistence.sessions.save({ ...session, id: 'session-502-upstream-retry-exhausted' })
+
+    const adapter = new AlwaysFails502UpstreamAdapter()
+    const runtime = new AgentRuntime({
+      persistence,
+      adapter,
+      retryPolicy: {
+        ...defaultRetryPolicy,
+        maxRetries: 5,
+        initialDelayMs: 1,
+        backoffMultiplier: 1
+      }
+    })
+    const events: AgentRuntimeEvent[] = []
+    runtime.subscribe((event) => {
+      events.push(event)
+    })
+
+    const run = await runtime.enqueue({ sessionId: 'session-502-upstream-retry-exhausted', prompt: 'will exhaust upstream retries', modelId: 'mock/hesper-fast' })
+    await runtime.waitForIdle('session-502-upstream-retry-exhausted')
+
+    const storedRun = await persistence.runs.get(run.id)
+    expect(adapter.inputs).toHaveLength(6)
+    expect(storedRun).toMatchObject({
+      id: run.id,
+      status: 'failed',
+      retryCount: 5,
+      maxRetries: 5,
+      error: { code: 'network_error', message: '502 Upstream service temporarily unavailable', retryable: true }
+    })
+    expect(events.filter((event) => event.type === 'run.retrying')).toHaveLength(5)
+    expect(events.filter((event) => event.type === 'run.failed')).toHaveLength(1)
+    expect(events.map((event) => event.type)).not.toContain('run.succeeded')
   })
 
   it('marks a retryable stream interruption failed after retry budget is exhausted', async () => {
