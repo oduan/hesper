@@ -291,6 +291,7 @@ function toSession(row: any): Session {
     workspacePath: row.workspace_path ?? undefined,
     defaultModelId: row.default_model_id ?? undefined,
     providerId: optionalString(row.provider_id),
+    soul: row.soul ?? undefined,
     modelId: optionalString(row.model_id),
     roleId: optionalString(row.role_id),
     enabledSkillIds: parseStringArrayJson(row.enabled_skill_ids_json, 'sessions.enabled_skill_ids_json'),
@@ -306,14 +307,16 @@ function toSession(row: any): Session {
 }
 
 function toSessionCategory(row: any): SessionCategory {
-  return {
+  return stripUndefined({
     id: row.id,
     name: row.name,
+    defaultModelId: row.default_model_id ?? undefined,
+    workspacePath: row.workspace_path ?? undefined,
+    soul: row.soul ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at
-  }
+  }) as SessionCategory
 }
-
 function toMessage(row: any): Message {
   return stripUndefined({
     id: row.id,
@@ -694,6 +697,7 @@ export async function createRepositories(db: SqliteAdapter): Promise<Persistence
           'workspace_path',
           'default_model_id',
           'provider_id',
+          'soul',
           'model_id',
           'role_id',
           'enabled_skill_ids_json',
@@ -715,6 +719,7 @@ export async function createRepositories(db: SqliteAdapter): Promise<Persistence
           session.workspacePath,
           session.defaultModelId,
           session.providerId,
+          session.soul,
           session.modelId,
           session.roleId,
           json(session.enabledSkillIds),
@@ -768,12 +773,18 @@ export async function createRepositories(db: SqliteAdapter): Promise<Persistence
         await upsert('session_categories', [
           'id',
           'name',
+          'default_model_id',
+          'workspace_path',
+          'soul',
           'created_at',
           'updated_at',
           'sort_seq'
         ], [
           category.id,
           category.name,
+          category.defaultModelId,
+          category.workspacePath,
+          category.soul,
           category.createdAt,
           category.updatedAt,
           nextSeq()

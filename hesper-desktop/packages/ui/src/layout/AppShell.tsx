@@ -66,6 +66,7 @@ export type AppShellProps = {
   onRenameSessionCategory?: (categoryId: string, name: string) => void | Promise<void>
   onDeleteSessionCategory?: (categoryId: string) => void | Promise<void>
   onDiscardSessionCategory?: (categoryId: string) => void | Promise<void>
+  onOpenSessionCategorySettings?: (categoryId: string) => void
   onDeleteRole?: (roleId: string, roleIds?: string[]) => void
   onWindowMinimize?: WindowControlAction
   onWindowToggleMaximize?: WindowControlAction
@@ -119,6 +120,7 @@ export function AppShell({
   onRenameSessionCategory,
   onDeleteSessionCategory,
   onDiscardSessionCategory,
+  onOpenSessionCategorySettings,
   onDeleteRole,
   onWindowMinimize,
   onWindowToggleMaximize,
@@ -255,6 +257,7 @@ export function AppShell({
           {...(onRenameSessionCategory ? { onRenameSessionCategory } : {})}
           {...(onDeleteSessionCategory ? { onDeleteSessionCategory } : {})}
           {...(onDiscardSessionCategory ? { onDiscardSessionCategory } : {})}
+          {...(onOpenSessionCategorySettings ? { onOpenSessionCategorySettings } : {})}
         />
         <EntityListPane
           activeSection={activeSection}

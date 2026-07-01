@@ -87,10 +87,12 @@ export type ModelConfig = {
 export type SessionCategory = {
   id: string
   name: string
+  defaultModelId?: string
+  workspacePath?: string
+  soul?: string
   createdAt: string
   updatedAt: string
 }
-
 export type Session = {
   id: string
   title: string
@@ -100,6 +102,7 @@ export type Session = {
   workspacePath?: string
   defaultModelId?: string
   providerId?: string
+  soul?: string
   modelId?: string
   roleId?: string
   enabledSkillIds?: string[]

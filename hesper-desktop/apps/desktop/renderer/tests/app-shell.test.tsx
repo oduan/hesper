@@ -37,15 +37,21 @@ const { listSessions, listSessionCategories, createSession, createSessionCategor
     createdAt: '2026-06-10T03:00:00.000Z',
     updatedAt: '2026-06-10T03:00:12.000Z'
   })),
-  createSessionCategory: vi.fn(async (input: { name: string }) => ({
+  createSessionCategory: vi.fn(async (input: { name: string; defaultModelId?: string; workspacePath?: string; soul?: string }) => ({
     id: 'category-created',
     name: input.name,
+    defaultModelId: input.defaultModelId,
+    workspacePath: input.workspacePath,
+    soul: input.soul,
     createdAt: '2026-06-10T03:00:00.000Z',
     updatedAt: '2026-06-10T03:00:00.000Z'
   })),
-  updateSessionCategory: vi.fn(async (input: { id: string; name: string }) => ({
+  updateSessionCategory: vi.fn(async (input: { id: string; name?: string; defaultModelId?: string; workspacePath?: string; soul?: string }) => ({
     id: input.id,
-    name: input.name,
+    name: input.name ?? '产品图',
+    defaultModelId: input.defaultModelId,
+    workspacePath: input.workspacePath,
+    soul: input.soul,
     createdAt: '2026-06-10T03:00:00.000Z',
     updatedAt: '2026-06-10T03:00:12.000Z'
   })),
@@ -530,10 +536,12 @@ describe('renderer App', () => {
       updatedAt: '2026-06-10T03:00:12.000Z'
     }))
     listProviders.mockResolvedValue([
-      { id: 'deepseek', name: 'DeepSeek', kind: 'deepseek', enabled: true, hasApiKey: true, defaultModelId: 'deepseek-v4-flash', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+      { id: 'deepseek', name: 'DeepSeek', kind: 'deepseek', enabled: true, hasApiKey: true, defaultModelId: 'deepseek-v4-flash', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' },
+      { id: 'openai', name: 'OpenAI', kind: 'openai', enabled: true, hasApiKey: true, defaultModelId: 'gpt-4o', createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
     ] as any)
     listModels.mockResolvedValue([
-      { id: 'deepseek-v4-flash', providerId: 'deepseek', modelName: 'deepseek-v4-flash', displayName: 'DeepSeek V4 Flash', capabilities: ['streaming', 'toolCalls'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
+      { id: 'deepseek-v4-flash', providerId: 'deepseek', modelName: 'deepseek-v4-flash', displayName: 'DeepSeek V4 Flash', capabilities: ['streaming', 'toolCalls'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' },
+      { id: 'gpt-4o', providerId: 'openai', modelName: 'gpt-4o', displayName: 'GPT-4o', capabilities: ['streaming', 'toolCalls'], enabled: true, createdAt: '2026-06-10T03:00:00.000Z', updatedAt: '2026-06-10T03:00:00.000Z' }
     ] as any)
     listTools.mockResolvedValue([
       {
@@ -729,7 +737,7 @@ describe('renderer App', () => {
 
     render(<App />)
 
-    await waitFor(() => expect(getGitState).toHaveBeenCalledWith({ sessionId: 'session-git' }))
+    await waitFor(() => expect(getGitState).toHaveBeenCalledWith({ sessionId: 'session-git', workspacePath: 'C:/workspace' }))
     expect(screen.queryByRole('button', { name: /打开 Git 图谱/ })).not.toBeInTheDocument()
   })
 
@@ -752,7 +760,7 @@ describe('renderer App', () => {
     const gitEntry = await screen.findByRole('button', { name: /打开 Git 图谱.*当前分支 main/ })
     await user.click(gitEntry)
 
-    await waitFor(() => expect(listGitLog).toHaveBeenCalledWith({ sessionId: 'session-git', limit: 60, offset: 0 }))
+    await waitFor(() => expect(listGitLog).toHaveBeenCalledWith({ sessionId: 'session-git', workspacePath: 'C:/workspace', limit: 60, offset: 0 }))
     expect(await screen.findByRole('dialog', { name: 'Git 提交图谱' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'workspace' })).toBeInTheDocument()
     expect(screen.getByLabelText('提交次数')).toHaveTextContent('123 次提交')
@@ -819,7 +827,7 @@ describe('renderer App', () => {
     Object.defineProperty(content, 'scrollTop', { configurable: true, value: 360 })
     fireEvent.scroll(content)
 
-    await waitFor(() => expect(listGitLog).toHaveBeenCalledWith({ sessionId: 'session-git', limit: 60, offset: 60 }))
+    await waitFor(() => expect(listGitLog).toHaveBeenCalledWith({ sessionId: 'session-git', workspacePath: 'C:/workspace', limit: 60, offset: 60 }))
     expect(await screen.findByText('Next page row')).toBeInTheDocument()
     expect(screen.getByText('First page row')).toBeInTheDocument()
   })
@@ -841,7 +849,7 @@ describe('renderer App', () => {
     row.focus()
     fireEvent.keyDown(row, { key: 'Enter' })
 
-    await waitFor(() => expect(getGitCommit).toHaveBeenCalledWith({ sessionId: 'session-git', commit }))
+    await waitFor(() => expect(getGitCommit).toHaveBeenCalledWith({ sessionId: 'session-git', workspacePath: 'C:/workspace', commit }))
     expect(await screen.findByRole('dialog', { name: '提交详情' })).toBeInTheDocument()
     expect(screen.getByText('Detailed commit subject')).toBeInTheDocument()
     expect(screen.getByText('README.md')).toBeInTheDocument()
@@ -867,6 +875,7 @@ describe('renderer App', () => {
 
     await waitFor(() => expect(createGitBranch).toHaveBeenCalledWith({
       sessionId: 'session-git',
+      workspacePath: 'C:/workspace',
       commit,
       branchName: 'feature/test-branch'
     }))
@@ -926,7 +935,7 @@ describe('renderer App', () => {
     expect(await screen.findByText('Second session commit')).toBeInTheDocument()
     expect(screen.queryByText('First session commit')).not.toBeInTheDocument()
     expect(screen.queryByText('First detail')).not.toBeInTheDocument()
-    expect(listGitLog).toHaveBeenLastCalledWith({ sessionId: 'session-two', limit: 60, offset: 0 })
+    expect(listGitLog).toHaveBeenLastCalledWith({ sessionId: 'session-two', workspacePath: 'C:/two', limit: 60, offset: 0 })
   })
 
   it('clears Git cache when the same session workspace changes and reloads the new workspace log', async () => {
@@ -957,6 +966,7 @@ describe('renderer App', () => {
     expect(await screen.findByText('Repo A commit')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /^选择文件夹/ }))
+    await user.click(await screen.findByRole('menuitem', { name: '选择目录' }))
     await waitFor(() => expect(setWorkspace).toHaveBeenCalledWith({ id: 'session-git', workspacePath: 'C:/repo-b' }))
     await waitFor(() => expect(screen.queryByText('Repo A commit')).not.toBeInTheDocument())
 
@@ -964,7 +974,7 @@ describe('renderer App', () => {
 
     expect(await screen.findByText('Repo B commit')).toBeInTheDocument()
     expect(screen.queryByText('Repo A commit')).not.toBeInTheDocument()
-    expect(listGitLog).toHaveBeenLastCalledWith({ sessionId: 'session-git', limit: 60, offset: 0 })
+    expect(listGitLog).toHaveBeenLastCalledWith({ sessionId: 'session-git', workspacePath: 'C:/repo-b', limit: 60, offset: 0 })
   })
 
   it('does not checkout when the checkout prompt is cancelled', async () => {
@@ -1018,9 +1028,10 @@ describe('renderer App', () => {
     const staleRow = await screen.findByRole('row', { name: /Repo A stale row 4444444/ })
     staleRow.focus()
     fireEvent.keyDown(staleRow, { key: 'Enter' })
-    await waitFor(() => expect(getGitCommit).toHaveBeenCalledWith({ sessionId: 'session-git', commit: repoACommit }))
+    await waitFor(() => expect(getGitCommit).toHaveBeenCalledWith({ sessionId: 'session-git', workspacePath: 'C:/repo-a', commit: repoACommit }))
 
     await user.click(screen.getByRole('button', { name: /^选择文件夹/ }))
+    await user.click(await screen.findByRole('menuitem', { name: '选择目录' }))
     await waitFor(() => expect(setWorkspace).toHaveBeenCalledWith({ id: 'session-git', workspacePath: 'C:/repo-b' }))
 
     staleDetail.resolve(gitDetailFixture(repoACommit, 'Stale detail should not render'))
@@ -1163,10 +1174,10 @@ describe('renderer App', () => {
     expect(entityList.queryByRole('heading', { name: '所有会话' })).not.toBeInTheDocument()
   })
 
-  it('creates new sessions in the active category', async () => {
+  it('copies active category settings into newly created sessions', async () => {
     const user = userEvent.setup()
     listSessionCategories.mockResolvedValueOnce([
-      { id: 'category-product', name: '产品图', createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:00.000Z' }
+      { id: 'category-product', name: '产品图', defaultModelId: 'deepseek-v4-flash', workspacePath: 'C:/work/product', soul: '分类 Soul', createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:00.000Z' }
     ])
     listSessions.mockResolvedValueOnce([])
     createSession.mockResolvedValueOnce({
@@ -1174,6 +1185,9 @@ describe('renderer App', () => {
       title: 'New chat',
       status: 'active',
       categoryId: 'category-product',
+      defaultModelId: 'deepseek-v4-flash',
+      workspacePath: 'C:/work/product',
+      soul: '分类 Soul',
       outputMode: 'markdown',
       createdAt: '2026-06-26T00:00:10.000Z',
       updatedAt: '2026-06-26T00:00:10.000Z'
@@ -1184,7 +1198,7 @@ describe('renderer App', () => {
     await user.click(await screen.findByRole('button', { name: '产品图' }))
     await user.click((await screen.findAllByRole('button', { name: '新建会话' }))[0]!)
 
-    expect(createSession).toHaveBeenCalledWith({ title: 'New chat', categoryId: 'category-product' })
+    expect(createSession).toHaveBeenCalledWith({ title: 'New chat', categoryId: 'category-product', defaultModelId: 'deepseek-v4-flash', workspacePath: 'C:/work/product', soul: '分类 Soul' })
   })
 
   it('shows active sessions in all sessions and archived sessions only in archive view', async () => {
@@ -1287,6 +1301,80 @@ describe('renderer App', () => {
     expect(screen.getByRole('button', { name: '产品图' })).toBeInTheDocument()
   })
 
+  it('opens and saves session category settings from the category context menu', async () => {
+    const user = userEvent.setup()
+    listSessionCategories.mockResolvedValueOnce([
+      { id: 'category-product', name: '产品图', defaultModelId: 'deepseek-v4-flash', workspacePath: 'C:/old', soul: '旧 Soul', createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:00.000Z' }
+    ])
+    listSessions.mockResolvedValueOnce([
+      { id: 'session-product', title: 'Product chat', status: 'active', categoryId: 'category-product', outputMode: 'markdown', createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:00.000Z' }
+    ] as any)
+    selectDirectory.mockResolvedValueOnce({ canceled: false, path: 'C:/new-workspace' })
+    updateSessionCategory.mockResolvedValueOnce({ id: 'category-product', name: '产品�?', defaultModelId: 'gpt-4o', workspacePath: 'C:/new-workspace', soul: '新的分类 Soul', createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:01.000Z' } as any)
+
+    render(<App />)
+
+    fireEvent.contextMenu(await screen.findByRole('button', { name: '产品图' }))
+    await user.click(within(screen.getByRole('menu', { name: '分类操作' })).getByRole('menuitem', { name: '设置' }))
+
+    const dialog = await screen.findByRole('dialog', { name: '产品图' })
+    expect(dialog).not.toHaveTextContent('分类设置')
+    expect(screen.getByRole('button', { name: '默认模型' })).toHaveTextContent('DeepSeek/deepseek-v4-flash')
+    expect(screen.getByText('C:/old')).toBeInTheDocument()
+    expect(screen.getByLabelText('Soul 设置')).toHaveValue('旧 Soul')
+
+    await user.click(screen.getByRole('button', { name: '选择' }))
+    expect(updateSessionCategory).not.toHaveBeenCalled()
+    expect(await screen.findByText('C:/new-workspace')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '默认模型' }))
+    fireEvent.focus(await screen.findByRole('button', { name: '连接 OpenAI' }))
+    await user.click(await screen.findByRole('option', { name: 'OpenAI/gpt-4o' }))
+    await user.clear(screen.getByLabelText('Soul 设置'))
+    await user.type(screen.getByLabelText('Soul 设置'), '新的分类 Soul')
+    await user.click(screen.getByRole('button', { name: '保存' }))
+
+    await waitFor(() => expect(updateSessionCategory).toHaveBeenLastCalledWith({
+      id: 'category-product',
+      defaultModelId: 'gpt-4o',
+      workspacePath: 'C:/new-workspace',
+      soul: '新的分类 Soul'
+    }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '产品图' })).not.toBeInTheDocument())
+  })
+
+  it('selects a category from its settings menu before creating sessions with saved category soul', async () => {
+    const user = userEvent.setup()
+    listSessionCategories.mockResolvedValueOnce([
+      { id: 'category-product', name: '产品图', createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:00.000Z' }
+    ])
+    listSessions.mockResolvedValueOnce([])
+    updateSessionCategory.mockResolvedValueOnce({ id: 'category-product', name: '产品图', soul: '新的分类 Soul', createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:01.000Z' } as any)
+    createSession.mockResolvedValueOnce({
+      id: 'session-new-product',
+      title: 'New chat',
+      status: 'active',
+      categoryId: 'category-product',
+      soul: '新的分类 Soul',
+      outputMode: 'markdown',
+      createdAt: '2026-06-26T00:00:10.000Z',
+      updatedAt: '2026-06-26T00:00:10.000Z'
+    } as any)
+
+    render(<App />)
+
+    fireEvent.contextMenu(await screen.findByRole('button', { name: '产品图' }))
+    await user.click(within(screen.getByRole('menu', { name: '分类操作' })).getByRole('menuitem', { name: '设置' }))
+    expect(within(screen.getByLabelText('实体列表')).getByRole('heading', { name: '产品图' })).toBeInTheDocument()
+
+    await user.type(await screen.findByLabelText('Soul 设置'), '新的分类 Soul')
+    await user.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '产品图' })).not.toBeInTheDocument())
+
+    await user.click((await screen.findAllByRole('button', { name: '新建会话' }))[0]!)
+
+    expect(createSession).toHaveBeenCalledWith({ title: 'New chat', categoryId: 'category-product', soul: '新的分类 Soul' })
+  })
   it('discards a cancelled pending category create without selecting it', async () => {
     const user = userEvent.setup()
     const confirmSpy = vi.spyOn(window, 'confirm')

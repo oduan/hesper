@@ -35,6 +35,19 @@ describe('createSessionService', () => {
     await expect(persistence.sessions.get(created.id)).resolves.not.toHaveProperty('categoryId')
   })
 
+  it('persists session soul only when provided at creation time', async () => {
+    const persistence = await createInMemoryPersistence()
+    const sessions = createSessionService(persistence)
+
+    const withSoul = await sessions.createSession({ title: 'With soul', soul: 'Focused assistant behavior', now })
+    const withoutSoul = await sessions.createSession({ title: 'Without soul', now })
+
+    expect(withSoul.soul).toBe('Focused assistant behavior')
+    await expect(persistence.sessions.get(withSoul.id)).resolves.toMatchObject({ soul: 'Focused assistant behavior' })
+    expect(withoutSoul.soul).toBeUndefined()
+    await expect(persistence.sessions.get(withoutSoul.id)).resolves.not.toHaveProperty('soul')
+  })
+
   it('normalizes blank category ids to uncategorized sessions', async () => {
     const persistence = await createInMemoryPersistence()
     const sessions = createSessionService(persistence)

@@ -1211,6 +1211,7 @@ const workspaceMenuCss = `
 .hesper-workspace-remove-button:focus-visible {
   opacity: 1 !important;
   pointer-events: auto !important;
+  visibility: visible !important;
 }
 .hesper-workspace-remove-button:hover,
 .hesper-workspace-remove-button:focus-visible {
@@ -1574,7 +1575,8 @@ const workspaceMenuRemoveButtonStyle = {
   fontSize: 14,
   opacity: 0,
   pointerEvents: 'none',
-  transition: 'opacity 120ms ease, background-color 120ms ease'
+  visibility: 'hidden',
+  transition: 'opacity 120ms ease, background-color 120ms ease, visibility 120ms ease'
 } satisfies CSSProperties
 
 const workspaceMenuSeparatorStyle = {

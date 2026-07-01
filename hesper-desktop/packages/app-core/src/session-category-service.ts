@@ -4,12 +4,18 @@ import { normalizeSessionTitle } from './session-service'
 
 export type CreateSessionCategoryInput = {
   name: string
+  defaultModelId?: string
+  workspacePath?: string
+  soul?: string
   now?: string
 }
 
 export type UpdateSessionCategoryInput = {
   id: string
-  name: string
+  name?: string
+  defaultModelId?: string
+  workspacePath?: string
+  soul?: string
 }
 
 export type DeleteSessionCategoryResult = {
@@ -42,6 +48,9 @@ export function createSessionCategoryService(persistence: Persistence): SessionC
       const category: SessionCategory = {
         id: createId('session-category'),
         name: normalizeCategoryName(input.name),
+        ...(input.defaultModelId !== undefined ? { defaultModelId: input.defaultModelId } : {}),
+        ...(input.workspacePath !== undefined ? { workspacePath: input.workspacePath } : {}),
+        ...(input.soul !== undefined ? { soul: input.soul } : {}),
         createdAt: timestamp,
         updatedAt: timestamp
       }
@@ -51,7 +60,14 @@ export function createSessionCategoryService(persistence: Persistence): SessionC
     async updateCategory(input) {
       const category = await persistence.sessionCategories.get(input.id)
       if (!category) throw missingCategoryError(input.id)
-      const updated: SessionCategory = { ...category, name: normalizeCategoryName(input.name), updatedAt: nowIso() }
+      const updated: SessionCategory = {
+        ...category,
+        ...(input.name !== undefined ? { name: normalizeCategoryName(input.name) } : {}),
+        ...(input.defaultModelId !== undefined ? { defaultModelId: input.defaultModelId } : {}),
+        ...(input.workspacePath !== undefined ? { workspacePath: input.workspacePath } : {}),
+        ...(input.soul !== undefined ? { soul: input.soul } : {}),
+        updatedAt: nowIso()
+      }
       await persistence.sessionCategories.save(updated)
       return updated
     },

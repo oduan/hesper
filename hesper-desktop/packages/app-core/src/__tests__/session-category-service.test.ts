@@ -31,6 +31,25 @@ describe('session category service', () => {
     await expect(persistence.sessionCategories.get(category.id)).resolves.toBeUndefined()
   })
 
+  it('creates and updates category settings while preserving omitted fields', async () => {
+    const persistence = await createInMemoryPersistence()
+    const categories = createSessionCategoryService(persistence)
+
+    const category = await categories.createCategory({ name: '设置分类', defaultModelId: 'deepseek-chat', workspacePath: 'C:/work/product', soul: 'Be concise.', now })
+    expect(category).toMatchObject({ name: '设置分类', defaultModelId: 'deepseek-chat', workspacePath: 'C:/work/product', soul: 'Be concise.' })
+
+    const renamed = await categories.updateCategory({ id: category.id, name: '重命名' })
+    expect(renamed).toMatchObject({ name: '重命名', defaultModelId: 'deepseek-chat', workspacePath: 'C:/work/product', soul: 'Be concise.' })
+
+    const updated = await categories.updateCategory({ id: category.id, name: '重命名', defaultModelId: '', workspacePath: '', soul: '' })
+    expect(updated).toMatchObject({ defaultModelId: '', workspacePath: '', soul: '' })
+    await expect(persistence.sessionCategories.get(category.id)).resolves.toMatchObject({ defaultModelId: '', workspacePath: '', soul: '' })
+    const settingsOnly = await categories.updateCategory({ id: category.id, defaultModelId: 'gpt-4o', workspacePath: 'D:/work/updated', soul: 'Category soul.' })
+    expect(settingsOnly).toMatchObject({ name: '重命名', defaultModelId: 'gpt-4o', workspacePath: 'D:/work/updated', soul: 'Category soul.' })
+    await expect(persistence.sessionCategories.get(category.id)).resolves.toMatchObject({ name: '重命名', defaultModelId: 'gpt-4o', workspacePath: 'D:/work/updated', soul: 'Category soul.' })
+
+  })
+
   it('lists categories from persistence', async () => {
     const persistence = await createInMemoryPersistence()
     const categories = createSessionCategoryService(persistence)

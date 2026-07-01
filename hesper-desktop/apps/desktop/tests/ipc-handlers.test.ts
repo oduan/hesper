@@ -1,4 +1,4 @@
-import fs from 'node:fs/promises'
+﻿import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import type { CredentialVaultCodec, SkillService } from '@hesper/app-core'
@@ -840,25 +840,47 @@ describe('registerIpcHandlers', () => {
     expect(ipcMain.handle).toHaveBeenCalledWith(ipcChannels.gitCreateTag, expect.any(Function))
     expect(ipcMain.handle).toHaveBeenCalledWith(ipcChannels.gitCheckout, expect.any(Function))
 
-    await expect(handles.get(ipcChannels.gitGetState)?.(event, { sessionId })).resolves.toEqual(gitState)
-    expect(getStateSpy).toHaveBeenCalledWith({ sessionId })
+    await expect(handles.get(ipcChannels.gitGetState)?.(event, { sessionId, workspacePath: '/workspace/project' })).resolves.toEqual(gitState)
+    expect(getStateSpy).toHaveBeenCalledWith({ sessionId, workspacePath: '/workspace/project' })
 
-    await expect(handles.get(ipcChannels.gitListLog)?.(event, { sessionId, limit: 25 })).resolves.toEqual(gitLog)
-    expect(listLogSpy).toHaveBeenCalledWith({ sessionId, limit: 25 })
+    await expect(handles.get(ipcChannels.gitListLog)?.(event, { sessionId, workspacePath: '/workspace/project', limit: 25 })).resolves.toEqual(gitLog)
+    expect(listLogSpy).toHaveBeenCalledWith({ sessionId, workspacePath: '/workspace/project', limit: 25 })
 
-    await expect(handles.get(ipcChannels.gitGetCommit)?.(event, { sessionId, commit: commitHash })).resolves.toEqual(gitCommit)
-    expect(getCommitSpy).toHaveBeenCalledWith({ sessionId, commit: commitHash })
+    await expect(handles.get(ipcChannels.gitGetCommit)?.(event, { sessionId, workspacePath: '/workspace/project', commit: commitHash })).resolves.toEqual(gitCommit)
+    expect(getCommitSpy).toHaveBeenCalledWith({ sessionId, workspacePath: '/workspace/project', commit: commitHash })
 
-    await expect(handles.get(ipcChannels.gitCreateBranch)?.(event, { sessionId, commit: commitHash, branchName: 'feature/git-panel', checkout: true })).resolves.toEqual(actionResult)
-    expect(createBranchSpy).toHaveBeenCalledWith({ sessionId, commit: commitHash, branchName: 'feature/git-panel', checkout: true })
+    await expect(handles.get(ipcChannels.gitCreateBranch)?.(event, { sessionId, workspacePath: '/workspace/project', commit: commitHash, branchName: 'feature/git-panel', checkout: true })).resolves.toEqual(actionResult)
+    expect(createBranchSpy).toHaveBeenCalledWith({ sessionId, workspacePath: '/workspace/project', commit: commitHash, branchName: 'feature/git-panel', checkout: true })
 
-    await expect(handles.get(ipcChannels.gitCreateTag)?.(event, { sessionId, commit: commitHash, tagName: 'v1.2.3' })).resolves.toEqual(actionResult)
-    expect(createTagSpy).toHaveBeenCalledWith({ sessionId, commit: commitHash, tagName: 'v1.2.3' })
+    await expect(handles.get(ipcChannels.gitCreateTag)?.(event, { sessionId, workspacePath: '/workspace/project', commit: commitHash, tagName: 'v1.2.3' })).resolves.toEqual(actionResult)
+    expect(createTagSpy).toHaveBeenCalledWith({ sessionId, workspacePath: '/workspace/project', commit: commitHash, tagName: 'v1.2.3' })
 
-    await expect(handles.get(ipcChannels.gitCheckout)?.(event, { sessionId, ref: 'main' })).resolves.toEqual(actionResult)
-    expect(checkoutSpy).toHaveBeenCalledWith({ sessionId, ref: 'main' })
+    await expect(handles.get(ipcChannels.gitCheckout)?.(event, { sessionId, workspacePath: '/workspace/project', ref: 'main' })).resolves.toEqual(actionResult)
+    expect(checkoutSpy).toHaveBeenCalledWith({ sessionId, workspacePath: '/workspace/project', ref: 'main' })
   })
 
+  it('does not resolve category workspace defaults before invoking git IPC services', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock' })
+    const { handles } = registerTestIpcHandlers(container)
+    const event = { sender: { id: 1 } }
+    const category = await container.sessionCategoryService.createCategory({ name: 'Git team', workspacePath: '/workspace/category' })
+    const session = await container.sessionService.createSession({ title: 'Categorized git', categoryId: category.id })
+    const getStateSpy = vi.spyOn(container.gitService, 'getState').mockResolvedValue({
+      sessionId: session.id,
+      workspacePath: '/workspace/from-service',
+      isGitRepository: false,
+      dirty: false,
+      changedFiles: 0,
+      refs: []
+    })
+
+    await expect(handles.get(ipcChannels.gitGetState)?.(event, { sessionId: session.id })).resolves.toMatchObject({
+      sessionId: session.id,
+      workspacePath: '/workspace/from-service'
+    })
+    expect(getStateSpy).toHaveBeenCalledWith({ sessionId: session.id })
+  })
   it('rejects invalid git IPC input and output with zod schemas', async () => {
     const persistence = await createInMemoryPersistence()
     const container = createServiceContainer({ persistence, agentMode: 'mock' })
@@ -1213,6 +1235,107 @@ describe('registerIpcHandlers', () => {
         sessionId: session.id,
         workspacePath
       }))
+    })
+  })
+
+  it('uses session soul and workspace copied at creation time when enqueueing a categorized session', async () => {
+    await withTempWorkspace(async (workspacePath) => {
+      const persistence = await createInMemoryPersistence()
+      const container = createServiceContainer({ persistence, agentMode: 'mock' })
+      const { handles } = registerTestIpcHandlers(container)
+
+      const category = await handles.get(ipcChannels.sessionCategoriesCreate)?.(
+        { sender: { id: 1 } },
+        { name: 'Product', workspacePath, soul: 'Original category soul.', defaultModelId: 'deepseek-chat' }
+      ) as { id: string }
+
+      const session = await handles.get(ipcChannels.sessionsCreate)?.(
+        { sender: { id: 1 } },
+        { title: 'Categorized', categoryId: category.id, workspacePath, soul: 'Copied session soul.' }
+      ) as { id: string; categoryId?: string; workspacePath?: string; soul?: string }
+      expect(session.categoryId).toBe(category.id)
+
+      await handles.get(ipcChannels.sessionCategoriesUpdate)?.(
+        { sender: { id: 1 } },
+        { id: category.id, workspacePath: 'C:/changed/category/workspace', soul: 'Changed category soul.' }
+      )
+
+      const promptSpy = vi.spyOn(container.promptAssemblyService, 'assembleMainPrompt')
+      const enqueueSpy = vi.spyOn(container.agentRuntime, 'enqueue').mockResolvedValueOnce({ id: 'run-session-initial-settings' } as any)
+
+      await expect(handles.get(ipcChannels.agentEnqueue)?.(
+        { sender: { id: 1 } },
+        { sessionId: session.id, prompt: 'Use copied session settings', modelId: 'mock/hesper-fast' }
+      )).resolves.toEqual({ runId: 'run-session-initial-settings' })
+
+      const promptInput = promptSpy.mock.calls[0]![0]
+      expect(promptInput.soul).toBe('Copied session soul.')
+      expect(promptInput.session.workspacePath).toBe(workspacePath)
+      expect(enqueueSpy).toHaveBeenCalledWith(expect.objectContaining({ workspacePath }))
+    })
+  })
+
+  it('falls back to global settings soul when the session has no soul even if the category has one', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock' })
+    const { handles } = registerTestIpcHandlers(container)
+
+    await container.settingsService.updateSettings({ soul: 'Global soul value.' })
+
+    const category = await handles.get(ipcChannels.sessionCategoriesCreate)?.(
+      { sender: { id: 1 } },
+      { name: 'Category soul', workspacePath: 'C:/category/workspace', soul: 'Category soul value.' }
+    ) as { id: string }
+
+    const session = await handles.get(ipcChannels.sessionsCreate)?.(
+      { sender: { id: 1 } },
+      { title: 'No session soul', categoryId: category.id }
+    ) as { id: string }
+
+    const promptSpy = vi.spyOn(container.promptAssemblyService, 'assembleMainPrompt')
+    const enqueueSpy = vi.spyOn(container.agentRuntime, 'enqueue').mockResolvedValueOnce({ id: 'run-global-soul' } as any)
+
+    await expect(handles.get(ipcChannels.agentEnqueue)?.(
+      { sender: { id: 1 } },
+      { sessionId: session.id, prompt: 'Use global soul', modelId: 'mock/hesper-fast' }
+    )).resolves.toEqual({ runId: 'run-global-soul' })
+
+    const promptInput = promptSpy.mock.calls[0]![0]
+    expect(promptInput.soul).toBe('Global soul value.')
+    expect(promptInput.session.workspacePath).toBeUndefined()
+    expect(enqueueSpy).toHaveBeenCalledWith(expect.not.objectContaining({ workspacePath: 'C:/category/workspace' }))
+  })
+
+  it('uses session workspace over category workspace when both are set', async () => {
+    await withTempWorkspace(async (workspacePath) => {
+      const persistence = await createInMemoryPersistence()
+      const container = createServiceContainer({ persistence, agentMode: 'mock' })
+      const { handles } = registerTestIpcHandlers(container)
+
+      // Create category with a workspace path
+      const category = await handles.get(ipcChannels.sessionCategoriesCreate)?.( 
+        { sender: { id: 1 } },
+        { name: 'Team', workspacePath: 'C:/team/workspace' }
+      ) as { id: string }
+
+      // Create session in the category WITH its own workspacePath
+      const session = await handles.get(ipcChannels.sessionsCreate)?.( 
+        { sender: { id: 1 } },
+        { title: 'Own workspace', categoryId: category.id, workspacePath }
+      ) as { id: string; workspacePath?: string }
+
+      const promptSpy = vi.spyOn(container.promptAssemblyService, 'assembleMainPrompt')
+      const enqueueSpy = vi.spyOn(container.agentRuntime, 'enqueue').mockResolvedValueOnce({ id: 'run-session-workspace' } as any)
+
+      await expect(handles.get(ipcChannels.agentEnqueue)?.( 
+        { sender: { id: 1 } },
+        { sessionId: session.id, prompt: 'Use session workspace', modelId: 'mock/hesper-fast' }
+      )).resolves.toEqual({ runId: 'run-session-workspace' })
+
+      const promptInput = promptSpy.mock.calls[0]![0]
+      // Session workspace should win over category workspace
+      expect(promptInput.session.workspacePath).toBe(workspacePath)
+      expect(enqueueSpy).toHaveBeenCalledWith(expect.objectContaining({ workspacePath }))
     })
   })
 

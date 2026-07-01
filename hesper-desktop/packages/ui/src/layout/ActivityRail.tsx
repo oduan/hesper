@@ -33,12 +33,13 @@ export type ActivityRailProps = {
   onRenameSessionCategory?: (categoryId: string, name: string) => void | Promise<void>
   onDeleteSessionCategory?: (categoryId: string) => void | Promise<void>
   onDiscardSessionCategory?: (categoryId: string) => void | Promise<void>
+  onOpenSessionCategorySettings?: (categoryId: string) => void
 }
 
 type EditingCategoryState = { id: string; name: string; isNew: boolean; realId?: string; pendingCreate?: boolean; queuedCommit?: boolean }
 type CategoryMenuState = { kind: 'all' | 'category'; categoryId?: string; x: number; y: number }
 
-type CategoryMenuAction = 'create' | 'rename' | 'delete'
+type CategoryMenuAction = 'create' | 'rename' | 'delete' | 'settings'
 
 type NavIconName = 'sessions' | 'category' | 'marked' | 'archived' | 'skills' | 'roles' | 'tools' | 'settings'
 
@@ -137,7 +138,8 @@ export function ActivityRail({
   onCreateSessionCategory,
   onRenameSessionCategory,
   onDeleteSessionCategory,
-  onDiscardSessionCategory
+  onDiscardSessionCategory,
+  onOpenSessionCategorySettings,
 }: ActivityRailProps) {
   const [fallbackSessionsExpanded, setFallbackSessionsExpanded] = useState(() => sessionsExpanded ?? true)
   const [categoryMenu, setCategoryMenu] = useState<CategoryMenuState>()
@@ -325,6 +327,14 @@ export function ActivityRail({
       case 'rename': {
         if (!menuState.categoryId) return
         startRenameCategory(menuState.categoryId)
+        return
+      }
+      case 'settings': {
+        if (!menuState.categoryId) return
+        setSessionsExpanded(true)
+        onSelectSection?.('sessions')
+        onSelectSessionCategory?.(menuState.categoryId)
+        onOpenSessionCategorySettings?.(menuState.categoryId)
         return
       }
       case 'delete': {
@@ -553,6 +563,17 @@ export function ActivityRail({
                 style={categoryMenuItemStyle}
               >
                 <span>重命名</span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="hesper-category-menu-item"
+                onClick={() => {
+                  void handleCategoryMenuAction('settings', categoryMenu)
+                }}
+                style={categoryMenuItemStyle}
+              >
+                <span>设置</span>
               </button>
               <button
                 type="button"

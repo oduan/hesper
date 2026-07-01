@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react'
 import { createId, defaultAppThemeId, nowIso, type AgentRun, type Message, type MessageAttachment, type RunStep, type Session, type WorkerAgentInvocation } from '@hesper/shared'
-import { AppShell, ConversationView, resolveThemeVariant, themeTokens, type AppSection, type ComposerDraftAttachment, type ComposerSendOptions, type ComposerSkillMention, type ConversationGitPanelProps, type ConversationShortcutCommand, type GitCommitDetailView, type GitGraphRowView, type SkillOption } from '@hesper/ui'
+import { AppShell, CategorySettingsDialog, ConversationView, resolveThemeVariant, themeTokens, type AppSection, type CategorySettingsValue, type ComposerDraftAttachment, type ComposerSendOptions, type ComposerSkillMention, type ConversationGitPanelProps, type ConversationShortcutCommand, type GitCommitDetailView, type GitGraphRowView, type SkillOption } from '@hesper/ui'
 import { AppStoreProvider, useAppStore, type SessionSpecialView } from './app-store'
 import { hesperApi } from './ipc-client'
 import { defaultFallbackModelId, fallbackSessionModelCatalog, isLegacyFallbackModelId, loadAvailableModelCatalog, mergeModelOptions, type SessionModelCatalog } from './model-options'
@@ -386,6 +386,9 @@ function AppContent() {
   const [appSettings, setAppSettings] = useState<AppSettings>(defaultAppSettings)
   const [settingsError, setSettingsError] = useState<string>()
   const [activeSettingsCategory, setActiveSettingsCategory] = useState<SettingsCategory>('ai')
+  const [activeSessionCategorySettingsId, setActiveSessionCategorySettingsId] = useState<string>()
+  const [categorySettingsError, setCategorySettingsError] = useState<string>()
+  const [categorySettingsPending, setCategorySettingsPending] = useState(false)
   const [tools, setTools] = useState<ToolDto[]>([])
   const [activeToolId, setActiveToolId] = useState<string>()
   const [pendingToolIds, setPendingToolIds] = useState<Set<string>>(new Set())
@@ -1036,6 +1039,9 @@ function AppContent() {
   const activeSessionCategory = state.activeSessionCategoryId
     ? state.sessionCategories.find((category) => category.id === state.activeSessionCategoryId)
     : undefined
+  const activeSessionCategorySettings = activeSessionCategorySettingsId
+    ? state.sessionCategories.find((category) => category.id === activeSessionCategorySettingsId)
+    : undefined
   const activeSessionListTitle = state.activeSessionSpecialView === 'marked'
     ? '已标记'
     : state.activeSessionSpecialView === 'archived'
@@ -1076,7 +1082,8 @@ function AppContent() {
     messagesByRun: state.childMessagesByRun,
     streamingByRun: state.streamingByRun
   }), [state.childMessagesByRun, state.runsById, state.stepsByRun, state.streamingByRun, state.workerInvocationIdByParentStepId, state.workerInvocationsById])
-  const activeModelId = activeSession ? resolveAvailableSessionModelId(activeSession.defaultModelId, sessionModelCatalog, explicitModelSelectionSessionIdsRef.current.has(activeSession.id)) : resolveAvailableSessionModelId(undefined, sessionModelCatalog)
+  const activeEffectiveDefaultModelId = activeSession?.defaultModelId?.trim() || undefined
+  const activeModelId = activeSession ? resolveAvailableSessionModelId(activeEffectiveDefaultModelId, sessionModelCatalog, explicitModelSelectionSessionIdsRef.current.has(activeSession.id)) : resolveAvailableSessionModelId(undefined, sessionModelCatalog)
   const activeModelConfig = sessionModelCatalog.modelsById[activeModelId]
   const activeModelCapabilities = activeModelConfig?.capabilities ?? []
   const activeModelOptions = isAvailableSessionModel(activeModelId, sessionModelCatalog) ? mergeModelOptions(sessionModelCatalog.options, [activeModelId]) : sessionModelCatalog.options
@@ -1104,7 +1111,7 @@ function AppContent() {
     }))
 
     try {
-      const repository = await hesperApi.git.getState({ sessionId })
+      const repository = await hesperApi.git.getState({ sessionId, workspacePath })
       if (latestGitStateRequestIdRef.current[sessionId] === requestId && repository.workspacePath === workspacePath) {
         setGitUiStateBySession((current) => {
           if (current[sessionId]?.workspacePath !== workspacePath) return current
@@ -1161,7 +1168,7 @@ function AppContent() {
     })
 
     try {
-      const result = await hesperApi.git.listLog({ sessionId, limit, offset })
+      const result = await hesperApi.git.listLog({ sessionId, workspacePath: expectedWorkspacePath, limit, offset })
       if (latestGitLogRequestIdRef.current[sessionId] === requestId) {
         let mergedRows: GitGraphRowDto[] | undefined
         setGitUiStateBySession((current) => {
@@ -1207,9 +1214,10 @@ function AppContent() {
 
   useEffect(() => {
     const sessionId = activeSession?.id
+    const workspacePath = activeSession?.workspacePath?.trim() || undefined
     if (!sessionId) return
 
-    if (!activeSession.workspacePath) {
+    if (!workspacePath) {
       setGitUiStateBySession((current) => mergeGitUiState(current, sessionId, {
         workspacePath: undefined,
         repository: undefined,
@@ -1229,9 +1237,9 @@ function AppContent() {
     }
 
     setGitUiStateBySession((current) => {
-      if (current[sessionId]?.workspacePath === activeSession.workspacePath) return current
+      if (current[sessionId]?.workspacePath === workspacePath) return current
       return mergeGitUiState(current, sessionId, {
-        workspacePath: activeSession.workspacePath,
+        workspacePath,
         repository: undefined,
         rows: undefined,
         hasMore: undefined,
@@ -1246,14 +1254,15 @@ function AppContent() {
         error: undefined
       })
     })
-    void loadGitRepositoryState(sessionId, activeSession.workspacePath)
+    void loadGitRepositoryState(sessionId, workspacePath)
   }, [activeSession?.id, activeSession?.workspacePath, loadGitRepositoryState])
 
   const activeGitUiState = activeSession ? gitUiStateBySession[activeSession.id] : undefined
-  const activeWorkspacePath = activeSession?.workspacePath
+  const activeWorkspacePath = activeSession?.workspacePath?.trim() || undefined
   const activeGitRepositoryMatches = Boolean(
     activeWorkspacePath &&
-    activeGitUiState?.workspacePath === activeWorkspacePath &&
+    activeGitUiState &&
+    activeGitUiState.workspacePath === activeWorkspacePath &&
     activeGitUiState.repository?.isGitRepository &&
     activeGitUiState.repository.workspacePath === activeWorkspacePath
   )
@@ -1314,7 +1323,7 @@ function AppContent() {
             }
           }
 
-          void hesperApi.git.getCommit({ sessionId, commit }).then((detail) => {
+          void hesperApi.git.getCommit({ sessionId, workspacePath, commit }).then((detail) => {
             if (latestGitDetailRequestIdRef.current[sessionId]?.[commit] !== detailRequestId) return
             setGitUiStateBySession((current) => {
               const currentSessionState = current[sessionId]
@@ -1360,7 +1369,7 @@ function AppContent() {
           const workspacePath = activeWorkspacePath
           const branchName = window.prompt?.('输入新分支名称', '')?.trim()
           if (!branchName) return
-          void hesperApi.git.createBranch({ sessionId, commit, branchName }).then(async (result) => {
+          void hesperApi.git.createBranch({ sessionId, workspacePath, commit, branchName }).then(async (result) => {
             if (!result.success) {
               setGitUiStateBySession((current) => current[sessionId]?.workspacePath === workspacePath
                 ? mergeGitUiState(current, sessionId, { error: result.message ?? 'Git 分支创建失败' })
@@ -1381,7 +1390,7 @@ function AppContent() {
           const workspacePath = activeWorkspacePath
           const tagName = window.prompt?.('输入标签名称', '')?.trim()
           if (!tagName) return
-          void hesperApi.git.createTag({ sessionId, commit, tagName }).then(async (result) => {
+          void hesperApi.git.createTag({ sessionId, workspacePath, commit, tagName }).then(async (result) => {
             if (!result.success) {
               setGitUiStateBySession((current) => current[sessionId]?.workspacePath === workspacePath
                 ? mergeGitUiState(current, sessionId, { error: result.message ?? 'Git 标签创建失败' })
@@ -1404,7 +1413,7 @@ function AppContent() {
           if (promptValue == null) return
           const checkoutRef = promptValue.trim()
           if (!checkoutRef) return
-          void hesperApi.git.checkout({ sessionId, ref: checkoutRef }).then(async (result) => {
+          void hesperApi.git.checkout({ sessionId, workspacePath, ref: checkoutRef }).then(async (result) => {
             if (!result.success) {
               setGitUiStateBySession((current) => current[sessionId]?.workspacePath === workspacePath
                 ? mergeGitUiState(current, sessionId, { error: result.message ?? 'Git 检出失败' })
@@ -1758,7 +1767,7 @@ function AppContent() {
       }
 
       const latestRunId = stateRef.current.latestRunIdBySession[sessionId]
-      const sessionModelId = resolveTitleGenerationModelId(session.defaultModelId, sessionModelCatalog, explicitModelSelectionSessionIdsRef.current.has(session.id))
+      const sessionModelId = resolveTitleGenerationModelId(session.defaultModelId?.trim() || undefined, sessionModelCatalog, explicitModelSelectionSessionIdsRef.current.has(session.id))
       const modelId = latestRunId ? runModelIdsRef.current[latestRunId] ?? sessionModelId : sessionModelId
       const modelError = titleGenerationModelError(modelId, sessionModelCatalog)
       if (modelError) {
@@ -1867,6 +1876,32 @@ function AppContent() {
     }
   }
 
+  const selectSessionCategorySettingsWorkspace = async (): Promise<string | undefined> => {
+    const result = await hesperApi.dialog.selectDirectory()
+    if (result.canceled || !result.path) return undefined
+    setCategorySettingsError(undefined)
+    return result.path
+  }
+
+  const saveSessionCategorySettings = async (categoryId: string, value: CategorySettingsValue) => {
+    setCategorySettingsPending(true)
+    setCategorySettingsError(undefined)
+    try {
+      const category = await hesperApi.sessionCategories.update({
+        id: categoryId,
+        defaultModelId: value.defaultModelId,
+        workspacePath: value.workspacePath,
+        soul: value.soul
+      })
+      dispatch({ type: 'sessionCategory.updated', category })
+      setActiveSessionCategorySettingsId(undefined)
+    } catch (error) {
+      setCategorySettingsError(error instanceof Error ? error.message : '未知分类设置保存错误')
+    } finally {
+      setCategorySettingsPending(false)
+    }
+  }
+
   const deleteSessionCategory = async (categoryId: string) => {
     const category = stateRef.current.sessionCategories.find((candidate) => candidate.id === categoryId)
     if (!category) return
@@ -1943,7 +1978,14 @@ function AppContent() {
 
   const createTrackedSession = async () => {
     const categoryId = stateRef.current.activeSessionSpecialView ? undefined : stateRef.current.activeSessionCategoryId
-    const session = await createSession(dispatch, defaultFallbackModelId, categoryId)
+    const categoryDefaults = categoryId ? stateRef.current.sessionCategories.find((category) => category.id === categoryId) : undefined
+    const session = await createSession(dispatch, {
+      defaultModelId: defaultFallbackModelId,
+      ...(categoryId ? { categoryId } : {}),
+      ...(categoryDefaults?.defaultModelId?.trim() ? { defaultModelId: categoryDefaults.defaultModelId.trim() } : {}),
+      ...(categoryDefaults?.workspacePath?.trim() ? { workspacePath: categoryDefaults.workspacePath.trim() } : {}),
+      ...(categoryDefaults?.soul?.trim() ? { soul: categoryDefaults.soul.trim() } : {})
+    })
     createdNewSessionIdsRef.current.add(session.id)
   }
 
@@ -2055,6 +2097,10 @@ function AppContent() {
       onDiscardSessionCategory={(categoryId) => {
         void discardSessionCategory(categoryId)
       }}
+      onOpenSessionCategorySettings={(categoryId) => {
+        setCategorySettingsError(undefined)
+        setActiveSessionCategorySettingsId(categoryId)
+      }}
       onSetSessionCategory={(sessionId, sessionIds, categoryId) => {
         void setSessionCategory(sessionId, sessionIds, categoryId)
       }}
@@ -2100,6 +2146,25 @@ function AppContent() {
       onWindowToggleMaximize={() => hesperApi.window.toggleMaximize()}
       onWindowClose={() => hesperApi.window.close()}
     >
+      {activeSessionCategorySettings ? (
+        <CategorySettingsDialog
+          category={activeSessionCategorySettings}
+          modelOptions={sessionModelCatalog.options}
+          modelOptionGroups={sessionModelCatalog.optionGroups}
+          defaultModelId={activeSessionCategorySettings.defaultModelId ?? ''}
+          workspacePath={activeSessionCategorySettings.workspacePath ?? ''}
+          soul={activeSessionCategorySettings.soul ?? ''}
+          pending={categorySettingsPending}
+          {...(categorySettingsError ? { error: categorySettingsError } : {})}
+          onSelectWorkspace={selectSessionCategorySettingsWorkspace}
+          onSave={(value) => { void saveSessionCategorySettings(activeSessionCategorySettings.id, value) }}
+          onClose={() => {
+            if (categorySettingsPending) return
+            setActiveSessionCategorySettingsId(undefined)
+            setCategorySettingsError(undefined)
+          }}
+        />
+      ) : null}
       {!isSessionsSection ? (
         state.activeSection === 'settings' ? (
           activeSettingsCategory === 'appearance' ? (
@@ -2196,7 +2261,7 @@ function AppContent() {
             draftSkillMentions={draftSkillMentionsBySession[activeSession.id] ?? []}
             draftAttachments={draftAttachmentsBySession[activeSession.id] ?? []}
             running={Boolean(activeRunningRunId)}
-            loadLocalFilePreview={(path) => hesperApi.files.preview({ sessionId: activeSession.id, path })}
+            loadLocalFilePreview={(path) => hesperApi.files.preview({ sessionId: activeSession.id, path, ...(activeWorkspacePath ? { workspacePath: activeWorkspacePath } : {}) })}
             loadAttachmentDataUrl={loadAttachmentDataUrl}
             onDraftChange={(value) => {
               setDraftsBySession((current) => ({ ...current, [activeSession.id]: value }))
@@ -2283,12 +2348,14 @@ function AppContent() {
                 setSendErrorsBySession((current) => ({ ...current, [activeSession.id]: '未配置模型' }))
                 return
               }
+              const effectiveWorkspacePath = activeSession.workspacePath?.trim() || undefined
               void sendMessage({
                 session: activeSession,
                 modelId: activeModelId,
                 content,
                 modelCapabilities: activeModelCapabilities,
                 modelCatalog: sessionModelCatalog,
+                ...(effectiveWorkspacePath ? { workspacePath: effectiveWorkspacePath } : {}),
                 ...(sendOptions ? { sendOptions } : {}),
                 dispatch,
                 setSendErrorsBySession,
@@ -2297,15 +2364,18 @@ function AppContent() {
               })
             }}
             onRetryRun={(message, run) => {
-              retryFailedRun({
+              const effectiveRetryWorkspacePath = activeSession.workspacePath?.trim() || undefined
+              const retryInput = {
                 session: activeSession,
                 message,
                 run,
                 onEnqueueSuccess: generateDefaultSessionTitleAfterEnqueue,
                 modelCatalog: sessionModelCatalog,
+                ...(effectiveRetryWorkspacePath ? { workspacePath: effectiveRetryWorkspacePath } : {}),
                 dispatch,
                 setSendErrorsBySession
-              })
+              }
+              retryFailedRun(retryInput)
             }}
             {...(activeGitPanel ? { gitPanel: activeGitPanel } : {})}
             {...(shortcutCommand ? { shortcutCommand } : {})}
@@ -2526,16 +2596,21 @@ function EmptyConversationState({
   )
 }
 
-async function createSession(dispatch: ReturnType<typeof useAppStore>['dispatch'], defaultModelId = defaultFallbackModelId, categoryId?: string): Promise<Session> {
+async function createSession(
+  dispatch: ReturnType<typeof useAppStore>['dispatch'],
+  options: { defaultModelId?: string; categoryId?: string; workspacePath?: string; soul?: string } = {}
+): Promise<Session> {
+  const defaultModelId = options.defaultModelId ?? defaultFallbackModelId
   const session = await hesperApi.sessions.create({
     title: 'New chat',
     ...(defaultModelId !== defaultFallbackModelId ? { defaultModelId } : {}),
-    ...(categoryId ? { categoryId } : {})
+    ...(options.categoryId ? { categoryId: options.categoryId } : {}),
+    ...(options.workspacePath ? { workspacePath: options.workspacePath } : {}),
+    ...(options.soul ? { soul: options.soul } : {})
   })
   dispatch({ type: 'session.created', session })
   return session
 }
-
 async function updateSessionWorkspace({
   session,
   dispatch,
@@ -2673,6 +2748,7 @@ function retryFailedRun({
   run,
   onEnqueueSuccess,
   modelCatalog,
+  workspacePath,
   dispatch,
   setSendErrorsBySession
 }: {
@@ -2681,6 +2757,7 @@ function retryFailedRun({
   run: AgentRun
   onEnqueueSuccess: (sessionId: string, modelId: string, userPrompt: string) => void
   modelCatalog: SessionModelCatalog
+  workspacePath?: string
   dispatch: ReturnType<typeof useAppStore>['dispatch']
   setSendErrorsBySession: Dispatch<SetStateAction<Record<string, string>>>
 }) {
@@ -2689,6 +2766,7 @@ function retryFailedRun({
     modelId: run.modelId,
     content: message.content,
     modelCatalog,
+    ...(workspacePath ? { workspacePath } : {}),
     dispatch,
     setSendErrorsBySession,
     onEnqueueSuccess
@@ -2738,6 +2816,7 @@ async function sendMessage({
   content,
   modelCapabilities = [],
   modelCatalog,
+  workspacePath,
   dispatch,
   sendOptions,
   setSendErrorsBySession,
@@ -2749,6 +2828,7 @@ async function sendMessage({
   content: string
   modelCapabilities?: readonly string[]
   modelCatalog?: SessionModelCatalog
+  workspacePath?: string
   sendOptions?: ComposerSendOptions
   dispatch: ReturnType<typeof useAppStore>['dispatch']
   setSendErrorsBySession: Dispatch<SetStateAction<Record<string, string>>>
@@ -2772,6 +2852,7 @@ async function sendMessage({
   dispatch({ type: 'session.touched', sessionId: session.id, updatedAt: message.createdAt })
 
   try {
+    const resolvedWorkspacePath = workspacePath ?? session.workspacePath
     const result = await hesperApi.agent.enqueue({
       sessionId: session.id,
       prompt: sendOptions?.prompt ?? content,
@@ -2781,7 +2862,7 @@ async function sendMessage({
       ...(enqueueDraftAttachments.length > 0 ? { draftAttachments: enqueueDraftAttachments } : {}),
       messageId: message.id,
       messageCreatedAt: message.createdAt,
-      ...(session.workspacePath ? { workspacePath: session.workspacePath } : {})
+      ...(resolvedWorkspacePath ? { workspacePath: resolvedWorkspacePath } : {})
     })
     dispatch({ type: 'message.run-linked', sessionId: session.id, messageId: message.id, runId: result.runId })
     onEnqueueSuccess?.(session.id, normalizedModelId, content)

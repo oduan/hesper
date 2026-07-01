@@ -33,6 +33,7 @@ export type ThemedSelectProps = {
   minWidth?: number
   maxWidth?: number
   menuPlacement?: 'top' | 'bottom'
+  menuZIndex?: number
 }
 
 export function ThemedSelect({
@@ -45,7 +46,8 @@ export function ThemedSelect({
   emptyLabel,
   minWidth = 108,
   maxWidth = 240,
-  menuPlacement = 'bottom'
+  menuPlacement = 'bottom',
+  menuZIndex = 30
 }: ThemedSelectProps) {
   const [open, setOpen] = useState(false)
   const [expandedGroupId, setExpandedGroupId] = useState<string>()
@@ -59,9 +61,9 @@ export function ThemedSelect({
   const labeledOptions = useMemo(
     () => [
       ...(optionGroups ?? []).flatMap((group) => group.options),
-      ...flatOptions.map((option) => ({ value: option, label: option }))
+      ...flatOptions.map((option) => ({ value: option, label: option === '' ? emptyLabel ?? option : option }))
     ],
-    [flatOptions, optionGroups]
+    [emptyLabel, flatOptions, optionGroups]
   )
   const fallbackSelectedLabel = value.trim() || emptyLabel || value
   const selectedLabel = labeledOptions.find((option) => option.value === value)?.label ?? fallbackSelectedLabel
@@ -140,6 +142,7 @@ export function ThemedSelect({
       aria-label={`${ariaLabel}选项`}
       style={{
         ...selectMenuStyle,
+        zIndex: menuZIndex,
         ...menuPosition
       }}
       onBlur={handleBlur}
@@ -204,7 +207,7 @@ export function ThemedSelect({
             ...(option === value ? activeSelectOptionStyle : {})
           }}
         >
-          {option}
+          {option === '' ? emptyLabel ?? option : option}
         </button>
       ))}
       {auxiliaryMenu ? (

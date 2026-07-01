@@ -249,7 +249,7 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
 
   const assembleRunContext = async (sessionId: string, workspacePath?: string, requestedEnabledToolIds?: string[]): Promise<{ systemPrompt: string; enabledToolIds: string[]; workspacePath?: string }> => {
     const session = await options.container.sessionService.getSession(sessionId)
-    const resolvedWorkspacePath = workspacePath ?? session.workspacePath
+    const resolvedWorkspacePath = workspacePath ?? (session.workspacePath?.trim() || undefined)
     const roles = await listRuntimeRoles()
     const role = roles.find((candidate) => candidate.id === (session.roleId ?? 'main-agent'))
     const configuredToolIds = session.enabledToolIds?.length ? session.enabledToolIds : role?.defaultToolIds ?? []
@@ -281,11 +281,23 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       role,
       skills: options.container.skillService.listSkills(),
       tools: options.container.toolCatalogService.list(),
-      soul: settings.soul,
+      soul: session.soul?.trim() ? session.soul.trim() : settings.soul,
       ...(projectContextFiles?.length ? { projectContextFiles } : {})
     })
 
     return omitUndefined({ systemPrompt: prompt.systemPrompt, enabledToolIds: sessionForPrompt.enabledToolIds, workspacePath: resolvedWorkspacePath })
+  }
+
+  const resolveWorkspacePathForSession = async (sessionId: string, explicitWorkspacePath?: string): Promise<string | undefined> => {
+    if (explicitWorkspacePath?.trim()) return explicitWorkspacePath.trim()
+    const session = await options.container.sessionService.getSession(sessionId)
+    return session.workspacePath?.trim() || undefined
+  }
+
+  const withResolvedGitWorkspace = async <T extends { sessionId: string; workspacePath?: string | undefined }>(input: T): Promise<T> => {
+    const workspacePath = await resolveWorkspacePathForSession(input.sessionId, input.workspacePath)
+    const { workspacePath: _workspacePath, ...rest } = input
+    return (workspacePath ? { ...rest, workspacePath } : rest) as T
   }
 
   const subscribeSender = (event: IpcMainInvokeEvent) => {
@@ -397,13 +409,13 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       return z.array(sessionCategoryDtoSchema).parse(categories)
     },
     [ipcChannels.sessionCategoriesCreate]: async (_event, payload) => {
-      const input = createSessionCategoryInputSchema.parse(payload)
+      const input = omitUndefined(createSessionCategoryInputSchema.parse(payload))
       const category = await options.container.sessionCategoryService.createCategory(input)
       await savePersistence()
       return sessionCategoryDtoSchema.parse(category)
     },
     [ipcChannels.sessionCategoriesUpdate]: async (_event, payload) => {
-      const input = updateSessionCategoryInputSchema.parse(payload)
+      const input = omitUndefined(updateSessionCategoryInputSchema.parse(payload))
       const category = await options.container.sessionCategoryService.updateCategory(input)
       await savePersistence()
       return sessionCategoryDtoSchema.parse(category)
@@ -451,33 +463,34 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
     [ipcChannels.filesPreview]: async (_event, payload) => {
       const input = localFilePreviewInputSchema.parse(payload)
       const session = await options.container.sessionService.getSession(input.sessionId)
-      if (!session.workspacePath) {
+      const workspacePath = input.workspacePath?.trim() || session.workspacePath?.trim() || undefined
+      if (!workspacePath) {
         throw new Error('Local file preview requires a selected workspace for this session')
       }
-      return localFilePreviewResultSchema.parse(await readLocalFilePreview({ workspacePath: session.workspacePath, path: input.path }))
+      return localFilePreviewResultSchema.parse(await readLocalFilePreview({ workspacePath, path: input.path }))
     },
     [ipcChannels.gitGetState]: async (_event, payload) => {
-      const input = gitSessionInputSchema.parse(payload)
+      const input = await withResolvedGitWorkspace(gitSessionInputSchema.parse(payload))
       return gitRepositoryStateSchema.parse(await options.container.gitService.getState(input))
     },
     [ipcChannels.gitListLog]: async (_event, payload) => {
-      const input = gitLogInputSchema.parse(payload)
+      const input = await withResolvedGitWorkspace(gitLogInputSchema.parse(payload))
       return gitLogResultSchema.parse(await options.container.gitService.listLog(input))
     },
     [ipcChannels.gitGetCommit]: async (_event, payload) => {
-      const input = gitCommitInputSchema.parse(payload)
+      const input = await withResolvedGitWorkspace(gitCommitInputSchema.parse(payload))
       return gitCommitDetailSchema.parse(await options.container.gitService.getCommit(input))
     },
     [ipcChannels.gitCreateBranch]: async (_event, payload) => {
-      const input = gitCreateBranchInputSchema.parse(payload)
+      const input = await withResolvedGitWorkspace(gitCreateBranchInputSchema.parse(payload))
       return gitActionResultSchema.parse(await options.container.gitService.createBranch(input))
     },
     [ipcChannels.gitCreateTag]: async (_event, payload) => {
-      const input = gitCreateTagInputSchema.parse(payload)
+      const input = await withResolvedGitWorkspace(gitCreateTagInputSchema.parse(payload))
       return gitActionResultSchema.parse(await options.container.gitService.createTag(input))
     },
     [ipcChannels.gitCheckout]: async (_event, payload) => {
-      const input = gitCheckoutInputSchema.parse(payload)
+      const input = await withResolvedGitWorkspace(gitCheckoutInputSchema.parse(payload))
       return gitActionResultSchema.parse(await options.container.gitService.checkout(input))
     },
     [ipcChannels.dialogSelectDirectory]: async () => {

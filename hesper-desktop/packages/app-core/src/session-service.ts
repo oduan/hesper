@@ -8,6 +8,7 @@ export type CreateSessionInput = {
   workspacePath?: string
   defaultModelId?: string
   outputMode?: OutputMode
+  soul?: string
 }
 
 export function normalizeSessionTitle(title: string | undefined, fallback: string): string {
@@ -84,7 +85,8 @@ export function createSessionService(persistence: Persistence): SessionService {
         updatedAt: timestamp,
         ...(normalizedCategoryId !== undefined ? { categoryId: normalizedCategoryId } : {}),
         ...(input.workspacePath !== undefined ? { workspacePath: input.workspacePath } : {}),
-        ...(input.defaultModelId !== undefined ? { defaultModelId: input.defaultModelId } : {})
+        ...(input.defaultModelId !== undefined ? { defaultModelId: input.defaultModelId } : {}),
+        ...(input.soul !== undefined ? { soul: input.soul } : {})
       }
       await persistence.sessions.save(session)
       return session
