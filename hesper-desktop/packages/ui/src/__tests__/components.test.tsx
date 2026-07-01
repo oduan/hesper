@@ -2550,7 +2550,8 @@ describe('ui components', () => {
 
     const listbox = screen.getByRole('listbox', { name: '技能提及建议' })
     expect(listbox).toHaveClass('hesper-skill-mention-menu')
-    expect(listbox).toHaveStyle({ width: '20%' })
+    expect(listbox).toHaveAttribute('data-hesper-skill-mention-menu', 'true')
+    expect(listbox).toHaveStyle({ width: '20%', fontSize: 'var(--hesper-font-size, 14px)' })
     const scrollbarStyle = [...container.querySelectorAll('style')].find((style) => style.textContent?.includes('.hesper-skill-mention-menu::-webkit-scrollbar'))
     expect(scrollbarStyle?.textContent).toContain('width: 4px')
     expect(scrollbarStyle?.textContent).toContain('var(--hesper-color-scrollbar-thumb')
@@ -2786,9 +2787,14 @@ describe('ui components', () => {
 
       const textarea = screen.getByLabelText('消息输入框')
       await user.type(textarea, '@')
+      const listbox = screen.getByRole('listbox', { name: '技能提及建议' })
       expect(screen.getByRole('option', { name: '选择技能 Research' })).toHaveAttribute('aria-selected', 'true')
-      await waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' }))
-      scrollIntoView.mockClear()
+      expect(scrollIntoView).not.toHaveBeenCalled()
+
+      listbox.scrollTop = 48
+      fireEvent.scroll(listbox)
+      expect(scrollIntoView).not.toHaveBeenCalled()
+      expect(listbox.scrollTop).toBe(48)
 
       await user.keyboard('{ArrowDown}{Enter}')
       await waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' }))
