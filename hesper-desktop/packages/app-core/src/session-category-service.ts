@@ -7,6 +7,9 @@ export type CreateSessionCategoryInput = {
   defaultModelId?: string
   workspacePath?: string
   soul?: string
+  soulOverrideEnabled?: boolean
+  agents?: string
+  agentsOverrideEnabled?: boolean
   now?: string
 }
 
@@ -16,6 +19,9 @@ export type UpdateSessionCategoryInput = {
   defaultModelId?: string
   workspacePath?: string
   soul?: string
+  soulOverrideEnabled?: boolean
+  agents?: string
+  agentsOverrideEnabled?: boolean
 }
 
 export type DeleteSessionCategoryResult = {
@@ -51,6 +57,9 @@ export function createSessionCategoryService(persistence: Persistence): SessionC
         ...(input.defaultModelId !== undefined ? { defaultModelId: input.defaultModelId } : {}),
         ...(input.workspacePath !== undefined ? { workspacePath: input.workspacePath } : {}),
         ...(input.soul !== undefined ? { soul: input.soul } : {}),
+        soulOverrideEnabled: input.soulOverrideEnabled ?? false,
+        agents: input.agents ?? '',
+        agentsOverrideEnabled: input.agentsOverrideEnabled ?? false,
         createdAt: timestamp,
         updatedAt: timestamp
       }
@@ -66,6 +75,9 @@ export function createSessionCategoryService(persistence: Persistence): SessionC
         ...(input.defaultModelId !== undefined ? { defaultModelId: input.defaultModelId } : {}),
         ...(input.workspacePath !== undefined ? { workspacePath: input.workspacePath } : {}),
         ...(input.soul !== undefined ? { soul: input.soul } : {}),
+        ...(input.soulOverrideEnabled !== undefined ? { soulOverrideEnabled: input.soulOverrideEnabled } : {}),
+        ...(input.agents !== undefined ? { agents: input.agents } : {}),
+        ...(input.agentsOverrideEnabled !== undefined ? { agentsOverrideEnabled: input.agentsOverrideEnabled } : {}),
         updatedAt: nowIso()
       }
       await persistence.sessionCategories.save(updated)

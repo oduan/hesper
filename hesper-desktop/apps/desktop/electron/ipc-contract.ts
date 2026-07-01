@@ -87,6 +87,7 @@ export const createSessionInputSchema = z.object({
   defaultModelId: z.string().optional(),
   categoryId: z.string().optional(),
   soul: z.string().optional(),
+  agents: z.string().optional(),
   outputMode: z.enum(['markdown', 'html']).optional()
 })
 
@@ -257,14 +258,20 @@ export const createSessionCategoryInputSchema = z.object({
   name: z.string(),
   defaultModelId: z.string().optional(),
   workspacePath: z.string().optional(),
-  soul: z.string().optional()
+  soul: z.string().optional(),
+  soulOverrideEnabled: z.boolean().optional(),
+  agents: z.string().optional(),
+  agentsOverrideEnabled: z.boolean().optional()
 }).strict()
 export const updateSessionCategoryInputSchema = z.object({
   id: nonEmptyStringSchema,
   name: z.string().optional(),
   defaultModelId: z.string().optional(),
   workspacePath: z.string().optional(),
-  soul: z.string().optional()
+  soul: z.string().optional(),
+  soulOverrideEnabled: z.boolean().optional(),
+  agents: z.string().optional(),
+  agentsOverrideEnabled: z.boolean().optional()
 }).strict()
 export const setSessionCategoryInputSchema = z.object({
   ids: z.array(nonEmptyStringSchema).min(1),
@@ -352,7 +359,8 @@ export const appSettingsSchema = z.object({
   themeMode: z.enum(themeModeValues),
   themeId: z.enum(appThemeIds),
   fontSize: appFontSizeSchema,
-  soul: z.string()
+  soul: z.string(),
+  agents: z.string()
 }).strict()
 
 export const updateSettingsInputSchema = z.object({
@@ -361,7 +369,8 @@ export const updateSettingsInputSchema = z.object({
   themeMode: z.enum(themeModeValues).optional(),
   themeId: z.enum(appThemeIds).optional(),
   fontSize: appFontSizeSchema.optional(),
-  soul: z.string().optional()
+  soul: z.string().optional(),
+  agents: z.string().optional()
 }).strict()
 
 export const managedRoleDtoSchema = z.object({

@@ -46,7 +46,8 @@ const defaultSettings: AppSettings = {
   themeMode: 'system',
   themeId: 'hesper',
   fontSize: 14,
-  soul: ''
+  soul: '',
+  agents: ''
 }
 
 const fallbackBuiltinTools: ToolDto[] = [
@@ -463,6 +464,9 @@ export function createFallbackHesperApi(): HesperDesktopApi {
           defaultModelId: input.defaultModelId,
           workspacePath: input.workspacePath,
           soul: input.soul,
+          soulOverrideEnabled: input.soulOverrideEnabled ?? false,
+          agents: input.agents ?? '',
+          agentsOverrideEnabled: input.agentsOverrideEnabled ?? false,
           createdAt: timestamp,
           updatedAt: timestamp
         }) as SessionCategoryDto
@@ -478,6 +482,9 @@ export function createFallbackHesperApi(): HesperDesktopApi {
           ...(input.defaultModelId !== undefined ? { defaultModelId: input.defaultModelId } : {}),
           ...(input.workspacePath !== undefined ? { workspacePath: input.workspacePath } : {}),
           ...(input.soul !== undefined ? { soul: input.soul } : {}),
+          ...(input.soulOverrideEnabled !== undefined ? { soulOverrideEnabled: input.soulOverrideEnabled } : {}),
+          ...(input.agents !== undefined ? { agents: input.agents } : {}),
+          ...(input.agentsOverrideEnabled !== undefined ? { agentsOverrideEnabled: input.agentsOverrideEnabled } : {}),
           updatedAt: new Date().toISOString()
         }) as SessionCategoryDto
         sessionCategories = sessionCategories.map((candidate) => candidate.id === input.id ? updated : candidate)
@@ -543,7 +550,8 @@ export function createFallbackHesperApi(): HesperDesktopApi {
         themeMode: input.themeMode ?? defaultSettings.themeMode,
         themeId: input.themeId ?? defaultSettings.themeId,
         fontSize: input.fontSize ?? defaultSettings.fontSize,
-        soul: input.soul ?? defaultSettings.soul
+        soul: input.soul ?? defaultSettings.soul,
+        agents: input.agents ?? defaultSettings.agents
       })
     },
     credentials: {

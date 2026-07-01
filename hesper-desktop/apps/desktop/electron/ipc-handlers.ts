@@ -268,6 +268,17 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
     }
 
     const settings = await options.container.settingsService.getSettings()
+    const category = session.categoryId
+      ? (await options.container.sessionCategoryService.listCategories()).find((candidate) => candidate.id === session.categoryId)
+      : undefined
+    const effectiveSoul = category?.soulOverrideEnabled === true
+      ? category.soul ?? ''
+      : session.soul?.trim()
+        ? session.soul.trim()
+        : settings.soul
+    const effectiveAgents = category?.agentsOverrideEnabled === true
+      ? category.agents ?? ''
+      : settings.agents
     let projectContextFiles: string[] | undefined
     if (resolvedWorkspacePath) {
       try {
@@ -281,7 +292,8 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): () => 
       role,
       skills: options.container.skillService.listSkills(),
       tools: options.container.toolCatalogService.list(),
-      soul: session.soul?.trim() ? session.soul.trim() : settings.soul,
+      soul: effectiveSoul,
+      agents: effectiveAgents,
       ...(projectContextFiles?.length ? { projectContextFiles } : {})
     })
 

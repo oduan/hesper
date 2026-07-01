@@ -54,6 +54,7 @@ export type AppSettingsRecord = {
   themeId: AppThemeId
   fontSize: number
   soul: string
+  agents: string
   updatedAt: string
 }
 
@@ -292,6 +293,7 @@ function toSession(row: any): Session {
     defaultModelId: row.default_model_id ?? undefined,
     providerId: optionalString(row.provider_id),
     soul: row.soul ?? undefined,
+    agents: row.agents ?? undefined,
     modelId: optionalString(row.model_id),
     roleId: optionalString(row.role_id),
     enabledSkillIds: parseStringArrayJson(row.enabled_skill_ids_json, 'sessions.enabled_skill_ids_json'),
@@ -313,6 +315,9 @@ function toSessionCategory(row: any): SessionCategory {
     defaultModelId: row.default_model_id ?? undefined,
     workspacePath: row.workspace_path ?? undefined,
     soul: row.soul ?? undefined,
+    soulOverrideEnabled: Number(row.soul_override_enabled ?? 0) === 1,
+    agents: typeof row.agents === 'string' ? row.agents : '',
+    agentsOverrideEnabled: Number(row.agents_override_enabled ?? 0) === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }) as SessionCategory
@@ -575,6 +580,7 @@ function toAppSettingsRecord(row: any): AppSettingsRecord {
     themeId,
     fontSize,
     soul: typeof row.soul === 'string' ? row.soul : '',
+    agents: typeof row.agents === 'string' ? row.agents : '',
     updatedAt: String(row.updated_at)
   }
 }
@@ -671,13 +677,14 @@ export async function createRepositories(db: SqliteAdapter): Promise<Persistence
     settings: {
       async save(settings) {
         await exec('DELETE FROM app_settings')
-        await exec('INSERT INTO app_settings (default_model_id, default_output_mode, theme_mode, theme_id, font_size, soul, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)', [
+        await exec('INSERT INTO app_settings (default_model_id, default_output_mode, theme_mode, theme_id, font_size, soul, agents, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [
           settings.defaultModelId,
           settings.defaultOutputMode,
           settings.themeMode,
           settings.themeId,
           settings.fontSize,
           settings.soul,
+          settings.agents,
           settings.updatedAt
         ])
       },
@@ -698,6 +705,7 @@ export async function createRepositories(db: SqliteAdapter): Promise<Persistence
           'default_model_id',
           'provider_id',
           'soul',
+          'agents',
           'model_id',
           'role_id',
           'enabled_skill_ids_json',
@@ -720,6 +728,7 @@ export async function createRepositories(db: SqliteAdapter): Promise<Persistence
           session.defaultModelId,
           session.providerId,
           session.soul,
+          session.agents,
           session.modelId,
           session.roleId,
           json(session.enabledSkillIds),
@@ -776,15 +785,21 @@ export async function createRepositories(db: SqliteAdapter): Promise<Persistence
           'default_model_id',
           'workspace_path',
           'soul',
+          'soul_override_enabled',
+          'agents',
+          'agents_override_enabled',
           'created_at',
           'updated_at',
           'sort_seq'
         ], [
           category.id,
           category.name,
-          category.defaultModelId,
-          category.workspacePath,
-          category.soul,
+          category.defaultModelId ?? '',
+          category.workspacePath ?? '',
+          category.soul ?? '',
+          category.soulOverrideEnabled ? 1 : 0,
+          category.agents ?? '',
+          category.agentsOverrideEnabled ? 1 : 0,
           category.createdAt,
           category.updatedAt,
           nextSeq()

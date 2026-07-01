@@ -1304,13 +1304,13 @@ describe('renderer App', () => {
   it('opens and saves session category settings from the category context menu', async () => {
     const user = userEvent.setup()
     listSessionCategories.mockResolvedValueOnce([
-      { id: 'category-product', name: '产品图', defaultModelId: 'deepseek-v4-flash', workspacePath: 'C:/old', soul: '旧 Soul', createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:00.000Z' }
+      { id: 'category-product', name: '产品图', defaultModelId: 'deepseek-v4-flash', workspacePath: 'C:/old', soul: '旧 Soul', soulOverrideEnabled: true, agents: '旧 Agents', agentsOverrideEnabled: true, createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:00.000Z' }
     ])
     listSessions.mockResolvedValueOnce([
       { id: 'session-product', title: 'Product chat', status: 'active', categoryId: 'category-product', outputMode: 'markdown', createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:00.000Z' }
     ] as any)
     selectDirectory.mockResolvedValueOnce({ canceled: false, path: 'C:/new-workspace' })
-    updateSessionCategory.mockResolvedValueOnce({ id: 'category-product', name: '产品�?', defaultModelId: 'gpt-4o', workspacePath: 'C:/new-workspace', soul: '新的分类 Soul', createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:01.000Z' } as any)
+    updateSessionCategory.mockResolvedValueOnce({ id: 'category-product', name: '产品图', defaultModelId: 'gpt-4o', workspacePath: 'C:/new-workspace', soul: '新的分类 Soul', soulOverrideEnabled: true, agents: '新的分类 Agents', agentsOverrideEnabled: true, createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:01.000Z' } as any)
 
     render(<App />)
 
@@ -1322,6 +1322,7 @@ describe('renderer App', () => {
     expect(screen.getByRole('button', { name: '默认模型' })).toHaveTextContent('DeepSeek/deepseek-v4-flash')
     expect(screen.getByText('C:/old')).toBeInTheDocument()
     expect(screen.getByLabelText('Soul 设置')).toHaveValue('旧 Soul')
+    expect(screen.getByLabelText('Agents 配置')).toHaveValue('旧 Agents')
 
     await user.click(screen.getByRole('button', { name: '选择' }))
     expect(updateSessionCategory).not.toHaveBeenCalled()
@@ -1332,13 +1333,18 @@ describe('renderer App', () => {
     await user.click(await screen.findByRole('option', { name: 'OpenAI/gpt-4o' }))
     await user.clear(screen.getByLabelText('Soul 设置'))
     await user.type(screen.getByLabelText('Soul 设置'), '新的分类 Soul')
+    await user.clear(screen.getByLabelText('Agents 配置'))
+    await user.type(screen.getByLabelText('Agents 配置'), '新的分类 Agents')
     await user.click(screen.getByRole('button', { name: '保存' }))
 
     await waitFor(() => expect(updateSessionCategory).toHaveBeenLastCalledWith({
       id: 'category-product',
       defaultModelId: 'gpt-4o',
       workspacePath: 'C:/new-workspace',
-      soul: '新的分类 Soul'
+      soul: '新的分类 Soul',
+      soulOverrideEnabled: true,
+      agents: '新的分类 Agents',
+      agentsOverrideEnabled: true
     }))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: '产品图' })).not.toBeInTheDocument())
   })
@@ -1349,7 +1355,7 @@ describe('renderer App', () => {
       { id: 'category-product', name: '产品图', createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:00.000Z' }
     ])
     listSessions.mockResolvedValueOnce([])
-    updateSessionCategory.mockResolvedValueOnce({ id: 'category-product', name: '产品图', soul: '新的分类 Soul', createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:01.000Z' } as any)
+    updateSessionCategory.mockResolvedValueOnce({ id: 'category-product', name: '产品图', soul: '新的分类 Soul', soulOverrideEnabled: true, agents: '', agentsOverrideEnabled: false, createdAt: '2026-06-26T00:00:00.000Z', updatedAt: '2026-06-26T00:00:01.000Z' } as any)
     createSession.mockResolvedValueOnce({
       id: 'session-new-product',
       title: 'New chat',
@@ -1367,6 +1373,7 @@ describe('renderer App', () => {
     await user.click(within(screen.getByRole('menu', { name: '分类操作' })).getByRole('menuitem', { name: '设置' }))
     expect(within(screen.getByLabelText('实体列表')).getByRole('heading', { name: '产品图' })).toBeInTheDocument()
 
+    await user.click(screen.getByRole('switch', { name: 'Soul 设置覆盖开关' }))
     await user.type(await screen.findByLabelText('Soul 设置'), '新的分类 Soul')
     await user.click(screen.getByRole('button', { name: '保存' }))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: '产品图' })).not.toBeInTheDocument())
@@ -2295,15 +2302,16 @@ describe('renderer App', () => {
     expect(screen.getByLabelText('主工作区').parentElement?.style.getPropertyValue('--hesper-font-size')).toBe('16px')
   })
 
-  it('opens soul settings and persists the soul text', async () => {
+  it('opens Agent Core settings and persists soul and agents text', async () => {
     const user = userEvent.setup()
-    let storedSettings: { defaultModelId: string; defaultOutputMode: 'markdown' | 'html'; themeMode: 'system' | 'light' | 'dark'; themeId: 'hesper' | 'catppuccin' | 'dracula' | 'tokyo-night'; fontSize: number; soul: string } = {
+    let storedSettings: { defaultModelId: string; defaultOutputMode: 'markdown' | 'html'; themeMode: 'system' | 'light' | 'dark'; themeId: 'hesper' | 'catppuccin' | 'dracula' | 'tokyo-night'; fontSize: number; soul: string; agents: string } = {
       defaultModelId: 'mock/hesper-fast',
       defaultOutputMode: 'markdown',
       themeMode: 'dark',
       themeId: 'hesper',
       fontSize: 14,
-      soul: ''
+      soul: '',
+      agents: ''
     }
     getSettings.mockImplementation(async () => storedSettings)
     updateSettings.mockImplementation(async (input) => {
@@ -2314,19 +2322,23 @@ describe('renderer App', () => {
     render(<App />)
 
     await user.click(await screen.findByRole('button', { name: '设置' }))
-    await user.click(screen.getByRole('button', { name: 'SOUL 设置' }))
+    await user.click(screen.getByRole('button', { name: 'Agent Core 设置' }))
 
-    expect(screen.getByRole('region', { name: 'SOUL 设置面板' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Agent Core 设置面板' })).toBeInTheDocument()
     expect(screen.getByText('设置主 Agent 的身份、口吻和行为偏好。')).toBeInTheDocument()
+    expect(screen.getByText('设置主 Agent 可读取的 agents 配置信息。')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: '编辑' }))
-
+    await user.click(screen.getByRole('button', { name: '编辑 Soul' }))
     const soulInput = screen.getByLabelText('身份设定')
     await user.type(soulInput, '你是耐心的代码助手。')
-
     expect(soulInput).toHaveValue('你是耐心的代码助手。')
     await waitFor(() => expect(updateSettings).toHaveBeenCalledWith({ soul: '你是耐心的代码助手。' }))
-    expect(updateSettings).toHaveBeenCalledTimes(1)
+
+    await user.click(screen.getByRole('button', { name: '编辑 Agents' }))
+    const agentsInput = screen.getByLabelText('Agents 配置')
+    await user.type(agentsInput, '使用全局 agents 配置。')
+    expect(agentsInput).toHaveValue('使用全局 agents 配置。')
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledWith({ agents: '使用全局 agents 配置。' }))
   })
 
   it('loads the active session conversation history after sessions load and renders persisted messages', async () => {

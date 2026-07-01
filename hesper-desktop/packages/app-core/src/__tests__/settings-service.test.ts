@@ -66,7 +66,8 @@ describe('createSettingsService', () => {
       themeMode: 'system',
       themeId: 'hesper',
       fontSize: 14,
-      soul: ''
+      soul: '',
+      agents: ''
     })
   })
 
@@ -80,7 +81,8 @@ describe('createSettingsService', () => {
       themeMode: 'dark',
       themeId: 'dracula',
       fontSize: 16,
-      soul: 'Helpful, calm, and precise.'
+      soul: 'Helpful, calm, and precise.',
+      agents: 'Use local worker agents for bounded tasks.'
     })
 
     const second = createSettingsService({ persistence })
@@ -90,7 +92,8 @@ describe('createSettingsService', () => {
       themeMode: 'dark',
       themeId: 'dracula',
       fontSize: 16,
-      soul: 'Helpful, calm, and precise.'
+      soul: 'Helpful, calm, and precise.',
+      agents: 'Use local worker agents for bounded tasks.'
     })
   })
 
@@ -101,7 +104,7 @@ describe('createSettingsService', () => {
     const firstUpdate = service.updateSettings({ defaultModelId: 'deepseek-chat' })
     await waitForExpectation(() => expect(saveSpy).toHaveBeenCalledTimes(1))
 
-    const secondUpdate = service.updateSettings({ themeMode: 'dark', themeId: 'tokyo-night', soul: 'Curious, calm, and steady.' })
+    const secondUpdate = service.updateSettings({ themeMode: 'dark', themeId: 'tokyo-night', soul: 'Curious, calm, and steady.', agents: 'Prefer review workers for risky diffs.' })
     expect(getSpy).toHaveBeenCalledTimes(1)
 
     releaseFirstSave()
@@ -113,7 +116,8 @@ describe('createSettingsService', () => {
       themeMode: 'dark',
       themeId: 'tokyo-night',
       fontSize: 14,
-      soul: 'Curious, calm, and steady.'
+      soul: 'Curious, calm, and steady.',
+      agents: 'Prefer review workers for risky diffs.'
     })
   })
 
@@ -139,7 +143,7 @@ describe('createSettingsService', () => {
     const firstUpdate = service.updateSettings({ defaultModelId: 'broken-model' })
     await waitForExpectation(() => expect(settings.save).toHaveBeenCalledTimes(1))
 
-    const secondUpdate = service.updateSettings({ soul: 'Resilient, calm, and focused.' })
+    const secondUpdate = service.updateSettings({ soul: 'Resilient, calm, and focused.', agents: '' })
     expect(settings.get).toHaveBeenCalledTimes(1)
 
     rejectFirstSave(new Error('save failed'))
@@ -152,7 +156,8 @@ describe('createSettingsService', () => {
       themeMode: 'system',
       themeId: 'hesper',
       fontSize: 14,
-      soul: 'Resilient, calm, and focused.'
+      soul: 'Resilient, calm, and focused.',
+      agents: ''
     })
     await expect(service.getSettings()).resolves.toEqual({
       defaultModelId: '',
@@ -160,7 +165,8 @@ describe('createSettingsService', () => {
       themeMode: 'system',
       themeId: 'hesper',
       fontSize: 14,
-      soul: 'Resilient, calm, and focused.'
+      soul: 'Resilient, calm, and focused.',
+      agents: ''
     })
   })
 })

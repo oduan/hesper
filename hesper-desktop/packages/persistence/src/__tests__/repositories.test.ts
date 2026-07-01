@@ -490,6 +490,9 @@ describe('persistence repositories', () => {
       defaultModelId: 'deepseek-chat',
       workspacePath: 'C:/work/product',
       soul: '',
+      soulOverrideEnabled: true,
+      agents: 'Category agents.',
+      agentsOverrideEnabled: true,
       createdAt: now,
       updatedAt: now
     })
@@ -504,9 +507,9 @@ describe('persistence repositories', () => {
     })
 
     await expect(db.sessionCategories.list()).resolves.toEqual([
-      { id: 'category-product', name: '产品图', defaultModelId: 'deepseek-chat', workspacePath: 'C:/work/product', soul: '', createdAt: now, updatedAt: now }
+      { id: 'category-product', name: '产品图', defaultModelId: 'deepseek-chat', workspacePath: 'C:/work/product', soul: '', soulOverrideEnabled: true, agents: 'Category agents.', agentsOverrideEnabled: true, createdAt: now, updatedAt: now }
     ])
-    await expect(db.sessionCategories.get('category-product')).resolves.toMatchObject({ name: '产品图', defaultModelId: 'deepseek-chat', workspacePath: 'C:/work/product', soul: '' })
+    await expect(db.sessionCategories.get('category-product')).resolves.toMatchObject({ name: '产品图', defaultModelId: 'deepseek-chat', workspacePath: 'C:/work/product', soul: '', soulOverrideEnabled: true, agents: 'Category agents.', agentsOverrideEnabled: true })
     await expect(db.sessions.get('session-product')).resolves.toMatchObject({ categoryId: 'category-product' })
   })
 
@@ -533,12 +536,14 @@ describe('persistence repositories', () => {
     expect(session?.isMarked).toBeUndefined()
     expect(session?.soul).toBeUndefined()
   })
-
   it('clears session category ids when deleting a session category', async () => {
     const db = await createInMemoryPersistence()
     await db.sessionCategories.save({
       id: 'category-product',
       name: '产品图',
+      soulOverrideEnabled: false,
+      agents: '',
+      agentsOverrideEnabled: false,
       createdAt: now,
       updatedAt: now
     })
@@ -736,6 +741,7 @@ describe('persistence repositories', () => {
       themeId: 'dracula',
       fontSize: 16,
       soul: 'Helpful, calm, and precise.',
+      agents: 'Use worker agents for reviews.',
       updatedAt: now
     })
 
@@ -751,6 +757,7 @@ describe('persistence repositories', () => {
         themeId: 'dracula',
         fontSize: 16,
         soul: 'Helpful, calm, and precise.',
+        agents: 'Use worker agents for reviews.',
         updatedAt: now
       })
       reopened.close?.()
@@ -772,6 +779,7 @@ describe('persistence repositories', () => {
         themeId: 'hesper',
         fontSize: 16,
         soul: '',
+        agents: '',
         updatedAt: now
       })
       migrated.close?.()
@@ -780,7 +788,7 @@ describe('persistence repositories', () => {
     }
   })
 
-  it('migrates legacy app settings rows with a default empty soul', async () => {
+  it('migrates legacy app settings rows with default empty agent core text', async () => {
     const tempFile = path.join(os.tmpdir(), `hesper-legacy-settings-${Date.now()}.sqlite`)
     fs.writeFileSync(tempFile, await createLegacySettingsDatabaseBytes())
 
@@ -793,6 +801,7 @@ describe('persistence repositories', () => {
         themeId: 'hesper',
         fontSize: 16,
         soul: '',
+        agents: '',
         updatedAt: now
       })
       migrated.close?.()
@@ -1341,6 +1350,9 @@ describe('persistence repositories', () => {
     await migrated.sessionCategories.save({
       id: 'category-avatar',
       name: '头像',
+      soulOverrideEnabled: false,
+      agents: '',
+      agentsOverrideEnabled: false,
       createdAt: now,
       updatedAt: now
     })

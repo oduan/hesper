@@ -27,7 +27,7 @@ export type SessionCategoryListItem = {
   updatedAt?: string
 }
 
-export type SettingsCategory = 'ai' | 'appearance' | 'ssh' | 'soul'
+export type SettingsCategory = 'ai' | 'appearance' | 'ssh' | 'agent-core'
 
 export type EntityListPaneProps = {
   title?: string
@@ -870,7 +870,7 @@ function ToolEnableSwitch({ enabled, pending, label, onToggle }: { enabled: bool
 const settingsCategories: Array<{ id: SettingsCategory; title: string; label: string; description: string }> = [
   { id: 'ai', title: 'AI', label: 'AI 设置', description: '模型、思考、连接' },
   { id: 'ssh', title: 'SSH', label: 'SSH 设置', description: '密钥、主机、远程连接' },
-  { id: 'soul', title: 'SOUL', label: 'SOUL 设置', description: '身份设定' },
+  { id: 'agent-core', title: 'Agent Core', label: 'Agent Core 设置', description: 'Soul、Agents 配置' },
   { id: 'appearance', title: '外观', label: '外观设置', description: '字体大小、亮色与暗色' }
 ]
 

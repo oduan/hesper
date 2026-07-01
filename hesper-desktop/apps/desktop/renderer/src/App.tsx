@@ -8,7 +8,7 @@ import type { AppSettings, CreateSshKeyInput, CreateSshServerInput, DraftAttachm
 import { AppearanceSettingsPanel } from './appearance-settings-panel'
 import { ProviderSettingsPanel } from './provider-settings-panel'
 import { createShortcutHandler } from './shortcuts'
-import { SoulSettingsPanel } from './soul-settings-panel'
+import { AgentCoreSettingsPanel } from './agent-core-settings-panel'
 import { SshSettingsPanel } from './ssh-settings-panel'
 import { ToolDetailsPanel } from './tool-details-panel'
 import { RolesPanel } from './roles-panel'
@@ -47,7 +47,7 @@ type GitUiStateBySession = Record<string, {
   error?: string | undefined
 }>
 
-type SettingsCategory = 'ai' | 'appearance' | 'ssh' | 'soul'
+type SettingsCategory = 'ai' | 'appearance' | 'ssh' | 'agent-core'
 
 const defaultAppSettings: AppSettings = {
   defaultModelId: '',
@@ -55,7 +55,8 @@ const defaultAppSettings: AppSettings = {
   themeMode: 'system',
   themeId: defaultAppThemeId,
   fontSize: 14,
-  soul: ''
+  soul: '',
+  agents: ''
 }
 
 const appBrandName = import.meta.env.MODE === 'development' ? 'Hesper-dev' : 'Hesper'
@@ -1891,7 +1892,10 @@ function AppContent() {
         id: categoryId,
         defaultModelId: value.defaultModelId,
         workspacePath: value.workspacePath,
-        soul: value.soul
+        soul: value.soul,
+        soulOverrideEnabled: value.soulOverrideEnabled,
+        agents: value.agents,
+        agentsOverrideEnabled: value.agentsOverrideEnabled
       })
       dispatch({ type: 'sessionCategory.updated', category })
       setActiveSessionCategorySettingsId(undefined)
@@ -2154,6 +2158,9 @@ function AppContent() {
           defaultModelId={activeSessionCategorySettings.defaultModelId ?? ''}
           workspacePath={activeSessionCategorySettings.workspacePath ?? ''}
           soul={activeSessionCategorySettings.soul ?? ''}
+          soulOverrideEnabled={activeSessionCategorySettings.soulOverrideEnabled ?? false}
+          agents={activeSessionCategorySettings.agents ?? ''}
+          agentsOverrideEnabled={activeSessionCategorySettings.agentsOverrideEnabled ?? false}
           pending={categorySettingsPending}
           {...(categorySettingsError ? { error: categorySettingsError } : {})}
           onSelectWorkspace={selectSessionCategorySettingsWorkspace}
@@ -2181,8 +2188,8 @@ function AppContent() {
               onUpdateServer={updateSshServer}
               onDeleteServer={deleteSshServer}
             />
-          ) : activeSettingsCategory === 'soul' ? (
-            <SoulSettingsPanel settings={appSettings} {...(settingsError ? { error: settingsError } : {})} onUpdate={updateAppSettings} />
+          ) : activeSettingsCategory === 'agent-core' ? (
+            <AgentCoreSettingsPanel settings={appSettings} {...(settingsError ? { error: settingsError } : {})} onUpdate={updateAppSettings} />
           ) : (
             <ProviderSettingsPanel onModelRegistryChanged={refreshSessionModelOptions} />
           )
@@ -2416,7 +2423,8 @@ function applySettingsPatch(settings: AppSettings, patch: UpdateSettingsInput): 
     ...(patch.themeMode !== undefined ? { themeMode: patch.themeMode } : {}),
     ...(patch.themeId !== undefined ? { themeId: patch.themeId } : {}),
     ...(patch.fontSize !== undefined ? { fontSize: patch.fontSize } : {}),
-    ...(patch.soul !== undefined ? { soul: patch.soul } : {})
+    ...(patch.soul !== undefined ? { soul: patch.soul } : {}),
+    ...(patch.agents !== undefined ? { agents: patch.agents } : {})
   }
 }
 

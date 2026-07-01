@@ -53,8 +53,8 @@ describe('session category service', () => {
   it('lists categories from persistence', async () => {
     const persistence = await createInMemoryPersistence()
     const categories = createSessionCategoryService(persistence)
-    const product = { id: 'category-product', name: '产品图', createdAt: now, updatedAt: now }
-    const avatar = { id: 'category-avatar', name: '头像', createdAt: now, updatedAt: now }
+    const product = { id: 'category-product', name: '产品图', defaultModelId: '', workspacePath: '', soul: '', soulOverrideEnabled: false, agents: '', agentsOverrideEnabled: false, createdAt: now, updatedAt: now }
+    const avatar = { id: 'category-avatar', name: '头像', defaultModelId: '', workspacePath: '', soul: '', soulOverrideEnabled: false, agents: '', agentsOverrideEnabled: false, createdAt: now, updatedAt: now }
     await persistence.sessionCategories.save(product)
     await persistence.sessionCategories.save(avatar)
 

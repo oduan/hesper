@@ -891,6 +891,9 @@ describe('ui components', () => {
         defaultModelId="deepseek-v4-flash"
         workspacePath="C:/work/product"
         soul="分类 Soul"
+        soulOverrideEnabled={false}
+        agents="分类 Agents"
+        agentsOverrideEnabled={false}
         modelOptionGroups={[
           { id: 'deepseek', label: 'DeepSeek', options: [{ value: 'deepseek-v4-flash', label: 'DeepSeek/deepseek-v4-flash' }] },
           { id: 'openai', label: 'OpenAI', options: [{ value: 'gpt-4o', label: 'OpenAI/gpt-4o' }] }
@@ -912,7 +915,12 @@ describe('ui components', () => {
     expect(modelButton).toHaveTextContent('DeepSeek/deepseek-v4-flash')
     expect(modelShell).toHaveClass('hesper-category-settings-model-select')
     expect(modelShell).toHaveStyle({ background: themeTokens.color.surface, borderRadius: themeTokens.radius.md })
-    expect(screen.getByLabelText('Soul 设置')).toHaveClass('hesper-category-settings-control')
+    expect(screen.queryByLabelText('Soul 设置')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Agents 配置')).not.toBeInTheDocument()
+    const soulSwitch = screen.getByRole('switch', { name: 'Soul 设置覆盖开关' })
+    const agentsSwitch = screen.getByRole('switch', { name: 'Agents 配置覆盖开关' })
+    expect(soulSwitch).toHaveAttribute('aria-checked', 'false')
+    expect(agentsSwitch).toHaveAttribute('aria-checked', 'false')
     expect(screen.getByRole('button', { name: '选择' })).toHaveClass('hesper-category-settings-button')
     expect(dialog.parentElement?.querySelector('style')).toHaveTextContent('outline: none !important')
 
@@ -924,12 +932,33 @@ describe('ui components', () => {
     await user.click(await screen.findByRole('option', { name: 'OpenAI/gpt-4o' }))
     await user.click(screen.getByRole('button', { name: '清除' }))
     await user.click(screen.getByRole('button', { name: '选择' }))
-    await user.clear(screen.getByLabelText('Soul 设置'))
-    await user.type(screen.getByLabelText('Soul 设置'), '新的分类 Soul')
+    await user.click(soulSwitch)
+    await user.click(agentsSwitch)
+    const soulTextarea = screen.getByLabelText('Soul 设置')
+    const agentsTextarea = screen.getByLabelText('Agents 配置')
+    const dialogBody = dialog.querySelector('.hesper-theme-scrollbar')
+    expect(soulTextarea.closest('.hesper-category-settings-textarea-scroll')).toBeNull()
+    expect(agentsTextarea.closest('.hesper-category-settings-textarea-scroll')).toBeNull()
+    expect(soulTextarea).toHaveClass('hesper-category-settings-control', 'hesper-theme-scrollbar')
+    expect(agentsTextarea).toHaveClass('hesper-category-settings-control', 'hesper-theme-scrollbar')
+    expect(dialogBody).toHaveClass('hesper-theme-scrollbar')
+    expect(dialogBody).toHaveStyle('overflow-y: auto')
+    expect(soulTextarea).toHaveStyle('resize: none; min-height: 128px; max-height: 384px; overflow-y: hidden')
+    expect(agentsTextarea).toHaveStyle('resize: none; min-height: 128px; max-height: 384px; overflow-y: hidden')
+    const scrollableDialogBody = dialogBody as HTMLElement
+    scrollableDialogBody.scrollTop = 180
+    Object.defineProperty(soulTextarea, 'scrollHeight', { configurable: true, value: 420 })
+    fireEvent.change(soulTextarea, { target: { value: '较长的分类 Soul\n继续输入' } })
+    expect(scrollableDialogBody.scrollTop).toBe(180)
+    expect(soulTextarea).toHaveStyle('height: 384px; overflow-y: auto')
+    await user.clear(soulTextarea)
+    await user.type(soulTextarea, '新的分类 Soul')
+    await user.clear(agentsTextarea)
+    await user.type(agentsTextarea, '新的分类 Agents')
     await user.click(screen.getByRole('button', { name: '保存' }))
 
     expect(onSelectWorkspace).toHaveBeenCalledTimes(1)
-    expect(onSave).toHaveBeenCalledWith({ defaultModelId: 'gpt-4o', workspacePath: 'C:/work/updated', soul: '新的分类 Soul' })
+    expect(onSave).toHaveBeenCalledWith({ defaultModelId: 'gpt-4o', workspacePath: 'C:/work/updated', soul: '新的分类 Soul', soulOverrideEnabled: true, agents: '新的分类 Agents', agentsOverrideEnabled: true })
   })
 
   it('keeps the category settings dialog open after dragging from the panel to the overlay', () => {
