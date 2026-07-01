@@ -3875,7 +3875,8 @@ plain text
     expect(conversationScroller.scrollTop).toBe(420)
   })
 
-  it('lets output block edge wheels continue scrolling the conversation while containing inner scroll', () => {
+  it('contains same-gesture output block edge wheels before letting a new gesture scroll the conversation', () => {
+    vi.useFakeTimers()
     const messages = [
       {
         id: 'edge-user-1',
@@ -3915,16 +3916,31 @@ plain text
 
     conversationScroller.scrollTop = 50
     outputScroller.scrollTop = 120
-    fireEvent.wheel(outputScroller, { deltaY: 64 })
+    fireEvent.wheel(outputScroller, { deltaY: 240 })
+    outputScroller.scrollTop = 360
     expect(conversationScroller.scrollTop).toBe(50)
 
-    conversationScroller.scrollTop = 140
-    outputScroller.scrollTop = 360
     fireEvent.wheel(outputScroller, { deltaY: 80 })
-    expect(conversationScroller.scrollTop).toBe(220)
+    expect(conversationScroller.scrollTop).toBe(50)
+
+    act(() => {
+      vi.advanceTimersByTime(350)
+    })
+    fireEvent.wheel(outputScroller, { deltaY: 80 })
+    expect(conversationScroller.scrollTop).toBe(130)
 
     conversationScroller.scrollTop = 300
+    outputScroller.scrollTop = 80
+    fireEvent.wheel(outputScroller, { deltaY: -160 })
     outputScroller.scrollTop = 0
+    expect(conversationScroller.scrollTop).toBe(300)
+
+    fireEvent.wheel(outputScroller, { deltaY: -90 })
+    expect(conversationScroller.scrollTop).toBe(300)
+
+    act(() => {
+      vi.advanceTimersByTime(350)
+    })
     fireEvent.wheel(outputScroller, { deltaY: -90 })
     expect(conversationScroller.scrollTop).toBe(210)
   })

@@ -85,12 +85,19 @@ type AnchorEntry = {
   label: string
 }
 
+type OutputWheelBoundaryLock = {
+  outputScroller: HTMLElement
+  direction: 'up' | 'down'
+}
+
+const outputWheelGestureIdleMs = 160
+
+const userMessageAnchorSelector = '[data-hesper-user-message-anchor="true"]'
+
 type LocalFilePreviewState =
   | { status: 'loading'; path: string }
   | { status: 'loaded'; path: string; preview: LocalFilePreview }
   | { status: 'error'; path: string; error: string }
-
-const userMessageAnchorSelector = '[data-hesper-user-message-anchor="true"]'
 
 let globalCtrlWheelListenerRefCount = 0
 let globalCtrlWheelHandler: ((event: WheelEvent) => void) | undefined
@@ -394,6 +401,8 @@ export function ConversationView({
   const localFilePreviewRequestRef = useRef(0)
   const pinnedToBottomRef = useRef(true)
   const didMeasureContentRef = useRef(false)
+  const outputWheelBoundaryLockRef = useRef<OutputWheelBoundaryLock | null>(null)
+  const outputWheelBoundaryLockTimerRef = useRef<number | undefined>(undefined)
   const orderedMessages = useMemo(() => sortChronologically(messages), [messages])
   const orderedSteps = useMemo(() => sortChronologically(steps), [steps])
   const orderedStepsByRun = useMemo(() => {
@@ -561,6 +570,25 @@ export function ConversationView({
     updateMessagesScrollState()
   }, [updateMessagesScrollState])
 
+  const resetOutputWheelBoundaryLock = useCallback(() => {
+    outputWheelBoundaryLockRef.current = null
+    if (outputWheelBoundaryLockTimerRef.current !== undefined) {
+      window.clearTimeout(outputWheelBoundaryLockTimerRef.current)
+      outputWheelBoundaryLockTimerRef.current = undefined
+    }
+  }, [])
+
+  const refreshOutputWheelBoundaryLock = useCallback((outputScroller: HTMLElement, direction: OutputWheelBoundaryLock['direction']) => {
+    outputWheelBoundaryLockRef.current = { outputScroller, direction }
+    if (outputWheelBoundaryLockTimerRef.current !== undefined) {
+      window.clearTimeout(outputWheelBoundaryLockTimerRef.current)
+    }
+    outputWheelBoundaryLockTimerRef.current = window.setTimeout(() => {
+      outputWheelBoundaryLockRef.current = null
+      outputWheelBoundaryLockTimerRef.current = undefined
+    }, outputWheelGestureIdleMs)
+  }, [])
+
   const handleMessagesScroll = () => {
     updateMessagesScrollState()
   }
@@ -583,9 +611,32 @@ export function ConversationView({
 
     const outputScroller = getOutputScrollArea(event.target)
     if (outputScroller) {
-      if (findNearestScrollConsumerWithinOutput(event.target, outputScroller, event.deltaX, event.deltaY) || !hasUsableScrollMetrics(outputScroller)) {
+      const verticalDirection = event.deltaY < 0 ? 'up' : event.deltaY > 0 ? 'down' : undefined
+      const scrollConsumer = findNearestScrollConsumerWithinOutput(event.target, outputScroller, event.deltaX, event.deltaY)
+      if (scrollConsumer || !hasUsableScrollMetrics(outputScroller)) {
+        if (scrollConsumer && verticalDirection) {
+          refreshOutputWheelBoundaryLock(outputScroller, verticalDirection)
+        } else {
+          resetOutputWheelBoundaryLock()
+        }
         return
       }
+
+      if (verticalDirection) {
+        const activeLock = outputWheelBoundaryLockRef.current
+        if (activeLock?.outputScroller === outputScroller && activeLock.direction === verticalDirection) {
+          event.preventDefault()
+          event.stopPropagation()
+          refreshOutputWheelBoundaryLock(outputScroller, verticalDirection)
+          return
+        }
+
+        refreshOutputWheelBoundaryLock(outputScroller, verticalDirection)
+      } else {
+        resetOutputWheelBoundaryLock()
+      }
+    } else {
+      resetOutputWheelBoundaryLock()
     }
 
     event.preventDefault()
@@ -629,6 +680,10 @@ export function ConversationView({
   }, [loadLocalFilePreview])
 
   useEffect(() => retainGlobalCtrlWheelListener(), [])
+
+  useEffect(() => () => {
+    resetOutputWheelBoundaryLock()
+  }, [resetOutputWheelBoundaryLock])
 
   useEffect(() => () => {
     localFilePreviewRequestRef.current += 1
