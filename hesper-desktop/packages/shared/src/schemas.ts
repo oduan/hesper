@@ -121,6 +121,9 @@ export const modelThinkingLevelSchema = z.enum(['low', 'medium', 'high', 'xhigh'
 const sessionCategoryBaseSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
+  defaultModelId: z.string().optional(),
+  workspacePath: z.string().optional(),
+  soul: z.string().optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime()
 })
@@ -136,6 +139,7 @@ const sessionBaseSchema = z.object({
   workspacePath: z.string().optional(),
   defaultModelId: z.string().optional(),
   providerId: z.string().min(1).optional(),
+  soul: z.string().optional(),
   modelId: z.string().min(1).optional(),
   roleId: z.string().min(1).optional(),
   enabledSkillIds: z.array(z.string().min(1)).optional(),

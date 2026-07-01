@@ -86,6 +86,7 @@ export const createSessionInputSchema = z.object({
   workspacePath: z.string().optional(),
   defaultModelId: z.string().optional(),
   categoryId: z.string().optional(),
+  soul: z.string().optional(),
   outputMode: z.enum(['markdown', 'html']).optional()
 })
 
@@ -115,7 +116,8 @@ export const workerInvocationsListByParentRunInputSchema = z.object({
 }).strict()
 export const localFilePreviewInputSchema = z.object({
   sessionId: nonEmptyStringSchema,
-  path: nonEmptyStringSchema
+  path: nonEmptyStringSchema,
+  workspacePath: nonEmptyStringSchema.optional()
 }).strict()
 export const localFilePreviewResultSchema = localFilePreviewSchema
 
@@ -207,22 +209,26 @@ export const gitActionResultSchema = z.object({
 }).strict()
 
 export const gitSessionInputSchema = z.object({
-  sessionId: nonEmptyStringSchema
+  sessionId: nonEmptyStringSchema,
+  workspacePath: nonEmptyStringSchema.optional()
 }).strict()
 
 export const gitLogInputSchema = z.object({
   sessionId: nonEmptyStringSchema,
+  workspacePath: nonEmptyStringSchema.optional(),
   limit: z.number().int().min(1).max(500).optional(),
   offset: z.number().int().nonnegative().optional()
 }).strict()
 
 export const gitCommitInputSchema = z.object({
   sessionId: nonEmptyStringSchema,
+  workspacePath: nonEmptyStringSchema.optional(),
   commit: nonEmptyStringSchema
 }).strict()
 
 export const gitCreateBranchInputSchema = z.object({
   sessionId: nonEmptyStringSchema,
+  workspacePath: nonEmptyStringSchema.optional(),
   commit: nonEmptyStringSchema,
   branchName: nonEmptyStringSchema,
   checkout: z.boolean().optional()
@@ -230,12 +236,14 @@ export const gitCreateBranchInputSchema = z.object({
 
 export const gitCreateTagInputSchema = z.object({
   sessionId: nonEmptyStringSchema,
+  workspacePath: nonEmptyStringSchema.optional(),
   commit: nonEmptyStringSchema,
   tagName: nonEmptyStringSchema
 }).strict()
 
 export const gitCheckoutInputSchema = z.object({
   sessionId: nonEmptyStringSchema,
+  workspacePath: nonEmptyStringSchema.optional(),
   ref: nonEmptyStringSchema
 }).strict()
 
@@ -247,11 +255,17 @@ export const workerInvocationsResultSchema = z.array(workerAgentInvocationSchema
 
 export const sessionCategoryDtoSchema = sessionCategorySchema
 export const createSessionCategoryInputSchema = z.object({
-  name: z.string()
+  name: z.string(),
+  defaultModelId: z.string().optional(),
+  workspacePath: z.string().optional(),
+  soul: z.string().optional()
 }).strict()
 export const updateSessionCategoryInputSchema = z.object({
   id: nonEmptyStringSchema,
-  name: z.string()
+  name: z.string().optional(),
+  defaultModelId: z.string().optional(),
+  workspacePath: z.string().optional(),
+  soul: z.string().optional()
 }).strict()
 export const setSessionCategoryInputSchema = z.object({
   ids: z.array(nonEmptyStringSchema).min(1),

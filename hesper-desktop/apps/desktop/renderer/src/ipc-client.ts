@@ -457,14 +457,29 @@ export function createFallbackHesperApi(): HesperDesktopApi {
       list: async () => sessionCategories,
       create: async (input: CreateSessionCategoryInput) => {
         const timestamp = new Date().toISOString()
-        const category = { id: createId('session-category'), name: input.name.trim() || '新分类', createdAt: timestamp, updatedAt: timestamp }
+        const category = withDefined({
+          id: createId('session-category'),
+          name: input.name.trim() || '新分类',
+          defaultModelId: input.defaultModelId,
+          workspacePath: input.workspacePath,
+          soul: input.soul,
+          createdAt: timestamp,
+          updatedAt: timestamp
+        }) as SessionCategoryDto
         sessionCategories = [...sessionCategories, category]
         return category
       },
       update: async (input: UpdateSessionCategoryInput) => {
         const category = sessionCategories.find((candidate) => candidate.id === input.id)
         if (!category) throw new Error(`Session category not found: ${input.id}`)
-        const updated = { ...category, name: input.name.trim() || '新分类', updatedAt: new Date().toISOString() }
+        const updated = withDefined({
+          ...category,
+          ...(input.name !== undefined ? { name: input.name.trim() || '新分类' } : {}),
+          ...(input.defaultModelId !== undefined ? { defaultModelId: input.defaultModelId } : {}),
+          ...(input.workspacePath !== undefined ? { workspacePath: input.workspacePath } : {}),
+          ...(input.soul !== undefined ? { soul: input.soul } : {}),
+          updatedAt: new Date().toISOString()
+        }) as SessionCategoryDto
         sessionCategories = sessionCategories.map((candidate) => candidate.id === input.id ? updated : candidate)
         return updated
       },

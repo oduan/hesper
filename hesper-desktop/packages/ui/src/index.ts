@@ -1,6 +1,7 @@
 export * from './theme'
 export * from './layout/ActivityRail'
 export * from './layout/AppShell'
+export * from './layout/CategorySettingsDialog'
 export * from './layout/EntityListPane'
 export * from './layout/TitleBar'
 export * from './conversation/Composer'

@@ -6,6 +6,7 @@ import type { AgentRun, LocalFilePreview, Message, MessageAttachment, RunStep, S
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppShell } from '../layout/AppShell'
 import { ActivityRail } from '../layout/ActivityRail'
+import { CategorySettingsDialog } from '../layout/CategorySettingsDialog'
 import { Composer, type ComposerDraftAttachment, type ComposerSkillMention } from '../conversation/Composer'
 import { ConversationView, type ConversationGitPanelProps } from '../conversation/ConversationView'
 import { FullscreenOutput } from '../conversation/FullscreenOutput'
@@ -831,8 +832,9 @@ describe('ui components', () => {
     })
   })
 
-  it('opens category context menu for rename and delete', async () => {
+  it('opens category context menu for settings, rename, and delete', async () => {
     const user = userEvent.setup()
+    const onOpenSessionCategorySettings = vi.fn()
     const onRenameSessionCategory = vi.fn()
     const onDeleteSessionCategory = vi.fn(() => {
       expect(screen.queryByRole('menu', { name: '分类操作' })).not.toBeInTheDocument()
@@ -845,13 +847,19 @@ describe('ui components', () => {
         sessionsExpanded
         activeSection="sessions"
         title="所有会话"
+        onOpenSessionCategorySettings={onOpenSessionCategorySettings}
         onRenameSessionCategory={onRenameSessionCategory}
         onDeleteSessionCategory={onDeleteSessionCategory}
       />
     )
 
     fireEvent.contextMenu(screen.getByRole('button', { name: '产品图' }))
-    const menu = screen.getByRole('menu', { name: '分类操作' })
+    let menu = screen.getByRole('menu', { name: '分类操作' })
+    await user.click(within(menu).getByRole('menuitem', { name: '设置' }))
+    expect(onOpenSessionCategorySettings).toHaveBeenCalledWith('category-product')
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: '产品图' }))
+    menu = screen.getByRole('menu', { name: '分类操作' })
     await user.click(within(menu).getByRole('menuitem', { name: '重命名' }))
 
     const input = (await screen.findByLabelText('重命名分类')) as HTMLInputElement
@@ -869,6 +877,102 @@ describe('ui components', () => {
     await waitFor(() => {
       expect(onDeleteSessionCategory).toHaveBeenCalledWith('category-product')
     })
+  })
+
+  it('renders and saves category settings from the centered glass dialog', async () => {
+    const user = userEvent.setup()
+    const onSave = vi.fn()
+    const onClose = vi.fn()
+    const onSelectWorkspace = vi.fn(async () => 'C:/work/updated')
+
+    render(
+      <CategorySettingsDialog
+        category={{ id: 'category-product', name: '产品图' }}
+        defaultModelId="deepseek-v4-flash"
+        workspacePath="C:/work/product"
+        soul="分类 Soul"
+        modelOptionGroups={[
+          { id: 'deepseek', label: 'DeepSeek', options: [{ value: 'deepseek-v4-flash', label: 'DeepSeek/deepseek-v4-flash' }] },
+          { id: 'openai', label: 'OpenAI', options: [{ value: 'gpt-4o', label: 'OpenAI/gpt-4o' }] }
+        ]}
+        onSave={onSave}
+        onClose={onClose}
+        onSelectWorkspace={onSelectWorkspace}
+      />
+    )
+
+    const dialog = screen.getByRole('dialog', { name: '产品图' })
+    expect(dialog).toBeInTheDocument()
+    expect(dialog.parentElement).toHaveStyle({ position: 'fixed', alignItems: 'center', justifyContent: 'center' })
+    expect(dialog.previousElementSibling).toHaveStyle({ backdropFilter: 'blur(8px)' })
+    expect(screen.queryByText('分类设置')).not.toBeInTheDocument()
+    expect(dialog.style.background).toContain('linear-gradient')
+    const modelButton = screen.getByRole('button', { name: '默认模型' })
+    const modelShell = modelButton.parentElement?.parentElement
+    expect(modelButton).toHaveTextContent('DeepSeek/deepseek-v4-flash')
+    expect(modelShell).toHaveClass('hesper-category-settings-model-select')
+    expect(modelShell).toHaveStyle({ background: themeTokens.color.surface, borderRadius: themeTokens.radius.md })
+    expect(screen.getByLabelText('Soul 设置')).toHaveClass('hesper-category-settings-control')
+    expect(screen.getByRole('button', { name: '选择' })).toHaveClass('hesper-category-settings-button')
+    expect(dialog.parentElement?.querySelector('style')).toHaveTextContent('outline: none !important')
+
+    await user.click(modelButton)
+    const modelListbox = screen.getByRole('listbox', { name: '默认模型选项' })
+    expect(modelListbox).toHaveStyle({ zIndex: '2100', background: themeTokens.color.surfaceMuted })
+    expect(within(modelListbox).getByRole('option', { name: '未设置' })).toBeInTheDocument()
+    await user.hover(within(modelListbox).getByRole('button', { name: '连接 OpenAI' }))
+    await user.click(await screen.findByRole('option', { name: 'OpenAI/gpt-4o' }))
+    await user.click(screen.getByRole('button', { name: '清除' }))
+    await user.click(screen.getByRole('button', { name: '选择' }))
+    await user.clear(screen.getByLabelText('Soul 设置'))
+    await user.type(screen.getByLabelText('Soul 设置'), '新的分类 Soul')
+    await user.click(screen.getByRole('button', { name: '保存' }))
+
+    expect(onSelectWorkspace).toHaveBeenCalledTimes(1)
+    expect(onSave).toHaveBeenCalledWith({ defaultModelId: 'gpt-4o', workspacePath: 'C:/work/updated', soul: '新的分类 Soul' })
+  })
+
+  it('keeps the category settings dialog open after dragging from the panel to the overlay', () => {
+    const onClose = vi.fn()
+
+    render(
+      <CategorySettingsDialog
+        category={{ id: 'category-product', name: '产品' }}
+        modelOptions={['gpt-4o']}
+        onSave={() => undefined}
+        onClose={onClose}
+        onSelectWorkspace={() => undefined}
+      />
+    )
+
+    const dialog = screen.getByRole('dialog', { name: '产品' })
+    const overlay = screen.getByTestId('category-settings-overlay')
+    fireEvent.pointerDown(dialog)
+    fireEvent.pointerUp(overlay)
+
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('closes the category settings dialog from the overlay and Escape key', () => {
+    const onClose = vi.fn()
+
+    render(
+      <CategorySettingsDialog
+        category={{ id: 'category-product', name: '产品' }}
+        modelOptions={['gpt-4o']}
+        onSave={() => undefined}
+        onClose={onClose}
+        onSelectWorkspace={() => undefined}
+      />
+    )
+
+    const overlay = screen.getByTestId('category-settings-overlay')
+    fireEvent.pointerDown(overlay)
+    fireEvent.pointerUp(overlay)
+    expect(onClose).toHaveBeenCalledTimes(1)
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledTimes(2)
   })
 
   it('keeps session disclosure icons centered and switches state when collapsed', () => {

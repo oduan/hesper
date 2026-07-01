@@ -61,7 +61,7 @@ export class GitService {
   }
 
   async getState(input: GitSessionInput): Promise<GitRepositoryStateDto> {
-    const workspace = await this.resolveWorkspace(input.sessionId)
+    const workspace = await this.resolveWorkspace(input)
     const baseState = this.createNonRepositoryState(workspace)
 
     if (!workspace.workspacePath || !(await isExistingDirectory(workspace.workspacePath))) {
@@ -103,7 +103,7 @@ export class GitService {
   }
 
   async listLog(input: GitLogInput): Promise<GitLogResultDto> {
-    const { workspacePath } = await this.requireRepository(input.sessionId)
+    const { workspacePath } = await this.requireRepository(input)
     const limit = input.limit ?? DEFAULT_LOG_LIMIT
     const offset = input.offset ?? 0
     if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
@@ -135,7 +135,7 @@ export class GitService {
 
   async getCommit(input: GitCommitInput): Promise<GitCommitDetailDto> {
     validateRevision(input.commit, 'commit')
-    const { workspacePath } = await this.requireRepository(input.sessionId)
+    const { workspacePath } = await this.requireRepository(input)
     const details = await this.git(workspacePath, [
       'show',
       '-s',
@@ -172,10 +172,10 @@ export class GitService {
   async createBranch(input: GitCreateBranchInput): Promise<GitActionResultDto> {
     validateRefName(input.branchName, 'branch name')
     validateRevision(input.commit, 'commit')
-    const { workspacePath } = await this.requireRepository(input.sessionId)
+    const { workspacePath } = await this.requireRepository(input)
 
     if (input.checkout === true) {
-      const state = await this.getState({ sessionId: input.sessionId })
+      const state = await this.getState(input)
       if (state.dirty) {
         throw new Error('Cannot create and checkout branch with a dirty workspace. Commit, stash, or discard changes first.')
       }
@@ -183,7 +183,7 @@ export class GitService {
       return {
         success: true,
         message: `Created and checked out branch ${input.branchName}`,
-        state: await this.getState({ sessionId: input.sessionId })
+        state: await this.getState(input)
       }
     }
 
@@ -191,27 +191,27 @@ export class GitService {
     return {
       success: true,
       message: `Created branch ${input.branchName}`,
-      state: await this.getState({ sessionId: input.sessionId })
+      state: await this.getState(input)
     }
   }
 
   async createTag(input: GitCreateTagInput): Promise<GitActionResultDto> {
     validateRefName(input.tagName, 'tag name')
     validateRevision(input.commit, 'commit')
-    const { workspacePath } = await this.requireRepository(input.sessionId)
+    const { workspacePath } = await this.requireRepository(input)
 
     await this.git(workspacePath, ['tag', input.tagName, input.commit])
     return {
       success: true,
       message: `Created tag ${input.tagName}`,
-      state: await this.getState({ sessionId: input.sessionId })
+      state: await this.getState(input)
     }
   }
 
   async checkout(input: GitCheckoutInput): Promise<GitActionResultDto> {
     validateRevision(input.ref, 'ref')
-    const { workspacePath } = await this.requireRepository(input.sessionId)
-    const state = await this.getState({ sessionId: input.sessionId })
+    const { workspacePath } = await this.requireRepository(input)
+    const state = await this.getState(input)
     if (state.dirty) {
       throw new Error('Cannot checkout ref with a dirty workspace. Commit, stash, or discard changes first.')
     }
@@ -224,25 +224,26 @@ export class GitService {
     return {
       success: true,
       message: `Checked out ${input.ref}`,
-      state: await this.getState({ sessionId: input.sessionId })
+      state: await this.getState(input)
     }
   }
 
-  private async resolveWorkspace(sessionId: string): Promise<ResolvedWorkspace> {
-    const session = await this.sessionService.getSession(sessionId)
+  private async resolveWorkspace(input: GitSessionInput): Promise<ResolvedWorkspace> {
+    const session = await this.sessionService.getSession(input.sessionId)
     if (!session) {
-      throw new Error(`Session not found: ${sessionId}`)
+      throw new Error(`Session not found: ${input.sessionId}`)
     }
+    const workspacePath = input.workspacePath?.trim() || session.workspacePath?.trim() || undefined
     return {
-      sessionId,
-      ...(session.workspacePath ? { workspacePath: session.workspacePath } : {})
+      sessionId: input.sessionId,
+      ...(workspacePath ? { workspacePath } : {})
     }
   }
 
-  private async requireRepository(sessionId: string): Promise<RequiredWorkspace> {
-    const workspace = await this.resolveWorkspace(sessionId)
+  private async requireRepository(input: GitSessionInput): Promise<RequiredWorkspace> {
+    const workspace = await this.resolveWorkspace(input)
     if (!workspace.workspacePath) {
-      throw new Error(`Session has no workspacePath: ${sessionId}`)
+      throw new Error(`Session has no workspacePath: ${input.sessionId}`)
     }
     if (!(await isExistingDirectory(workspace.workspacePath))) {
       throw new Error(`Workspace path does not exist or is not a directory: ${workspace.workspacePath}`)
@@ -250,7 +251,7 @@ export class GitService {
     if (!(await this.isGitRepository(workspace.workspacePath))) {
       throw new Error(`Workspace is not a Git repository: ${workspace.workspacePath}`)
     }
-    return { sessionId, workspacePath: workspace.workspacePath }
+    return { sessionId: input.sessionId, workspacePath: workspace.workspacePath }
   }
 
   private createNonRepositoryState(workspace: ResolvedWorkspace): GitRepositoryStateDto {

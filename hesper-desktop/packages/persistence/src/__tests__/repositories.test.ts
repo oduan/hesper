@@ -228,11 +228,13 @@ INSERT INTO worker_agent_invocations (
 describe('persistence repositories', () => {
   it('creates and lists sessions by latest update without deleted sessions', async () => {
     const db = await createInMemoryPersistence()
-    await db.sessions.save({ id: 'session-1', title: 'Build hesper', status: 'active', outputMode: 'markdown', unreadCompletedAt: '2026-06-10T03:01:00.000Z', createdAt: now, updatedAt: '2026-06-10T03:01:00.000Z' })
+    await db.sessions.save({ id: 'session-1', title: 'Build hesper', status: 'active', outputMode: 'markdown', soul: 'Persistent session soul', unreadCompletedAt: '2026-06-10T03:01:00.000Z', createdAt: now, updatedAt: '2026-06-10T03:01:00.000Z' })
     await db.sessions.save({ id: 'session-2', title: 'Deleted session', status: 'deleted', outputMode: 'html', createdAt: now, updatedAt: '2026-06-10T03:03:00.000Z' })
     await db.sessions.save({ id: 'session-3', title: 'Recently touched', status: 'active', outputMode: 'markdown', createdAt: now, updatedAt: '2026-06-10T03:02:00.000Z' })
     const visible = await db.sessions.listVisible()
     expect(visible.map((session) => session.id)).toEqual(['session-3', 'session-1'])
+    expect(visible[0]!.soul).toBeUndefined()
+    expect(visible[1]!.soul).toBe('Persistent session soul')
     expect(visible[1]!.unreadCompletedAt).toBe('2026-06-10T03:01:00.000Z')
   })
 
@@ -443,6 +445,9 @@ describe('persistence repositories', () => {
     await db.sessionCategories.save({
       id: 'category-product',
       name: '产品图',
+      defaultModelId: 'deepseek-chat',
+      workspacePath: 'C:/work/product',
+      soul: '',
       createdAt: now,
       updatedAt: now
     })
@@ -457,9 +462,9 @@ describe('persistence repositories', () => {
     })
 
     await expect(db.sessionCategories.list()).resolves.toEqual([
-      { id: 'category-product', name: '产品图', createdAt: now, updatedAt: now }
+      { id: 'category-product', name: '产品图', defaultModelId: 'deepseek-chat', workspacePath: 'C:/work/product', soul: '', createdAt: now, updatedAt: now }
     ])
-    await expect(db.sessionCategories.get('category-product')).resolves.toMatchObject({ name: '产品图' })
+    await expect(db.sessionCategories.get('category-product')).resolves.toMatchObject({ name: '产品图', defaultModelId: 'deepseek-chat', workspacePath: 'C:/work/product', soul: '' })
     await expect(db.sessions.get('session-product')).resolves.toMatchObject({ categoryId: 'category-product' })
   })
 
@@ -484,6 +489,7 @@ describe('persistence repositories', () => {
 
     const session = await migrated.sessions.get('legacy-session')
     expect(session?.isMarked).toBeUndefined()
+    expect(session?.soul).toBeUndefined()
   })
 
   it('clears session category ids when deleting a session category', async () => {
