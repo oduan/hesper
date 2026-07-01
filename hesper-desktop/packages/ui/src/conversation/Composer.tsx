@@ -128,6 +128,7 @@ export function Composer({
   const workspaceButtonRef = useRef<HTMLButtonElement | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const skillOptionRefs = useRef<Array<HTMLButtonElement | null>>([])
+  const shouldScrollActiveSkillIntoViewRef = useRef(false)
   const value = controlledValue ?? internalValue
   const selectedSkillMentions = controlledSkillMentions ?? internalSkillMentions
   // sendSignal is edge-triggered; a non-zero value present at mount is historical and must not replay.
@@ -378,7 +379,12 @@ export function Composer({
   }, [activeSkillIndex, filteredSkills.length])
 
   useEffect(() => {
-    if (!showSkillMenu || !skillMenuPosition) return
+    if (!showSkillMenu || !skillMenuPosition) {
+      shouldScrollActiveSkillIntoViewRef.current = false
+      return
+    }
+    if (!shouldScrollActiveSkillIntoViewRef.current) return
+    shouldScrollActiveSkillIntoViewRef.current = false
     skillOptionRefs.current[activeSkillIndex]?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
   }, [activeSkillIndex, filteredSkills.length, showSkillMenu, skillMenuPosition])
 
@@ -388,7 +394,9 @@ export function Composer({
       return undefined
     }
 
-    const updateSkillMenuPosition = () => {
+    const updateSkillMenuPosition = (event?: Event) => {
+      const target = event?.target
+      if (target instanceof Element && target.closest('[data-hesper-skill-mention-menu="true"]')) return
       const root = composerRootRef.current
       if (!root) return
       const rect = root.getBoundingClientRect()
@@ -457,7 +465,13 @@ export function Composer({
     }
   }, [showWorkspaceMenu])
   const skillMenu = showSkillMenu && skillMenuPosition ? createPortal(
-    <div role="listbox" aria-label="技能提及建议" className="hesper-skill-mention-menu" style={{ ...skillMenuStyle, ...skillMenuPosition }}>
+    <div
+      role="listbox"
+      aria-label="技能提及建议"
+      data-hesper-skill-mention-menu="true"
+      className="hesper-skill-mention-menu"
+      style={{ ...skillMenuStyle, ...skillMenuPosition }}
+    >
       {filteredSkills.map((skill, index) => {
         const selected = index === activeSkillIndex
         const label = skill.description ? `选择技能 ${skill.name}：${skill.description}` : `选择技能 ${skill.name}`
@@ -637,11 +651,13 @@ export function Composer({
             if (showSkillMenu) {
               if (event.key === 'ArrowDown') {
                 event.preventDefault()
+                shouldScrollActiveSkillIntoViewRef.current = true
                 setActiveSkillIndex((index) => (index + 1) % filteredSkills.length)
                 return
               }
               if (event.key === 'ArrowUp') {
                 event.preventDefault()
+                shouldScrollActiveSkillIntoViewRef.current = true
                 setActiveSkillIndex((index) => (index <= 0 ? filteredSkills.length - 1 : index - 1))
                 return
               }
@@ -1234,6 +1250,7 @@ const skillMenuStyle = {
   borderRadius: themeTokens.radius.lg,
   background: 'var(--hesper-color-surface, #1f2335)',
   boxShadow: `0 4px 10px -6px ${themeTokens.color.shadow}`,
+  fontSize: 'var(--hesper-font-size, 14px)',
   padding: 6
 } satisfies CSSProperties
 const skillOptionStyle = {
