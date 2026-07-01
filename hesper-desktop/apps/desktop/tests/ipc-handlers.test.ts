@@ -1157,8 +1157,7 @@ describe('registerIpcHandlers', () => {
     const promptSpy = vi.spyOn(container.promptAssemblyService, 'assembleMainPrompt').mockReturnValueOnce(assembled)
     const enqueueSpy = vi.spyOn(container.agentRuntime, 'enqueue').mockResolvedValueOnce({ id: 'run-assembled' } as Awaited<ReturnType<typeof container.agentRuntime.enqueue>>)
     const createUserMessageSpy = vi.spyOn(container.conversationService, 'createUserMessage')
-
-    await container.settingsService.updateSettings({ soul: 'Softly curious and steady.' })
+    await container.settingsService.updateSettings({ soul: 'Softly curious and steady.', agents: 'Global agents guidance.' })
     registerIpcHandlers({ ipcMain, dialog, container, savePersistence, schedulePersistenceSave })
     const session = await container.sessionService.createSession({ title: 'Prompt assembly IPC', workspacePath: 'C:/workspace' })
     await container.roleManagementService.createRole({ name: 'Custom Worker', defaultToolIds: ['filesystem.read-file'] })
@@ -1173,6 +1172,7 @@ describe('registerIpcHandlers', () => {
         enabledToolIds: expectedDefaultEnabledTools
       }),
       soul: 'Softly curious and steady.',
+      agents: 'Global agents guidance.',
       role: expect.objectContaining({ id: 'main-agent' }),
       skills: expect.any(Array),
       tools: expect.any(Array)
@@ -1304,6 +1304,46 @@ describe('registerIpcHandlers', () => {
     expect(promptInput.soul).toBe('Global soul value.')
     expect(promptInput.session.workspacePath).toBeUndefined()
     expect(enqueueSpy).toHaveBeenCalledWith(expect.not.objectContaining({ workspacePath: 'C:/category/workspace' }))
+  })
+
+  it('suppresses global soul and agents when category overrides are enabled with empty values', async () => {
+    const persistence = await createInMemoryPersistence()
+    const container = createServiceContainer({ persistence, agentMode: 'mock' })
+    const { handles } = registerTestIpcHandlers(container)
+
+    await container.settingsService.updateSettings({ soul: 'Global soul value.', agents: 'Global agents value.' })
+
+    const category = await handles.get(ipcChannels.sessionCategoriesCreate)?.(
+      { sender: { id: 1 } },
+      {
+        name: 'Empty overrides',
+        soul: 'Category soul value.',
+        soulOverrideEnabled: true,
+        agents: 'Category agents value.',
+        agentsOverrideEnabled: true
+      }
+    ) as { id: string }
+    await handles.get(ipcChannels.sessionCategoriesUpdate)?.(
+      { sender: { id: 1 } },
+      { id: category.id, soul: '', agents: '' }
+    )
+
+    const session = await handles.get(ipcChannels.sessionsCreate)?.(
+      { sender: { id: 1 } },
+      { title: 'Empty override session', categoryId: category.id }
+    ) as { id: string }
+
+    const promptSpy = vi.spyOn(container.promptAssemblyService, 'assembleMainPrompt')
+    vi.spyOn(container.agentRuntime, 'enqueue').mockResolvedValueOnce({ id: 'run-empty-category-overrides' } as any)
+
+    await expect(handles.get(ipcChannels.agentEnqueue)?.(
+      { sender: { id: 1 } },
+      { sessionId: session.id, prompt: 'Use empty overrides', modelId: 'mock/hesper-fast' }
+    )).resolves.toEqual({ runId: 'run-empty-category-overrides' })
+
+    const promptInput = promptSpy.mock.calls[0]![0]
+    expect(promptInput.soul).toBe('')
+    expect(promptInput.agents).toBe('')
   })
 
   it('uses session workspace over category workspace when both are set', async () => {
@@ -2745,7 +2785,7 @@ describe('registerIpcHandlers', () => {
 
     await expect(
       handles.get(ipcChannels.settingsUpdate)?.({ sender: { id: 1 } }, { defaultModelId: 'deepseek-chat', defaultOutputMode: 'html', themeMode: 'dark', themeId: 'tokyo-night', fontSize: 16, soul: '保持中文输出。' })
-    ).resolves.toEqual({ defaultModelId: 'deepseek-chat', defaultOutputMode: 'html', themeMode: 'dark', themeId: 'tokyo-night', fontSize: 16, soul: '保持中文输出。' })
+    ).resolves.toEqual({ defaultModelId: 'deepseek-chat', defaultOutputMode: 'html', themeMode: 'dark', themeId: 'tokyo-night', fontSize: 16, soul: '保持中文输出。', agents: '' })
     expect(savePersistence).toHaveBeenCalled()
 
     const restoredContainer = createServiceContainer({ persistence, agentMode: 'mock' })
@@ -2764,7 +2804,8 @@ describe('registerIpcHandlers', () => {
       themeMode: 'dark',
       themeId: 'tokyo-night',
       fontSize: 16,
-      soul: '保持中文输出。'
+      soul: '保持中文输出。',
+      agents: ''
     })
   })
 

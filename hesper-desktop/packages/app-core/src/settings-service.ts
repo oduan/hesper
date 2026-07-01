@@ -8,6 +8,7 @@ export type AppSettings = {
   themeId: AppThemeId
   fontSize: number
   soul: string
+  agents: string
 }
 
 export type SettingsService = {
@@ -27,7 +28,8 @@ const defaults: AppSettings = {
   themeMode: 'system',
   themeId: defaultAppThemeId,
   fontSize: 14,
-  soul: ''
+  soul: '',
+  agents: ''
 }
 
 export function createSettingsService(options: SettingsServiceOptions): SettingsService {
@@ -46,7 +48,8 @@ export function createSettingsService(options: SettingsServiceOptions): Settings
             themeMode: persisted.themeMode,
             themeId: persisted.themeId,
             fontSize: persisted.fontSize,
-            soul: persisted.soul
+            soul: persisted.soul,
+            agents: persisted.agents
           }
         : {})
     }

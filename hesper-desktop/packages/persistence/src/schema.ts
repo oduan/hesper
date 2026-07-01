@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   default_model_id TEXT,
   provider_id TEXT,
   soul TEXT,
+  agents TEXT,
   model_id TEXT,
   role_id TEXT,
   enabled_skill_ids_json TEXT,
@@ -44,6 +45,9 @@ CREATE TABLE IF NOT EXISTS session_categories (
   default_model_id TEXT,
   workspace_path TEXT,
   soul TEXT,
+  soul_override_enabled INTEGER NOT NULL DEFAULT 0,
+  agents TEXT NOT NULL DEFAULT '',
+  agents_override_enabled INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   sort_seq INTEGER NOT NULL
@@ -278,6 +282,7 @@ CREATE TABLE IF NOT EXISTS app_settings (
   theme_id TEXT NOT NULL DEFAULT 'hesper',
   font_size INTEGER NOT NULL DEFAULT 14,
   soul TEXT NOT NULL DEFAULT '',
+  agents TEXT NOT NULL DEFAULT '',
   updated_at TEXT NOT NULL
 );
 ${deleteGraphIndexes.join(';\n')};
@@ -296,7 +301,8 @@ const migrationColumns: Record<string, string[]> = {
     'unread_completed_at TEXT',
     'category_id TEXT',
     'is_marked INTEGER NOT NULL DEFAULT 0',
-    'soul TEXT'
+    'soul TEXT',
+    'agents TEXT'
   ],
   messages: [
     'attachments_json TEXT'
@@ -304,7 +310,10 @@ const migrationColumns: Record<string, string[]> = {
   session_categories: [
     'default_model_id TEXT',
     'workspace_path TEXT',
-    'soul TEXT'
+    'soul TEXT',
+    'soul_override_enabled INTEGER NOT NULL DEFAULT 0',
+    "agents TEXT NOT NULL DEFAULT ''",
+    'agents_override_enabled INTEGER NOT NULL DEFAULT 0'
   ],
   agent_runs: [
     'worker_agent_invocation_id TEXT',
@@ -342,6 +351,7 @@ const migrationColumns: Record<string, string[]> = {
   app_settings: [
     'font_size INTEGER NOT NULL DEFAULT 14',
     "soul TEXT NOT NULL DEFAULT ''",
+    "agents TEXT NOT NULL DEFAULT ''",
     "theme_id TEXT NOT NULL DEFAULT 'hesper'"
   ]
 }

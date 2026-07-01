@@ -35,17 +35,20 @@ describe('createSessionService', () => {
     await expect(persistence.sessions.get(created.id)).resolves.not.toHaveProperty('categoryId')
   })
 
-  it('persists session soul only when provided at creation time', async () => {
+  it('persists session soul and agents only when provided at creation time', async () => {
     const persistence = await createInMemoryPersistence()
     const sessions = createSessionService(persistence)
 
-    const withSoul = await sessions.createSession({ title: 'With soul', soul: 'Focused assistant behavior', now })
-    const withoutSoul = await sessions.createSession({ title: 'Without soul', now })
+    const withAgentCore = await sessions.createSession({ title: 'With agent core', soul: 'Focused assistant behavior', agents: 'Use worker agents deliberately.', now })
+    const withoutAgentCore = await sessions.createSession({ title: 'Without agent core', now })
 
-    expect(withSoul.soul).toBe('Focused assistant behavior')
-    await expect(persistence.sessions.get(withSoul.id)).resolves.toMatchObject({ soul: 'Focused assistant behavior' })
-    expect(withoutSoul.soul).toBeUndefined()
-    await expect(persistence.sessions.get(withoutSoul.id)).resolves.not.toHaveProperty('soul')
+    expect(withAgentCore.soul).toBe('Focused assistant behavior')
+    expect(withAgentCore.agents).toBe('Use worker agents deliberately.')
+    await expect(persistence.sessions.get(withAgentCore.id)).resolves.toMatchObject({ soul: 'Focused assistant behavior', agents: 'Use worker agents deliberately.' })
+    expect(withoutAgentCore.soul).toBeUndefined()
+    expect(withoutAgentCore.agents).toBeUndefined()
+    await expect(persistence.sessions.get(withoutAgentCore.id)).resolves.not.toHaveProperty('soul')
+    await expect(persistence.sessions.get(withoutAgentCore.id)).resolves.not.toHaveProperty('agents')
   })
 
   it('normalizes blank category ids to uncategorized sessions', async () => {

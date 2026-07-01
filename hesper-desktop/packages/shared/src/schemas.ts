@@ -124,10 +124,12 @@ const sessionCategoryBaseSchema = z.object({
   defaultModelId: z.string().optional(),
   workspacePath: z.string().optional(),
   soul: z.string().optional(),
+  soulOverrideEnabled: z.boolean().optional(),
+  agents: z.string().optional(),
+  agentsOverrideEnabled: z.boolean().optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime()
 })
-
 export const sessionCategorySchema = sessionCategoryBaseSchema.transform(stripUndefined)
 
 const sessionBaseSchema = z.object({
@@ -140,6 +142,7 @@ const sessionBaseSchema = z.object({
   defaultModelId: z.string().optional(),
   providerId: z.string().min(1).optional(),
   soul: z.string().optional(),
+  agents: z.string().optional(),
   modelId: z.string().min(1).optional(),
   roleId: z.string().min(1).optional(),
   enabledSkillIds: z.array(z.string().min(1)).optional(),

@@ -385,6 +385,42 @@ describe('PromptAssemblyService', () => {
     expect(soulIndex).toBeGreaterThan(-1)
     expect(soulIndex).toBeLessThan(availableToolsIndex)
   })
+  it('injects non-empty agents into the main prompt after soul and before available tools', () => {
+    const service = createPromptAssemblyService()
+
+    const output = service.assembleMainPrompt({
+      session,
+      role: mainRole,
+      skills,
+      tools,
+      soul: 'Calm and curious.',
+      agents: 'Prefer careful tool use.',
+      assignableWorkerAgentRoles: [reviewerRole]
+    })
+
+    const soulIndex = output.systemPrompt.indexOf('Soul: "Calm and curious."')
+    const agentsIndex = output.systemPrompt.indexOf('Agents: "Prefer careful tool use."')
+    const availableToolsIndex = output.systemPrompt.indexOf('Available tools (use callable as the runtime tool name;')
+
+    expect(agentsIndex).toBeGreaterThan(soulIndex)
+    expect(agentsIndex).toBeGreaterThan(-1)
+    expect(agentsIndex).toBeLessThan(availableToolsIndex)
+  })
+
+  it('does not inject blank agents into the main prompt', () => {
+    const service = createPromptAssemblyService()
+
+    const output = service.assembleMainPrompt({
+      session,
+      role: mainRole,
+      skills,
+      tools,
+      agents: '  \n\t  ',
+      assignableWorkerAgentRoles: [reviewerRole]
+    })
+
+    expect(output.systemPrompt).not.toContain('Agents:')
+  })
 
   it('does not inject blank soul into the main prompt', () => {
     const service = createPromptAssemblyService()

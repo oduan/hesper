@@ -90,6 +90,9 @@ export type SessionCategory = {
   defaultModelId?: string
   workspacePath?: string
   soul?: string
+  soulOverrideEnabled?: boolean
+  agents?: string
+  agentsOverrideEnabled?: boolean
   createdAt: string
   updatedAt: string
 }
@@ -103,6 +106,7 @@ export type Session = {
   defaultModelId?: string
   providerId?: string
   soul?: string
+  agents?: string
   modelId?: string
   roleId?: string
   enabledSkillIds?: string[]
