@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, type CSSProperties } from 'react'
 import type { LocalFilePreview } from '@hesper/shared'
 import { darkTheme } from '../theme'
-import { isTopFullscreenDialog, pushFullscreenDialog, removeFullscreenDialog } from './fullscreen-dialog-stack'
+import { fullscreenDialogDataAttributes, isTopFullscreenDialog, pushFullscreenDialog, removeFullscreenDialog } from './fullscreen-dialog-stack'
 import { createSandboxedHtmlDocument } from './html-document'
 import { MarkdownOutput } from './MarkdownOutput'
 
@@ -117,6 +117,7 @@ export function LocalFilePreviewDialog({ path, loading = false, preview, error, 
       aria-modal="true"
       aria-label="本地文件全屏预览"
       data-hesper-fullscreen-output="true"
+      {...fullscreenDialogDataAttributes(dialogId)}
       style={overlayStyle}
     >
       <div aria-label="本地文件预览内容" style={contentShellStyle}>

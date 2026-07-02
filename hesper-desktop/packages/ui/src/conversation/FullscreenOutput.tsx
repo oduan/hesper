@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, type CSSProperties } from 'react'
 import type { MessageContentType } from '@hesper/shared'
 import { themeTokens } from '../theme'
-import { isTopFullscreenDialog, pushFullscreenDialog, removeFullscreenDialog } from './fullscreen-dialog-stack'
+import { fullscreenDialogDataAttributes, isTopFullscreenDialog, pushFullscreenDialog, removeFullscreenDialog } from './fullscreen-dialog-stack'
 import { createSandboxedHtmlDocument } from './html-document'
 import { MarkdownOutput } from './MarkdownOutput'
 
@@ -57,6 +57,7 @@ export function FullscreenOutput({ open, content, contentType, onClose, onLocalF
       aria-modal="true"
       aria-label="输出全屏查看"
       data-hesper-fullscreen-output="true"
+      {...fullscreenDialogDataAttributes(dialogId)}
       style={overlayStyle}
     >
       <div
