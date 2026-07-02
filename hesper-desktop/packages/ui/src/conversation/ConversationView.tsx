@@ -402,6 +402,7 @@ export function ConversationView({
   const localFilePreviewRequestRef = useRef(0)
   const pinnedToBottomRef = useRef(true)
   const didMeasureContentRef = useRef(false)
+  const measuredSessionIdRef = useRef(session.id)
   const outputWheelBoundaryLockRef = useRef<OutputWheelBoundaryLock | null>(null)
   const outputWheelBoundaryLockTimerRef = useRef<number | undefined>(undefined)
   const orderedMessages = useMemo(() => sortChronologically(messages), [messages])
@@ -736,9 +737,17 @@ export function ConversationView({
       return
     }
 
+    const sessionChanged = measuredSessionIdRef.current !== session.id
+    measuredSessionIdRef.current = session.id
+
     if (!didMeasureContentRef.current) {
       didMeasureContentRef.current = true
       pinnedToBottomRef.current = isNearScrollBottom(element)
+      return
+    }
+
+    if (sessionChanged) {
+      scrollMessagesToBottom('auto')
       return
     }
 
@@ -747,7 +756,7 @@ export function ConversationView({
     } else {
       setShowJumpToBottom(true)
     }
-  }, [contentLayoutSignature, scrollMessagesToBottom])
+  }, [contentLayoutSignature, scrollMessagesToBottom, session.id])
 
   useEffect(() => {
     const scrollElement = messagesScrollRef.current

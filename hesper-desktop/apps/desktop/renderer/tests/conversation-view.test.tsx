@@ -212,6 +212,74 @@ describe('ConversationView', () => {
     await waitFor(() => expect(screen.queryByRole('button', { name: '滚动到底部' })).not.toBeInTheDocument())
   })
 
+  it('scrolls to the bottom when switching sessions after the user scrolled up', async () => {
+    const baseMessages = [
+      {
+        id: 'u1',
+        sessionId: 'session-1',
+        role: 'user' as const,
+        content: 'hello',
+        contentType: 'plain' as const,
+        createdAt: '2026-06-10T03:00:00.000Z'
+      }
+    ]
+    const nextSession = {
+      ...session,
+      id: 'session-2',
+      title: 'Next Test'
+    } as const
+    const nextMessages = [
+      {
+        id: 'u2',
+        sessionId: 'session-2',
+        role: 'user' as const,
+        content: 'next hello',
+        contentType: 'plain' as const,
+        createdAt: '2026-06-10T03:01:00.000Z'
+      },
+      {
+        id: 'a2',
+        sessionId: 'session-2',
+        role: 'assistant' as const,
+        content: 'next answer',
+        contentType: 'markdown' as const,
+        createdAt: '2026-06-10T03:01:01.000Z'
+      }
+    ]
+
+    const { rerender } = render(
+      <ConversationView
+        session={session}
+        messages={baseMessages}
+        steps={[]}
+        streamingText=""
+        modelId="mock/hesper-fast"
+        onSend={() => undefined}
+      />
+    )
+    const messageList = screen.getByLabelText('消息列表')
+    Object.defineProperty(messageList, 'clientHeight', { configurable: true, value: 100 })
+    Object.defineProperty(messageList, 'scrollHeight', { configurable: true, value: 320 })
+    messageList.scrollTop = 0
+    fireEvent.scroll(messageList)
+
+    scrollToMock.mockClear()
+    Object.defineProperty(messageList, 'scrollHeight', { configurable: true, value: 740 })
+    rerender(
+      <ConversationView
+        session={nextSession}
+        messages={nextMessages}
+        steps={[]}
+        streamingText=""
+        modelId="mock/hesper-fast"
+        onSend={() => undefined}
+      />
+    )
+
+    await waitFor(() => expect(scrollToMock).toHaveBeenLastCalledWith(expect.objectContaining({ top: 740, behavior: 'auto' })))
+    expect(screen.queryByRole('button', { name: '滚动到底部' })).not.toBeInTheDocument()
+  })
+
   it('keeps pinned conversations at the bottom for new content, streaming text, and resize growth', () => {
     let resizeObserverCallback: ResizeObserverCallback | undefined
     const originalResizeObserver = globalThis.ResizeObserver
