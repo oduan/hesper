@@ -3904,7 +3904,7 @@ plain text
     expect(conversationScroller.scrollTop).toBe(420)
   })
 
-  it('contains same-gesture output block edge wheels before letting a new gesture scroll the conversation', () => {
+  it('pauses briefly at output block edges before releasing the conversation scroll', () => {
     vi.useFakeTimers()
     const messages = [
       {
@@ -3953,10 +3953,18 @@ plain text
     expect(conversationScroller.scrollTop).toBe(50)
 
     act(() => {
-      vi.advanceTimersByTime(350)
+      vi.advanceTimersByTime(80)
+    })
+    fireEvent.wheel(outputScroller, { deltaY: 80 })
+    expect(conversationScroller.scrollTop).toBe(50)
+
+    act(() => {
+      vi.advanceTimersByTime(41)
     })
     fireEvent.wheel(outputScroller, { deltaY: 80 })
     expect(conversationScroller.scrollTop).toBe(130)
+    fireEvent.wheel(outputScroller, { deltaY: 80 })
+    expect(conversationScroller.scrollTop).toBe(210)
 
     conversationScroller.scrollTop = 300
     outputScroller.scrollTop = 80
@@ -3968,10 +3976,18 @@ plain text
     expect(conversationScroller.scrollTop).toBe(300)
 
     act(() => {
-      vi.advanceTimersByTime(350)
+      vi.advanceTimersByTime(80)
+    })
+    fireEvent.wheel(outputScroller, { deltaY: -90 })
+    expect(conversationScroller.scrollTop).toBe(300)
+
+    act(() => {
+      vi.advanceTimersByTime(41)
     })
     fireEvent.wheel(outputScroller, { deltaY: -90 })
     expect(conversationScroller.scrollTop).toBe(210)
+    fireEvent.wheel(outputScroller, { deltaY: -90 })
+    expect(conversationScroller.scrollTop).toBe(120)
   })
 
   it('lets wide markdown tables consume horizontal wheel without scrolling the conversation', () => {

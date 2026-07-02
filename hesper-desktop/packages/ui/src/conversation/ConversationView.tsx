@@ -88,9 +88,10 @@ type AnchorEntry = {
 type OutputWheelBoundaryLock = {
   outputScroller: HTMLElement
   direction: 'up' | 'down'
+  released: boolean
 }
 
-const outputWheelGestureIdleMs = 160
+const outputWheelBoundaryPauseMs = 120
 
 const userMessageAnchorSelector = '[data-hesper-user-message-anchor="true"]'
 
@@ -579,14 +580,17 @@ export function ConversationView({
   }, [])
 
   const refreshOutputWheelBoundaryLock = useCallback((outputScroller: HTMLElement, direction: OutputWheelBoundaryLock['direction']) => {
-    outputWheelBoundaryLockRef.current = { outputScroller, direction }
+    const lock: OutputWheelBoundaryLock = { outputScroller, direction, released: false }
+    outputWheelBoundaryLockRef.current = lock
     if (outputWheelBoundaryLockTimerRef.current !== undefined) {
       window.clearTimeout(outputWheelBoundaryLockTimerRef.current)
     }
     outputWheelBoundaryLockTimerRef.current = window.setTimeout(() => {
-      outputWheelBoundaryLockRef.current = null
+      if (outputWheelBoundaryLockRef.current === lock) {
+        lock.released = true
+      }
       outputWheelBoundaryLockTimerRef.current = undefined
-    }, outputWheelGestureIdleMs)
+    }, outputWheelBoundaryPauseMs)
   }, [])
 
   const handleMessagesScroll = () => {
@@ -625,13 +629,17 @@ export function ConversationView({
       if (verticalDirection) {
         const activeLock = outputWheelBoundaryLockRef.current
         if (activeLock?.outputScroller === outputScroller && activeLock.direction === verticalDirection) {
+          if (!activeLock.released) {
+            event.preventDefault()
+            event.stopPropagation()
+            return
+          }
+        } else {
+          refreshOutputWheelBoundaryLock(outputScroller, verticalDirection)
           event.preventDefault()
           event.stopPropagation()
-          refreshOutputWheelBoundaryLock(outputScroller, verticalDirection)
           return
         }
-
-        refreshOutputWheelBoundaryLock(outputScroller, verticalDirection)
       } else {
         resetOutputWheelBoundaryLock()
       }
