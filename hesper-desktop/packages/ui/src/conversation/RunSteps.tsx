@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import type { AgentRun, Message, RunStep, RunStepStatus, WorkerAgentInvocation } from '@hesper/shared'
 import { themeTokens } from '../theme'
-import { isTopFullscreenDialog, pushFullscreenDialog, removeFullscreenDialog } from './fullscreen-dialog-stack'
+import { fullscreenDialogDataAttributes, isTopFullscreenDialog, pushFullscreenDialog, removeFullscreenDialog } from './fullscreen-dialog-stack'
 import { MarkdownOutput } from './MarkdownOutput'
 import { RunningStatusIcon } from './RunningStatusIcon'
 import { WorkerAgentRunViewer } from './WorkerAgentRunViewer'
@@ -388,6 +388,7 @@ function StepFullscreenDialog({ step, workerAgentView, onClose, onLocalFileClick
       aria-modal="true"
       aria-label={workerInvocation ? 'Worker Agent 执行详情' : '步骤全屏查看'}
       data-hesper-fullscreen-output="true"
+      {...fullscreenDialogDataAttributes(dialogId)}
       style={stepFullscreenOverlayStyle}
     >
       <div aria-label="步骤详情内容" style={stepFullscreenShellStyle}>

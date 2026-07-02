@@ -2433,6 +2433,55 @@ describe('renderer App', () => {
     expect(screen.getByText('预览内容')).toBeInTheDocument()
   })
 
+  it('keeps the composer editable after closing a local file fullscreen preview', async () => {
+    const user = userEvent.setup()
+
+    listSessions.mockResolvedValueOnce([
+      {
+        id: 'session-preview',
+        title: 'Preview chat',
+        status: 'active',
+        outputMode: 'markdown',
+        createdAt: '2026-06-10T03:00:00.000Z',
+        updatedAt: '2026-06-10T03:00:00.000Z'
+      }
+    ] as any)
+    listMessages.mockResolvedValueOnce([
+      {
+        id: 'message-preview-assistant',
+        sessionId: 'session-preview',
+        role: 'assistant',
+        content: '[README](workspace:README.md)',
+        contentType: 'markdown',
+        runId: 'run-preview',
+        createdAt: '2026-06-10T03:00:02.000Z'
+      }
+    ] as any)
+    filesPreview.mockResolvedValueOnce({
+      path: 'README.md',
+      name: 'README.md',
+      kind: 'markdown',
+      mimeType: 'text/markdown',
+      bytes: 20,
+      content: '# 本地 README\n\n预览内容'
+    })
+
+    render(<App />)
+
+    await user.click(await screen.findByRole('link', { name: 'README' }))
+    expect(screen.getByRole('dialog', { name: '本地文件全屏预览' })).toBeInTheDocument()
+
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '本地文件全屏预览' })).not.toBeInTheDocument())
+
+    const composer = await screen.findByLabelText('消息输入框')
+    await user.click(composer)
+    await user.type(composer, 'preview closed')
+
+    expect(composer).toHaveFocus()
+    expect(composer).toHaveValue('preview closed')
+  })
+
   it('retries loading worker history when the first attempt fails before a session is marked loaded', async () => {
     const user = userEvent.setup()
     listSessions.mockResolvedValueOnce([

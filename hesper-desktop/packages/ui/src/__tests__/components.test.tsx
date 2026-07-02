@@ -10,6 +10,7 @@ import { CategorySettingsDialog } from '../layout/CategorySettingsDialog'
 import { Composer, type ComposerDraftAttachment, type ComposerSkillMention } from '../conversation/Composer'
 import { ConversationView, type ConversationGitPanelProps } from '../conversation/ConversationView'
 import { FullscreenOutput } from '../conversation/FullscreenOutput'
+import { pushFullscreenDialog, removeFullscreenDialog } from '../conversation/fullscreen-dialog-stack'
 import { MarkdownOutput } from '../conversation/MarkdownOutput'
 import { MessageBubble } from '../conversation/MessageBubble'
 import { OutputBlock } from '../conversation/OutputBlock'
@@ -4199,6 +4200,22 @@ plain text
     expect(writeText).toHaveBeenCalledWith('copy me')
     await user.click(closeButton)
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('closes the visible fullscreen output even when an old dialog id remains on the stack', () => {
+    const staleDialogId = 'stale-dialog-left-from-previous-preview'
+    const onClose = vi.fn()
+
+    render(<FullscreenOutput open content="visible output" contentType="markdown" onClose={onClose} />)
+    pushFullscreenDialog(staleDialogId)
+    try {
+      expect(screen.getByRole('dialog', { name: '输出全屏查看' })).toBeInTheDocument()
+
+      fireEvent.keyDown(window, { key: 'Escape' })
+      expect(onClose).toHaveBeenCalledTimes(1)
+    } finally {
+      removeFullscreenDialog(staleDialogId)
+    }
   })
 
   it('renders run steps without latest-step label or header status dot', async () => {
